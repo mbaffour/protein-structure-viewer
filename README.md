@@ -26,7 +26,17 @@ Multiple structures can be displayed together. Each loaded structure has its own
 - Standard AlphaFold pLDDT legend and mean pLDDT calculation from Cα B-factor values
 - Spin and rocking animations with adjustable speed
 - PNG export
+- Downloadable HTML reports with every selected model embedded
+- Previous/next navigation, automatic cycling, arrow-key navigation, pLDDT colors, and PNG export inside generated reports
 - No build step, account, backend, or bundled example data
+
+## Create a shareable model report
+
+1. Load all model files that should appear in the report.
+2. Select **Download HTML report**.
+3. Open the resulting `protein-model-report.html` in a browser.
+
+The report embeds the loaded coordinate data and lets the reader choose models, move forward or backward, or automatically cycle through them. Like the main viewer, it loads 3Dmol.js from a CDN when opened.
 
 ## GitHub Pages
 
@@ -39,4 +49,3 @@ Structure files remain in browser memory and are not transmitted by this applica
 ## License
 
 MIT
-

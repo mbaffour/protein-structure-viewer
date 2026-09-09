@@ -821,6 +821,7 @@ html&gt;body{padding:0}&lt;/style&gt;
     &lt;button class=&quot;btn&quot; type=&quot;button&quot; id=&quot;gpv-clear&quot;&gt;Clear all&lt;/button&gt;
     &lt;button class=&quot;btn&quot; type=&quot;button&quot; id=&quot;gpv-fit&quot;&gt;Fit visible&lt;/button&gt;
     &lt;button class=&quot;btn&quot; type=&quot;button&quot; id=&quot;gpv-image&quot;&gt;Download PNG&lt;/button&gt;
+    &lt;button class=&quot;btn btn-primary&quot; type=&quot;button&quot; id=&quot;gpv-report&quot; disabled&gt;Download HTML report&lt;/button&gt;
   &lt;/div&gt;
 
   &lt;div class=&quot;viz-controls&quot; aria-label=&quot;Display controls&quot;&gt;
@@ -953,6 +954,7 @@ html&gt;body{padding:0}&lt;/style&gt;
     root.querySelector(&#x27;#gpv-confidence&#x27;).textContent = score === null ? &#x27;Mean pLDDT —&#x27; : &#x27;Mean pLDDT &#x27; + score.toFixed(1);
     root.querySelector(&#x27;#gpv-state&#x27;).textContent = message;
     root.querySelector(&#x27;#gpv-empty&#x27;).hidden = structures.length &gt; 0;
+    root.querySelector(&#x27;#gpv-report&#x27;).disabled = structures.length === 0;
   }
 
   function applyStyle() {
@@ -1021,12 +1023,15 @@ html&gt;body{padding:0}&lt;/style&gt;
       try {
         const extension = file.name.split(&#x27;.&#x27;).pop().toLowerCase();
         const format = extension === &#x27;pdb&#x27; ? &#x27;pdb&#x27; : &#x27;cif&#x27;;
-        const model = viewer.addModel(await file.text(), format);
+        const text = await file.text();
+        const model = viewer.addModel(text, format);
         const entry = {
           name: file.name,
           model,
           visible: true,
           color: palette[structures.length % palette.length],
+          text,
+          format,
           scores: modelScores(model)
         };
         structures.push(entry);
@@ -1070,6 +1075,47 @@ html&gt;body{padding:0}&lt;/style&gt;
     updateStatus(motion === &#x27;off&#x27; ? &#x27;Ready&#x27; : root.querySelector(&#x27;#gpv-motion&#x27;).selectedOptions[0].text);
   }
 
+  function downloadReport() {
+    const exported = structures.map(entry =&gt; ({
+      name: entry.name,
+      text: entry.text,
+      format: entry.format,
+      color: entry.color
+    }));
+    const payload = JSON.stringify(exported).replace(/&lt;/g, &#x27;\\u003c&#x27;);
+    const html = [
+      &quot;&lt;!doctype html&gt;&quot;,
+      &quot;&lt;html lang=&#x27;en&#x27;&gt;&lt;head&gt;&lt;meta charset=&#x27;utf-8&#x27;&gt;&quot;,
+      &quot;&lt;meta name=&#x27;viewport&#x27; content=&#x27;width=device-width,initial-scale=1&#x27;&gt;&quot;,
+      &quot;&lt;title&gt;Protein Model Report&lt;/title&gt;&quot;,
+      &quot;&lt;style&gt;&quot;,
+      &quot;:root{color-scheme:light dark;font-family:system-ui,sans-serif}body{margin:0;padding:18px;background:#111827;color:#f8fafc}main{max-width:1100px;margin:auto}.controls{display:flex;gap:10px;flex-wrap:wrap;align-items:end;margin-bottom:12px}label{display:grid;gap:4px}button,select,input{font:inherit;padding:7px 10px}#view{height:70vh;min-height:420px;background:#020617}#status{display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-top:8px;color:#cbd5e1}.legend{display:flex;gap:12px;flex-wrap:wrap;margin:8px 0}.legend span{display:flex;align-items:center;gap:5px}.swatch{width:12px;height:12px;display:inline-block}.vlow{background:#ff7d45}.low{background:#ffdb13}.conf{background:#65cbf3}.vhigh{background:#0053d6}@media(prefers-color-scheme:light){body{background:#f8fafc;color:#0f172a}#view{background:#e2e8f0}#status{color:#475569}}&quot;,
+      &quot;&lt;/style&gt;&lt;/head&gt;&lt;body&gt;&lt;main&gt;&quot;,
+      &quot;&lt;div class=&#x27;controls&#x27;&gt;&lt;label&gt;Model&lt;select id=&#x27;model&#x27;&gt;&lt;/select&gt;&lt;/label&gt;&lt;button id=&#x27;previous&#x27;&gt;Previous&lt;/button&gt;&lt;button id=&#x27;next&#x27;&gt;Next&lt;/button&gt;&lt;button id=&#x27;play&#x27;&gt;Play cycle&lt;/button&gt;&lt;label&gt;Interval (seconds)&lt;input id=&#x27;interval&#x27; type=&#x27;number&#x27; min=&#x27;0.5&#x27; max=&#x27;20&#x27; step=&#x27;0.5&#x27; value=&#x27;2&#x27;&gt;&lt;/label&gt;&lt;label&gt;Representation&lt;select id=&#x27;style&#x27;&gt;&lt;option value=&#x27;cartoon&#x27;&gt;Cartoon&lt;/option&gt;&lt;option value=&#x27;stick&#x27;&gt;Sticks&lt;/option&gt;&lt;option value=&#x27;sphere&#x27;&gt;Spheres&lt;/option&gt;&lt;option value=&#x27;line&#x27;&gt;Lines&lt;/option&gt;&lt;/select&gt;&lt;/label&gt;&lt;label&gt;Colors&lt;select id=&#x27;colors&#x27;&gt;&lt;option value=&#x27;plddt&#x27;&gt;pLDDT&lt;/option&gt;&lt;option value=&#x27;structure&#x27;&gt;Model color&lt;/option&gt;&lt;option value=&#x27;chain&#x27;&gt;Chain&lt;/option&gt;&lt;option value=&#x27;spectrum&#x27;&gt;Spectrum&lt;/option&gt;&lt;/select&gt;&lt;/label&gt;&lt;button id=&#x27;spin&#x27;&gt;Spin&lt;/button&gt;&lt;button id=&#x27;png&#x27;&gt;Download PNG&lt;/button&gt;&lt;/div&gt;&quot;,
+      &quot;&lt;div class=&#x27;legend&#x27;&gt;&lt;span&gt;&lt;i class=&#x27;swatch vlow&#x27;&gt;&lt;/i&gt;&amp;lt;50&lt;/span&gt;&lt;span&gt;&lt;i class=&#x27;swatch low&#x27;&gt;&lt;/i&gt;50–70&lt;/span&gt;&lt;span&gt;&lt;i class=&#x27;swatch conf&#x27;&gt;&lt;/i&gt;70–90&lt;/span&gt;&lt;span&gt;&lt;i class=&#x27;swatch vhigh&#x27;&gt;&lt;/i&gt;≥90&lt;/span&gt;&lt;/div&gt;&quot;,
+      &quot;&lt;div id=&#x27;view&#x27;&gt;&lt;/div&gt;&lt;div id=&#x27;status&#x27;&gt;&lt;span id=&#x27;name&#x27;&gt;&lt;/span&gt;&lt;span id=&#x27;score&#x27;&gt;&lt;/span&gt;&lt;span id=&#x27;position&#x27;&gt;&lt;/span&gt;&lt;/div&gt;&quot;,
+      &quot;&lt;script src=&#x27;https://cdnjs.cloudflare.com/ajax/libs/3Dmol/2.4.2/3Dmol-min.js&#x27;&gt;&lt;&quot; + &quot;/script&gt;&quot;,
+      &quot;&lt;script&gt;&quot;,
+      &quot;const structures=&quot; + payload + &quot;;&quot;,
+      &quot;const viewer=$3Dmol.createViewer(document.getElementById(&#x27;view&#x27;),{backgroundColor:&#x27;rgba(0,0,0,0)&#x27;,antialias:true});let current=0,timer=0,spinning=false;&quot;,
+      &quot;const picker=document.getElementById(&#x27;model&#x27;);structures.forEach((s,i)=&gt;{const o=document.createElement(&#x27;option&#x27;);o.value=i;o.textContent=s.name;picker.append(o)});&quot;,
+      &quot;function pcolor(v){return v&lt;50?&#x27;#ff7d45&#x27;:v&lt;70?&#x27;#ffdb13&#x27;:v&lt;90?&#x27;#65cbf3&#x27;:&#x27;#0053d6&#x27;}&quot;,
+      &quot;function mean(a){return a.length?a.reduce((s,v)=&gt;s+v,0)/a.length:null}&quot;,
+      &quot;function show(i){current=(Number(i)+structures.length)%structures.length;picker.value=current;const s=structures[current];viewer.removeAllModels();const m=viewer.addModel(s.text,s.format);const rep=document.getElementById(&#x27;style&#x27;).value;const mode=document.getElementById(&#x27;colors&#x27;).value;let options={color:s.color};if(mode===&#x27;plddt&#x27;)options={colorfunc:a=&gt;pcolor(Number(a.b||0))};if(mode===&#x27;chain&#x27;)options={colorscheme:&#x27;chainHetatm&#x27;};if(mode===&#x27;spectrum&#x27;)options={colorscheme:&#x27;spectrum&#x27;};if(rep===&#x27;line&#x27;)options.linewidth=2;const spec={};spec[rep]=options;m.setStyle({},spec);viewer.zoomTo();viewer.render();const values=m.selectedAtoms({}).filter(a=&gt;a.atom===&#x27;CA&#x27;&amp;&amp;Number.isFinite(Number(a.b))).map(a=&gt;Number(a.b));const avg=mean(values);document.getElementById(&#x27;name&#x27;).textContent=s.name;document.getElementById(&#x27;score&#x27;).textContent=avg===null?&#x27;Mean pLDDT —&#x27;:&#x27;Mean pLDDT &#x27;+avg.toFixed(1);document.getElementById(&#x27;position&#x27;).textContent=(current+1)+&#x27; / &#x27;+structures.length}&quot;,
+      &quot;function stop(){clearInterval(timer);timer=0;document.getElementById(&#x27;play&#x27;).textContent=&#x27;Play cycle&#x27;}&quot;,
+      &quot;function play(){if(timer){stop();return}const seconds=Math.max(.5,Number(document.getElementById(&#x27;interval&#x27;).value)||2);timer=setInterval(()=&gt;show(current+1),seconds*1000);document.getElementById(&#x27;play&#x27;).textContent=&#x27;Pause cycle&#x27;}&quot;,
+      &quot;picker.addEventListener(&#x27;change&#x27;,e=&gt;{stop();show(e.target.value)});document.getElementById(&#x27;previous&#x27;).onclick=()=&gt;{stop();show(current-1)};document.getElementById(&#x27;next&#x27;).onclick=()=&gt;{stop();show(current+1)};document.getElementById(&#x27;play&#x27;).onclick=play;document.getElementById(&#x27;style&#x27;).onchange=()=&gt;show(current);document.getElementById(&#x27;colors&#x27;).onchange=()=&gt;show(current);document.getElementById(&#x27;spin&#x27;).onclick=()=&gt;{spinning=!spinning;viewer.spin(spinning?&#x27;y&#x27;:false);document.getElementById(&#x27;spin&#x27;).textContent=spinning?&#x27;Stop spin&#x27;:&#x27;Spin&#x27;};document.getElementById(&#x27;png&#x27;).onclick=()=&gt;{const a=document.createElement(&#x27;a&#x27;);a.href=viewer.pngURI();a.download=&#x27;protein-model.png&#x27;;a.click()};window.addEventListener(&#x27;keydown&#x27;,e=&gt;{if(e.key===&#x27;ArrowLeft&#x27;){stop();show(current-1)}if(e.key===&#x27;ArrowRight&#x27;){stop();show(current+1)}});new ResizeObserver(()=&gt;viewer.resize()).observe(document.getElementById(&#x27;view&#x27;));show(0);&quot;,
+      &quot;&lt;&quot; + &quot;/script&gt;&lt;/main&gt;&lt;/body&gt;&lt;/html&gt;&quot;
+    ].join(&#x27;\n&#x27;);
+    const blob = new Blob([html], { type: &#x27;text/html&#x27; });
+    const link = document.createElement(&#x27;a&#x27;);
+    link.href = URL.createObjectURL(blob);
+    link.download = &#x27;protein-model-report.html&#x27;;
+    link.click();
+    setTimeout(() =&gt; URL.revokeObjectURL(link.href), 1000);
+    updateStatus(&#x27;HTML report downloaded&#x27;);
+  }
+
   root.querySelector(&#x27;#gpv-files&#x27;).addEventListener(&#x27;change&#x27;, event =&gt; loadFiles([...event.target.files]));
   root.querySelector(&#x27;#gpv-style&#x27;).addEventListener(&#x27;change&#x27;, applyStyle);
   root.querySelector(&#x27;#gpv-color-mode&#x27;).addEventListener(&#x27;change&#x27;, applyStyle);
@@ -1091,6 +1137,7 @@ html&gt;body{padding:0}&lt;/style&gt;
     link.download = &#x27;protein-view.png&#x27;;
     link.click();
   });
+  root.querySelector(&#x27;#gpv-report&#x27;).addEventListener(&#x27;click&#x27;, downloadReport);
   new ResizeObserver(() =&gt; viewer.resize()).observe(root.querySelector(&#x27;#gpv-stage&#x27;));
   updateStatus();
 })();
