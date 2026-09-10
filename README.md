@@ -21,21 +21,27 @@ Multiple structures can be displayed together. Each loaded structure has its own
 
 ## Features
 
-- Multiple PDB, CIF, and mmCIF files—or an AlphaFold ZIP—in one view
+- Multiple PDB, CIF, and mmCIF files—or a complete AlphaFold result ZIP—in one view
 - Drag-and-drop loading, automatic ZIP extraction, and show-all/hide-all controls
+- Automatic AlphaFold 2/3 confidence JSON and ranking CSV association when filenames match their models
 - Independent visibility and colors per structure
 - Full model names in the model list and navigator
-- Overlay mode or one-model-at-a-time mode, with previous/next controls, keyboard navigation, and adjustable automatic cycling
+- Overlay mode or one-model-at-a-time mode, with previous/next controls, keyboard navigation, adjustable automatic cycling, and sorting by ranking score or mean pLDDT
 - Cartoon, stick, sphere, and line representations
 - Per-structure, per-chain, pLDDT, sequence-spectrum, and element color schemes
 - Standard AlphaFold pLDDT legend and mean pLDDT calculation from Cα B-factor values
+- Interactive PAE heatmaps with residue/token inspection and PNG export
+- Model-level pTM, ipTM, ranking score, rank, and clash indicators, plus chain-pair ipTM and minimum PAE when available
+- Downloadable confidence-metrics CSV
 - Click any atom to inspect its model, residue, chain, atom name, and pLDDT
 - Add or edit custom residue labels, or label every residue in the current model
-- Align visible models to a selected reference using matching Cα atoms, with a one-click coordinate restore
+- Sequence-aware Cα alignment or strict chain/residue-ID alignment, with a one-click coordinate restore
+- Per-model aligned-residue count, sequence identity, chain mapping, Cα RMSD, and downloadable alignment CSV
 - Spin and rocking animations with adjustable speed
 - PNG image export and 5-, 10-, or 15-second WebM spin-video export
 - Downloadable HTML reports with every selected model embedded
-- Previous/next navigation, automatic cycling, arrow-key navigation, saved custom labels, pLDDT colors, PNG export, and WebM spin-video recording inside generated reports
+- Previous/next navigation, automatic cycling, arrow-key navigation, saved custom labels, pLDDT/PAE confidence, provenance, PNG export, and WebM spin-video recording inside generated reports
+- Reproducible scene manifests with SHA-256 structure-file hashes, camera, model state, colors, labels, alignment settings, and scientific provenance
 - No build step, account, backend, or bundled example data
 
 ## Create a shareable model report
@@ -49,10 +55,10 @@ The report embeds the loaded coordinate data and lets the reader choose models, 
 ## Scientific-use notes
 
 - pLDDT is a per-residue confidence measure. It does not by itself establish that a multimeric interface or relative chain placement is correct.
-- Alignment is intended for visual comparison of related models. The current browser build pairs Cα atoms by chain ID and residue number, falling back to residue order when identifiers differ; inspect the result before interpreting it.
+- Alignment is intended for visual comparison of related models. Sequence-aware mode globally aligns amino-acid sequences and reports its chain mapping, identity, aligned Cα count, and RMSD; inspect those values before interpreting an overlay.
 - The generated report is a presentation artifact, not a replacement for the original coordinate files, AlphaFold confidence JSON, PAE plots, or experimental validation.
 
-See [`SCIENTIFIC-AUDIT.md`](SCIENTIFIC-AUDIT.md) for the publication/reviewer-readiness audit and prioritized roadmap.
+See [`SCIENTIFIC-AUDIT.md`](SCIENTIFIC-AUDIT.md) for the publication/reviewer-readiness audit and remaining roadmap.
 
 ## GitHub Pages
 

@@ -816,12 +816,12 @@ html&gt;body{padding:0}&lt;/style&gt;
 &lt;div id=&quot;generic-protein-viewer&quot;&gt;
   &lt;label class=&quot;card gpv-drop&quot; id=&quot;gpv-drop&quot; for=&quot;gpv-files&quot;&gt;
     &lt;strong&gt;Drop an AlphaFold ZIP or structure files here&lt;/strong&gt;
-    &lt;span class=&quot;text-muted&quot;&gt;PDB, CIF, and mmCIF are supported. Files stay on this device.&lt;/span&gt;
+    &lt;span class=&quot;text-muted&quot;&gt;PDB, CIF/mmCIF, AlphaFold confidence JSON, scene JSON, and result ZIPs are supported. Files stay on this device.&lt;/span&gt;
   &lt;/label&gt;
 
   &lt;div class=&quot;viz-controls&quot; aria-label=&quot;Load protein structures&quot;&gt;
     &lt;label class=&quot;form-label gpv-file-label&quot;&gt;Structure files
-      &lt;input class=&quot;form-control&quot; id=&quot;gpv-files&quot; type=&quot;file&quot; accept=&quot;.pdb,.cif,.mmcif,.zip&quot; multiple&gt;
+      &lt;input class=&quot;form-control&quot; id=&quot;gpv-files&quot; type=&quot;file&quot; accept=&quot;.pdb,.cif,.mmcif,.json,.csv,.zip&quot; multiple&gt;
     &lt;/label&gt;
     &lt;button class=&quot;btn&quot; type=&quot;button&quot; id=&quot;gpv-clear&quot;&gt;Clear all&lt;/button&gt;
     &lt;button class=&quot;btn&quot; type=&quot;button&quot; id=&quot;gpv-show-all&quot;&gt;Show all&lt;/button&gt;
@@ -841,6 +841,13 @@ html&gt;body{padding:0}&lt;/style&gt;
     &lt;/label&gt;
     &lt;label class=&quot;form-label gpv-current-label&quot;&gt;Current model
       &lt;select class=&quot;form-select&quot; id=&quot;gpv-current&quot; disabled&gt;&lt;option&gt;No models loaded&lt;/option&gt;&lt;/select&gt;
+    &lt;/label&gt;
+    &lt;label class=&quot;form-label&quot;&gt;Model order
+      &lt;select class=&quot;form-select&quot; id=&quot;gpv-order&quot;&gt;
+        &lt;option value=&quot;loaded&quot;&gt;As loaded&lt;/option&gt;
+        &lt;option value=&quot;ranking&quot;&gt;Ranking score&lt;/option&gt;
+        &lt;option value=&quot;plddt&quot;&gt;Mean pLDDT&lt;/option&gt;
+      &lt;/select&gt;
     &lt;/label&gt;
     &lt;button class=&quot;btn&quot; type=&quot;button&quot; id=&quot;gpv-previous&quot; disabled&gt;Previous&lt;/button&gt;
     &lt;button class=&quot;btn&quot; type=&quot;button&quot; id=&quot;gpv-next&quot; disabled&gt;Next&lt;/button&gt;
@@ -887,12 +894,49 @@ html&gt;body{padding:0}&lt;/style&gt;
     &lt;label class=&quot;form-label gpv-current-label&quot;&gt;Alignment reference
       &lt;select class=&quot;form-select&quot; id=&quot;gpv-reference&quot; disabled&gt;&lt;option&gt;No models loaded&lt;/option&gt;&lt;/select&gt;
     &lt;/label&gt;
+    &lt;label class=&quot;form-label&quot;&gt;Residue mapping
+      &lt;select class=&quot;form-select&quot; id=&quot;gpv-alignment-mode&quot;&gt;
+        &lt;option value=&quot;sequence&quot;&gt;Sequence-aware&lt;/option&gt;
+        &lt;option value=&quot;identifier&quot;&gt;Chain and residue IDs&lt;/option&gt;
+      &lt;/select&gt;
+    &lt;/label&gt;
     &lt;button class=&quot;btn&quot; type=&quot;button&quot; id=&quot;gpv-align&quot; disabled&gt;Align selected models&lt;/button&gt;
     &lt;button class=&quot;btn&quot; type=&quot;button&quot; id=&quot;gpv-restore&quot; disabled&gt;Restore coordinates&lt;/button&gt;
+    &lt;button class=&quot;btn&quot; type=&quot;button&quot; id=&quot;gpv-alignment-csv&quot; disabled&gt;Download RMSD CSV&lt;/button&gt;
+  &lt;/div&gt;
+
+  &lt;div class=&quot;table-responsive&quot; id=&quot;gpv-alignment-wrap&quot; hidden&gt;
+    &lt;table class=&quot;table table-sm&quot; aria-label=&quot;Structural alignment results&quot;&gt;
+      &lt;thead&gt;&lt;tr&gt;&lt;th&gt;Model&lt;/th&gt;&lt;th&gt;Reference&lt;/th&gt;&lt;th class=&quot;text-end&quot;&gt;Cα pairs&lt;/th&gt;&lt;th class=&quot;text-end&quot;&gt;Identity&lt;/th&gt;&lt;th class=&quot;text-end&quot;&gt;RMSD (Å)&lt;/th&gt;&lt;th&gt;Mapping&lt;/th&gt;&lt;/tr&gt;&lt;/thead&gt;
+      &lt;tbody id=&quot;gpv-alignment-results&quot;&gt;&lt;/tbody&gt;
+    &lt;/table&gt;
   &lt;/div&gt;
 
   &lt;div class=&quot;gpv-list&quot; id=&quot;gpv-list&quot; aria-label=&quot;Loaded structures&quot;&gt;&lt;/div&gt;
   &lt;div class=&quot;gpv-empty text-muted&quot; id=&quot;gpv-empty&quot;&gt;Choose one or more PDB, CIF, or mmCIF files to begin.&lt;/div&gt;
+
+  &lt;div class=&quot;gpv-confidence-layout&quot; id=&quot;gpv-confidence-panel&quot; hidden&gt;
+    &lt;div&gt;
+      &lt;div class=&quot;viz-controls&quot;&gt;&lt;button class=&quot;btn&quot; type=&quot;button&quot; id=&quot;gpv-confidence-csv&quot;&gt;Download confidence CSV&lt;/button&gt;&lt;/div&gt;
+      &lt;div class=&quot;table-responsive&quot;&gt;
+        &lt;table class=&quot;table table-sm&quot; aria-label=&quot;AlphaFold model confidence metrics&quot;&gt;
+          &lt;thead&gt;&lt;tr&gt;&lt;th&gt;Model&lt;/th&gt;&lt;th class=&quot;text-end&quot;&gt;Mean pLDDT&lt;/th&gt;&lt;th class=&quot;text-end&quot;&gt;pTM&lt;/th&gt;&lt;th class=&quot;text-end&quot;&gt;ipTM&lt;/th&gt;&lt;th class=&quot;text-end&quot;&gt;Ranking score&lt;/th&gt;&lt;th class=&quot;text-end&quot;&gt;Rank&lt;/th&gt;&lt;th&gt;Clash&lt;/th&gt;&lt;/tr&gt;&lt;/thead&gt;
+          &lt;tbody id=&quot;gpv-metrics&quot;&gt;&lt;/tbody&gt;
+        &lt;/table&gt;
+      &lt;/div&gt;
+    &lt;/div&gt;
+    &lt;div class=&quot;gpv-pae-panel&quot; id=&quot;gpv-pae-panel&quot; hidden&gt;
+      &lt;div id=&quot;gpv-pae-plot&quot; hidden&gt;
+        &lt;div class=&quot;viz-controls&quot;&gt;&lt;button class=&quot;btn&quot; type=&quot;button&quot; id=&quot;gpv-pae-png&quot;&gt;Download PAE PNG&lt;/button&gt;&lt;/div&gt;
+        &lt;canvas id=&quot;gpv-pae&quot; width=&quot;420&quot; height=&quot;420&quot; role=&quot;img&quot; aria-label=&quot;Predicted aligned error heatmap&quot;&gt;&lt;/canvas&gt;
+        &lt;div class=&quot;gpv-pae-legend text-small&quot;&gt;&lt;span&gt;Low error&lt;/span&gt;&lt;span&gt;PAE (Å)&lt;/span&gt;&lt;span&gt;High error&lt;/span&gt;&lt;/div&gt;
+        &lt;div class=&quot;text-small&quot; id=&quot;gpv-pae-detail&quot;&gt;Move over the heatmap to inspect a residue pair.&lt;/div&gt;
+      &lt;/div&gt;
+      &lt;div class=&quot;table-responsive&quot; id=&quot;gpv-interface-wrap&quot; hidden&gt;
+        &lt;table class=&quot;table table-sm&quot; aria-label=&quot;Chain-pair interface confidence&quot;&gt;&lt;thead&gt;&lt;tr&gt;&lt;th&gt;Chain pair&lt;/th&gt;&lt;th class=&quot;text-end&quot;&gt;ipTM&lt;/th&gt;&lt;th class=&quot;text-end&quot;&gt;Min PAE (Å)&lt;/th&gt;&lt;/tr&gt;&lt;/thead&gt;&lt;tbody id=&quot;gpv-interface-metrics&quot;&gt;&lt;/tbody&gt;&lt;/table&gt;
+      &lt;/div&gt;
+    &lt;/div&gt;
+  &lt;/div&gt;
 
   &lt;div class=&quot;viz-controls&quot; aria-label=&quot;Residue labels&quot;&gt;
     &lt;span id=&quot;gpv-residue&quot;&gt;Click a residue to inspect it.&lt;/span&gt;
@@ -903,6 +947,20 @@ html&gt;body{padding:0}&lt;/style&gt;
     &lt;label class=&quot;form-check form-switch&quot;&gt;&lt;input class=&quot;form-check-input&quot; id=&quot;gpv-all-labels&quot; type=&quot;checkbox&quot;&gt;&lt;span class=&quot;form-check-label&quot;&gt;Label every residue in current model&lt;/span&gt;&lt;/label&gt;
     &lt;button class=&quot;btn&quot; type=&quot;button&quot; id=&quot;gpv-clear-labels&quot;&gt;Clear labels&lt;/button&gt;
   &lt;/div&gt;
+
+  &lt;details class=&quot;gpv-provenance&quot;&gt;
+    &lt;summary&gt;Provenance and reproducible scene&lt;/summary&gt;
+    &lt;div class=&quot;viz-controls&quot;&gt;
+      &lt;label class=&quot;form-label&quot;&gt;Figure or project title&lt;input class=&quot;form-control&quot; id=&quot;gpv-project-title&quot; type=&quot;text&quot;&gt;&lt;/label&gt;
+      &lt;label class=&quot;form-label&quot;&gt;Model source or run&lt;input class=&quot;form-control&quot; id=&quot;gpv-project-source&quot; type=&quot;text&quot; placeholder=&quot;AlphaFold Server job, accession, or run ID&quot;&gt;&lt;/label&gt;
+      &lt;label class=&quot;form-label&quot;&gt;Method and version&lt;input class=&quot;form-control&quot; id=&quot;gpv-project-method&quot; type=&quot;text&quot; placeholder=&quot;For example AlphaFold 3&quot;&gt;&lt;/label&gt;
+      &lt;label class=&quot;form-label&quot;&gt;Notes&lt;textarea class=&quot;form-control&quot; id=&quot;gpv-project-notes&quot; rows=&quot;2&quot;&gt;&lt;/textarea&gt;&lt;/label&gt;
+    &lt;/div&gt;
+    &lt;div class=&quot;viz-controls&quot;&gt;
+      &lt;button class=&quot;btn&quot; type=&quot;button&quot; id=&quot;gpv-save-scene&quot; disabled&gt;Download scene JSON&lt;/button&gt;
+      &lt;label class=&quot;form-label&quot;&gt;Restore scene JSON&lt;input class=&quot;form-control&quot; id=&quot;gpv-load-scene&quot; type=&quot;file&quot; accept=&quot;.json&quot;&gt;&lt;/label&gt;
+    &lt;/div&gt;
+  &lt;/details&gt;
 
   &lt;div class=&quot;gpv-legend text-small&quot; id=&quot;gpv-plddt-legend&quot; hidden aria-label=&quot;pLDDT confidence color legend&quot;&gt;
     &lt;span&gt;&lt;i class=&quot;gpv-swatch gpv-vlow&quot;&gt;&lt;/i&gt;Very low &amp;lt;50&lt;/span&gt;
@@ -933,6 +991,13 @@ html&gt;body{padding:0}&lt;/style&gt;
   #generic-protein-viewer .gpv-entry-score { color: var(--muted-foreground); white-space: nowrap; }
   #generic-protein-viewer .gpv-entry .form-control-color { flex: 0 0 auto; }
   #generic-protein-viewer .gpv-empty { margin: 0 0 10px; }
+  #generic-protein-viewer .gpv-confidence-layout { display: grid; grid-template-columns: minmax(0, 1fr) minmax(240px, 420px); gap: 16px; align-items: start; margin: 0 0 12px; }
+  #generic-protein-viewer .gpv-confidence-layout[hidden], #generic-protein-viewer .gpv-pae-panel[hidden], #generic-protein-viewer #gpv-pae-plot[hidden], #generic-protein-viewer #gpv-interface-wrap[hidden], #generic-protein-viewer #gpv-alignment-wrap[hidden] { display: none; }
+  #generic-protein-viewer .gpv-pae-panel { min-width: 0; }
+  #generic-protein-viewer .gpv-pae-panel canvas { display: block; width: 100%; height: auto; max-width: 420px; background: var(--muted); }
+  #generic-protein-viewer .gpv-pae-legend { display: flex; justify-content: space-between; gap: 8px; margin-top: 4px; color: var(--muted-foreground); }
+  #generic-protein-viewer .gpv-provenance { margin: 0 0 12px; }
+  #generic-protein-viewer .gpv-provenance summary { cursor: pointer; margin-bottom: 10px; }
   #generic-protein-viewer .gpv-legend[hidden] { display: none; }
   #generic-protein-viewer .gpv-legend { display: flex; gap: 14px; flex-wrap: wrap; margin: 0 0 10px; color: var(--muted-foreground); }
   #generic-protein-viewer .gpv-legend span { display: inline-flex; align-items: center; gap: 5px; }
@@ -944,6 +1009,7 @@ html&gt;body{padding:0}&lt;/style&gt;
   #generic-protein-viewer .gpv-stage { position: relative; width: 100%; height: 520px; min-height: 360px; background: color-mix(in srgb, var(--muted) 35%, transparent); overflow: hidden; }
   #generic-protein-viewer .gpv-stage canvas { display: block; }
   #generic-protein-viewer .gpv-status { display: flex; justify-content: space-between; gap: 12px; flex-wrap: wrap; margin-top: 8px; color: var(--muted-foreground); }
+  @media (max-width: 680px) { #generic-protein-viewer .gpv-confidence-layout { grid-template-columns: 1fr; } }
   @media (max-width: 520px) { #generic-protein-viewer .gpv-stage { height: 400px; } }
 &lt;/style&gt;
 
@@ -967,6 +1033,10 @@ html&gt;body{padding:0}&lt;/style&gt;
   let selectedResidue = null;
   let labelRecords = [];
   let nextStructureId = 1;
+  let confidenceAssets = [];
+  let alignmentResults = [];
+  let pendingScene = null;
+  const viewerVersion = &#x27;1.2.0&#x27;;
   const labelColors = getComputedStyle(root);
 
   function plddtColor(score) {
@@ -987,6 +1057,252 @@ html&gt;body{padding:0}&lt;/style&gt;
 
   function mean(values) {
     return values.length ? values.reduce((sum, value) =&gt; sum + value, 0) / values.length : null;
+  }
+
+  function finiteNumber(value) {
+    const number = Number(value);
+    return Number.isFinite(number) ? number : null;
+  }
+
+  function formatMetric(value, digits = 3) {
+    const number = finiteNumber(value);
+    return number === null ? &#x27;—&#x27; : number.toFixed(digits);
+  }
+
+  function matrixMaximum(matrix) {
+    let maximum = 0;
+    if (!Array.isArray(matrix)) return maximum;
+    matrix.forEach(row =&gt; {
+      if (!Array.isArray(row)) return;
+      row.forEach(value =&gt; { const number = finiteNumber(value); if (number !== null) maximum = Math.max(maximum, number); });
+    });
+    return maximum;
+  }
+
+  function fileStem(path) {
+    return path.split(&#x27;/&#x27;).pop().replace(/\.(pdb|cif|mmcif|json|csv)$/i, &#x27;&#x27;);
+  }
+
+  function associationKey(path) {
+    const stem = fileStem(path).toLowerCase();
+    return stem.replace(/_(summary_confidences|confidences|full_data|model)(?:_(\d+))?$/, (_, marker, index) =&gt; index ? &#x27;_&#x27; + index : &#x27;&#x27;);
+  }
+
+  function assetFitsEntry(asset, entry) {
+    const assetKey = associationKey(asset.name);
+    const entryKey = associationKey(entry.sourcePath || entry.name);
+    if (assetKey === entryKey) return true;
+    const assetBase = fileStem(asset.name).toLowerCase();
+    const entryBase = fileStem(entry.name).toLowerCase();
+    const ranked = entryBase.match(/^ranked_(\d+)$/);
+    if (ranked &amp;&amp; asset.rankIndex === Number(ranked[1])) return true;
+    if (asset.modelName &amp;&amp; (entryBase === asset.modelName.toLowerCase() || entryBase.endsWith(&#x27;_&#x27; + asset.modelName.toLowerCase()))) return true;
+    if (asset.seed !== undefined &amp;&amp; asset.sample !== undefined) {
+      return entryBase.includes(&#x27;seed-&#x27; + asset.seed + &#x27;_sample-&#x27; + asset.sample);
+    }
+    return false;
+  }
+
+  function normalizeConfidenceJson(value) {
+    if (Array.isArray(value) &amp;&amp; value.length === 1 &amp;&amp; typeof value[0] === &#x27;object&#x27;) return value[0];
+    return value;
+  }
+
+  function confidenceFromJson(raw) {
+    const data = normalizeConfidenceJson(raw);
+    if (!data || typeof data !== &#x27;object&#x27; || Array.isArray(data)) return null;
+    const pae = Array.isArray(data.pae) ? data.pae : Array.isArray(data.predicted_aligned_error) ? data.predicted_aligned_error : null;
+    return {
+      ptm: finiteNumber(data.ptm ?? data.predicted_tm_score),
+      iptm: finiteNumber(data.iptm ?? data.interface_predicted_tm_score),
+      rankingScore: finiteNumber(data.ranking_score ?? data.ranking_confidence),
+      fractionDisordered: finiteNumber(data.fraction_disordered),
+      hasClash: data.has_clash === undefined ? null : data.has_clash === true || Number(data.has_clash) === 1,
+      pae,
+      paeMaximum: pae ? matrixMaximum(pae) : null,
+      tokenChainIds: Array.isArray(data.token_chain_ids) ? data.token_chain_ids : null,
+      tokenResidueIds: Array.isArray(data.token_res_ids) ? data.token_res_ids : null,
+      chainIds: Array.isArray(data.chain_ids) ? data.chain_ids : null,
+      chainPairIptm: Array.isArray(data.chain_pair_iptm) ? data.chain_pair_iptm : null,
+      chainPairPaeMin: Array.isArray(data.chain_pair_pae_min) ? data.chain_pair_pae_min : null
+    };
+  }
+
+  function mergeConfidence(target, incoming) {
+    if (!incoming) return target || {};
+    const merged = { ...(target || {}) };
+    Object.entries(incoming).forEach(([key, value]) =&gt; {
+      if (value !== null &amp;&amp; value !== undefined) merged[key] = value;
+    });
+    return merged;
+  }
+
+  function attachConfidenceAssets() {
+    structures.forEach(entry =&gt; {
+      confidenceAssets.filter(asset =&gt; assetFitsEntry(asset, entry)).forEach(asset =&gt; {
+        entry.confidence = mergeConfidence(entry.confidence, asset.confidence);
+        if (asset.rank !== null &amp;&amp; asset.rank !== undefined) entry.rank = asset.rank;
+      });
+    });
+    applyModelOrder();
+    renderConfidence();
+  }
+
+  function applyModelOrder() {
+    const mode = root.querySelector(&#x27;#gpv-order&#x27;).value;
+    const value = entry =&gt; mode === &#x27;ranking&#x27; ? finiteNumber(entry.confidence &amp;&amp; entry.confidence.rankingScore) : mode === &#x27;plddt&#x27; ? mean(entry.scores) : -entry.loadIndex;
+    structures.sort((a, b) =&gt; {
+      if (mode === &#x27;loaded&#x27;) return a.loadIndex - b.loadIndex;
+      return (value(b) ?? -Infinity) - (value(a) ?? -Infinity) || a.loadIndex - b.loadIndex;
+    });
+  }
+
+  function renderConfidence() {
+    const panel = root.querySelector(&#x27;#gpv-confidence-panel&#x27;);
+    panel.hidden = structures.length === 0;
+    const body = root.querySelector(&#x27;#gpv-metrics&#x27;);
+    body.replaceChildren();
+    structures.forEach(entry =&gt; {
+      const row = document.createElement(&#x27;tr&#x27;);
+      const values = [
+        entry.name,
+        formatMetric(mean(entry.scores), 1),
+        formatMetric(entry.confidence &amp;&amp; entry.confidence.ptm),
+        formatMetric(entry.confidence &amp;&amp; entry.confidence.iptm),
+        formatMetric(entry.confidence &amp;&amp; entry.confidence.rankingScore),
+        entry.rank === null || entry.rank === undefined ? &#x27;—&#x27; : String(entry.rank),
+        Object.prototype.hasOwnProperty.call(entry.confidence || {}, &#x27;hasClash&#x27;) ? (entry.confidence.hasClash ? &#x27;Yes&#x27; : &#x27;No&#x27;) : &#x27;—&#x27;
+      ];
+      values.forEach((value, index) =&gt; {
+        const cell = document.createElement(index === 0 ? &#x27;th&#x27; : &#x27;td&#x27;);
+        cell.textContent = value;
+        if (index &gt; 0 &amp;&amp; index &lt; 6) cell.className = &#x27;text-end&#x27;;
+        row.append(cell);
+      });
+      body.append(row);
+    });
+    drawPae(activeEntry());
+  }
+
+  function paeColor(value, maximum) {
+    const t = Math.max(0, Math.min(1, value / Math.max(1, maximum)));
+    const low = [0, 83, 214];
+    const high = [255, 219, 19];
+    return low.map((channel, index) =&gt; Math.round(channel + (high[index] - channel) * t));
+  }
+
+  function drawPae(entry) {
+    const panel = root.querySelector(&#x27;#gpv-pae-panel&#x27;);
+    const plot = root.querySelector(&#x27;#gpv-pae-plot&#x27;);
+    const matrix = entry &amp;&amp; entry.confidence &amp;&amp; entry.confidence.pae;
+    if (!Array.isArray(matrix) || !matrix.length || !Array.isArray(matrix[0])) {
+      plot.hidden = true;
+      renderInterfaceMetrics(entry);
+      return;
+    }
+    plot.hidden = false;
+    const canvas = root.querySelector(&#x27;#gpv-pae&#x27;);
+    const context = canvas.getContext(&#x27;2d&#x27;);
+    const size = matrix.length;
+    const image = context.createImageData(canvas.width, canvas.height);
+    const maximum = finiteNumber(entry.confidence.paeMaximum) || matrixMaximum(matrix);
+    for (let y = 0; y &lt; canvas.height; y += 1) {
+      const row = matrix[Math.min(size - 1, Math.floor(y * size / canvas.height))] || [];
+      for (let x = 0; x &lt; canvas.width; x += 1) {
+        const value = finiteNumber(row[Math.min(row.length - 1, Math.floor(x * row.length / canvas.width))]) || 0;
+        const color = paeColor(value, maximum);
+        const offset = (y * canvas.width + x) * 4;
+        image.data[offset] = color[0];
+        image.data[offset + 1] = color[1];
+        image.data[offset + 2] = color[2];
+        image.data[offset + 3] = 255;
+      }
+    }
+    context.putImageData(image, 0, 0);
+    const chains = entry.confidence.tokenChainIds || [];
+    context.save();
+    context.strokeStyle = labelColors.getPropertyValue(&#x27;--foreground&#x27;).trim() || &#x27;#111827&#x27;;
+    context.globalAlpha = 0.7;
+    context.lineWidth = 1;
+    for (let index = 1; index &lt; chains.length; index += 1) {
+      if (chains[index] === chains[index - 1]) continue;
+      const position = Math.round(index * canvas.width / size) + 0.5;
+      context.beginPath();
+      context.moveTo(position, 0);
+      context.lineTo(position, canvas.height);
+      context.moveTo(0, position);
+      context.lineTo(canvas.width, position);
+      context.stroke();
+    }
+    context.restore();
+    canvas.dataset.entryId = String(entry.id);
+    canvas.dataset.maximum = String(maximum);
+    canvas.setAttribute(&#x27;aria-label&#x27;, &#x27;Predicted aligned error heatmap for &#x27; + entry.name + &#x27;, &#x27; + size + &#x27; by &#x27; + size + &#x27; tokens, maximum &#x27; + maximum.toFixed(1) + &#x27; angstroms&#x27;);
+    root.querySelector(&#x27;#gpv-pae-detail&#x27;).textContent = entry.name + &#x27; · &#x27; + size + &#x27; × &#x27; + size + &#x27; tokens · maximum &#x27; + maximum.toFixed(1) + &#x27; Å&#x27;;
+    renderInterfaceMetrics(entry);
+  }
+
+  function renderInterfaceMetrics(entry) {
+    const panel = root.querySelector(&#x27;#gpv-pae-panel&#x27;);
+    const wrap = root.querySelector(&#x27;#gpv-interface-wrap&#x27;);
+    const body = root.querySelector(&#x27;#gpv-interface-metrics&#x27;);
+    body.replaceChildren();
+    const confidence = entry &amp;&amp; entry.confidence || {};
+    const iptm = confidence.chainPairIptm;
+    const pae = confidence.chainPairPaeMin;
+    const size = Math.max(Array.isArray(iptm) ? iptm.length : 0, Array.isArray(pae) ? pae.length : 0);
+    const derivedChainIds = [...new Set(confidence.tokenChainIds || [])];
+    const chainIds = confidence.chainIds &amp;&amp; confidence.chainIds.length ? confidence.chainIds : derivedChainIds.length ? derivedChainIds : Array.from({ length: size }, (_, index) =&gt; String(index + 1));
+    for (let i = 0; i &lt; size; i += 1) {
+      for (let j = i + 1; j &lt; size; j += 1) {
+        const row = document.createElement(&#x27;tr&#x27;);
+        const values = [
+          (chainIds[i] ?? i + 1) + &#x27;–&#x27; + (chainIds[j] ?? j + 1),
+          formatMetric(iptm &amp;&amp; iptm[i] &amp;&amp; iptm[i][j]),
+          formatMetric(pae &amp;&amp; pae[i] &amp;&amp; pae[i][j], 2)
+        ];
+        values.forEach((value, index) =&gt; {
+          const cell = document.createElement(index === 0 ? &#x27;th&#x27; : &#x27;td&#x27;);
+          cell.textContent = value;
+          if (index &gt; 0) cell.className = &#x27;text-end&#x27;;
+          row.append(cell);
+        });
+        body.append(row);
+      }
+    }
+    wrap.hidden = body.children.length === 0;
+    panel.hidden = root.querySelector(&#x27;#gpv-pae-plot&#x27;).hidden &amp;&amp; wrap.hidden;
+  }
+
+  async function sha256(textValue) {
+    if (!globalThis.crypto || !crypto.subtle) return null;
+    const bytes = new TextEncoder().encode(textValue);
+    const digest = await crypto.subtle.digest(&#x27;SHA-256&#x27;, bytes);
+    return [...new Uint8Array(digest)].map(byte =&gt; byte.toString(16).padStart(2, &#x27;0&#x27;)).join(&#x27;&#x27;);
+  }
+
+  function downloadBlob(contents, type, filename) {
+    const url = URL.createObjectURL(new Blob([contents], { type }));
+    const link = document.createElement(&#x27;a&#x27;);
+    link.href = url;
+    link.download = filename;
+    link.click();
+    setTimeout(() =&gt; URL.revokeObjectURL(url), 1000);
+  }
+
+  function csvCell(value) {
+    return &#x27;&quot;&#x27; + String(value ?? &#x27;&#x27;).replace(/&quot;/g, &#x27;&quot;&quot;&#x27;) + &#x27;&quot;&#x27;;
+  }
+
+  function downloadConfidenceCsv() {
+    const rows = [[&#x27;model&#x27;, &#x27;mean_plddt&#x27;, &#x27;ptm&#x27;, &#x27;iptm&#x27;, &#x27;ranking_score&#x27;, &#x27;rank&#x27;, &#x27;has_clash&#x27;, &#x27;confidence_sources&#x27;]];
+    structures.forEach(entry =&gt; {
+      const confidence = entry.confidence || {};
+      const sources = confidenceAssets.filter(asset =&gt; assetFitsEntry(asset, entry)).map(asset =&gt; asset.name).join(&#x27;; &#x27;);
+      rows.push([entry.name, mean(entry.scores) ?? &#x27;&#x27;, confidence.ptm ?? &#x27;&#x27;, confidence.iptm ?? &#x27;&#x27;, confidence.rankingScore ?? &#x27;&#x27;, entry.rank ?? &#x27;&#x27;, Object.prototype.hasOwnProperty.call(confidence, &#x27;hasClash&#x27;) ? confidence.hasClash : &#x27;&#x27;, sources]);
+    });
+    downloadBlob(rows.map(row =&gt; row.map(csvCell).join(&#x27;,&#x27;)).join(&#x27;\n&#x27;), &#x27;text/csv&#x27;, &#x27;protein-confidence-metrics.csv&#x27;);
+    updateStatus(&#x27;Confidence CSV downloaded&#x27;);
   }
 
   function activeEntry() {
@@ -1026,6 +1342,7 @@ html&gt;body{padding:0}&lt;/style&gt;
     root.querySelector(&#x27;#gpv-empty&#x27;).hidden = structures.length &gt; 0;
     root.querySelector(&#x27;#gpv-report&#x27;).disabled = structures.length === 0;
     root.querySelector(&#x27;#gpv-video&#x27;).disabled = structures.length === 0;
+    root.querySelector(&#x27;#gpv-save-scene&#x27;).disabled = structures.length === 0;
     [&#x27;#gpv-current&#x27;, &#x27;#gpv-reference&#x27;, &#x27;#gpv-previous&#x27;, &#x27;#gpv-next&#x27;, &#x27;#gpv-cycle&#x27;, &#x27;#gpv-align&#x27;, &#x27;#gpv-restore&#x27;].forEach(selector =&gt; {
       root.querySelector(selector).disabled = structures.length === 0;
     });
@@ -1040,6 +1357,7 @@ html&gt;body{padding:0}&lt;/style&gt;
     root.querySelector(&#x27;#gpv-plddt-legend&#x27;).hidden = root.querySelector(&#x27;#gpv-color-mode&#x27;).value !== &#x27;plddt&#x27;;
     viewer.render();
     rebuildLabels();
+    renderConfidence();
     updateStatus();
   }
 
@@ -1058,6 +1376,7 @@ html&gt;body{padding:0}&lt;/style&gt;
       });
       if (structures.some(entry =&gt; String(entry.id) === String(previous))) select.value = String(previous);
     });
+    renderConfidence();
   }
 
   function renderList() {
@@ -1081,7 +1400,6 @@ html&gt;body{padding:0}&lt;/style&gt;
       const name = document.createElement(&#x27;span&#x27;);
       name.className = &#x27;gpv-entry-name&#x27;;
       name.textContent = entry.name;
-      name.setAttribute(&#x27;title&#x27;, entry.name);
 
       const score = document.createElement(&#x27;span&#x27;);
       score.className = &#x27;gpv-entry-score text-small&#x27;;
@@ -1103,6 +1421,8 @@ html&gt;body{padding:0}&lt;/style&gt;
         viewer.removeModel(entry.model);
         structures = structures.filter(item =&gt; item !== entry);
         labelRecords = labelRecords.filter(label =&gt; label.entryId !== entry.id);
+        alignmentResults = [];
+        renderAlignmentResults();
         renderList();
         applyStyle();
       });
@@ -1112,17 +1432,21 @@ html&gt;body{padding:0}&lt;/style&gt;
     });
   }
 
-  function addStructure(name, text, format) {
+  function addStructure(name, text, format, sourcePath = name) {
     const model = viewer.addModel(text, format);
     const atoms = model.selectedAtoms({});
     const entry = {
       id: nextStructureId++,
+      loadIndex: nextStructureId - 2,
       name,
       model,
       visible: true,
       color: palette[structures.length % palette.length],
       text,
       format,
+      sourcePath,
+      confidence: {},
+      rank: null,
       scores: modelScores(model),
       atoms,
       originalAtoms: atoms.map(atom =&gt; ({ x: atom.x, y: atom.y, z: atom.z }))
@@ -1130,6 +1454,7 @@ html&gt;body{padding:0}&lt;/style&gt;
     structures.push(entry);
     if (activeId === null) activeId = entry.id;
     viewer.setClickable({ model: model.getID() }, true, atom =&gt; selectResidue(entry, atom));
+    sha256(text).then(hash =&gt; { entry.hash = hash; });
     return entry;
   }
 
@@ -1260,6 +1585,8 @@ html&gt;body{padding:0}&lt;/style&gt;
       atom.z = original.z;
     }));
     if (shouldRender) {
+      alignmentResults = [];
+      renderAlignmentResults();
       applyStyle();
       viewer.zoomTo();
       viewer.render();
@@ -1272,17 +1599,98 @@ html&gt;body{padding:0}&lt;/style&gt;
     return total.map(value =&gt; value / points.length);
   }
 
-  function caPairs(reference, target) {
+  function identifierPairs(reference, target) {
     const referenceMap = new Map(reference.atoms.filter(atom =&gt; atom.atom === &#x27;CA&#x27;).map(atom =&gt; [(atom.chain || &#x27;&#x27;) + &#x27;|&#x27; + atom.resi, atom]));
-    let pairs = target.atoms.filter(atom =&gt; atom.atom === &#x27;CA&#x27; &amp;&amp; referenceMap.has((atom.chain || &#x27;&#x27;) + &#x27;|&#x27; + atom.resi)).map(atom =&gt; [referenceMap.get((atom.chain || &#x27;&#x27;) + &#x27;|&#x27; + atom.resi), atom]);
-    let method = &#x27;chain/residue identifiers&#x27;;
-    if (pairs.length &lt; 3) {
-      const refAtoms = reference.atoms.filter(atom =&gt; atom.atom === &#x27;CA&#x27;);
-      const targetAtoms = target.atoms.filter(atom =&gt; atom.atom === &#x27;CA&#x27;);
-      pairs = Array.from({ length: Math.min(refAtoms.length, targetAtoms.length) }, (_, index) =&gt; [refAtoms[index], targetAtoms[index]]);
-      method = &#x27;residue order&#x27;;
+    const pairs = target.atoms.filter(atom =&gt; atom.atom === &#x27;CA&#x27; &amp;&amp; referenceMap.has((atom.chain || &#x27;&#x27;) + &#x27;|&#x27; + atom.resi)).map(atom =&gt; [referenceMap.get((atom.chain || &#x27;&#x27;) + &#x27;|&#x27; + atom.resi), atom]);
+    return { pairs, method: &#x27;chain/residue IDs&#x27;, identity: null, chainPairs: null };
+  }
+
+  const aminoAcids = {
+    ALA: &#x27;A&#x27;, ARG: &#x27;R&#x27;, ASN: &#x27;N&#x27;, ASP: &#x27;D&#x27;, CYS: &#x27;C&#x27;, GLN: &#x27;Q&#x27;, GLU: &#x27;E&#x27;, GLY: &#x27;G&#x27;, HIS: &#x27;H&#x27;, ILE: &#x27;I&#x27;,
+    LEU: &#x27;L&#x27;, LYS: &#x27;K&#x27;, MET: &#x27;M&#x27;, PHE: &#x27;F&#x27;, PRO: &#x27;P&#x27;, SER: &#x27;S&#x27;, THR: &#x27;T&#x27;, TRP: &#x27;W&#x27;, TYR: &#x27;Y&#x27;, VAL: &#x27;V&#x27;,
+    SEC: &#x27;U&#x27;, PYL: &#x27;O&#x27;, ASX: &#x27;B&#x27;, GLX: &#x27;Z&#x27;
+  };
+
+  function residueChains(entry) {
+    const chains = new Map();
+    entry.atoms.filter(atom =&gt; atom.atom === &#x27;CA&#x27;).forEach(atom =&gt; {
+      const chain = atom.chain || &#x27;&#x27;;
+      if (!chains.has(chain)) chains.set(chain, []);
+      chains.get(chain).push({ atom, letter: aminoAcids[String(atom.resn || &#x27;&#x27;).toUpperCase()] || &#x27;X&#x27; });
+    });
+    return chains;
+  }
+
+  function alignSequences(referenceResidues, targetResidues) {
+    const rows = referenceResidues.length + 1;
+    const columns = targetResidues.length + 1;
+    const scores = Array.from({ length: rows }, () =&gt; new Int32Array(columns));
+    const trace = Array.from({ length: rows }, () =&gt; new Uint8Array(columns));
+    for (let i = 1; i &lt; rows; i += 1) { scores[i][0] = -2 * i; trace[i][0] = 1; }
+    for (let j = 1; j &lt; columns; j += 1) { scores[0][j] = -2 * j; trace[0][j] = 2; }
+    for (let i = 1; i &lt; rows; i += 1) {
+      for (let j = 1; j &lt; columns; j += 1) {
+        const diagonal = scores[i - 1][j - 1] + (referenceResidues[i - 1].letter === targetResidues[j - 1].letter ? 2 : -1);
+        const up = scores[i - 1][j] - 2;
+        const left = scores[i][j - 1] - 2;
+        const best = Math.max(diagonal, up, left);
+        scores[i][j] = best;
+        trace[i][j] = best === diagonal ? 0 : best === up ? 1 : 2;
+      }
     }
-    return { pairs, method };
+    let i = referenceResidues.length;
+    let j = targetResidues.length;
+    const pairs = [];
+    let matches = 0;
+    while (i &gt; 0 || j &gt; 0) {
+      const direction = trace[i][j];
+      if (i &gt; 0 &amp;&amp; j &gt; 0 &amp;&amp; direction === 0) {
+        const referenceResidue = referenceResidues[i - 1];
+        const targetResidue = targetResidues[j - 1];
+        pairs.push([referenceResidue.atom, targetResidue.atom]);
+        if (referenceResidue.letter === targetResidue.letter) matches += 1;
+        i -= 1;
+        j -= 1;
+      } else if (i &gt; 0 &amp;&amp; (j === 0 || direction === 1)) i -= 1;
+      else j -= 1;
+    }
+    pairs.reverse();
+    return { pairs, identity: pairs.length ? matches / pairs.length : 0, score: scores[rows - 1][columns - 1] };
+  }
+
+  function sequencePairs(reference, target) {
+    const referenceChains = residueChains(reference);
+    const targetChains = residueChains(target);
+    const candidates = [];
+    referenceChains.forEach((referenceResidues, referenceChain) =&gt; {
+      targetChains.forEach((targetResidues, targetChain) =&gt; {
+        const alignment = alignSequences(referenceResidues, targetResidues);
+        candidates.push({ referenceChain, targetChain, ...alignment });
+      });
+    });
+    candidates.sort((a, b) =&gt; (b.identity - a.identity) || (b.pairs.length - a.pairs.length) || (b.score - a.score));
+    const usedReference = new Set();
+    const usedTarget = new Set();
+    const selected = [];
+    candidates.forEach(candidate =&gt; {
+      if (!usedReference.has(candidate.referenceChain) &amp;&amp; !usedTarget.has(candidate.targetChain)) {
+        usedReference.add(candidate.referenceChain);
+        usedTarget.add(candidate.targetChain);
+        selected.push(candidate);
+      }
+    });
+    const pairs = selected.flatMap(candidate =&gt; candidate.pairs);
+    const matches = selected.reduce((sum, candidate) =&gt; sum + Math.round(candidate.identity * candidate.pairs.length), 0);
+    return {
+      pairs,
+      method: &#x27;global sequence alignment&#x27;,
+      identity: pairs.length ? matches / pairs.length : 0,
+      chainPairs: selected.map(candidate =&gt; (candidate.referenceChain || &#x27;—&#x27;) + &#x27;→&#x27; + (candidate.targetChain || &#x27;—&#x27;)).join(&#x27;; &#x27;)
+    };
+  }
+
+  function caPairs(reference, target) {
+    return root.querySelector(&#x27;#gpv-alignment-mode&#x27;).value === &#x27;sequence&#x27; ? sequencePairs(reference, target) : identifierPairs(reference, target);
   }
 
   function determinant3(matrix) {
@@ -1320,7 +1728,34 @@ html&gt;body{padding:0}&lt;/style&gt;
       const dz = pair[0].z - pair[1].z;
       return sum + dx * dx + dy * dy + dz * dz;
     }, 0);
-    return { count: pairs.length, rmsd: Math.sqrt(squaredError / pairs.length), method: pairing.method, name: target.name };
+    return { count: pairs.length, rmsd: Math.sqrt(squaredError / pairs.length), method: pairing.method, identity: pairing.identity, chainPairs: pairing.chainPairs, name: target.name, reference: reference.name };
+  }
+
+  function renderAlignmentResults() {
+    const wrap = root.querySelector(&#x27;#gpv-alignment-wrap&#x27;);
+    wrap.hidden = alignmentResults.length === 0;
+    root.querySelector(&#x27;#gpv-alignment-csv&#x27;).disabled = alignmentResults.length === 0;
+    const body = root.querySelector(&#x27;#gpv-alignment-results&#x27;);
+    body.replaceChildren();
+    alignmentResults.forEach(result =&gt; {
+      const row = document.createElement(&#x27;tr&#x27;);
+      const values = [result.name, result.reference, String(result.count), result.identity === null ? &#x27;—&#x27; : (result.identity * 100).toFixed(1) + &#x27;%&#x27;, result.rmsd.toFixed(3), result.method + (result.chainPairs ? &#x27; · &#x27; + result.chainPairs : &#x27;&#x27;)];
+      values.forEach((value, index) =&gt; {
+        const cell = document.createElement(index &lt; 2 ? &#x27;th&#x27; : &#x27;td&#x27;);
+        cell.textContent = value;
+        if (index &gt;= 2 &amp;&amp; index &lt;= 4) cell.className = &#x27;text-end&#x27;;
+        row.append(cell);
+      });
+      body.append(row);
+    });
+  }
+
+  function downloadAlignmentCsv() {
+    const quote = value =&gt; &#x27;&quot;&#x27; + String(value ?? &#x27;&#x27;).replace(/&quot;/g, &#x27;&quot;&quot;&#x27;) + &#x27;&quot;&#x27;;
+    const rows = [[&#x27;model&#x27;, &#x27;reference&#x27;, &#x27;ca_pairs&#x27;, &#x27;sequence_identity&#x27;, &#x27;rmsd_angstrom&#x27;, &#x27;mapping&#x27;, &#x27;chain_pairs&#x27;]];
+    alignmentResults.forEach(result =&gt; rows.push([result.name, result.reference, result.count, result.identity === null ? &#x27;&#x27; : result.identity, result.rmsd, result.method, result.chainPairs || &#x27;&#x27;]));
+    downloadBlob(rows.map(row =&gt; row.map(quote).join(&#x27;,&#x27;)).join(&#x27;\n&#x27;), &#x27;text/csv&#x27;, &#x27;protein-alignment-results.csv&#x27;);
+    updateStatus(&#x27;Alignment CSV downloaded&#x27;);
   }
 
   function alignVisible() {
@@ -1335,13 +1770,15 @@ html&gt;body{padding:0}&lt;/style&gt;
         if (result) results.push(result);
       }
     });
+    alignmentResults = results;
+    renderAlignmentResults();
     applyStyle();
     viewer.zoomTo();
     viewer.render();
     if (results.length) {
       const averageRmsd = mean(results.map(result =&gt; result.rmsd));
-      const orderMapped = results.filter(result =&gt; result.method === &#x27;residue order&#x27;).length;
-      updateStatus(&#x27;Aligned &#x27; + results.length + &#x27; model&#x27; + (results.length === 1 ? &#x27;&#x27; : &#x27;s&#x27;) + &#x27; · mean Cα RMSD &#x27; + averageRmsd.toFixed(2) + &#x27; Å&#x27; + (orderMapped ? &#x27; · &#x27; + orderMapped + &#x27; order-mapped&#x27; : &#x27;&#x27;));
+      const identities = results.map(result =&gt; result.identity).filter(value =&gt; value !== null);
+      updateStatus(&#x27;Aligned &#x27; + results.length + &#x27; model&#x27; + (results.length === 1 ? &#x27;&#x27; : &#x27;s&#x27;) + &#x27; · mean Cα RMSD &#x27; + averageRmsd.toFixed(2) + &#x27; Å&#x27; + (identities.length ? &#x27; · mean identity &#x27; + (mean(identities) * 100).toFixed(1) + &#x27;%&#x27; : &#x27;&#x27;));
     } else updateStatus(&#x27;No model had enough matching residues&#x27;);
   }
 
@@ -1380,6 +1817,166 @@ html&gt;body{padding:0}&lt;/style&gt;
     setTimeout(() =&gt; recorder.stop(), duration * 1000);
   }
 
+  function rankingAssets(name, data) {
+    if (!data || !Array.isArray(data.order)) return [];
+    const scoreMaps = [data[&#x27;iptm+ptm&#x27;], data.ranking_confidences, data.plddts].filter(value =&gt; value &amp;&amp; typeof value === &#x27;object&#x27;);
+    return data.order.map((modelName, rankIndex) =&gt; {
+      let score = null;
+      scoreMaps.some(map =&gt; {
+        const value = finiteNumber(map[modelName]);
+        if (value !== null) { score = value; return true; }
+        return false;
+      });
+      return {
+        name,
+        modelName,
+        rankIndex,
+        rank: rankIndex + 1,
+        confidence: { rankingScore: score }
+      };
+    });
+  }
+
+  function parseRankingCsv(name, textValue) {
+    const rows = textValue.trim().split(/\r?\n/).map(line =&gt; line.split(&#x27;,&#x27;).map(value =&gt; value.trim()));
+    if (rows.length &lt; 2) return [];
+    const headers = rows[0].map(value =&gt; value.toLowerCase());
+    const seedIndex = headers.indexOf(&#x27;seed&#x27;);
+    const sampleIndex = headers.indexOf(&#x27;sample&#x27;);
+    const scoreIndex = headers.indexOf(&#x27;ranking_score&#x27;);
+    if (scoreIndex &lt; 0) return [];
+    return rows.slice(1).map(row =&gt; ({
+      name,
+      seed: seedIndex &gt;= 0 ? row[seedIndex] : undefined,
+      sample: sampleIndex &gt;= 0 ? row[sampleIndex] : undefined,
+      confidence: { rankingScore: finiteNumber(row[scoreIndex]) }
+    })).sort((a, b) =&gt; (b.confidence.rankingScore ?? -Infinity) - (a.confidence.rankingScore ?? -Infinity)).map((asset, index) =&gt; ({ ...asset, rank: index + 1 }));
+  }
+
+  function registerMetadata(name, textValue) {
+    const lower = name.toLowerCase();
+    if (lower.endsWith(&#x27;.csv&#x27;)) {
+      const assets = parseRankingCsv(name, textValue);
+      confidenceAssets.push(...assets);
+      return assets.length &gt; 0;
+    }
+    let data;
+    try { data = JSON.parse(textValue); } catch (error) { return false; }
+    if (data &amp;&amp; data.type === &#x27;protein-viewer-scene&#x27;) {
+      pendingScene = data;
+      return true;
+    }
+    const ranked = rankingAssets(name, data);
+    if (ranked.length) {
+      confidenceAssets.push(...ranked);
+      return true;
+    }
+    const confidence = confidenceFromJson(data);
+    if (!confidence) return false;
+    const useful = Object.values(confidence).some(value =&gt; value !== null &amp;&amp; value !== false);
+    if (!useful) return false;
+    confidenceAssets.push({ name, confidence, rank: null });
+    return true;
+  }
+
+  function provenanceValues() {
+    return {
+      title: root.querySelector(&#x27;#gpv-project-title&#x27;).value.trim(),
+      source: root.querySelector(&#x27;#gpv-project-source&#x27;).value.trim(),
+      method: root.querySelector(&#x27;#gpv-project-method&#x27;).value.trim(),
+      notes: root.querySelector(&#x27;#gpv-project-notes&#x27;).value.trim()
+    };
+  }
+
+  async function saveScene() {
+    const modelRecords = await Promise.all(structures.map(async entry =&gt; ({
+      name: entry.name,
+      sourcePath: entry.sourcePath,
+      sha256: entry.hash || await sha256(entry.text),
+      visible: entry.visible,
+      color: entry.color
+    })));
+    const active = activeEntry();
+    const reference = structures.find(entry =&gt; entry.id === Number(root.querySelector(&#x27;#gpv-reference&#x27;).value));
+    const scene = {
+      type: &#x27;protein-viewer-scene&#x27;,
+      schemaVersion: 1,
+      viewerVersion,
+      createdAt: new Date().toISOString(),
+      provenance: provenanceValues(),
+      confidenceSources: [...new Set(confidenceAssets.map(asset =&gt; asset.name))],
+      models: modelRecords,
+      settings: {
+        viewMode: root.querySelector(&#x27;#gpv-view-mode&#x27;).value,
+        representation: root.querySelector(&#x27;#gpv-style&#x27;).value,
+        colorMode: root.querySelector(&#x27;#gpv-color-mode&#x27;).value,
+        modelOrder: root.querySelector(&#x27;#gpv-order&#x27;).value,
+        alignmentMode: root.querySelector(&#x27;#gpv-alignment-mode&#x27;).value,
+        alignmentApplied: alignmentResults.length &gt; 0,
+        activeModel: active ? active.name : null,
+        referenceModel: reference ? reference.name : null,
+        allResidueLabels: root.querySelector(&#x27;#gpv-all-labels&#x27;).checked,
+        camera: typeof viewer.getView === &#x27;function&#x27; ? viewer.getView() : null
+      },
+      labels: labelRecords.map(label =&gt; ({
+        model: (structures.find(entry =&gt; entry.id === label.entryId) || {}).name,
+        chain: label.chain,
+        resi: label.resi,
+        atom: label.atom,
+        text: label.text
+      }))
+    };
+    downloadBlob(JSON.stringify(scene, null, 2), &#x27;application/json&#x27;, &#x27;protein-viewer-scene.json&#x27;);
+    updateStatus(&#x27;Reproducible scene JSON downloaded&#x27;);
+  }
+
+  async function applyScene(scene) {
+    if (!scene || scene.type !== &#x27;protein-viewer-scene&#x27;) return;
+    const byName = new Map(structures.map(entry =&gt; [entry.name, entry]));
+    let hashWarnings = 0;
+    for (const modelRecord of scene.models || []) {
+      const entry = byName.get(modelRecord.name);
+      if (!entry) continue;
+      entry.visible = modelRecord.visible !== false;
+      if (/^#[0-9a-f]{6}$/i.test(modelRecord.color || &#x27;&#x27;)) entry.color = modelRecord.color;
+      if (modelRecord.sha256) {
+        const actual = entry.hash || await sha256(entry.text);
+        if (actual &amp;&amp; actual !== modelRecord.sha256) hashWarnings += 1;
+      }
+    }
+    const settings = scene.settings || {};
+    if ([&#x27;overlay&#x27;, &#x27;single&#x27;].includes(settings.viewMode)) root.querySelector(&#x27;#gpv-view-mode&#x27;).value = settings.viewMode;
+    if ([&#x27;cartoon&#x27;, &#x27;stick&#x27;, &#x27;sphere&#x27;, &#x27;line&#x27;].includes(settings.representation)) root.querySelector(&#x27;#gpv-style&#x27;).value = settings.representation;
+    if ([&#x27;structure&#x27;, &#x27;chain&#x27;, &#x27;plddt&#x27;, &#x27;spectrum&#x27;, &#x27;element&#x27;].includes(settings.colorMode)) root.querySelector(&#x27;#gpv-color-mode&#x27;).value = settings.colorMode;
+    if ([&#x27;loaded&#x27;, &#x27;ranking&#x27;, &#x27;plddt&#x27;].includes(settings.modelOrder)) root.querySelector(&#x27;#gpv-order&#x27;).value = settings.modelOrder;
+    if ([&#x27;sequence&#x27;, &#x27;identifier&#x27;].includes(settings.alignmentMode)) root.querySelector(&#x27;#gpv-alignment-mode&#x27;).value = settings.alignmentMode;
+    const active = byName.get(settings.activeModel);
+    if (active) activeId = active.id;
+    const reference = byName.get(settings.referenceModel);
+    labelRecords = (scene.labels || []).map(label =&gt; {
+      const entry = byName.get(label.model);
+      if (!entry) return null;
+      const atom = entry.atoms.find(item =&gt; (item.chain || &#x27;&#x27;) === (label.chain || &#x27;&#x27;) &amp;&amp; item.resi === label.resi &amp;&amp; (item.atom === label.atom || item.atom === &#x27;CA&#x27;));
+      if (!atom) return null;
+      return { entryId: entry.id, chain: label.chain || &#x27;&#x27;, resi: label.resi, atom: label.atom || &#x27;CA&#x27;, resn: atom.resn, x: atom.x, y: atom.y, z: atom.z, key: residueKey(entry.id, label.chain, label.resi), text: label.text };
+    }).filter(Boolean);
+    root.querySelector(&#x27;#gpv-all-labels&#x27;).checked = settings.allResidueLabels === true;
+    const provenance = scene.provenance || {};
+    root.querySelector(&#x27;#gpv-project-title&#x27;).value = provenance.title || &#x27;&#x27;;
+    root.querySelector(&#x27;#gpv-project-source&#x27;).value = provenance.source || &#x27;&#x27;;
+    root.querySelector(&#x27;#gpv-project-method&#x27;).value = provenance.method || &#x27;&#x27;;
+    root.querySelector(&#x27;#gpv-project-notes&#x27;).value = provenance.notes || &#x27;&#x27;;
+    applyModelOrder();
+    renderList();
+    if (reference) root.querySelector(&#x27;#gpv-reference&#x27;).value = String(reference.id);
+    applyStyle();
+    if (settings.alignmentApplied &amp;&amp; reference) alignVisible();
+    if (settings.camera &amp;&amp; typeof viewer.setView === &#x27;function&#x27;) viewer.setView(settings.camera);
+    viewer.render();
+    pendingScene = null;
+    updateStatus(&#x27;Scene restored&#x27; + (hashWarnings ? &#x27; · warning: &#x27; + hashWarnings + &#x27; file hash mismatch&#x27; + (hashWarnings === 1 ? &#x27;&#x27; : &#x27;es&#x27;) : &#x27;&#x27;));
+  }
+
   async function loadFiles(files) {
     if (!files.length) return;
     updateStatus(&#x27;Loading…&#x27;);
@@ -1390,21 +1987,26 @@ html&gt;body{padding:0}&lt;/style&gt;
         const extension = file.name.split(&#x27;.&#x27;).pop().toLowerCase();
         if (extension === &#x27;zip&#x27;) {
           const zip = await JSZip.loadAsync(file);
-          const members = Object.values(zip.files).filter(member =&gt; {
+          const members = Object.values(zip.files);
+          const structureMembers = members.filter(member =&gt; {
             const lower = member.name.toLowerCase();
             const supported = lower.endsWith(&#x27;.pdb&#x27;) || lower.endsWith(&#x27;.cif&#x27;) || lower.endsWith(&#x27;.mmcif&#x27;);
             return !member.dir &amp;&amp; supported &amp;&amp; !lower.includes(&#x27;/templates/&#x27;) &amp;&amp; !lower.includes(&#x27;template_hit&#x27;);
           });
-          for (const member of members) {
+          for (const member of structureMembers) {
             const memberExtension = member.name.split(&#x27;.&#x27;).pop().toLowerCase();
-            addStructure(member.name.split(&#x27;/&#x27;).pop(), await member.async(&#x27;string&#x27;), memberExtension === &#x27;pdb&#x27; ? &#x27;pdb&#x27; : &#x27;cif&#x27;);
+            addStructure(member.name.split(&#x27;/&#x27;).pop(), await member.async(&#x27;string&#x27;), memberExtension === &#x27;pdb&#x27; ? &#x27;pdb&#x27; : &#x27;cif&#x27;, member.name);
             loaded += 1;
             updateStatus(&#x27;Loading &#x27; + loaded + &#x27; structures…&#x27;);
           }
-          if (!members.length) skipped += 1;
+          const metadataMembers = members.filter(member =&gt; !member.dir &amp;&amp; (member.name.toLowerCase().endsWith(&#x27;.json&#x27;) || member.name.toLowerCase().endsWith(&#x27;ranking_scores.csv&#x27;)) &amp;&amp; !member.name.toLowerCase().includes(&#x27;/templates/&#x27;));
+          for (const member of metadataMembers) registerMetadata(member.name, await member.async(&#x27;string&#x27;));
+          if (!structureMembers.length &amp;&amp; !metadataMembers.length) skipped += 1;
         } else if ([&#x27;pdb&#x27;, &#x27;cif&#x27;, &#x27;mmcif&#x27;].includes(extension)) {
           addStructure(file.name, await file.text(), extension === &#x27;pdb&#x27; ? &#x27;pdb&#x27; : &#x27;cif&#x27;);
           loaded += 1;
+        } else if ([&#x27;json&#x27;, &#x27;csv&#x27;].includes(extension)) {
+          if (!registerMetadata(file.name, await file.text())) skipped += 1;
         } else {
           skipped += 1;
         }
@@ -1412,12 +2014,15 @@ html&gt;body{padding:0}&lt;/style&gt;
         skipped += 1;
       }
     }
+    attachConfidenceAssets();
     renderList();
     applyStyle();
     if (loaded) viewer.zoomTo();
     viewer.render();
     root.querySelector(&#x27;#gpv-files&#x27;).value = &#x27;&#x27;;
-    updateStatus(loaded ? &#x27;Loaded &#x27; + loaded + (skipped ? &#x27; · skipped &#x27; + skipped : &#x27;&#x27;) : &#x27;No supported structures found&#x27;);
+    root.querySelector(&#x27;#gpv-save-scene&#x27;).disabled = structures.length === 0;
+    if (pendingScene &amp;&amp; structures.length) await applyScene(pendingScene);
+    else updateStatus(loaded ? &#x27;Loaded &#x27; + loaded + (confidenceAssets.length ? &#x27; · confidence data attached&#x27; : &#x27;&#x27;) + (skipped ? &#x27; · skipped &#x27; + skipped : &#x27;&#x27;) : pendingScene ? &#x27;Scene loaded; now add its matching structure files&#x27; : confidenceAssets.length ? &#x27;Confidence data loaded; add matching structures&#x27; : &#x27;No supported structures found&#x27;);
   }
 
   function stopMotion() {
@@ -1448,12 +2053,27 @@ html&gt;body{padding:0}&lt;/style&gt;
     updateStatus(motion === &#x27;off&#x27; ? &#x27;Ready&#x27; : root.querySelector(&#x27;#gpv-motion&#x27;).selectedOptions[0].text);
   }
 
+  function reportConfidence(entry) {
+    const confidence = { ...(entry.confidence || {}) };
+    const matrix = confidence.pae;
+    if (!Array.isArray(matrix) || matrix.length &lt;= 400) return confidence;
+    const indices = Array.from({ length: 400 }, (_, index) =&gt; Math.min(matrix.length - 1, Math.floor(index * matrix.length / 400)));
+    confidence.pae = indices.map(row =&gt; indices.map(column =&gt; matrix[row][column]));
+    if (Array.isArray(confidence.tokenChainIds)) confidence.tokenChainIds = indices.map(index =&gt; confidence.tokenChainIds[index]);
+    if (Array.isArray(confidence.tokenResidueIds)) confidence.tokenResidueIds = indices.map(index =&gt; confidence.tokenResidueIds[index]);
+    confidence.paeOriginalSize = matrix.length;
+    confidence.paeDownsampled = true;
+    return confidence;
+  }
+
   function downloadReport() {
     const exported = structures.map(entry =&gt; ({
       name: entry.name,
       text: entry.text,
       format: entry.format,
       color: entry.color,
+      confidence: reportConfidence(entry),
+      rank: entry.rank,
       labels: labelRecords.filter(label =&gt; label.entryId === entry.id).map(label =&gt; ({
         text: label.text,
         chain: label.chain,
@@ -1465,25 +2085,29 @@ html&gt;body{padding:0}&lt;/style&gt;
       }))
     }));
     const payload = JSON.stringify(exported).replace(/&lt;/g, &#x27;\\u003c&#x27;);
+    const reportMetadata = JSON.stringify(provenanceValues()).replace(/&lt;/g, &#x27;\\u003c&#x27;);
     const html = [
       &quot;&lt;!doctype html&gt;&quot;,
       &quot;&lt;html lang=&#x27;en&#x27;&gt;&lt;head&gt;&lt;meta charset=&#x27;utf-8&#x27;&gt;&quot;,
       &quot;&lt;meta name=&#x27;viewport&#x27; content=&#x27;width=device-width,initial-scale=1&#x27;&gt;&quot;,
       &quot;&lt;title&gt;Protein Model Report&lt;/title&gt;&quot;,
       &quot;&lt;style&gt;&quot;,
-      &quot;:root{color-scheme:light dark;font-family:system-ui,sans-serif}body{margin:0;padding:18px;background:#111827;color:#f8fafc}main{max-width:1100px;margin:auto}.controls{display:flex;gap:10px;flex-wrap:wrap;align-items:end;margin-bottom:12px}label{display:grid;gap:4px}button,select,input{font:inherit;padding:7px 10px}#view{height:70vh;min-height:420px;background:#020617}#status{display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-top:8px;color:#cbd5e1}.legend{display:flex;gap:12px;flex-wrap:wrap;margin:8px 0}.legend span{display:flex;align-items:center;gap:5px}.swatch{width:12px;height:12px;display:inline-block}.vlow{background:#ff7d45}.low{background:#ffdb13}.conf{background:#65cbf3}.vhigh{background:#0053d6}@media(prefers-color-scheme:light){body{background:#f8fafc;color:#0f172a}#view{background:#e2e8f0}#status{color:#475569}}&quot;,
+      &quot;:root{color-scheme:light dark;font-family:system-ui,sans-serif}body{margin:0;padding:18px;background:#111827;color:#f8fafc}main{max-width:1100px;margin:auto}.controls{display:flex;gap:10px;flex-wrap:wrap;align-items:end;margin-bottom:12px}label{display:grid;gap:4px}button,select,input{font:inherit;padding:7px 10px}#view{height:65vh;min-height:420px;background:#020617}#status{display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-top:8px;color:#cbd5e1}.legend{display:flex;gap:12px;flex-wrap:wrap;margin:8px 0}.legend span{display:flex;align-items:center;gap:5px}.swatch{width:12px;height:12px;display:inline-block}.vlow{background:#ff7d45}.low{background:#ffdb13}.conf{background:#65cbf3}.vhigh{background:#0053d6}#pae-wrap{max-width:360px;margin-top:14px}#pae{display:block;width:100%;height:auto}#pae-detail{margin-top:5px;color:#cbd5e1}.meta{white-space:pre-wrap;color:#cbd5e1}@media(prefers-color-scheme:light){body{background:#f8fafc;color:#0f172a}#view{background:#e2e8f0}#status,#pae-detail,.meta{color:#475569}}&quot;,
       &quot;&lt;/style&gt;&lt;/head&gt;&lt;body&gt;&lt;main&gt;&quot;,
+      &quot;&lt;h1 id=&#x27;project-title&#x27; hidden&gt;&lt;/h1&gt;&lt;p class=&#x27;meta&#x27; id=&#x27;project-meta&#x27;&gt;&lt;/p&gt;&quot;,
       &quot;&lt;div class=&#x27;controls&#x27;&gt;&lt;label&gt;Model&lt;select id=&#x27;model&#x27;&gt;&lt;/select&gt;&lt;/label&gt;&lt;button id=&#x27;previous&#x27;&gt;Previous&lt;/button&gt;&lt;button id=&#x27;next&#x27;&gt;Next&lt;/button&gt;&lt;button id=&#x27;play&#x27;&gt;Play cycle&lt;/button&gt;&lt;label&gt;Interval (seconds)&lt;input id=&#x27;interval&#x27; type=&#x27;number&#x27; min=&#x27;0.5&#x27; max=&#x27;20&#x27; step=&#x27;0.5&#x27; value=&#x27;2&#x27;&gt;&lt;/label&gt;&lt;label&gt;Representation&lt;select id=&#x27;style&#x27;&gt;&lt;option value=&#x27;cartoon&#x27;&gt;Cartoon&lt;/option&gt;&lt;option value=&#x27;stick&#x27;&gt;Sticks&lt;/option&gt;&lt;option value=&#x27;sphere&#x27;&gt;Spheres&lt;/option&gt;&lt;option value=&#x27;line&#x27;&gt;Lines&lt;/option&gt;&lt;/select&gt;&lt;/label&gt;&lt;label&gt;Colors&lt;select id=&#x27;colors&#x27;&gt;&lt;option value=&#x27;plddt&#x27;&gt;pLDDT&lt;/option&gt;&lt;option value=&#x27;structure&#x27;&gt;Model color&lt;/option&gt;&lt;option value=&#x27;chain&#x27;&gt;Chain&lt;/option&gt;&lt;option value=&#x27;spectrum&#x27;&gt;Spectrum&lt;/option&gt;&lt;/select&gt;&lt;/label&gt;&lt;button id=&#x27;spin&#x27;&gt;Spin&lt;/button&gt;&lt;button id=&#x27;png&#x27;&gt;Download PNG&lt;/button&gt;&lt;button id=&#x27;video&#x27;&gt;Record 5s video&lt;/button&gt;&lt;/div&gt;&quot;,
       &quot;&lt;div class=&#x27;legend&#x27;&gt;&lt;span&gt;&lt;i class=&#x27;swatch vlow&#x27;&gt;&lt;/i&gt;&amp;lt;50&lt;/span&gt;&lt;span&gt;&lt;i class=&#x27;swatch low&#x27;&gt;&lt;/i&gt;50–70&lt;/span&gt;&lt;span&gt;&lt;i class=&#x27;swatch conf&#x27;&gt;&lt;/i&gt;70–90&lt;/span&gt;&lt;span&gt;&lt;i class=&#x27;swatch vhigh&#x27;&gt;&lt;/i&gt;≥90&lt;/span&gt;&lt;/div&gt;&quot;,
-      &quot;&lt;div id=&#x27;view&#x27;&gt;&lt;/div&gt;&lt;div id=&#x27;status&#x27;&gt;&lt;span id=&#x27;name&#x27;&gt;&lt;/span&gt;&lt;span id=&#x27;score&#x27;&gt;&lt;/span&gt;&lt;span id=&#x27;position&#x27;&gt;&lt;/span&gt;&lt;/div&gt;&quot;,
+      &quot;&lt;div id=&#x27;view&#x27;&gt;&lt;/div&gt;&lt;div id=&#x27;status&#x27;&gt;&lt;span id=&#x27;name&#x27;&gt;&lt;/span&gt;&lt;span id=&#x27;score&#x27;&gt;&lt;/span&gt;&lt;span id=&#x27;model-confidence&#x27;&gt;&lt;/span&gt;&lt;span id=&#x27;position&#x27;&gt;&lt;/span&gt;&lt;/div&gt;&lt;div id=&#x27;pae-wrap&#x27; hidden&gt;&lt;canvas id=&#x27;pae&#x27; width=&#x27;360&#x27; height=&#x27;360&#x27; aria-label=&#x27;Predicted aligned error heatmap&#x27;&gt;&lt;/canvas&gt;&lt;div id=&#x27;pae-detail&#x27;&gt;Predicted aligned error (Å)&lt;/div&gt;&lt;/div&gt;&quot;,
       &quot;&lt;script src=&#x27;https://cdnjs.cloudflare.com/ajax/libs/3Dmol/2.4.2/3Dmol-min.js&#x27;&gt;&lt;&quot; + &quot;/script&gt;&quot;,
       &quot;&lt;script&gt;&quot;,
       &quot;const structures=&quot; + payload + &quot;;&quot;,
+      &quot;const metadata=&quot; + reportMetadata + &quot;;const title=document.getElementById(&#x27;project-title&#x27;);if(metadata.title){title.hidden=false;title.textContent=metadata.title}document.getElementById(&#x27;project-meta&#x27;).textContent=[metadata.source,metadata.method,metadata.notes].filter(Boolean).join(&#x27; · &#x27;);&quot;,
       &quot;const viewer=$3Dmol.createViewer(document.getElementById(&#x27;view&#x27;),{backgroundColor:&#x27;rgba(0,0,0,0)&#x27;,antialias:true});let current=0,timer=0,spinning=false;&quot;,
       &quot;const picker=document.getElementById(&#x27;model&#x27;);structures.forEach((s,i)=&gt;{const o=document.createElement(&#x27;option&#x27;);o.value=i;o.textContent=s.name;picker.append(o)});&quot;,
       &quot;function pcolor(v){return v&lt;50?&#x27;#ff7d45&#x27;:v&lt;70?&#x27;#ffdb13&#x27;:v&lt;90?&#x27;#65cbf3&#x27;:&#x27;#0053d6&#x27;}&quot;,
       &quot;function mean(a){return a.length?a.reduce((s,v)=&gt;s+v,0)/a.length:null}&quot;,
-      &quot;function show(i){current=(Number(i)+structures.length)%structures.length;picker.value=current;const s=structures[current];viewer.removeAllModels();viewer.removeAllLabels();const m=viewer.addModel(s.text,s.format);const rep=document.getElementById(&#x27;style&#x27;).value;const mode=document.getElementById(&#x27;colors&#x27;).value;let options={color:s.color};if(mode===&#x27;plddt&#x27;)options={colorfunc:a=&gt;pcolor(Number(a.b||0))};if(mode===&#x27;chain&#x27;)options={colorscheme:&#x27;chainHetatm&#x27;};if(mode===&#x27;spectrum&#x27;)options={colorscheme:&#x27;spectrum&#x27;};if(rep===&#x27;line&#x27;)options.linewidth=2;const spec={};spec[rep]=options;m.setStyle({},spec);(s.labels||[]).forEach(l=&gt;viewer.addLabel(l.text,{position:{x:l.x,y:l.y,z:l.z},backgroundColor:&#x27;#fff&#x27;,fontColor:&#x27;#111827&#x27;,borderColor:&#x27;#94a3b8&#x27;,borderThickness:1,fontSize:12,inFront:true}));viewer.zoomTo();viewer.render();const values=m.selectedAtoms({}).filter(a=&gt;a.atom===&#x27;CA&#x27;&amp;&amp;Number.isFinite(Number(a.b))).map(a=&gt;Number(a.b));const avg=mean(values);document.getElementById(&#x27;name&#x27;).textContent=s.name;document.getElementById(&#x27;score&#x27;).textContent=avg===null?&#x27;Mean pLDDT —&#x27;:&#x27;Mean pLDDT &#x27;+avg.toFixed(1);document.getElementById(&#x27;position&#x27;).textContent=(current+1)+&#x27; / &#x27;+structures.length}&quot;,
+      &quot;function metric(v,d=3){return Number.isFinite(Number(v))?Number(v).toFixed(d):&#x27;—&#x27;}function drawPae(s){const wrap=document.getElementById(&#x27;pae-wrap&#x27;),c=s.confidence||{},matrix=c.pae;if(!Array.isArray(matrix)||!matrix.length){wrap.hidden=true;return}wrap.hidden=false;const canvas=document.getElementById(&#x27;pae&#x27;),ctx=canvas.getContext(&#x27;2d&#x27;),image=ctx.createImageData(canvas.width,canvas.height);let max=1;matrix.forEach(r=&gt;r.forEach(v=&gt;{if(Number.isFinite(Number(v)))max=Math.max(max,Number(v))}));for(let y=0;y&lt;canvas.height;y++){const row=matrix[Math.min(matrix.length-1,Math.floor(y*matrix.length/canvas.height))]||[];for(let x=0;x&lt;canvas.width;x++){const v=Number(row[Math.min(row.length-1,Math.floor(x*row.length/canvas.width))])||0,t=Math.max(0,Math.min(1,v/max)),o=(y*canvas.width+x)*4;image.data[o]=Math.round(255*t);image.data[o+1]=Math.round(83+136*t);image.data[o+2]=Math.round(214-195*t);image.data[o+3]=255}}ctx.putImageData(image,0,0);document.getElementById(&#x27;pae-detail&#x27;).textContent=&#x27;PAE · &#x27;+(c.paeOriginalSize||matrix.length)+&#x27; × &#x27;+(c.paeOriginalSize||matrix.length)+&#x27; tokens · maximum &#x27;+max.toFixed(1)+&#x27; Å&#x27;+(c.paeDownsampled?&#x27; · heatmap downsampled for report&#x27;:&#x27;&#x27;)}&quot;,
+      &quot;function show(i){current=(Number(i)+structures.length)%structures.length;picker.value=current;const s=structures[current];viewer.removeAllModels();viewer.removeAllLabels();const m=viewer.addModel(s.text,s.format);const rep=document.getElementById(&#x27;style&#x27;).value;const mode=document.getElementById(&#x27;colors&#x27;).value;let options={color:s.color};if(mode===&#x27;plddt&#x27;)options={colorfunc:a=&gt;pcolor(Number(a.b||0))};if(mode===&#x27;chain&#x27;)options={colorscheme:&#x27;chainHetatm&#x27;};if(mode===&#x27;spectrum&#x27;)options={colorscheme:&#x27;spectrum&#x27;};if(rep===&#x27;line&#x27;)options.linewidth=2;const spec={};spec[rep]=options;m.setStyle({},spec);(s.labels||[]).forEach(l=&gt;viewer.addLabel(l.text,{position:{x:l.x,y:l.y,z:l.z},backgroundColor:&#x27;#fff&#x27;,fontColor:&#x27;#111827&#x27;,borderColor:&#x27;#94a3b8&#x27;,borderThickness:1,fontSize:12,inFront:true}));viewer.zoomTo();viewer.render();const values=m.selectedAtoms({}).filter(a=&gt;a.atom===&#x27;CA&#x27;&amp;&amp;Number.isFinite(Number(a.b))).map(a=&gt;Number(a.b));const avg=mean(values),c=s.confidence||{};document.getElementById(&#x27;name&#x27;).textContent=s.name;document.getElementById(&#x27;score&#x27;).textContent=avg===null?&#x27;Mean pLDDT —&#x27;:&#x27;Mean pLDDT &#x27;+avg.toFixed(1);document.getElementById(&#x27;model-confidence&#x27;).textContent=&#x27;pTM &#x27;+metric(c.ptm)+&#x27; · ipTM &#x27;+metric(c.iptm)+&#x27; · ranking &#x27;+metric(c.rankingScore)+(c.hasClash?&#x27; · clash warning&#x27;:&#x27;&#x27;);document.getElementById(&#x27;position&#x27;).textContent=(current+1)+&#x27; / &#x27;+structures.length;drawPae(s)}&quot;,
       &quot;function stop(){clearInterval(timer);timer=0;document.getElementById(&#x27;play&#x27;).textContent=&#x27;Play cycle&#x27;}&quot;,
       &quot;function play(){if(timer){stop();return}const seconds=Math.max(.5,Number(document.getElementById(&#x27;interval&#x27;).value)||2);timer=setInterval(()=&gt;show(current+1),seconds*1000);document.getElementById(&#x27;play&#x27;).textContent=&#x27;Pause cycle&#x27;}&quot;,
       &quot;function record(){const canvas=document.querySelector(&#x27;#view canvas&#x27;),button=document.getElementById(&#x27;video&#x27;);if(!canvas||!canvas.captureStream||typeof MediaRecorder===&#x27;undefined&#x27;){alert(&#x27;Video recording is not supported by this browser.&#x27;);return}const stream=canvas.captureStream(30),type=MediaRecorder.isTypeSupported(&#x27;video/webm;codecs=vp9&#x27;)?&#x27;video/webm;codecs=vp9&#x27;:&#x27;video/webm&#x27;,recorder=new MediaRecorder(stream,{mimeType:type}),chunks=[];recorder.ondataavailable=e=&gt;{if(e.data.size)chunks.push(e.data)};recorder.onstop=()=&gt;{viewer.spin(false);stream.getTracks().forEach(t=&gt;t.stop());const url=URL.createObjectURL(new Blob(chunks,{type:&#x27;video/webm&#x27;})),a=document.createElement(&#x27;a&#x27;);a.href=url;a.download=&#x27;protein-spin.webm&#x27;;a.click();setTimeout(()=&gt;URL.revokeObjectURL(url),1000);button.disabled=false;button.textContent=&#x27;Record 5s video&#x27;};button.disabled=true;button.textContent=&#x27;Recording…&#x27;;viewer.spin(&#x27;y&#x27;,.8);recorder.start();setTimeout(()=&gt;recorder.stop(),5000)}&quot;,
@@ -1520,6 +2144,13 @@ html&gt;body{padding:0}&lt;/style&gt;
     stopCycle();
     selectModel(structures.find(entry =&gt; entry.id === Number(event.target.value)));
   });
+  root.querySelector(&#x27;#gpv-order&#x27;).addEventListener(&#x27;change&#x27;, () =&gt; {
+    stopCycle();
+    applyModelOrder();
+    renderList();
+    applyStyle();
+    updateStatus(&#x27;Model order updated&#x27;);
+  });
   root.querySelector(&#x27;#gpv-previous&#x27;).addEventListener(&#x27;click&#x27;, () =&gt; { stopCycle(); selectRelative(-1); });
   root.querySelector(&#x27;#gpv-next&#x27;).addEventListener(&#x27;click&#x27;, () =&gt; { stopCycle(); selectRelative(1); });
   root.querySelector(&#x27;#gpv-cycle&#x27;).addEventListener(&#x27;click&#x27;, toggleCycle);
@@ -1540,10 +2171,14 @@ html&gt;body{padding:0}&lt;/style&gt;
     activeId = null;
     selectedResidue = null;
     labelRecords = [];
+    confidenceAssets = [];
+    alignmentResults = [];
+    pendingScene = null;
     root.querySelector(&#x27;#gpv-residue&#x27;).textContent = &#x27;Click any atom in the viewer to inspect it.&#x27;;
     root.querySelector(&#x27;#gpv-label-text&#x27;).value = &#x27;&#x27;;
     root.querySelector(&#x27;#gpv-add-label&#x27;).disabled = true;
     root.querySelector(&#x27;#gpv-all-labels&#x27;).checked = false;
+    renderAlignmentResults();
     renderList();
     applyStyle();
   });
@@ -1559,6 +2194,7 @@ html&gt;body{padding:0}&lt;/style&gt;
   });
   root.querySelector(&#x27;#gpv-fit&#x27;).addEventListener(&#x27;click&#x27;, () =&gt; { viewer.zoomTo(); viewer.render(); });
   root.querySelector(&#x27;#gpv-align&#x27;).addEventListener(&#x27;click&#x27;, alignVisible);
+  root.querySelector(&#x27;#gpv-alignment-csv&#x27;).addEventListener(&#x27;click&#x27;, downloadAlignmentCsv);
   root.querySelector(&#x27;#gpv-restore&#x27;).addEventListener(&#x27;click&#x27;, () =&gt; restoreCoordinates(true));
   root.querySelector(&#x27;#gpv-add-label&#x27;).addEventListener(&#x27;click&#x27;, addOrEditLabel);
   root.querySelector(&#x27;#gpv-label-text&#x27;).addEventListener(&#x27;keydown&#x27;, event =&gt; { if (event.key === &#x27;Enter&#x27;) addOrEditLabel(); });
@@ -1578,6 +2214,41 @@ html&gt;body{padding:0}&lt;/style&gt;
   });
   root.querySelector(&#x27;#gpv-video&#x27;).addEventListener(&#x27;click&#x27;, recordSpinVideo);
   root.querySelector(&#x27;#gpv-report&#x27;).addEventListener(&#x27;click&#x27;, downloadReport);
+  root.querySelector(&#x27;#gpv-confidence-csv&#x27;).addEventListener(&#x27;click&#x27;, downloadConfidenceCsv);
+  root.querySelector(&#x27;#gpv-pae-png&#x27;).addEventListener(&#x27;click&#x27;, () =&gt; {
+    const link = document.createElement(&#x27;a&#x27;);
+    link.href = root.querySelector(&#x27;#gpv-pae&#x27;).toDataURL(&#x27;image/png&#x27;);
+    link.download = &#x27;predicted-aligned-error.png&#x27;;
+    link.click();
+    updateStatus(&#x27;PAE heatmap PNG downloaded&#x27;);
+  });
+  root.querySelector(&#x27;#gpv-save-scene&#x27;).addEventListener(&#x27;click&#x27;, saveScene);
+  root.querySelector(&#x27;#gpv-load-scene&#x27;).addEventListener(&#x27;change&#x27;, async event =&gt; {
+    const file = event.target.files[0];
+    if (!file) return;
+    try {
+      const scene = JSON.parse(await file.text());
+      if (scene.type !== &#x27;protein-viewer-scene&#x27;) throw new Error(&#x27;Not a scene file&#x27;);
+      if (structures.length) await applyScene(scene);
+      else { pendingScene = scene; updateStatus(&#x27;Scene loaded; now add its matching structure files&#x27;); }
+    } catch (error) {
+      updateStatus(&#x27;Could not read that scene JSON&#x27;);
+    }
+    event.target.value = &#x27;&#x27;;
+  });
+  root.querySelector(&#x27;#gpv-pae&#x27;).addEventListener(&#x27;pointermove&#x27;, event =&gt; {
+    const entry = structures.find(item =&gt; item.id === Number(event.currentTarget.dataset.entryId));
+    const matrix = entry &amp;&amp; entry.confidence &amp;&amp; entry.confidence.pae;
+    if (!matrix || !matrix.length) return;
+    const bounds = event.currentTarget.getBoundingClientRect();
+    const column = Math.min(matrix.length - 1, Math.max(0, Math.floor((event.clientX - bounds.left) * matrix.length / bounds.width)));
+    const row = Math.min(matrix.length - 1, Math.max(0, Math.floor((event.clientY - bounds.top) * matrix.length / bounds.height)));
+    const value = finiteNumber(matrix[row] &amp;&amp; matrix[row][column]);
+    const chains = entry.confidence.tokenChainIds || [];
+    const residues = entry.confidence.tokenResidueIds || [];
+    const describe = index =&gt; &#x27;token &#x27; + (index + 1) + (chains[index] !== undefined ? &#x27;, chain &#x27; + chains[index] : &#x27;&#x27;) + (residues[index] !== undefined ? &#x27;, residue &#x27; + residues[index] : &#x27;&#x27;);
+    root.querySelector(&#x27;#gpv-pae-detail&#x27;).textContent = describe(row) + &#x27; → &#x27; + describe(column) + &#x27; · PAE &#x27; + (value === null ? &#x27;—&#x27; : value.toFixed(2) + &#x27; Å&#x27;);
+  });
   window.addEventListener(&#x27;keydown&#x27;, event =&gt; {
     if (event.target.matches(&#x27;input, select, textarea&#x27;)) return;
     if (event.key === &#x27;ArrowLeft&#x27;) { stopCycle(); selectRelative(-1); }

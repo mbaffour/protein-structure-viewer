@@ -20,35 +20,37 @@ This audit evaluates the viewer as a tool for comparing predicted structures, sh
 - Predictions should be presented as predictions and kept distinct from experimentally determined structures.
 - Original coordinate files and prediction metadata remain the source data; screenshots and HTML reports are derived presentation artifacts.
 
-## Priority roadmap
+## Implemented confidence and reproducibility milestone
 
-### P0 — confidence and reproducibility
+- AlphaFold confidence JSON and ranking-score CSV import
+- Interactive PAE heatmaps and chain-pair interface summaries
+- pTM, ipTM, ranking score, rank, clash, and confidence CSV reporting
+- Sequence-aware structural alignment with chain mappings, aligned Cα counts, sequence identity, RMSD, and CSV export
+- SHA-256-backed scene manifests that retain provenance, camera, labels, colors, model order, and alignment state
+- Confidence, PAE, provenance, labels, and media controls in portable reviewer reports
 
-1. **PAE and ranking-data import.** Parse AlphaFold JSON files from result ZIPs; show an interactive PAE heatmap and model-level pTM/ipTM/ranking scores when present.
-2. **Alignment report.** Add sequence-aware residue mapping, aligned residue count, Cα RMSD, optional chain selection, and downloadable CSV/JSON results. Remove or explicitly confirm order-based fallback for dissimilar proteins.
-3. **Saved scene state.** Export/import a small JSON manifest containing file hashes, selected models, visibility, colors, camera orientation, labels, representation, alignment settings, and software version.
-4. **Provenance panel.** Let authors enter a figure title, model source, run/date, sequence or construct name, prediction method/version, notes, and citation; embed this metadata in HTML reports.
+## Remaining roadmap
 
 ### P1 — reviewer and publication workflow
 
-5. **Publication export presets.** White/transparent/dark backgrounds, fixed canvas sizes, supersampled PNG at 2×–4×, and scale/orientation consistency across a batch.
-6. **Figure panels.** Save named views (for example overview, interface, pore, and confidence), arrange them into labelled panels, and export a contact sheet plus caption text.
-7. **Selections and measurements.** Select by chain/residue range, show/hide selections, highlight interfaces, and add distance/angle measurements with editable labels.
-8. **Side-by-side synchronized views.** Compare two or more models with linked rotation/zoom, avoiding ambiguity caused by translucent overlays.
-9. **Reviewer mode.** Read-only presentation mode with author-defined model order, captions, guided views, keyboard controls, and a table summarizing confidence and provenance.
-10. **Vector overlays.** Export labels, legends, titles, and scale bars as SVG layered over a high-resolution molecular render.
+1. **Publication export presets.** White/transparent/dark backgrounds, fixed canvas sizes, supersampled PNG at 2×–4×, and scale/orientation consistency across a batch.
+2. **Figure panels.** Save named views (for example overview, interface, pore, and confidence), arrange them into labelled panels, and export a contact sheet plus caption text.
+3. **Selections and measurements.** Select by chain/residue range, show/hide selections, highlight interfaces, and add distance/angle measurements with editable labels.
+4. **Side-by-side synchronized views.** Compare two or more models with linked rotation/zoom, avoiding ambiguity caused by translucent overlays.
+5. **Reviewer mode.** Read-only presentation mode with author-defined model order, captions, guided views, keyboard controls, and a table summarizing confidence and provenance.
+6. **Vector overlays.** Export labels, legends, titles, and scale bars as SVG layered over a high-resolution molecular render.
 
 ### P2 — deeper structural analysis
 
-11. **Interface analysis.** Contact maps, inter-chain contact counts, buried-surface estimates, interface-residue tables, and exportable selections.
-12. **Membrane context.** Adjustable membrane planes and hydrophobic slab guides—particularly useful for holins and other membrane proteins.
-13. **Ensemble summaries.** Cluster models by structural similarity, show representative conformations, and graph pairwise RMSD alongside confidence metrics.
-14. **Sequence viewer.** Linked sequence and structure selection, residue search, domain annotations, mutation markers, and chain-aware numbering.
-15. **Validation warnings.** Flag missing residues/atoms, duplicate identifiers, implausible coordinate ranges, absent pLDDT, and incompatible models before alignment.
+7. **Interface analysis.** Contact maps, inter-chain contact counts, buried-surface estimates, interface-residue tables, and exportable selections.
+8. **Membrane context.** Adjustable membrane planes and hydrophobic slab guides—particularly useful for holins and other membrane proteins.
+9. **Ensemble summaries.** Cluster models by structural similarity, show representative conformations, and graph pairwise RMSD alongside confidence metrics.
+10. **Sequence viewer.** Linked sequence and structure selection, residue search, domain annotations, mutation markers, and chain-aware numbering.
+11. **Validation warnings.** Flag missing residues/atoms, duplicate identifiers, implausible coordinate ranges, absent pLDDT, and incompatible models before alignment.
 
 ## Recommended next milestone
 
-The most scientifically valuable next release is **confidence + reproducibility**: PAE JSON import, model ranking metrics, sequence-aware alignment with RMSD, and a saved scene/provenance manifest. Those additions would make the viewer much safer for comparing AlphaFold complexes and much easier to cite or reproduce during peer review.
+The most valuable next release is **publication figure preparation**: fixed-size high-resolution exports, reusable named views, selection and measurement tools, synchronized side-by-side comparison, and a guided reviewer mode.
 
 ## Technical notes
 
