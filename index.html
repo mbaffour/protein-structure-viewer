@@ -814,11 +814,18 @@ html&gt;body{padding:0}&lt;/style&gt;
 &lt;/head&gt;
 &lt;body&gt;
 &lt;div id=&quot;generic-protein-viewer&quot;&gt;
+  &lt;label class=&quot;card gpv-drop&quot; id=&quot;gpv-drop&quot; for=&quot;gpv-files&quot;&gt;
+    &lt;strong&gt;Drop an AlphaFold ZIP or structure files here&lt;/strong&gt;
+    &lt;span class=&quot;text-muted&quot;&gt;PDB, CIF, and mmCIF are supported. Files stay on this device.&lt;/span&gt;
+  &lt;/label&gt;
+
   &lt;div class=&quot;viz-controls&quot; aria-label=&quot;Load protein structures&quot;&gt;
     &lt;label class=&quot;form-label gpv-file-label&quot;&gt;Structure files
-      &lt;input class=&quot;form-control&quot; id=&quot;gpv-files&quot; type=&quot;file&quot; accept=&quot;.pdb,.cif,.mmcif&quot; multiple&gt;
+      &lt;input class=&quot;form-control&quot; id=&quot;gpv-files&quot; type=&quot;file&quot; accept=&quot;.pdb,.cif,.mmcif,.zip&quot; multiple&gt;
     &lt;/label&gt;
     &lt;button class=&quot;btn&quot; type=&quot;button&quot; id=&quot;gpv-clear&quot;&gt;Clear all&lt;/button&gt;
+    &lt;button class=&quot;btn&quot; type=&quot;button&quot; id=&quot;gpv-show-all&quot;&gt;Show all&lt;/button&gt;
+    &lt;button class=&quot;btn&quot; type=&quot;button&quot; id=&quot;gpv-hide-all&quot;&gt;Hide all&lt;/button&gt;
     &lt;button class=&quot;btn&quot; type=&quot;button&quot; id=&quot;gpv-fit&quot;&gt;Fit visible&lt;/button&gt;
     &lt;button class=&quot;btn&quot; type=&quot;button&quot; id=&quot;gpv-image&quot;&gt;Download PNG&lt;/button&gt;
     &lt;button class=&quot;btn btn-primary&quot; type=&quot;button&quot; id=&quot;gpv-report&quot; disabled&gt;Download HTML report&lt;/button&gt;
@@ -877,6 +884,8 @@ html&gt;body{padding:0}&lt;/style&gt;
   #generic-protein-viewer .viz-controls { margin-bottom: 12px; align-items: end; }
   #generic-protein-viewer .form-label { min-width: 126px; flex: 1 1 138px; }
   #generic-protein-viewer .gpv-file-label { flex: 3 1 300px; }
+  #generic-protein-viewer .gpv-drop { display: grid; gap: 4px; text-align: center; margin-bottom: 12px; cursor: pointer; }
+  #generic-protein-viewer .gpv-drop.is-dragging { outline: 2px solid var(--ring); outline-offset: 2px; }
   #generic-protein-viewer .form-range { width: 100%; }
   #generic-protein-viewer .gpv-list { display: grid; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); gap: 8px; margin: 0 0 10px; }
   #generic-protein-viewer .gpv-entry { display: flex; align-items: center; gap: 8px; min-width: 0; }
@@ -899,6 +908,7 @@ html&gt;body{padding:0}&lt;/style&gt;
 &lt;/style&gt;
 
 &lt;script src=&quot;https://cdnjs.cloudflare.com/ajax/libs/3Dmol/2.4.2/3Dmol-min.js&quot;&gt;&lt;/script&gt;
+&lt;script src=&quot;https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js&quot;&gt;&lt;/script&gt;
 &lt;script&gt;
 (() =&gt; {
   const root = document.getElementById(&#x27;generic-protein-viewer&#x27;);
@@ -1016,35 +1026,57 @@ html&gt;body{padding:0}&lt;/style&gt;
     });
   }
 
+  function addStructure(name, text, format) {
+    const model = viewer.addModel(text, format);
+    structures.push({
+      name,
+      model,
+      visible: true,
+      color: palette[structures.length % palette.length],
+      text,
+      format,
+      scores: modelScores(model)
+    });
+  }
+
   async function loadFiles(files) {
     if (!files.length) return;
     updateStatus(&#x27;Loading…&#x27;);
+    let loaded = 0;
+    let skipped = 0;
     for (const file of files) {
       try {
         const extension = file.name.split(&#x27;.&#x27;).pop().toLowerCase();
-        const format = extension === &#x27;pdb&#x27; ? &#x27;pdb&#x27; : &#x27;cif&#x27;;
-        const text = await file.text();
-        const model = viewer.addModel(text, format);
-        const entry = {
-          name: file.name,
-          model,
-          visible: true,
-          color: palette[structures.length % palette.length],
-          text,
-          format,
-          scores: modelScores(model)
-        };
-        structures.push(entry);
+        if (extension === &#x27;zip&#x27;) {
+          const zip = await JSZip.loadAsync(file);
+          const members = Object.values(zip.files).filter(member =&gt; {
+            const lower = member.name.toLowerCase();
+            const supported = lower.endsWith(&#x27;.pdb&#x27;) || lower.endsWith(&#x27;.cif&#x27;) || lower.endsWith(&#x27;.mmcif&#x27;);
+            return !member.dir &amp;&amp; supported &amp;&amp; !lower.includes(&#x27;/templates/&#x27;) &amp;&amp; !lower.includes(&#x27;template_hit&#x27;);
+          });
+          for (const member of members) {
+            const memberExtension = member.name.split(&#x27;.&#x27;).pop().toLowerCase();
+            addStructure(member.name.split(&#x27;/&#x27;).pop(), await member.async(&#x27;string&#x27;), memberExtension === &#x27;pdb&#x27; ? &#x27;pdb&#x27; : &#x27;cif&#x27;);
+            loaded += 1;
+            updateStatus(&#x27;Loading &#x27; + loaded + &#x27; structures…&#x27;);
+          }
+          if (!members.length) skipped += 1;
+        } else if ([&#x27;pdb&#x27;, &#x27;cif&#x27;, &#x27;mmcif&#x27;].includes(extension)) {
+          addStructure(file.name, await file.text(), extension === &#x27;pdb&#x27; ? &#x27;pdb&#x27; : &#x27;cif&#x27;);
+          loaded += 1;
+        } else {
+          skipped += 1;
+        }
       } catch (error) {
-        updateStatus(&#x27;Could not load &#x27; + file.name);
+        skipped += 1;
       }
     }
     renderList();
     applyStyle();
-    viewer.zoomTo();
+    if (loaded) viewer.zoomTo();
     viewer.render();
     root.querySelector(&#x27;#gpv-files&#x27;).value = &#x27;&#x27;;
-    updateStatus(&#x27;Loaded&#x27;);
+    updateStatus(loaded ? &#x27;Loaded &#x27; + loaded + (skipped ? &#x27; · skipped &#x27; + skipped : &#x27;&#x27;) : &#x27;No supported structures found&#x27;);
   }
 
   function stopMotion() {
@@ -1117,6 +1149,14 @@ html&gt;body{padding:0}&lt;/style&gt;
   }
 
   root.querySelector(&#x27;#gpv-files&#x27;).addEventListener(&#x27;change&#x27;, event =&gt; loadFiles([...event.target.files]));
+  const dropZone = root.querySelector(&#x27;#gpv-drop&#x27;);
+  dropZone.addEventListener(&#x27;dragover&#x27;, event =&gt; { event.preventDefault(); dropZone.classList.add(&#x27;is-dragging&#x27;); });
+  dropZone.addEventListener(&#x27;dragleave&#x27;, () =&gt; dropZone.classList.remove(&#x27;is-dragging&#x27;));
+  dropZone.addEventListener(&#x27;drop&#x27;, event =&gt; {
+    event.preventDefault();
+    dropZone.classList.remove(&#x27;is-dragging&#x27;);
+    loadFiles([...event.dataTransfer.files]);
+  });
   root.querySelector(&#x27;#gpv-style&#x27;).addEventListener(&#x27;change&#x27;, applyStyle);
   root.querySelector(&#x27;#gpv-color-mode&#x27;).addEventListener(&#x27;change&#x27;, applyStyle);
   root.querySelector(&#x27;#gpv-motion&#x27;).addEventListener(&#x27;change&#x27;, applyMotion);
@@ -1127,6 +1167,16 @@ html&gt;body{padding:0}&lt;/style&gt;
   root.querySelector(&#x27;#gpv-clear&#x27;).addEventListener(&#x27;click&#x27;, () =&gt; {
     viewer.removeAllModels();
     structures = [];
+    renderList();
+    applyStyle();
+  });
+  root.querySelector(&#x27;#gpv-show-all&#x27;).addEventListener(&#x27;click&#x27;, () =&gt; {
+    structures.forEach(entry =&gt; { entry.visible = true; });
+    renderList();
+    applyStyle();
+  });
+  root.querySelector(&#x27;#gpv-hide-all&#x27;).addEventListener(&#x27;click&#x27;, () =&gt; {
+    structures.forEach(entry =&gt; { entry.visible = false; });
     renderList();
     applyStyle();
   });

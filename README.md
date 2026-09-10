@@ -11,15 +11,18 @@ An internet connection is required when the page starts because it loads the [3D
 
 ## Load AlphaFold models
 
-1. Download and unzip the result from AlphaFold Server or another prediction tool.
+1. Download the result from AlphaFold Server or another prediction tool.
 2. Open the viewer.
-3. Select one or more model files ending in `.pdb`, `.cif`, or `.mmcif`.
+3. Drop the AlphaFold `.zip` directly onto the viewer, or select one or more `.pdb`, `.cif`, or `.mmcif` model files.
+
+When an AlphaFold ZIP is loaded, model structures are extracted automatically and template-hit files are ignored.
 
 Multiple structures can be displayed together. Each loaded structure has its own visibility switch, color picker, mean pLDDT readout, and remove button.
 
 ## Features
 
-- Multiple PDB, CIF, and mmCIF files in one view
+- Multiple PDB, CIF, and mmCIF files—or an AlphaFold ZIP—in one view
+- Drag-and-drop loading, automatic ZIP extraction, and show-all/hide-all controls
 - Independent visibility and colors per structure
 - Cartoon, stick, sphere, and line representations
 - Per-structure, per-chain, pLDDT, sequence-spectrum, and element color schemes
