@@ -24,13 +24,18 @@ Multiple structures can be displayed together. Each loaded structure has its own
 - Multiple PDB, CIF, and mmCIF files—or an AlphaFold ZIP—in one view
 - Drag-and-drop loading, automatic ZIP extraction, and show-all/hide-all controls
 - Independent visibility and colors per structure
+- Full model names in the model list and navigator
+- Overlay mode or one-model-at-a-time mode, with previous/next controls, keyboard navigation, and adjustable automatic cycling
 - Cartoon, stick, sphere, and line representations
 - Per-structure, per-chain, pLDDT, sequence-spectrum, and element color schemes
 - Standard AlphaFold pLDDT legend and mean pLDDT calculation from Cα B-factor values
+- Click any atom to inspect its model, residue, chain, atom name, and pLDDT
+- Add or edit custom residue labels, or label every residue in the current model
+- Align visible models to a selected reference using matching Cα atoms, with a one-click coordinate restore
 - Spin and rocking animations with adjustable speed
-- PNG export
+- PNG image export and 5-, 10-, or 15-second WebM spin-video export
 - Downloadable HTML reports with every selected model embedded
-- Previous/next navigation, automatic cycling, arrow-key navigation, pLDDT colors, and PNG export inside generated reports
+- Previous/next navigation, automatic cycling, arrow-key navigation, saved custom labels, pLDDT colors, PNG export, and WebM spin-video recording inside generated reports
 - No build step, account, backend, or bundled example data
 
 ## Create a shareable model report
@@ -40,6 +45,14 @@ Multiple structures can be displayed together. Each loaded structure has its own
 3. Open the resulting `protein-model-report.html` in a browser.
 
 The report embeds the loaded coordinate data and lets the reader choose models, move forward or backward, or automatically cycle through them. Like the main viewer, it loads 3Dmol.js from a CDN when opened.
+
+## Scientific-use notes
+
+- pLDDT is a per-residue confidence measure. It does not by itself establish that a multimeric interface or relative chain placement is correct.
+- Alignment is intended for visual comparison of related models. The current browser build pairs Cα atoms by chain ID and residue number, falling back to residue order when identifiers differ; inspect the result before interpreting it.
+- The generated report is a presentation artifact, not a replacement for the original coordinate files, AlphaFold confidence JSON, PAE plots, or experimental validation.
+
+See [`SCIENTIFIC-AUDIT.md`](SCIENTIFIC-AUDIT.md) for the publication/reviewer-readiness audit and prioritized roadmap.
 
 ## GitHub Pages
 

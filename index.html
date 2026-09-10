@@ -9,7 +9,7 @@
 <style>:root{color-scheme:light dark;background:light-dark(rgb(255 255 255), rgb(24 24 24))}html,body{margin:0}body{box-sizing:border-box;padding:1rem;background:inherit}iframe{display:block;width:100%;max-width:736px;height:calc(100vh - 2rem);margin:0 auto;border:0}</style>
 </head>
 <body>
-<iframe sandbox="allow-scripts" referrerpolicy="no-referrer" title="Generic Protein Viewer" srcdoc="&lt;!doctype html&gt;
+<iframe sandbox="allow-scripts allow-downloads" referrerpolicy="no-referrer" title="Generic Protein Viewer" srcdoc="&lt;!doctype html&gt;
 &lt;html lang=&quot;en&quot;&gt;
 &lt;head&gt;
 &lt;meta charset=&quot;utf-8&quot;&gt;
@@ -828,7 +828,26 @@ html&gt;body{padding:0}&lt;/style&gt;
     &lt;button class=&quot;btn&quot; type=&quot;button&quot; id=&quot;gpv-hide-all&quot;&gt;Hide all&lt;/button&gt;
     &lt;button class=&quot;btn&quot; type=&quot;button&quot; id=&quot;gpv-fit&quot;&gt;Fit visible&lt;/button&gt;
     &lt;button class=&quot;btn&quot; type=&quot;button&quot; id=&quot;gpv-image&quot;&gt;Download PNG&lt;/button&gt;
+    &lt;button class=&quot;btn&quot; type=&quot;button&quot; id=&quot;gpv-video&quot; disabled&gt;Record spin video&lt;/button&gt;
     &lt;button class=&quot;btn btn-primary&quot; type=&quot;button&quot; id=&quot;gpv-report&quot; disabled&gt;Download HTML report&lt;/button&gt;
+  &lt;/div&gt;
+
+  &lt;div class=&quot;viz-controls&quot; aria-label=&quot;Model navigation controls&quot;&gt;
+    &lt;label class=&quot;form-label&quot;&gt;View mode
+      &lt;select class=&quot;form-select&quot; id=&quot;gpv-view-mode&quot;&gt;
+        &lt;option value=&quot;overlay&quot;&gt;Overlay selected models&lt;/option&gt;
+        &lt;option value=&quot;single&quot;&gt;One model at a time&lt;/option&gt;
+      &lt;/select&gt;
+    &lt;/label&gt;
+    &lt;label class=&quot;form-label gpv-current-label&quot;&gt;Current model
+      &lt;select class=&quot;form-select&quot; id=&quot;gpv-current&quot; disabled&gt;&lt;option&gt;No models loaded&lt;/option&gt;&lt;/select&gt;
+    &lt;/label&gt;
+    &lt;button class=&quot;btn&quot; type=&quot;button&quot; id=&quot;gpv-previous&quot; disabled&gt;Previous&lt;/button&gt;
+    &lt;button class=&quot;btn&quot; type=&quot;button&quot; id=&quot;gpv-next&quot; disabled&gt;Next&lt;/button&gt;
+    &lt;button class=&quot;btn&quot; type=&quot;button&quot; id=&quot;gpv-cycle&quot; disabled&gt;Cycle models&lt;/button&gt;
+    &lt;label class=&quot;form-label&quot;&gt;Cycle interval &lt;span id=&quot;gpv-cycle-value&quot;&gt;2.0 s&lt;/span&gt;
+      &lt;input class=&quot;form-range&quot; id=&quot;gpv-cycle-speed&quot; type=&quot;range&quot; min=&quot;0.5&quot; max=&quot;10&quot; value=&quot;2&quot; step=&quot;0.5&quot;&gt;
+    &lt;/label&gt;
   &lt;/div&gt;
 
   &lt;div class=&quot;viz-controls&quot; aria-label=&quot;Display controls&quot;&gt;
@@ -859,10 +878,31 @@ html&gt;body{padding:0}&lt;/style&gt;
     &lt;label class=&quot;form-label&quot;&gt;Speed &lt;span id=&quot;gpv-speed-value&quot;&gt;1.0×&lt;/span&gt;
       &lt;input class=&quot;form-range&quot; id=&quot;gpv-speed&quot; type=&quot;range&quot; min=&quot;0.25&quot; max=&quot;2.5&quot; value=&quot;1&quot; step=&quot;0.25&quot;&gt;
     &lt;/label&gt;
+    &lt;label class=&quot;form-label&quot;&gt;Video length
+      &lt;select class=&quot;form-select&quot; id=&quot;gpv-video-length&quot;&gt;&lt;option value=&quot;5&quot;&gt;5 seconds&lt;/option&gt;&lt;option value=&quot;10&quot;&gt;10 seconds&lt;/option&gt;&lt;option value=&quot;15&quot;&gt;15 seconds&lt;/option&gt;&lt;/select&gt;
+    &lt;/label&gt;
+  &lt;/div&gt;
+
+  &lt;div class=&quot;viz-controls&quot; aria-label=&quot;Alignment controls&quot;&gt;
+    &lt;label class=&quot;form-label gpv-current-label&quot;&gt;Alignment reference
+      &lt;select class=&quot;form-select&quot; id=&quot;gpv-reference&quot; disabled&gt;&lt;option&gt;No models loaded&lt;/option&gt;&lt;/select&gt;
+    &lt;/label&gt;
+    &lt;button class=&quot;btn&quot; type=&quot;button&quot; id=&quot;gpv-align&quot; disabled&gt;Align selected models&lt;/button&gt;
+    &lt;button class=&quot;btn&quot; type=&quot;button&quot; id=&quot;gpv-restore&quot; disabled&gt;Restore coordinates&lt;/button&gt;
   &lt;/div&gt;
 
   &lt;div class=&quot;gpv-list&quot; id=&quot;gpv-list&quot; aria-label=&quot;Loaded structures&quot;&gt;&lt;/div&gt;
   &lt;div class=&quot;gpv-empty text-muted&quot; id=&quot;gpv-empty&quot;&gt;Choose one or more PDB, CIF, or mmCIF files to begin.&lt;/div&gt;
+
+  &lt;div class=&quot;viz-controls&quot; aria-label=&quot;Residue labels&quot;&gt;
+    &lt;span id=&quot;gpv-residue&quot;&gt;Click a residue to inspect it.&lt;/span&gt;
+    &lt;label class=&quot;form-label&quot;&gt;Label text
+      &lt;input class=&quot;form-control&quot; id=&quot;gpv-label-text&quot; type=&quot;text&quot; placeholder=&quot;Optional custom label&quot;&gt;
+    &lt;/label&gt;
+    &lt;button class=&quot;btn&quot; type=&quot;button&quot; id=&quot;gpv-add-label&quot; disabled&gt;Add or edit label&lt;/button&gt;
+    &lt;label class=&quot;form-check form-switch&quot;&gt;&lt;input class=&quot;form-check-input&quot; id=&quot;gpv-all-labels&quot; type=&quot;checkbox&quot;&gt;&lt;span class=&quot;form-check-label&quot;&gt;Label every residue in current model&lt;/span&gt;&lt;/label&gt;
+    &lt;button class=&quot;btn&quot; type=&quot;button&quot; id=&quot;gpv-clear-labels&quot;&gt;Clear labels&lt;/button&gt;
+  &lt;/div&gt;
 
   &lt;div class=&quot;gpv-legend text-small&quot; id=&quot;gpv-plddt-legend&quot; hidden aria-label=&quot;pLDDT confidence color legend&quot;&gt;
     &lt;span&gt;&lt;i class=&quot;gpv-swatch gpv-vlow&quot;&gt;&lt;/i&gt;Very low &amp;lt;50&lt;/span&gt;
@@ -883,13 +923,13 @@ html&gt;body{padding:0}&lt;/style&gt;
   #generic-protein-viewer { width: 100%; color: var(--foreground); }
   #generic-protein-viewer .viz-controls { margin-bottom: 12px; align-items: end; }
   #generic-protein-viewer .form-label { min-width: 126px; flex: 1 1 138px; }
-  #generic-protein-viewer .gpv-file-label { flex: 3 1 300px; }
+  #generic-protein-viewer .gpv-file-label, #generic-protein-viewer .gpv-current-label { flex: 3 1 280px; }
   #generic-protein-viewer .gpv-drop { display: grid; gap: 4px; text-align: center; margin-bottom: 12px; cursor: pointer; }
   #generic-protein-viewer .gpv-drop.is-dragging { outline: 2px solid var(--ring); outline-offset: 2px; }
   #generic-protein-viewer .form-range { width: 100%; }
   #generic-protein-viewer .gpv-list { display: grid; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); gap: 8px; margin: 0 0 10px; }
   #generic-protein-viewer .gpv-entry { display: flex; align-items: center; gap: 8px; min-width: 0; }
-  #generic-protein-viewer .gpv-entry-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  #generic-protein-viewer .gpv-entry-name { flex: 1; min-width: 0; overflow-wrap: anywhere; }
   #generic-protein-viewer .gpv-entry-score { color: var(--muted-foreground); white-space: nowrap; }
   #generic-protein-viewer .gpv-entry .form-control-color { flex: 0 0 auto; }
   #generic-protein-viewer .gpv-empty { margin: 0 0 10px; }
@@ -909,6 +949,7 @@ html&gt;body{padding:0}&lt;/style&gt;
 
 &lt;script src=&quot;https://cdnjs.cloudflare.com/ajax/libs/3Dmol/2.4.2/3Dmol-min.js&quot;&gt;&lt;/script&gt;
 &lt;script src=&quot;https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js&quot;&gt;&lt;/script&gt;
+&lt;script src=&quot;https://cdnjs.cloudflare.com/ajax/libs/numeric/1.2.6/numeric.min.js&quot;&gt;&lt;/script&gt;
 &lt;script&gt;
 (() =&gt; {
   const root = document.getElementById(&#x27;generic-protein-viewer&#x27;);
@@ -921,6 +962,12 @@ html&gt;body{padding:0}&lt;/style&gt;
   let animationFrame = 0;
   let rockPhase = 0;
   let rockDirection = 1;
+  let activeId = null;
+  let cycleTimer = 0;
+  let selectedResidue = null;
+  let labelRecords = [];
+  let nextStructureId = 1;
+  const labelColors = getComputedStyle(root);
 
   function plddtColor(score) {
     if (score &lt; 50) return &#x27;#ff7d45&#x27;;
@@ -942,6 +989,19 @@ html&gt;body{padding:0}&lt;/style&gt;
     return values.length ? values.reduce((sum, value) =&gt; sum + value, 0) / values.length : null;
   }
 
+  function activeEntry() {
+    return structures.find(entry =&gt; entry.id === activeId &amp;&amp; entry.visible) || structures.find(entry =&gt; entry.visible) || structures[0] || null;
+  }
+
+  function displayedEntries() {
+    const visible = structures.filter(entry =&gt; entry.visible);
+    if (root.querySelector(&#x27;#gpv-view-mode&#x27;).value === &#x27;single&#x27;) {
+      const active = activeEntry();
+      return active &amp;&amp; active.visible ? [active] : [];
+    }
+    return visible;
+  }
+
   function styleFor(entry) {
     const representation = root.querySelector(&#x27;#gpv-style&#x27;).value;
     const mode = root.querySelector(&#x27;#gpv-color-mode&#x27;).value;
@@ -957,7 +1017,7 @@ html&gt;body{padding:0}&lt;/style&gt;
   }
 
   function updateStatus(message = &#x27;Ready&#x27;) {
-    const visible = structures.filter(entry =&gt; entry.visible);
+    const visible = displayedEntries();
     root.querySelector(&#x27;#gpv-count&#x27;).textContent = visible.length + &#x27; visible / &#x27; + structures.length + &#x27; loaded&#x27;;
     const scores = visible.flatMap(entry =&gt; entry.scores);
     const score = mean(scores);
@@ -965,19 +1025,43 @@ html&gt;body{padding:0}&lt;/style&gt;
     root.querySelector(&#x27;#gpv-state&#x27;).textContent = message;
     root.querySelector(&#x27;#gpv-empty&#x27;).hidden = structures.length &gt; 0;
     root.querySelector(&#x27;#gpv-report&#x27;).disabled = structures.length === 0;
+    root.querySelector(&#x27;#gpv-video&#x27;).disabled = structures.length === 0;
+    [&#x27;#gpv-current&#x27;, &#x27;#gpv-reference&#x27;, &#x27;#gpv-previous&#x27;, &#x27;#gpv-next&#x27;, &#x27;#gpv-cycle&#x27;, &#x27;#gpv-align&#x27;, &#x27;#gpv-restore&#x27;].forEach(selector =&gt; {
+      root.querySelector(selector).disabled = structures.length === 0;
+    });
   }
 
   function applyStyle() {
+    const shown = new Set(displayedEntries());
     structures.forEach(entry =&gt; {
       entry.model.setStyle({}, {});
-      if (entry.visible) entry.model.setStyle({}, styleFor(entry));
+      if (shown.has(entry)) entry.model.setStyle({}, styleFor(entry));
     });
     root.querySelector(&#x27;#gpv-plddt-legend&#x27;).hidden = root.querySelector(&#x27;#gpv-color-mode&#x27;).value !== &#x27;plddt&#x27;;
     viewer.render();
+    rebuildLabels();
     updateStatus();
   }
 
+  function syncModelControls() {
+    if (!structures.length) activeId = null;
+    if (structures.length &amp;&amp; !structures.some(entry =&gt; entry.id === activeId)) activeId = structures[0].id;
+    [&#x27;#gpv-current&#x27;, &#x27;#gpv-reference&#x27;].forEach(selector =&gt; {
+      const select = root.querySelector(selector);
+      const previous = selector === &#x27;#gpv-current&#x27; ? activeId : select.value;
+      select.replaceChildren();
+      structures.forEach(entry =&gt; {
+        const option = document.createElement(&#x27;option&#x27;);
+        option.value = String(entry.id);
+        option.textContent = entry.name;
+        select.append(option);
+      });
+      if (structures.some(entry =&gt; String(entry.id) === String(previous))) select.value = String(previous);
+    });
+  }
+
   function renderList() {
+    syncModelControls();
     const list = root.querySelector(&#x27;#gpv-list&#x27;);
     list.replaceChildren();
     structures.forEach(entry =&gt; {
@@ -997,6 +1081,7 @@ html&gt;body{padding:0}&lt;/style&gt;
       const name = document.createElement(&#x27;span&#x27;);
       name.className = &#x27;gpv-entry-name&#x27;;
       name.textContent = entry.name;
+      name.setAttribute(&#x27;title&#x27;, entry.name);
 
       const score = document.createElement(&#x27;span&#x27;);
       score.className = &#x27;gpv-entry-score text-small&#x27;;
@@ -1017,6 +1102,7 @@ html&gt;body{padding:0}&lt;/style&gt;
       remove.addEventListener(&#x27;click&#x27;, () =&gt; {
         viewer.removeModel(entry.model);
         structures = structures.filter(item =&gt; item !== entry);
+        labelRecords = labelRecords.filter(label =&gt; label.entryId !== entry.id);
         renderList();
         applyStyle();
       });
@@ -1028,15 +1114,270 @@ html&gt;body{padding:0}&lt;/style&gt;
 
   function addStructure(name, text, format) {
     const model = viewer.addModel(text, format);
-    structures.push({
+    const atoms = model.selectedAtoms({});
+    const entry = {
+      id: nextStructureId++,
       name,
       model,
       visible: true,
       color: palette[structures.length % palette.length],
       text,
       format,
-      scores: modelScores(model)
+      scores: modelScores(model),
+      atoms,
+      originalAtoms: atoms.map(atom =&gt; ({ x: atom.x, y: atom.y, z: atom.z }))
+    };
+    structures.push(entry);
+    if (activeId === null) activeId = entry.id;
+    viewer.setClickable({ model: model.getID() }, true, atom =&gt; selectResidue(entry, atom));
+    return entry;
+  }
+
+  function stopCycle() {
+    clearInterval(cycleTimer);
+    cycleTimer = 0;
+    root.querySelector(&#x27;#gpv-cycle&#x27;).textContent = &#x27;Cycle models&#x27;;
+  }
+
+  function visibleEntries() {
+    return structures.filter(entry =&gt; entry.visible);
+  }
+
+  function selectModel(entry, fit = true) {
+    if (!entry) return;
+    if (!entry.visible) {
+      entry.visible = true;
+      renderList();
+    }
+    activeId = entry.id;
+    root.querySelector(&#x27;#gpv-current&#x27;).value = String(entry.id);
+    root.querySelector(&#x27;#gpv-view-mode&#x27;).value = &#x27;single&#x27;;
+    applyStyle();
+    if (fit) viewer.zoomTo({ model: entry.model.getID() });
+    viewer.render();
+    updateStatus(&#x27;Showing &#x27; + entry.name);
+  }
+
+  function selectRelative(delta) {
+    const candidates = visibleEntries();
+    if (!candidates.length) return;
+    let index = candidates.findIndex(entry =&gt; entry.id === activeId);
+    if (index &lt; 0) index = 0;
+    selectModel(candidates[(index + delta + candidates.length) % candidates.length]);
+  }
+
+  function toggleCycle() {
+    if (cycleTimer) { stopCycle(); return; }
+    if (!visibleEntries().length) return;
+    root.querySelector(&#x27;#gpv-view-mode&#x27;).value = &#x27;single&#x27;;
+    const delay = Math.max(500, Number(root.querySelector(&#x27;#gpv-cycle-speed&#x27;).value) * 1000);
+    cycleTimer = setInterval(() =&gt; selectRelative(1), delay);
+    root.querySelector(&#x27;#gpv-cycle&#x27;).textContent = &#x27;Pause cycle&#x27;;
+    selectModel(activeEntry(), false);
+  }
+
+  function residueKey(entryId, chain, resi) {
+    return [entryId, chain || &#x27;&#x27;, resi].join(&#x27;|&#x27;);
+  }
+
+  function residueText(entry, atom) {
+    const chain = atom.chain ? &#x27; chain &#x27; + atom.chain : &#x27;&#x27;;
+    const confidence = Number.isFinite(Number(atom.b)) ? &#x27; · pLDDT &#x27; + Number(atom.b).toFixed(1) : &#x27;&#x27;;
+    return entry.name + &#x27; · &#x27; + (atom.resn || &#x27;Residue&#x27;) + &#x27; &#x27; + atom.resi + chain + &#x27; · atom &#x27; + (atom.atom || &#x27;—&#x27;) + confidence;
+  }
+
+  function selectResidue(entry, atom) {
+    selectedResidue = {
+      entryId: entry.id,
+      chain: atom.chain || &#x27;&#x27;,
+      resi: atom.resi,
+      resn: atom.resn || &#x27;RES&#x27;,
+      atom: atom.atom || &#x27;&#x27;,
+      x: atom.x,
+      y: atom.y,
+      z: atom.z,
+      b: atom.b
+    };
+    root.querySelector(&#x27;#gpv-residue&#x27;).textContent = residueText(entry, atom);
+    const key = residueKey(entry.id, atom.chain, atom.resi);
+    const saved = labelRecords.find(label =&gt; label.key === key);
+    root.querySelector(&#x27;#gpv-label-text&#x27;).value = saved ? saved.text : (atom.resn || &#x27;RES&#x27;) + atom.resi + (atom.chain ? &#x27; · &#x27; + atom.chain : &#x27;&#x27;);
+    root.querySelector(&#x27;#gpv-add-label&#x27;).disabled = false;
+  }
+
+  function addOrEditLabel() {
+    if (!selectedResidue) return;
+    const text = root.querySelector(&#x27;#gpv-label-text&#x27;).value.trim();
+    if (!text) return;
+    const key = residueKey(selectedResidue.entryId, selectedResidue.chain, selectedResidue.resi);
+    const record = { ...selectedResidue, key, text };
+    const index = labelRecords.findIndex(label =&gt; label.key === key);
+    if (index &gt;= 0) labelRecords[index] = record;
+    else labelRecords.push(record);
+    rebuildLabels();
+    updateStatus(index &gt;= 0 ? &#x27;Residue label updated&#x27; : &#x27;Residue label added&#x27;);
+  }
+
+  function labelStyle(position) {
+    return {
+      position,
+      backgroundColor: labelColors.getPropertyValue(&#x27;--card&#x27;).trim() || &#x27;#ffffff&#x27;,
+      fontColor: labelColors.getPropertyValue(&#x27;--card-foreground&#x27;).trim() || &#x27;#111827&#x27;,
+      borderColor: labelColors.getPropertyValue(&#x27;--border&#x27;).trim() || &#x27;#cbd5e1&#x27;,
+      borderThickness: 1,
+      fontSize: 12,
+      inFront: true,
+      showBackground: true
+    };
+  }
+
+  function rebuildLabels() {
+    viewer.removeAllLabels();
+    const shownIds = new Set(displayedEntries().map(entry =&gt; entry.id));
+    labelRecords.filter(label =&gt; shownIds.has(label.entryId)).forEach(label =&gt; {
+      const entry = structures.find(item =&gt; item.id === label.entryId);
+      const atom = entry &amp;&amp; entry.atoms.find(item =&gt; (item.chain || &#x27;&#x27;) === label.chain &amp;&amp; item.resi === label.resi &amp;&amp; (item.atom === &#x27;CA&#x27; || item.atom === label.atom));
+      const position = atom ? { x: atom.x, y: atom.y, z: atom.z } : { x: label.x, y: label.y, z: label.z };
+      viewer.addLabel(label.text, labelStyle(position));
     });
+    if (root.querySelector(&#x27;#gpv-all-labels&#x27;).checked) {
+      const entry = activeEntry();
+      if (entry &amp;&amp; shownIds.has(entry.id)) {
+        entry.atoms.filter(atom =&gt; atom.atom === &#x27;CA&#x27;).forEach(atom =&gt; {
+          const text = (atom.resn || &#x27;RES&#x27;) + atom.resi + (atom.chain ? &#x27; · &#x27; + atom.chain : &#x27;&#x27;);
+          viewer.addLabel(text, labelStyle({ x: atom.x, y: atom.y, z: atom.z }));
+        });
+      }
+    }
+    viewer.render();
+  }
+
+  function restoreCoordinates(shouldRender = true) {
+    structures.forEach(entry =&gt; entry.atoms.forEach((atom, index) =&gt; {
+      const original = entry.originalAtoms[index];
+      atom.x = original.x;
+      atom.y = original.y;
+      atom.z = original.z;
+    }));
+    if (shouldRender) {
+      applyStyle();
+      viewer.zoomTo();
+      viewer.render();
+      updateStatus(&#x27;Original coordinates restored&#x27;);
+    }
+  }
+
+  function centroid(points) {
+    const total = points.reduce((sum, point) =&gt; [sum[0] + point[0], sum[1] + point[1], sum[2] + point[2]], [0, 0, 0]);
+    return total.map(value =&gt; value / points.length);
+  }
+
+  function caPairs(reference, target) {
+    const referenceMap = new Map(reference.atoms.filter(atom =&gt; atom.atom === &#x27;CA&#x27;).map(atom =&gt; [(atom.chain || &#x27;&#x27;) + &#x27;|&#x27; + atom.resi, atom]));
+    let pairs = target.atoms.filter(atom =&gt; atom.atom === &#x27;CA&#x27; &amp;&amp; referenceMap.has((atom.chain || &#x27;&#x27;) + &#x27;|&#x27; + atom.resi)).map(atom =&gt; [referenceMap.get((atom.chain || &#x27;&#x27;) + &#x27;|&#x27; + atom.resi), atom]);
+    let method = &#x27;chain/residue identifiers&#x27;;
+    if (pairs.length &lt; 3) {
+      const refAtoms = reference.atoms.filter(atom =&gt; atom.atom === &#x27;CA&#x27;);
+      const targetAtoms = target.atoms.filter(atom =&gt; atom.atom === &#x27;CA&#x27;);
+      pairs = Array.from({ length: Math.min(refAtoms.length, targetAtoms.length) }, (_, index) =&gt; [refAtoms[index], targetAtoms[index]]);
+      method = &#x27;residue order&#x27;;
+    }
+    return { pairs, method };
+  }
+
+  function determinant3(matrix) {
+    return matrix[0][0] * (matrix[1][1] * matrix[2][2] - matrix[1][2] * matrix[2][1])
+      - matrix[0][1] * (matrix[1][0] * matrix[2][2] - matrix[1][2] * matrix[2][0])
+      + matrix[0][2] * (matrix[1][0] * matrix[2][1] - matrix[1][1] * matrix[2][0]);
+  }
+
+  function alignEntry(reference, target) {
+    const pairing = caPairs(reference, target);
+    const pairs = pairing.pairs;
+    if (pairs.length &lt; 3) return null;
+    const referencePoints = pairs.map(pair =&gt; [pair[0].x, pair[0].y, pair[0].z]);
+    const targetPoints = pairs.map(pair =&gt; [pair[1].x, pair[1].y, pair[1].z]);
+    const referenceCenter = centroid(referencePoints);
+    const targetCenter = centroid(targetPoints);
+    const x = targetPoints.map(point =&gt; point.map((value, axis) =&gt; value - targetCenter[axis]));
+    const y = referencePoints.map(point =&gt; point.map((value, axis) =&gt; value - referenceCenter[axis]));
+    const svd = numeric.svd(numeric.dot(numeric.transpose(x), y));
+    let rotation = numeric.dot(svd.V, numeric.transpose(svd.U));
+    if (determinant3(rotation) &lt; 0) {
+      svd.V.forEach(row =&gt; { row[2] *= -1; });
+      rotation = numeric.dot(svd.V, numeric.transpose(svd.U));
+    }
+    target.atoms.forEach(atom =&gt; {
+      const centered = [atom.x - targetCenter[0], atom.y - targetCenter[1], atom.z - targetCenter[2]];
+      const transformed = numeric.dot(rotation, centered);
+      atom.x = transformed[0] + referenceCenter[0];
+      atom.y = transformed[1] + referenceCenter[1];
+      atom.z = transformed[2] + referenceCenter[2];
+    });
+    const squaredError = pairs.reduce((sum, pair) =&gt; {
+      const dx = pair[0].x - pair[1].x;
+      const dy = pair[0].y - pair[1].y;
+      const dz = pair[0].z - pair[1].z;
+      return sum + dx * dx + dy * dy + dz * dz;
+    }, 0);
+    return { count: pairs.length, rmsd: Math.sqrt(squaredError / pairs.length), method: pairing.method, name: target.name };
+  }
+
+  function alignVisible() {
+    const referenceId = Number(root.querySelector(&#x27;#gpv-reference&#x27;).value);
+    const reference = structures.find(entry =&gt; entry.id === referenceId);
+    if (!reference) return;
+    restoreCoordinates(false);
+    const results = [];
+    visibleEntries().forEach(entry =&gt; {
+      if (entry !== reference) {
+        const result = alignEntry(reference, entry);
+        if (result) results.push(result);
+      }
+    });
+    applyStyle();
+    viewer.zoomTo();
+    viewer.render();
+    if (results.length) {
+      const averageRmsd = mean(results.map(result =&gt; result.rmsd));
+      const orderMapped = results.filter(result =&gt; result.method === &#x27;residue order&#x27;).length;
+      updateStatus(&#x27;Aligned &#x27; + results.length + &#x27; model&#x27; + (results.length === 1 ? &#x27;&#x27; : &#x27;s&#x27;) + &#x27; · mean Cα RMSD &#x27; + averageRmsd.toFixed(2) + &#x27; Å&#x27; + (orderMapped ? &#x27; · &#x27; + orderMapped + &#x27; order-mapped&#x27; : &#x27;&#x27;));
+    } else updateStatus(&#x27;No model had enough matching residues&#x27;);
+  }
+
+  function recordSpinVideo() {
+    const canvas = root.querySelector(&#x27;#gpv-stage canvas&#x27;);
+    if (!canvas || !canvas.captureStream || typeof MediaRecorder === &#x27;undefined&#x27;) {
+      updateStatus(&#x27;Video recording is not supported by this browser&#x27;);
+      return;
+    }
+    const button = root.querySelector(&#x27;#gpv-video&#x27;);
+    const duration = Number(root.querySelector(&#x27;#gpv-video-length&#x27;).value) || 5;
+    const stream = canvas.captureStream(30);
+    const mimeType = MediaRecorder.isTypeSupported(&#x27;video/webm;codecs=vp9&#x27;) ? &#x27;video/webm;codecs=vp9&#x27; : &#x27;video/webm&#x27;;
+    const recorder = new MediaRecorder(stream, { mimeType });
+    const chunks = [];
+    recorder.ondataavailable = event =&gt; { if (event.data.size) chunks.push(event.data); };
+    recorder.onstop = () =&gt; {
+      viewer.spin(false);
+      stream.getTracks().forEach(track =&gt; track.stop());
+      const url = URL.createObjectURL(new Blob(chunks, { type: &#x27;video/webm&#x27; }));
+      const link = document.createElement(&#x27;a&#x27;);
+      link.href = url;
+      link.download = &#x27;protein-spin.webm&#x27;;
+      link.click();
+      setTimeout(() =&gt; URL.revokeObjectURL(url), 1000);
+      button.disabled = false;
+      button.textContent = &#x27;Record spin video&#x27;;
+      updateStatus(&#x27;Spin video downloaded&#x27;);
+    };
+    stopMotion();
+    button.disabled = true;
+    button.textContent = &#x27;Recording &#x27; + duration + &#x27;s…&#x27;;
+    recorder.start();
+    viewer.spin(&#x27;y&#x27;, 0.8);
+    updateStatus(&#x27;Recording spin video…&#x27;);
+    setTimeout(() =&gt; recorder.stop(), duration * 1000);
   }
 
   async function loadFiles(files) {
@@ -1112,7 +1453,16 @@ html&gt;body{padding:0}&lt;/style&gt;
       name: entry.name,
       text: entry.text,
       format: entry.format,
-      color: entry.color
+      color: entry.color,
+      labels: labelRecords.filter(label =&gt; label.entryId === entry.id).map(label =&gt; ({
+        text: label.text,
+        chain: label.chain,
+        resi: label.resi,
+        atom: label.atom,
+        x: label.x,
+        y: label.y,
+        z: label.z
+      }))
     }));
     const payload = JSON.stringify(exported).replace(/&lt;/g, &#x27;\\u003c&#x27;);
     const html = [
@@ -1123,7 +1473,7 @@ html&gt;body{padding:0}&lt;/style&gt;
       &quot;&lt;style&gt;&quot;,
       &quot;:root{color-scheme:light dark;font-family:system-ui,sans-serif}body{margin:0;padding:18px;background:#111827;color:#f8fafc}main{max-width:1100px;margin:auto}.controls{display:flex;gap:10px;flex-wrap:wrap;align-items:end;margin-bottom:12px}label{display:grid;gap:4px}button,select,input{font:inherit;padding:7px 10px}#view{height:70vh;min-height:420px;background:#020617}#status{display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-top:8px;color:#cbd5e1}.legend{display:flex;gap:12px;flex-wrap:wrap;margin:8px 0}.legend span{display:flex;align-items:center;gap:5px}.swatch{width:12px;height:12px;display:inline-block}.vlow{background:#ff7d45}.low{background:#ffdb13}.conf{background:#65cbf3}.vhigh{background:#0053d6}@media(prefers-color-scheme:light){body{background:#f8fafc;color:#0f172a}#view{background:#e2e8f0}#status{color:#475569}}&quot;,
       &quot;&lt;/style&gt;&lt;/head&gt;&lt;body&gt;&lt;main&gt;&quot;,
-      &quot;&lt;div class=&#x27;controls&#x27;&gt;&lt;label&gt;Model&lt;select id=&#x27;model&#x27;&gt;&lt;/select&gt;&lt;/label&gt;&lt;button id=&#x27;previous&#x27;&gt;Previous&lt;/button&gt;&lt;button id=&#x27;next&#x27;&gt;Next&lt;/button&gt;&lt;button id=&#x27;play&#x27;&gt;Play cycle&lt;/button&gt;&lt;label&gt;Interval (seconds)&lt;input id=&#x27;interval&#x27; type=&#x27;number&#x27; min=&#x27;0.5&#x27; max=&#x27;20&#x27; step=&#x27;0.5&#x27; value=&#x27;2&#x27;&gt;&lt;/label&gt;&lt;label&gt;Representation&lt;select id=&#x27;style&#x27;&gt;&lt;option value=&#x27;cartoon&#x27;&gt;Cartoon&lt;/option&gt;&lt;option value=&#x27;stick&#x27;&gt;Sticks&lt;/option&gt;&lt;option value=&#x27;sphere&#x27;&gt;Spheres&lt;/option&gt;&lt;option value=&#x27;line&#x27;&gt;Lines&lt;/option&gt;&lt;/select&gt;&lt;/label&gt;&lt;label&gt;Colors&lt;select id=&#x27;colors&#x27;&gt;&lt;option value=&#x27;plddt&#x27;&gt;pLDDT&lt;/option&gt;&lt;option value=&#x27;structure&#x27;&gt;Model color&lt;/option&gt;&lt;option value=&#x27;chain&#x27;&gt;Chain&lt;/option&gt;&lt;option value=&#x27;spectrum&#x27;&gt;Spectrum&lt;/option&gt;&lt;/select&gt;&lt;/label&gt;&lt;button id=&#x27;spin&#x27;&gt;Spin&lt;/button&gt;&lt;button id=&#x27;png&#x27;&gt;Download PNG&lt;/button&gt;&lt;/div&gt;&quot;,
+      &quot;&lt;div class=&#x27;controls&#x27;&gt;&lt;label&gt;Model&lt;select id=&#x27;model&#x27;&gt;&lt;/select&gt;&lt;/label&gt;&lt;button id=&#x27;previous&#x27;&gt;Previous&lt;/button&gt;&lt;button id=&#x27;next&#x27;&gt;Next&lt;/button&gt;&lt;button id=&#x27;play&#x27;&gt;Play cycle&lt;/button&gt;&lt;label&gt;Interval (seconds)&lt;input id=&#x27;interval&#x27; type=&#x27;number&#x27; min=&#x27;0.5&#x27; max=&#x27;20&#x27; step=&#x27;0.5&#x27; value=&#x27;2&#x27;&gt;&lt;/label&gt;&lt;label&gt;Representation&lt;select id=&#x27;style&#x27;&gt;&lt;option value=&#x27;cartoon&#x27;&gt;Cartoon&lt;/option&gt;&lt;option value=&#x27;stick&#x27;&gt;Sticks&lt;/option&gt;&lt;option value=&#x27;sphere&#x27;&gt;Spheres&lt;/option&gt;&lt;option value=&#x27;line&#x27;&gt;Lines&lt;/option&gt;&lt;/select&gt;&lt;/label&gt;&lt;label&gt;Colors&lt;select id=&#x27;colors&#x27;&gt;&lt;option value=&#x27;plddt&#x27;&gt;pLDDT&lt;/option&gt;&lt;option value=&#x27;structure&#x27;&gt;Model color&lt;/option&gt;&lt;option value=&#x27;chain&#x27;&gt;Chain&lt;/option&gt;&lt;option value=&#x27;spectrum&#x27;&gt;Spectrum&lt;/option&gt;&lt;/select&gt;&lt;/label&gt;&lt;button id=&#x27;spin&#x27;&gt;Spin&lt;/button&gt;&lt;button id=&#x27;png&#x27;&gt;Download PNG&lt;/button&gt;&lt;button id=&#x27;video&#x27;&gt;Record 5s video&lt;/button&gt;&lt;/div&gt;&quot;,
       &quot;&lt;div class=&#x27;legend&#x27;&gt;&lt;span&gt;&lt;i class=&#x27;swatch vlow&#x27;&gt;&lt;/i&gt;&amp;lt;50&lt;/span&gt;&lt;span&gt;&lt;i class=&#x27;swatch low&#x27;&gt;&lt;/i&gt;50–70&lt;/span&gt;&lt;span&gt;&lt;i class=&#x27;swatch conf&#x27;&gt;&lt;/i&gt;70–90&lt;/span&gt;&lt;span&gt;&lt;i class=&#x27;swatch vhigh&#x27;&gt;&lt;/i&gt;≥90&lt;/span&gt;&lt;/div&gt;&quot;,
       &quot;&lt;div id=&#x27;view&#x27;&gt;&lt;/div&gt;&lt;div id=&#x27;status&#x27;&gt;&lt;span id=&#x27;name&#x27;&gt;&lt;/span&gt;&lt;span id=&#x27;score&#x27;&gt;&lt;/span&gt;&lt;span id=&#x27;position&#x27;&gt;&lt;/span&gt;&lt;/div&gt;&quot;,
       &quot;&lt;script src=&#x27;https://cdnjs.cloudflare.com/ajax/libs/3Dmol/2.4.2/3Dmol-min.js&#x27;&gt;&lt;&quot; + &quot;/script&gt;&quot;,
@@ -1133,10 +1483,11 @@ html&gt;body{padding:0}&lt;/style&gt;
       &quot;const picker=document.getElementById(&#x27;model&#x27;);structures.forEach((s,i)=&gt;{const o=document.createElement(&#x27;option&#x27;);o.value=i;o.textContent=s.name;picker.append(o)});&quot;,
       &quot;function pcolor(v){return v&lt;50?&#x27;#ff7d45&#x27;:v&lt;70?&#x27;#ffdb13&#x27;:v&lt;90?&#x27;#65cbf3&#x27;:&#x27;#0053d6&#x27;}&quot;,
       &quot;function mean(a){return a.length?a.reduce((s,v)=&gt;s+v,0)/a.length:null}&quot;,
-      &quot;function show(i){current=(Number(i)+structures.length)%structures.length;picker.value=current;const s=structures[current];viewer.removeAllModels();const m=viewer.addModel(s.text,s.format);const rep=document.getElementById(&#x27;style&#x27;).value;const mode=document.getElementById(&#x27;colors&#x27;).value;let options={color:s.color};if(mode===&#x27;plddt&#x27;)options={colorfunc:a=&gt;pcolor(Number(a.b||0))};if(mode===&#x27;chain&#x27;)options={colorscheme:&#x27;chainHetatm&#x27;};if(mode===&#x27;spectrum&#x27;)options={colorscheme:&#x27;spectrum&#x27;};if(rep===&#x27;line&#x27;)options.linewidth=2;const spec={};spec[rep]=options;m.setStyle({},spec);viewer.zoomTo();viewer.render();const values=m.selectedAtoms({}).filter(a=&gt;a.atom===&#x27;CA&#x27;&amp;&amp;Number.isFinite(Number(a.b))).map(a=&gt;Number(a.b));const avg=mean(values);document.getElementById(&#x27;name&#x27;).textContent=s.name;document.getElementById(&#x27;score&#x27;).textContent=avg===null?&#x27;Mean pLDDT —&#x27;:&#x27;Mean pLDDT &#x27;+avg.toFixed(1);document.getElementById(&#x27;position&#x27;).textContent=(current+1)+&#x27; / &#x27;+structures.length}&quot;,
+      &quot;function show(i){current=(Number(i)+structures.length)%structures.length;picker.value=current;const s=structures[current];viewer.removeAllModels();viewer.removeAllLabels();const m=viewer.addModel(s.text,s.format);const rep=document.getElementById(&#x27;style&#x27;).value;const mode=document.getElementById(&#x27;colors&#x27;).value;let options={color:s.color};if(mode===&#x27;plddt&#x27;)options={colorfunc:a=&gt;pcolor(Number(a.b||0))};if(mode===&#x27;chain&#x27;)options={colorscheme:&#x27;chainHetatm&#x27;};if(mode===&#x27;spectrum&#x27;)options={colorscheme:&#x27;spectrum&#x27;};if(rep===&#x27;line&#x27;)options.linewidth=2;const spec={};spec[rep]=options;m.setStyle({},spec);(s.labels||[]).forEach(l=&gt;viewer.addLabel(l.text,{position:{x:l.x,y:l.y,z:l.z},backgroundColor:&#x27;#fff&#x27;,fontColor:&#x27;#111827&#x27;,borderColor:&#x27;#94a3b8&#x27;,borderThickness:1,fontSize:12,inFront:true}));viewer.zoomTo();viewer.render();const values=m.selectedAtoms({}).filter(a=&gt;a.atom===&#x27;CA&#x27;&amp;&amp;Number.isFinite(Number(a.b))).map(a=&gt;Number(a.b));const avg=mean(values);document.getElementById(&#x27;name&#x27;).textContent=s.name;document.getElementById(&#x27;score&#x27;).textContent=avg===null?&#x27;Mean pLDDT —&#x27;:&#x27;Mean pLDDT &#x27;+avg.toFixed(1);document.getElementById(&#x27;position&#x27;).textContent=(current+1)+&#x27; / &#x27;+structures.length}&quot;,
       &quot;function stop(){clearInterval(timer);timer=0;document.getElementById(&#x27;play&#x27;).textContent=&#x27;Play cycle&#x27;}&quot;,
       &quot;function play(){if(timer){stop();return}const seconds=Math.max(.5,Number(document.getElementById(&#x27;interval&#x27;).value)||2);timer=setInterval(()=&gt;show(current+1),seconds*1000);document.getElementById(&#x27;play&#x27;).textContent=&#x27;Pause cycle&#x27;}&quot;,
-      &quot;picker.addEventListener(&#x27;change&#x27;,e=&gt;{stop();show(e.target.value)});document.getElementById(&#x27;previous&#x27;).onclick=()=&gt;{stop();show(current-1)};document.getElementById(&#x27;next&#x27;).onclick=()=&gt;{stop();show(current+1)};document.getElementById(&#x27;play&#x27;).onclick=play;document.getElementById(&#x27;style&#x27;).onchange=()=&gt;show(current);document.getElementById(&#x27;colors&#x27;).onchange=()=&gt;show(current);document.getElementById(&#x27;spin&#x27;).onclick=()=&gt;{spinning=!spinning;viewer.spin(spinning?&#x27;y&#x27;:false);document.getElementById(&#x27;spin&#x27;).textContent=spinning?&#x27;Stop spin&#x27;:&#x27;Spin&#x27;};document.getElementById(&#x27;png&#x27;).onclick=()=&gt;{const a=document.createElement(&#x27;a&#x27;);a.href=viewer.pngURI();a.download=&#x27;protein-model.png&#x27;;a.click()};window.addEventListener(&#x27;keydown&#x27;,e=&gt;{if(e.key===&#x27;ArrowLeft&#x27;){stop();show(current-1)}if(e.key===&#x27;ArrowRight&#x27;){stop();show(current+1)}});new ResizeObserver(()=&gt;viewer.resize()).observe(document.getElementById(&#x27;view&#x27;));show(0);&quot;,
+      &quot;function record(){const canvas=document.querySelector(&#x27;#view canvas&#x27;),button=document.getElementById(&#x27;video&#x27;);if(!canvas||!canvas.captureStream||typeof MediaRecorder===&#x27;undefined&#x27;){alert(&#x27;Video recording is not supported by this browser.&#x27;);return}const stream=canvas.captureStream(30),type=MediaRecorder.isTypeSupported(&#x27;video/webm;codecs=vp9&#x27;)?&#x27;video/webm;codecs=vp9&#x27;:&#x27;video/webm&#x27;,recorder=new MediaRecorder(stream,{mimeType:type}),chunks=[];recorder.ondataavailable=e=&gt;{if(e.data.size)chunks.push(e.data)};recorder.onstop=()=&gt;{viewer.spin(false);stream.getTracks().forEach(t=&gt;t.stop());const url=URL.createObjectURL(new Blob(chunks,{type:&#x27;video/webm&#x27;})),a=document.createElement(&#x27;a&#x27;);a.href=url;a.download=&#x27;protein-spin.webm&#x27;;a.click();setTimeout(()=&gt;URL.revokeObjectURL(url),1000);button.disabled=false;button.textContent=&#x27;Record 5s video&#x27;};button.disabled=true;button.textContent=&#x27;Recording…&#x27;;viewer.spin(&#x27;y&#x27;,.8);recorder.start();setTimeout(()=&gt;recorder.stop(),5000)}&quot;,
+      &quot;picker.addEventListener(&#x27;change&#x27;,e=&gt;{stop();show(e.target.value)});document.getElementById(&#x27;previous&#x27;).onclick=()=&gt;{stop();show(current-1)};document.getElementById(&#x27;next&#x27;).onclick=()=&gt;{stop();show(current+1)};document.getElementById(&#x27;play&#x27;).onclick=play;document.getElementById(&#x27;style&#x27;).onchange=()=&gt;show(current);document.getElementById(&#x27;colors&#x27;).onchange=()=&gt;show(current);document.getElementById(&#x27;spin&#x27;).onclick=()=&gt;{spinning=!spinning;viewer.spin(spinning?&#x27;y&#x27;:false);document.getElementById(&#x27;spin&#x27;).textContent=spinning?&#x27;Stop spin&#x27;:&#x27;Spin&#x27;};document.getElementById(&#x27;png&#x27;).onclick=()=&gt;{const a=document.createElement(&#x27;a&#x27;);a.href=viewer.pngURI();a.download=&#x27;protein-model.png&#x27;;a.click()};document.getElementById(&#x27;video&#x27;).onclick=record;window.addEventListener(&#x27;keydown&#x27;,e=&gt;{if(e.key===&#x27;ArrowLeft&#x27;){stop();show(current-1)}if(e.key===&#x27;ArrowRight&#x27;){stop();show(current+1)}});new ResizeObserver(()=&gt;viewer.resize()).observe(document.getElementById(&#x27;view&#x27;));show(0);&quot;,
       &quot;&lt;&quot; + &quot;/script&gt;&lt;/main&gt;&lt;/body&gt;&lt;/html&gt;&quot;
     ].join(&#x27;\n&#x27;);
     const blob = new Blob([html], { type: &#x27;text/html&#x27; });
@@ -1159,14 +1510,40 @@ html&gt;body{padding:0}&lt;/style&gt;
   });
   root.querySelector(&#x27;#gpv-style&#x27;).addEventListener(&#x27;change&#x27;, applyStyle);
   root.querySelector(&#x27;#gpv-color-mode&#x27;).addEventListener(&#x27;change&#x27;, applyStyle);
+  root.querySelector(&#x27;#gpv-view-mode&#x27;).addEventListener(&#x27;change&#x27;, () =&gt; {
+    stopCycle();
+    applyStyle();
+    viewer.zoomTo();
+    viewer.render();
+  });
+  root.querySelector(&#x27;#gpv-current&#x27;).addEventListener(&#x27;change&#x27;, event =&gt; {
+    stopCycle();
+    selectModel(structures.find(entry =&gt; entry.id === Number(event.target.value)));
+  });
+  root.querySelector(&#x27;#gpv-previous&#x27;).addEventListener(&#x27;click&#x27;, () =&gt; { stopCycle(); selectRelative(-1); });
+  root.querySelector(&#x27;#gpv-next&#x27;).addEventListener(&#x27;click&#x27;, () =&gt; { stopCycle(); selectRelative(1); });
+  root.querySelector(&#x27;#gpv-cycle&#x27;).addEventListener(&#x27;click&#x27;, toggleCycle);
+  root.querySelector(&#x27;#gpv-cycle-speed&#x27;).addEventListener(&#x27;input&#x27;, event =&gt; {
+    root.querySelector(&#x27;#gpv-cycle-value&#x27;).textContent = Number(event.target.value).toFixed(1) + &#x27;s&#x27;;
+    if (cycleTimer) { stopCycle(); toggleCycle(); }
+  });
   root.querySelector(&#x27;#gpv-motion&#x27;).addEventListener(&#x27;change&#x27;, applyMotion);
   root.querySelector(&#x27;#gpv-speed&#x27;).addEventListener(&#x27;input&#x27;, event =&gt; {
     root.querySelector(&#x27;#gpv-speed-value&#x27;).textContent = Number(event.target.value).toFixed(2).replace(/0$/, &#x27;&#x27;) + &#x27;×&#x27;;
     applyMotion();
   });
   root.querySelector(&#x27;#gpv-clear&#x27;).addEventListener(&#x27;click&#x27;, () =&gt; {
+    stopCycle();
+    stopMotion();
     viewer.removeAllModels();
     structures = [];
+    activeId = null;
+    selectedResidue = null;
+    labelRecords = [];
+    root.querySelector(&#x27;#gpv-residue&#x27;).textContent = &#x27;Click any atom in the viewer to inspect it.&#x27;;
+    root.querySelector(&#x27;#gpv-label-text&#x27;).value = &#x27;&#x27;;
+    root.querySelector(&#x27;#gpv-add-label&#x27;).disabled = true;
+    root.querySelector(&#x27;#gpv-all-labels&#x27;).checked = false;
     renderList();
     applyStyle();
   });
@@ -1181,13 +1558,31 @@ html&gt;body{padding:0}&lt;/style&gt;
     applyStyle();
   });
   root.querySelector(&#x27;#gpv-fit&#x27;).addEventListener(&#x27;click&#x27;, () =&gt; { viewer.zoomTo(); viewer.render(); });
+  root.querySelector(&#x27;#gpv-align&#x27;).addEventListener(&#x27;click&#x27;, alignVisible);
+  root.querySelector(&#x27;#gpv-restore&#x27;).addEventListener(&#x27;click&#x27;, () =&gt; restoreCoordinates(true));
+  root.querySelector(&#x27;#gpv-add-label&#x27;).addEventListener(&#x27;click&#x27;, addOrEditLabel);
+  root.querySelector(&#x27;#gpv-label-text&#x27;).addEventListener(&#x27;keydown&#x27;, event =&gt; { if (event.key === &#x27;Enter&#x27;) addOrEditLabel(); });
+  root.querySelector(&#x27;#gpv-all-labels&#x27;).addEventListener(&#x27;change&#x27;, rebuildLabels);
+  root.querySelector(&#x27;#gpv-clear-labels&#x27;).addEventListener(&#x27;click&#x27;, () =&gt; {
+    labelRecords = [];
+    root.querySelector(&#x27;#gpv-all-labels&#x27;).checked = false;
+    root.querySelector(&#x27;#gpv-label-text&#x27;).value = &#x27;&#x27;;
+    rebuildLabels();
+    updateStatus(&#x27;Residue labels cleared&#x27;);
+  });
   root.querySelector(&#x27;#gpv-image&#x27;).addEventListener(&#x27;click&#x27;, () =&gt; {
     const link = document.createElement(&#x27;a&#x27;);
     link.href = viewer.pngURI();
     link.download = &#x27;protein-view.png&#x27;;
     link.click();
   });
+  root.querySelector(&#x27;#gpv-video&#x27;).addEventListener(&#x27;click&#x27;, recordSpinVideo);
   root.querySelector(&#x27;#gpv-report&#x27;).addEventListener(&#x27;click&#x27;, downloadReport);
+  window.addEventListener(&#x27;keydown&#x27;, event =&gt; {
+    if (event.target.matches(&#x27;input, select, textarea&#x27;)) return;
+    if (event.key === &#x27;ArrowLeft&#x27;) { stopCycle(); selectRelative(-1); }
+    if (event.key === &#x27;ArrowRight&#x27;) { stopCycle(); selectRelative(1); }
+  });
   new ResizeObserver(() =&gt; viewer.resize()).observe(root.querySelector(&#x27;#gpv-stage&#x27;));
   updateStatus();
 })();
