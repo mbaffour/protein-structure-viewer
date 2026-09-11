@@ -1,0 +1,441 @@
+/* Headless regression suite for the Protein Structure Viewer.
+   Serves a copy of ../index.html with the CDN script tags rewritten to the
+   locally verified copies in vendor/ (see vendor.mjs), then drives the real UI.
+
+   Usage:  npm install && npm test
+   Set PSV_HEADED=1 to watch it run. */
+import { chromium } from 'playwright';
+import { createServer } from 'node:http';
+import { mkdtemp, readFile, writeFile } from 'node:fs/promises';
+import { createReadStream, existsSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { dirname, extname, join, resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { writeFixtures } from './fixtures.mjs';
+
+const here = dirname(fileURLToPath(import.meta.url));
+const failures = [];
+const consoleErrors = [];
+
+/* ---------- fixtures and a local static server ---------- */
+
+const work = await mkdtemp(join(tmpdir(), 'psv-tests-'));
+const models = (await writeFixtures(work)).map(name => join(work, name));
+
+const source = await readFile(join(here, '..', 'index.html'), 'utf8');
+const local = source.replace(
+  /<script src="https:\/\/cdnjs\.cloudflare\.com\/ajax\/libs\/(?:[^"]+\/)?([^"/]+\.js)"[^>]*><\/script>/g,
+  (_, file) => `<script src="vendor/${file}"></script>`
+);
+if (local === source) throw new Error('no CDN script tags were rewritten — check index.html');
+await writeFile(join(work, 'index.html'), local);
+
+const types = { '.html': 'text/html', '.js': 'text/javascript', '.json': 'application/json', '.png': 'image/png' };
+const roots = [work, here];
+const server = createServer((request, response) => {
+  const name = decodeURIComponent(new URL(request.url, 'http://x').pathname).replace(/^\/+/, '') || 'index.html';
+  if (name.includes('..')) { response.writeHead(400).end(); return; }
+  const file = roots.map(root => resolve(root, name)).find(candidate => existsSync(candidate));
+  if (!file) { response.writeHead(404).end('not found'); return; }
+  response.writeHead(200, { 'content-type': types[extname(file)] || 'application/octet-stream' });
+  createReadStream(file).pipe(response);
+});
+await new Promise(done => server.listen(0, '127.0.0.1', done));
+const base = `http://127.0.0.1:${server.address().port}`;
+
+/* ---------- harness ---------- */
+
+const browser = await chromium.launch({
+  headless: process.env.PSV_HEADED !== '1',
+  /* PSV_CHROMIUM lets CI or a sandbox point at a Chromium it already has,
+     instead of Playwright downloading its own. */
+  ...(process.env.PSV_CHROMIUM ? { executablePath: process.env.PSV_CHROMIUM } : {}),
+  /* The viewer needs WebGL; most CI runners have no GPU. */
+  args: ['--use-gl=swiftshader', '--enable-unsafe-swiftshader', '--no-sandbox', '--disable-dev-shm-usage']
+});
+const page = await browser.newPage({ viewport: { width: 1280, height: 1000 } });
+page.on('pageerror', error => consoleErrors.push('PAGEERROR: ' + error.message));
+page.on('console', message => {
+  /* The static server has no favicon; that 404 is the harness, not the page. */
+  if (message.type() === 'error' && !/favicon|404/.test(message.text())) consoleErrors.push(message.text());
+});
+
+const step = async (name, body) => {
+  try { await body(); console.log('  ok   ' + name); }
+  catch (error) { console.log('  FAIL ' + name + ' :: ' + String(error.message).split('\n')[0]); failures.push(name); }
+};
+const tab = async name => { await page.click(`[data-gpv-tab="${name}"]`); await page.waitForTimeout(150); };
+const group = name => console.log('\n' + name);
+
+await page.goto(base + '/index.html');
+await page.waitForTimeout(2500);
+
+group('boot');
+await step('3Dmol is available', async () => {
+  if (!(await page.evaluate(() => typeof $3Dmol !== 'undefined'))) throw new Error('missing');
+});
+await step('no startup error banner', async () => {
+  if (!(await page.locator('#gpv-import-errors').isHidden())) {
+    throw new Error(await page.locator('#gpv-import-errors').textContent());
+  }
+});
+await step('icons render from the inline set', async () => {
+  const count = await page.locator('#generic-protein-viewer [data-icon] svg').count();
+  if (count < 10) throw new Error('only ' + count + ' icons rendered');
+});
+
+group('import');
+await page.setInputFiles('#gpv-files', models);
+await page.waitForTimeout(2500);
+await step('all three models are listed', async () => {
+  const rows = await page.locator('#gpv-list .gpv-entry').count();
+  if (rows !== 3) throw new Error('rows=' + rows);
+});
+await step('mean pLDDT is computed from Cα B-factors', async () => {
+  const text = await page.locator('#gpv-confidence').textContent();
+  if (!/Mean pLDDT \d/.test(text)) throw new Error(text);
+});
+await step('the viewport has a canvas', async () => {
+  const ok = await page.evaluate(() => {
+    const canvas = document.querySelector('#gpv-stage canvas');
+    return Boolean(canvas) && canvas.width > 100;
+  });
+  if (!ok) throw new Error('no canvas');
+});
+await step('search filters the model list', async () => {
+  await page.fill('#gpv-model-search', 'model_c'); await page.waitForTimeout(400);
+  const rows = await page.locator('#gpv-list .gpv-entry').count();
+  if (rows !== 1) throw new Error('rows=' + rows);
+  await page.fill('#gpv-model-search', ''); await page.waitForTimeout(400);
+});
+
+group('navigation');
+await step('previous and next', async () => {
+  await page.click('#gpv-next'); await page.waitForTimeout(400);
+  await page.click('#gpv-previous'); await page.waitForTimeout(400);
+});
+await step('arrow keys navigate', async () => {
+  await page.click('#gpv-stage'); await page.keyboard.press('ArrowRight'); await page.waitForTimeout(400);
+});
+for (const [index, name] of ['models', 'appearance', 'annotate', 'compare', 'confidence', 'publish'].entries()) {
+  await step(`digit ${index + 1} opens the ${name} tab`, async () => {
+    await page.keyboard.press(String(index + 1)); await page.waitForTimeout(250);
+    if (await page.locator(`[data-gpv-panel="${name}"]`).isHidden()) throw new Error('panel hidden');
+  });
+}
+
+group('appearance');
+await tab('appearance');
+for (const [selector, value] of [
+  ['#gpv-style', 'stick'], ['#gpv-style', 'sphere'], ['#gpv-style', 'line'],
+  ['#gpv-color-mode', 'plddt'], ['#gpv-color-mode', 'spectrum'], ['#gpv-color-mode', 'element'],
+  ['#gpv-background', 'dark'], ['#gpv-background', 'white'],
+  ['#gpv-projection', 'orthographic'], ['#gpv-motion', 'rock']
+]) {
+  await step(`${selector} = ${value}`, async () => {
+    await page.selectOption(selector, value); await page.waitForTimeout(400);
+  });
+}
+await step('pLDDT colouring reveals the legend', async () => {
+  await page.selectOption('#gpv-color-mode', 'plddt'); await page.waitForTimeout(300);
+  if (await page.locator('#gpv-plddt-legend').isHidden()) throw new Error('legend hidden');
+});
+await step('motion off', async () => { await page.selectOption('#gpv-motion', 'off'); await page.waitForTimeout(300); });
+await step('theme cycles system → light → dark → system', async () => {
+  const seen = [];
+  for (let i = 0; i < 3; i += 1) {
+    await page.click('#gpv-theme'); await page.waitForTimeout(250);
+    seen.push(await page.locator('#gpv-theme').getAttribute('data-mode'));
+  }
+  if (seen.join(',') !== 'light,dark,system') throw new Error(seen.join(','));
+});
+await step('preferences survive a reload', async () => {
+  await page.selectOption('#gpv-style', 'stick'); await page.waitForTimeout(300);
+  await page.reload(); await page.waitForTimeout(2500);
+  await tab('appearance');
+  const value = await page.locator('#gpv-style').inputValue();
+  if (value !== 'stick') throw new Error('got ' + value);
+  await page.setInputFiles('#gpv-files', models); await page.waitForTimeout(2500);
+  await tab('appearance'); await page.selectOption('#gpv-style', 'cartoon'); await page.waitForTimeout(400);
+});
+
+group('compare');
+await step('sequence-aware alignment reports a non-zero RMSD', async () => {
+  await tab('models'); await page.click('#gpv-show-all'); await page.waitForTimeout(500);
+  await tab('compare');
+  await page.click('#gpv-align'); await page.waitForTimeout(3000);
+  if ((await page.locator('#gpv-alignment-results tr').count()) < 2) throw new Error('no alignment rows');
+  const cells = await page.locator('#gpv-alignment-results tr').nth(1).locator('td').allTextContents();
+  console.log(`       ${cells[0]} Cα pairs · identity ${cells[1]} · RMSD ${cells[2]} Å`);
+  if (Number(cells[0]) < 10) throw new Error('too few pairs: ' + cells[0]);
+  if (!(Number(cells[2]) > 0)) throw new Error('RMSD not positive: ' + cells[2]);
+});
+await step('identifier alignment mode also runs', async () => {
+  await page.selectOption('#gpv-alignment-mode', 'identifier');
+  await page.click('#gpv-align'); await page.waitForTimeout(2500);
+  if ((await page.locator('#gpv-alignment-results tr').count()) < 2) throw new Error('no rows');
+  await page.selectOption('#gpv-alignment-mode', 'sequence');
+});
+await step('RMSD CSV downloads', async () => {
+  const download = page.waitForEvent('download', { timeout: 20000 });
+  await page.click('#gpv-alignment-csv'); await download;
+});
+await step('side-by-side renders a second viewport', async () => {
+  await page.check('#gpv-side-by-side'); await page.waitForTimeout(1500);
+  if (!(await page.locator('#gpv-stage-compare canvas').count())) throw new Error('no compare canvas');
+  await page.uncheck('#gpv-side-by-side'); await page.waitForTimeout(600);
+});
+await step('coordinates restore', async () => { await page.click('#gpv-restore'); await page.waitForTimeout(800); });
+
+group('annotate');
+await tab('annotate');
+await step('a residue range can be highlighted', async () => {
+  await page.fill('#gpv-selection-chain', 'A'); await page.fill('#gpv-selection-range', '5-12');
+  await page.click('#gpv-add-selection'); await page.waitForTimeout(600);
+  if ((await page.locator('#gpv-selection-list .gpv-entry').count()) !== 1) throw new Error('no row added');
+});
+await step('a blank chain applies to every chain', async () => {
+  await page.fill('#gpv-selection-chain', ''); await page.fill('#gpv-selection-range', '20,21,22');
+  await page.selectOption('#gpv-selection-action', 'hide');
+  await page.click('#gpv-add-selection'); await page.waitForTimeout(600);
+  if ((await page.locator('#gpv-selection-list .gpv-entry').count()) !== 2) throw new Error('no second row');
+  await page.selectOption('#gpv-selection-action', 'highlight');
+});
+await step('an unparseable range is rejected', async () => {
+  await page.fill('#gpv-selection-range', 'nonsense');
+  await page.click('#gpv-add-selection'); await page.waitForTimeout(400);
+  const status = await page.locator('#gpv-state').textContent();
+  if (!/valid residue/.test(status)) throw new Error('status: ' + status);
+});
+await step('selections clear', async () => { await page.click('#gpv-clear-selections'); await page.waitForTimeout(500); });
+await step('every residue can be labelled', async () => {
+  await page.check('#gpv-all-labels'); await page.waitForTimeout(1200);
+  await page.uncheck('#gpv-all-labels'); await page.waitForTimeout(600);
+});
+
+group('confidence');
+await tab('confidence');
+await step('the metrics table has a row per model', async () => {
+  const rows = await page.locator('#gpv-metrics tr').count();
+  if (rows !== 3) throw new Error('rows=' + rows);
+});
+await step('confidence CSV downloads', async () => {
+  const download = page.waitForEvent('download', { timeout: 20000 });
+  await page.click('#gpv-confidence-csv'); await download;
+});
+
+group('publish and export');
+await tab('publish');
+await step('the export button is reachable, not covered', async () => {
+  const state = await page.evaluate(() => {
+    const button = document.querySelector('#gpv-image');
+    button.scrollIntoView({ block: 'center' });
+    const box = button.getBoundingClientRect();
+    const top = document.elementsFromPoint(box.x + box.width / 2, box.y + box.height / 2)[0];
+    return { disabled: button.disabled, top: top ? top.tagName + (top.id ? '#' + top.id : '') : null };
+  });
+  if (state.disabled) throw new Error('#gpv-image is disabled');
+  if (!/BUTTON/.test(String(state.top))) throw new Error('covered by ' + state.top);
+});
+await step('the busy state paints before the export blocks the thread', async () => {
+  /* A supersampled export is one long synchronous WebGL call. rAF callbacks run
+     once per painted frame, so a sample with the badge visible immediately
+     before a multi-second gap proves it reached the screen first. */
+  await page.selectOption('#gpv-export-scale', '2'); await page.waitForTimeout(300);
+  await page.evaluate(() => {
+    window.__frames = [];
+    const tick = time => {
+      window.__frames.push([Math.round(time), document.getElementById('gpv-busy').hidden ? 0 : 1]);
+      requestAnimationFrame(tick);
+    };
+    requestAnimationFrame(tick);
+  });
+  const download = page.waitForEvent('download', { timeout: 300000 });
+  await page.click('#gpv-image', { noWaitAfter: true, timeout: 15000 });
+  console.log('       ' + (await download).suggestedFilename());
+  await page.waitForTimeout(400);
+  const frames = await page.evaluate(() => window.__frames);
+  let longest = { gap: 0, at: -1 };
+  for (let i = 1; i < frames.length; i += 1) {
+    const gap = frames[i][0] - frames[i - 1][0];
+    if (gap > longest.gap) longest = { gap, at: i - 1 };
+  }
+  if (longest.gap < 300) return; /* fast GPU: nothing blocked long enough to matter */
+  if (!frames[longest.at][1]) throw new Error(`busy badge was not on screen before a ${longest.gap} ms block`);
+  console.log(`       busy badge painted before a ${longest.gap} ms render block`);
+});
+await step('the export button re-enables afterwards', async () => {
+  await page.waitForTimeout(600);
+  if (await page.locator('#gpv-image').isDisabled()) throw new Error('still disabled');
+  const label = await page.locator('#gpv-image').textContent();
+  if (!/Download publication PNG/.test(label)) throw new Error('label not restored: ' + label);
+});
+await step('six saved views render a contact sheet', async () => {
+  for (let i = 1; i <= 6; i += 1) {
+    await page.fill('#gpv-view-name', 'View ' + i);
+    await page.fill('#gpv-view-caption', 'Caption ' + i + ' long enough that the wrapping logic has real work to do across several lines');
+    await page.click('#gpv-save-view'); await page.waitForTimeout(250);
+  }
+  const download = page.waitForEvent('download', { timeout: 300000 });
+  await page.click('#gpv-contact-sheet', { noWaitAfter: true });
+  console.log('       ' + (await download).suggestedFilename());
+});
+await step('the main viewport survived seven off-screen renders', async () => {
+  /* Regression: export used to leak a WebGL context per panel, and browsers
+     silently discard the oldest context past their limit — the main one. */
+  const state = await page.evaluate(() => {
+    const canvases = [...document.querySelectorAll('#gpv-stage canvas')];
+    const payloads = canvases.map(canvas => {
+      try { return canvas.toDataURL('image/png').length; } catch { return -1; }
+    });
+    const lost = canvases.some(canvas => {
+      for (const type of ['webgl2', 'webgl']) {
+        let context = null;
+        try { context = canvas.getContext(type); } catch { /* wrong type for this canvas */ }
+        if (context) return context.isContextLost();
+      }
+      return false;
+    });
+    return { payloads, lost };
+  });
+  if (state.lost) throw new Error('a WebGL context reports lost');
+  if (!state.payloads.length) throw new Error('no canvas');
+  if (state.payloads.every(size => size > 0 && size < 5000)) throw new Error('viewport rendered blank');
+});
+await step('captions download', async () => {
+  const download = page.waitForEvent('download', { timeout: 20000 });
+  await page.click('#gpv-captions'); await download;
+});
+await step('the report size estimate is shown', async () => {
+  const text = await page.locator('#gpv-report-size').textContent();
+  if (!/model/.test(text)) throw new Error(text);
+  console.log('       ' + text.trim());
+});
+await step('a scene manifest round-trips without a hash mismatch', async () => {
+  await page.fill('#gpv-project-title', 'Test figure');
+  await page.fill('#gpv-project-method', 'Synthetic');
+  const download = page.waitForEvent('download', { timeout: 20000 });
+  await page.click('#gpv-save-scene');
+  const scene = join(work, 'scene.json');
+  await (await download).saveAs(scene);
+  await page.setInputFiles('#gpv-load-scene', scene);
+  await page.waitForTimeout(2500);
+  const status = await page.locator('#gpv-state').textContent();
+  if (!/Scene restored/.test(status)) throw new Error('status: ' + status);
+  if (/hash mismatch/.test(status)) throw new Error('unexpected hash mismatch: ' + status);
+});
+
+let reportPath = null;
+await step('an HTML report downloads', async () => {
+  const download = page.waitForEvent('download', { timeout: 120000 });
+  await page.click('#gpv-report');
+  reportPath = join(work, 'report.html');
+  await (await download).saveAs(reportPath);
+  const html = await readFile(reportPath, 'utf8');
+  if (!/cdnjs\.cloudflare\.com\/ajax\/libs\/3Dmol/.test(html)) throw new Error('report lost its 3Dmol tag');
+  await writeFile(join(work, 'report-local.html'), html.replace(/https:\/\/cdnjs\.cloudflare\.com\/ajax\/libs\/3Dmol\/[^']+/, 'vendor/3Dmol-min.js'));
+});
+
+group('interface');
+await step('"?" opens help and Escape closes it', async () => {
+  await page.click('#gpv-stage'); await page.keyboard.press('?'); await page.waitForTimeout(500);
+  if (!(await page.locator('#gpv-help').isVisible())) throw new Error('did not open');
+  await page.keyboard.press('Escape'); await page.waitForTimeout(500);
+  if (await page.locator('#gpv-help').isVisible()) throw new Error('did not close');
+});
+await step('typing "?" in a field does not open help', async () => {
+  await tab('models');
+  await page.click('#gpv-model-search');
+  await page.keyboard.type('?ab'); await page.waitForTimeout(400);
+  if (await page.locator('#gpv-help').isVisible()) throw new Error('help opened while typing');
+  const value = await page.locator('#gpv-model-search').inputValue();
+  if (value !== '?ab') throw new Error('field received "' + value + '"');
+  await page.fill('#gpv-model-search', '');
+});
+await step('full screen toggles on and off', async () => {
+  await page.click('#gpv-fullscreen'); await page.waitForTimeout(800);
+  if (!(await page.locator('#gpv-view-grid.is-fullscreen').count())) throw new Error('did not enter');
+  await page.keyboard.press('Escape'); await page.waitForTimeout(800);
+  if (await page.locator('#gpv-view-grid.is-fullscreen').count()) throw new Error('did not leave');
+});
+await step('cycling keeps the button icon', async () => {
+  await tab('models');
+  await page.click('#gpv-cycle'); await page.waitForTimeout(1500);
+  if (!(await page.locator('#gpv-cycle svg').count())) throw new Error('icon destroyed on start');
+  if (!/Pause/.test(await page.locator('#gpv-cycle').textContent())) throw new Error('label did not change');
+  await page.click('#gpv-cycle'); await page.waitForTimeout(400);
+  if (!(await page.locator('#gpv-cycle svg').count())) throw new Error('icon destroyed on stop');
+});
+await step('an unrecognised fetch identifier is reported', async () => {
+  await page.fill('#gpv-fetch-id', 'not an id!!');
+  await page.click('#gpv-fetch'); await page.waitForTimeout(800);
+  const status = await page.locator('#gpv-state').textContent();
+  if (!/Enter a four-character/.test(status)) throw new Error('status: ' + status);
+  await page.fill('#gpv-fetch-id', '');
+});
+
+group('generated report');
+const reportErrors = [];
+if (reportPath) {
+  const report = await browser.newPage({ viewport: { width: 1280, height: 1000 } });
+  report.on('pageerror', error => reportErrors.push('PAGEERROR: ' + error.message));
+  report.on('console', message => {
+    if (message.type() === 'error' && !/favicon|404/.test(message.text())) reportErrors.push(message.text());
+  });
+  await report.goto(base + '/report-local.html');
+  await report.waitForTimeout(3000);
+  await step('the report renders a canvas', async () => {
+    if (!(await report.evaluate(() => Boolean(document.querySelector('#view canvas'))))) throw new Error('no canvas');
+  });
+  await step('the report carries the provenance title', async () => {
+    const title = await report.locator('#project-title').textContent();
+    if (title !== 'Test figure') throw new Error('got ' + title);
+  });
+  await step('the report canvas stays inside its container', async () => {
+    /* Regression: with a statically positioned #view, 3Dmol laid its absolutely
+       positioned canvas out against the page and covered the whole toolbar. */
+    const state = await report.evaluate(() => {
+      const view = document.getElementById('view').getBoundingClientRect();
+      const canvas = document.querySelector('#view canvas');
+      if (!canvas) return { ok: false, why: 'no canvas' };
+      const box = canvas.getBoundingClientRect();
+      const inside = box.top >= view.top - 2 && box.left >= view.left - 2
+        && box.bottom <= view.bottom + 2 && box.right <= view.right + 2;
+      const next = document.getElementById('next').getBoundingClientRect();
+      const top = document.elementsFromPoint(next.x + next.width / 2, next.y + next.height / 2)[0];
+      return { ok: inside, why: 'canvas escaped #view', top: top ? top.tagName : null };
+    });
+    if (!state.ok) throw new Error(state.why);
+    if (state.top !== 'BUTTON') throw new Error('the Next button is covered by ' + state.top);
+  });
+  await step('a guided view sets the caption', async () => {
+    await report.selectOption('#guided', '0'); await report.waitForTimeout(1000);
+    if (await report.locator('#caption').isHidden()) throw new Error('caption hidden');
+  });
+  await step('report navigation works with a real click', async () => {
+    const before = await report.locator('#position').textContent();
+    await report.click('#next', { timeout: 15000 }); await report.waitForTimeout(800);
+    const after = await report.locator('#position').textContent();
+    if (before === after) throw new Error('position did not advance from ' + before);
+    console.log('       ' + before.trim() + ' → ' + after.trim());
+  });
+  await step('report play and pause', async () => {
+    await report.click('#play', { timeout: 15000 }); await report.waitForTimeout(600);
+    if (!/Pause/.test(await report.locator('#play').textContent())) throw new Error('did not start');
+    await report.click('#play', { timeout: 15000 }); await report.waitForTimeout(300);
+  });
+  await step('report element colouring is selectable', async () => {
+    await report.selectOption('#colors', 'element'); await report.waitForTimeout(800);
+  });
+}
+
+await browser.close();
+server.close();
+
+console.log('\n' + '-'.repeat(52));
+console.log('viewer console errors: ' + consoleErrors.length);
+consoleErrors.slice(0, 10).forEach(error => console.log('  ! ' + error));
+console.log('report console errors: ' + reportErrors.length);
+reportErrors.slice(0, 10).forEach(error => console.log('  ! ' + error));
+console.log('failed steps: ' + (failures.length ? failures.join(', ') : 'none'));
+process.exit(failures.length || consoleErrors.length || reportErrors.length ? 1 : 0);
