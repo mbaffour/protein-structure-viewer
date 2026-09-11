@@ -13,16 +13,18 @@ An internet connection is required when the page starts because it loads the [3D
 
 1. Download the result from AlphaFold Server or another prediction tool.
 2. Open the viewer.
-3. Drop the AlphaFold `.zip` directly onto the viewer, or select one or more `.pdb`, `.cif`, or `.mmcif` model files.
+3. Drop one or several AlphaFold `.zip` archives directly onto the viewer, or use the visible file picker to select multiple `.zip`, `.pdb`, `.cif`, or `.mmcif` files.
 
-When an AlphaFold ZIP is loaded, model structures are extracted automatically and template-hit files are ignored.
+When AlphaFold ZIPs are loaded, model structures are extracted automatically, grouped by source archive, and template-hit files are ignored. Multi-model archives open in one-at-a-time mode so the browser does not attempt to render every prediction as a single overlay. Large archives load models lazily and skip their very large `full_data` PAE payloads; those JSON files can still be added separately when needed.
 
 Multiple structures can be displayed together. Each loaded structure has its own visibility switch, color picker, mean pLDDT readout, and remove button.
 
 ## Features
 
 - Multiple PDB, CIF, and mmCIF files—or a complete AlphaFold result ZIP—in one view
-- Drag-and-drop loading, automatic ZIP extraction, and show-all/hide-all controls
+- Reliable visible file picker, multi-ZIP drag-and-drop loading, progress feedback, automatic ZIP extraction, and show-all/hide-all controls
+- Source-archive filtering and model-name/stoichiometry search for large prediction collections
+- Lazy model rendering and guarded PAE import for archives containing hundreds of predictions
 - Automatic AlphaFold 2/3 confidence JSON and ranking CSV association when filenames match their models
 - Independent visibility and colors per structure
 - Full model names in the model list and navigator
