@@ -2,6 +2,45 @@
 
 All notable changes to this project are recorded here.
 
+## 2.2.0
+
+A capability release for comparing many predictions at once and for making figures. Scenes and
+reports from 2.1 still load; scene manifests gain `annotations`, `comparePanels`, and `syncMode`.
+
+### Added
+
+- **Synchronized multi-view.** The comparison view takes up to six models (a primary panel plus five
+  more), laid out one row for two or three panels, a 2 × 2 grid for four, and three columns for five
+  or six. Every panel carries its model name. Dragging, wheel-zooming, spinning, or rocking any panel
+  moves them all; the primary is no longer special.
+- **Camera sync modes.** *Rotation only* (the default) shares orientation while each panel keeps its own
+  centre and zoom, so assemblies of different size stay framed. *Rotation and zoom* locks the cameras
+  completely, which is the right mode for superposed models after **Align visible**.
+- **Download comparison PNG** stitches the current panels into one lettered figure at the chosen
+  export size and scale, with each model's name and mean pLDDT in a caption strip.
+- **Figure annotations.** In the Annotate tab: arrows and lines between two clicked atoms, residue
+  markers and text callouts on one clicked atom, and corner titles as screen text. They are anchored to
+  atoms, so they follow rotation and alignment, and they are drawn into publication PNGs, comparison
+  figures, comparison panels, and the shared report. They round-trip through scene JSON.
+- **Multi-panel reports.** The shared HTML report now shows one to six synchronized panels with their
+  own model pickers, steps every panel together, spins and fits them together, switches background,
+  exports a stitched lettered PNG or a composite video, and offers full screen. Superposed models are
+  exported with their aligned coordinates, and labels, measurements, and figure annotations travel too.
+- Nearest-atom picking: clicks in the main viewer select the closest projected atom within a few
+  pixels, so labels, measurements, and annotations land in cartoon mode instead of requiring a hit on
+  a Cα sphere.
+- A rotating tips bar under the viewport, a **Load an example** button in the empty state, an `S`
+  shortcut for spinning, and a *Tips for figures and reviewers* section in the help dialog.
+
+### Fixed
+
+- Adding a residue label no longer erases measurement labels: labels, measurements, and annotations
+  are rebuilt in one pass.
+- The comparison viewport is now genuinely synchronized. 3Dmol redraws drags through a path that
+  bypasses its state-change callback, so the previous side-by-side view only matched the camera at
+  the moment it was set up.
+- Publication PNG export now includes residue labels and measurements.
+
 ## 2.1.0
 
 A correctness, robustness, and interface pass over the 2.0 viewer. No file formats or exports changed

@@ -183,6 +183,21 @@ await step('RMSD CSV downloads', async () => {
 await step('side-by-side renders a second viewport', async () => {
   await page.check('#gpv-side-by-side'); await page.waitForTimeout(1500);
   if (!(await page.locator('#gpv-stage-compare canvas').count())) throw new Error('no compare canvas');
+});
+await step('a third synchronized panel follows a drag on the primary', async () => {
+  await page.click('#gpv-add-panel'); await page.waitForTimeout(1500);
+  if ((await page.locator('.gpv-stage-compare canvas').count()) < 2) throw new Error('second comparison panel missing');
+  const columns = await page.evaluate(() => getComputedStyle(document.getElementById('gpv-view-grid')).gridTemplateColumns.split(' ').length);
+  if (columns !== 3) throw new Error('expected 3 grid columns, got ' + columns);
+  const before = await page.evaluate(() => [...document.querySelectorAll('.gpv-stage-compare canvas')].map(canvas => canvas.toDataURL()));
+  const box = await page.locator('#gpv-stage').boundingBox();
+  await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2); await page.mouse.down();
+  await page.mouse.move(box.x + box.width / 2 + 140, box.y + box.height / 2 + 50, { steps: 10 }); await page.mouse.up();
+  await page.waitForTimeout(900);
+  const after = await page.evaluate(() => [...document.querySelectorAll('.gpv-stage-compare canvas')].map(canvas => canvas.toDataURL()));
+  if (before.every((image, index) => image === after[index])) throw new Error('comparison panels did not follow the drag');
+  await page.click('#gpv-clear-panels'); await page.waitForTimeout(600);
+  if (await page.locator('.gpv-stage-compare').count()) throw new Error('panels were not removed');
   await page.uncheck('#gpv-side-by-side'); await page.waitForTimeout(600);
 });
 await step('coordinates restore', async () => { await page.click('#gpv-restore'); await page.waitForTimeout(800); });
@@ -208,6 +223,21 @@ await step('an unparseable range is rejected', async () => {
   if (!/valid residue/.test(status)) throw new Error('status: ' + status);
 });
 await step('selections clear', async () => { await page.click('#gpv-clear-selections'); await page.waitForTimeout(500); });
+await step('figure annotations: an arrow from two real atom clicks and a corner title', async () => {
+  await page.selectOption('#gpv-annotation-type', 'arrow');
+  await page.fill('#gpv-annotation-text', 'helix');
+  await page.click('#gpv-annotate'); await page.waitForTimeout(300);
+  if (!(await page.locator('#gpv-stage.is-drawing').count())) throw new Error('drawing mode did not start');
+  const box = await page.locator('#gpv-stage').boundingBox();
+  await page.mouse.click(box.x + box.width / 2, box.y + box.height / 2); await page.waitForTimeout(500);
+  await page.mouse.click(box.x + box.width / 2 + 25, box.y + box.height / 2 - 20); await page.waitForTimeout(700);
+  const rows = await page.locator('#gpv-annotation-list .gpv-entry').count();
+  if (rows !== 1) throw new Error('expected one annotation, found ' + rows + ' · ' + await page.locator('#gpv-annotation-state').textContent());
+  await page.fill('#gpv-screen-text', 'A · Test'); await page.click('#gpv-add-screen-text'); await page.waitForTimeout(400);
+  if ((await page.locator('#gpv-annotation-list .gpv-entry').count()) !== 2) throw new Error('screen text row missing');
+  await page.click('#gpv-annotate'); await page.waitForTimeout(200);
+  if (await page.locator('#gpv-stage.is-drawing').count()) throw new Error('drawing mode did not stop');
+});
 await step('every residue can be labelled', async () => {
   await page.check('#gpv-all-labels'); await page.waitForTimeout(1200);
   await page.uncheck('#gpv-all-labels'); await page.waitForTimeout(600);
@@ -301,6 +331,15 @@ await step('the main viewport survived seven off-screen renders', async () => {
   if (state.lost) throw new Error('a WebGL context reports lost');
   if (!state.payloads.length) throw new Error('no canvas');
   if (state.payloads.every(size => size > 0 && size < 5000)) throw new Error('viewport rendered blank');
+});
+await step('a comparison figure downloads with the multi-view on', async () => {
+  await tab('compare'); await page.check('#gpv-side-by-side'); await page.waitForTimeout(1200);
+  await tab('publish');
+  await page.selectOption('#gpv-export-size', '1200x1200'); await page.selectOption('#gpv-export-scale', '1');
+  const download = page.waitForEvent('download', { timeout: 120000 });
+  await page.click('#gpv-compare-image'); await download;
+  await tab('compare'); await page.uncheck('#gpv-side-by-side'); await page.waitForTimeout(600);
+  await tab('publish');
 });
 await step('captions download', async () => {
   const download = page.waitForEvent('download', { timeout: 20000 });
@@ -426,6 +465,19 @@ if (reportPath) {
   });
   await step('report element colouring is selectable', async () => {
     await report.selectOption('#colors', 'element'); await report.waitForTimeout(800);
+  });
+  await step('the report shows two panels that rotate together', async () => {
+    await report.selectOption('#panels', '2'); await report.waitForTimeout(1500);
+    if ((await report.locator('#view canvas').count()) !== 2) throw new Error('expected two canvases');
+    const before = await report.evaluate(() => document.querySelectorAll('#view canvas')[1].toDataURL());
+    const box = await report.locator('#view canvas').first().boundingBox();
+    await report.mouse.move(box.x + box.width / 2, box.y + box.height / 2); await report.mouse.down();
+    await report.mouse.move(box.x + box.width / 2 + 120, box.y + box.height / 2 + 40, { steps: 10 }); await report.mouse.up();
+    await report.waitForTimeout(900);
+    const after = await report.evaluate(() => document.querySelectorAll('#view canvas')[1].toDataURL());
+    if (before === after) throw new Error('the second panel did not follow the drag');
+    await report.click('#next', { timeout: 15000 }); await report.waitForTimeout(700);
+    if (!/panel 1/.test(await report.locator('#position').textContent())) throw new Error('position lost its panel index');
   });
 }
 

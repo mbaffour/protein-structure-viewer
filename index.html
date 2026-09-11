@@ -862,12 +862,8 @@ html>body{padding:0}</style>
     <div class="gpv-view-pane">
       <span class="viz-badge gpv-view-label" id="gpv-left-label" hidden>Primary</span>
       <div class="card gpv-stage" id="gpv-stage" tabindex="0" role="application" aria-label="Interactive three-dimensional protein structure viewer. Drag to rotate, scroll to zoom, click an atom to inspect it."></div>
-      <div class="gpv-stage-empty" id="gpv-stage-empty"><i data-icon="orbit" aria-hidden="true"></i><strong>No structure loaded yet</strong><span class="text-muted">Drop a PDB, CIF, or AlphaFold ZIP anywhere on this page, or fetch an ID above</span></div>
+      <div class="gpv-stage-empty" id="gpv-stage-empty"><i data-icon="orbit" aria-hidden="true"></i><strong>No structure loaded yet</strong><span class="text-muted">Drop a PDB, CIF, or AlphaFold ZIP anywhere on this page, or fetch an ID above</span><button class="btn" type="button" id="gpv-demo"><i data-icon="cloud-download" aria-hidden="true"></i>Load an example (PDB 1ubq)</button></div>
       <div class="gpv-busy" id="gpv-busy" hidden aria-hidden="true"><span class="gpv-spinner"></span><span id="gpv-busy-label">Working…</span></div>
-    </div>
-    <div class="gpv-view-pane" id="gpv-compare-pane" hidden>
-      <span class="viz-badge gpv-view-label">Comparison</span>
-      <div class="card gpv-stage" id="gpv-stage-compare" role="img" aria-label="Synchronized comparison structure viewer"></div>
     </div>
   </div>
   <div class="gpv-status text-small">
@@ -875,6 +871,7 @@ html>body{padding:0}</style>
     <span id="gpv-confidence">Mean pLDDT —</span>
     <span id="gpv-state" aria-live="polite">Ready</span>
   </div>
+  <div class="gpv-tip text-small" id="gpv-tip" hidden><i data-icon="info" aria-hidden="true"></i><span id="gpv-tip-text"></span><button class="btn btn-ghost" type="button" id="gpv-tip-next">Next tip</button><button class="btn btn-ghost gpv-icon-btn" type="button" id="gpv-tip-hide" aria-label="Hide tips"><i data-icon="x" aria-hidden="true"></i></button></div>
 
   <div class="gpv-legend text-small" id="gpv-plddt-legend" hidden aria-label="pLDDT confidence color legend">
     <span><i class="gpv-swatch gpv-vlow"></i>Very low &lt;50</span>
@@ -949,6 +946,24 @@ html>body{padding:0}</style>
       <span class="text-muted" id="gpv-measure-state">Measurement mode is off.</span>
     </div>
     <div class="gpv-list" id="gpv-measurement-list" aria-label="Measurements"></div>
+    <h3 class="gpv-subheading">Figure annotations</h3>
+    <p class="text-muted text-small gpv-hint">Arrows, lines, markers and callouts are anchored to atoms, so they follow rotation and alignment and appear in PNG exports, comparison panels, and the shared report.</p>
+    <div class="viz-controls">
+      <label class="form-label">Tool<select class="form-select" id="gpv-annotation-type"><option value="arrow">Arrow · click 2 atoms</option><option value="line">Line · click 2 atoms</option><option value="marker">Residue marker · click 1 atom</option><option value="callout">Text callout · click 1 atom</option></select></label>
+      <label class="form-label gpv-current-label">Text<input class="form-control" id="gpv-annotation-text" type="text" placeholder="Optional label, e.g. active site"></label>
+      <label class="form-label">Colour<input class="form-control form-control-color" id="gpv-annotation-color" type="color" value="#f97316"></label>
+      <label class="form-label gpv-slider-label">Size <span id="gpv-annotation-size-value">1×</span><input class="form-range" id="gpv-annotation-size" type="range" min="0.5" max="3" value="1" step="0.25"></label>
+      <label class="form-check form-switch"><input class="form-check-input" id="gpv-annotation-dashed" type="checkbox"><span class="form-check-label">Dashed</span></label>
+      <button class="btn" type="button" id="gpv-annotate" disabled><i data-icon="mouse-pointer-2" aria-hidden="true"></i>Start drawing</button>
+      <span class="text-muted" id="gpv-annotation-state">Pick a tool, start drawing, then click atoms in the main viewer.</span>
+    </div>
+    <div class="viz-controls">
+      <label class="form-label gpv-current-label">Screen text<input class="form-control" id="gpv-screen-text" type="text" placeholder="Panel title, e.g. A · Round tip"></label>
+      <label class="form-label">Corner<select class="form-select" id="gpv-screen-corner"><option value="top-left">Top left</option><option value="top-right">Top right</option><option value="bottom-left">Bottom left</option><option value="bottom-right">Bottom right</option></select></label>
+      <button class="btn" type="button" id="gpv-add-screen-text" disabled>Add screen text</button>
+      <button class="btn btn-ghost" type="button" id="gpv-clear-annotations">Clear annotations</button>
+    </div>
+    <div class="gpv-list" id="gpv-annotation-list" aria-label="Figure annotations"></div>
   </section>
 
   <section class="gpv-tool-panel" data-gpv-panel="compare" hidden>
@@ -961,10 +976,14 @@ html>body{padding:0}</style>
     </div>
     <div class="table-responsive" id="gpv-alignment-wrap" hidden><table class="table table-sm" aria-label="Structural alignment results"><thead><tr><th>Model</th><th>Reference</th><th class="text-end">Cα pairs</th><th class="text-end">Identity</th><th class="text-end">RMSD (Å)</th><th>Mapping</th></tr></thead><tbody id="gpv-alignment-results"></tbody></table></div>
     <div class="viz-controls">
-      <label class="form-check form-switch"><input class="form-check-input" id="gpv-side-by-side" type="checkbox"><span class="form-check-label">Synchronized side-by-side view</span></label>
-      <label class="form-label">Left model<select class="form-select" id="gpv-left-model" disabled><option>No models loaded</option></select></label>
-      <label class="form-label">Right model<select class="form-select" id="gpv-right-model" disabled><option>No models loaded</option></select></label>
+      <label class="form-check form-switch"><input class="form-check-input" id="gpv-side-by-side" type="checkbox"><span class="form-check-label">Synchronized multi-view</span></label>
+      <label class="form-label">Camera sync<select class="form-select" id="gpv-sync-mode"><option value="rotation">Rotation only</option><option value="full">Rotation and zoom</option></select></label>
+      <label class="form-label gpv-current-label">Primary panel<select class="form-select" id="gpv-left-model" disabled><option>No models loaded</option></select></label>
+      <button class="btn" type="button" id="gpv-add-panel" disabled data-tooltip="Add another synchronized viewport — up to six in total"><i data-icon="columns-2" aria-hidden="true"></i>Add panel</button>
+      <button class="btn btn-ghost" type="button" id="gpv-clear-panels" disabled>Remove all panels</button>
     </div>
+    <p class="text-muted text-small gpv-hint">Every panel follows the others as you drag, spin, or rock. <strong>Rotation only</strong> keeps each model framed on its own centre, which suits assemblies of different size. <strong>Rotation and zoom</strong> locks the cameras completely, which suits superposed models of the same target after <em>Align visible</em>.</p>
+    <div class="gpv-list" id="gpv-compare-panels" aria-label="Comparison panels"></div>
   </section>
 
   <section class="gpv-tool-panel" data-gpv-panel="confidence" hidden>
@@ -979,6 +998,7 @@ html>body{padding:0}</style>
       <label class="form-label">Image size<select class="form-select" id="gpv-export-size"><option value="1200x1200">Square · 1200 × 1200</option><option value="1800x1200" selected>Landscape · 1800 × 1200</option><option value="1200x1800">Portrait · 1200 × 1800</option><option value="2400x1600">Large landscape · 2400 × 1600</option></select></label>
       <label class="form-label">Scale<select class="form-select" id="gpv-export-scale"><option value="1">1×</option><option value="2" selected>2×</option><option value="4">4×</option></select></label>
       <button class="btn" type="button" id="gpv-image" disabled>Download publication PNG</button>
+      <button class="btn" type="button" id="gpv-compare-image" disabled data-tooltip="Stitch every synchronized panel into one lettered figure at the chosen size">Download comparison PNG</button>
       <label class="form-label">Video length<select class="form-select" id="gpv-video-length"><option value="5">5 seconds</option><option value="10">10 seconds</option><option value="15">15 seconds</option></select></label>
       <button class="btn" type="button" id="gpv-video" disabled data-tooltip="Record the viewport spinning once, as a WebM file">Record spin video</button>
     </div>
@@ -1016,13 +1036,16 @@ html>body{padding:0}</style>
       <ul>
         <li>Drag to rotate, scroll to zoom, right-drag or two-finger drag to pan.</li>
         <li>Click any atom to inspect its residue, chain, and pLDDT, and to place a label.</li>
+        <li>Use <strong>Figure annotations</strong> in the Annotate tab to draw arrows, lines, residue markers, and text callouts by clicking atoms, and to add corner titles. They follow rotation and alignment and are included in PNG exports and reports.</li>
+        <li>Turn on <strong>Synchronized multi-view</strong> in the Compare tab to show up to six models in linked viewports. Dragging, spinning, or rocking any one of them moves them all.</li>
       </ul>
       <h3>Keyboard</h3>
       <table class="table table-sm gpv-shortcuts">
         <tbody>
           <tr><th><kbd>←</kbd> <kbd>→</kbd></th><td>Previous / next model</td></tr>
           <tr><th><kbd>C</kbd></th><td>Start or pause automatic cycling</td></tr>
-          <tr><th><kbd>F</kbd></th><td>Fit the view to what is displayed</td></tr>
+          <tr><th><kbd>F</kbd></th><td>Fit every panel to what it displays</td></tr>
+          <tr><th><kbd>S</kbd></th><td>Start or stop spinning</td></tr>
           <tr><th><kbd>Shift</kbd> + <kbd>F</kbd></th><td>Toggle full screen</td></tr>
           <tr><th><kbd>1</kbd> – <kbd>6</kbd></th><td>Jump to a tool tab</td></tr>
           <tr><th><kbd>?</kbd></th><td>Open this help</td></tr>
@@ -1035,6 +1058,15 @@ html>body{padding:0}</style>
         <li><strong>PAE</strong> and <strong>ipTM</strong> are what to read for interfaces and domain placement in complexes.</li>
         <li><strong>RMSD</strong> from the Compare tab is a visual-comparison aid. Always report the alignment method, chain mapping, and aligned Cα count alongside it.</li>
       </ul>
+      <h3>Tips for figures and reviewers</h3>
+      <ul>
+        <li>Colour by <strong>pLDDT confidence</strong> and switch to <strong>orthographic</strong> projection for publication panels; perspective exaggerates whatever is closest to the camera.</li>
+        <li>Run <strong>Align visible</strong>, then enable multi-view with <em>Rotation and zoom</em> to inspect a superposition panel by panel. The shared report carries the aligned coordinates.</li>
+        <li>Save named views with captions in <strong>Publish</strong>: they become lettered figure panels, a caption file, and a guided tour inside the report.</li>
+        <li><strong>Download comparison PNG</strong> stitches the current panels into one lettered figure at the export size you chose.</li>
+        <li>Keep <em>Report contents</em> on <em>Models currently shown</em> for a small file reviewers can open on a laptop; switch to <em>Every loaded model</em> for an archive.</li>
+      </ul>
+      <div class="viz-controls"><button class="btn btn-ghost" type="button" id="gpv-tips-reset"><i data-icon="info" aria-hidden="true"></i>Show the tips bar again</button></div>
       <p class="text-muted text-small">Everything runs locally. Structure files you open are read in the browser and are never uploaded.</p>
     </div>
   </dialog>
@@ -1073,9 +1105,19 @@ html>body{padding:0}</style>
   #generic-protein-viewer .gpv-entry .form-control-color { flex: 0 0 auto; }
   #generic-protein-viewer .gpv-empty { margin: 0 0 10px; }
   #generic-protein-viewer .gpv-view-grid { display: grid; grid-template-columns: minmax(0, 1fr); gap: 8px; }
-  #generic-protein-viewer .gpv-view-grid.is-comparing { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-  #generic-protein-viewer .gpv-view-pane { position: relative; min-width: 0; }
-  #generic-protein-viewer .gpv-view-label { position: absolute; z-index: 2; top: 8px; left: 8px; pointer-events: none; }
+  #generic-protein-viewer .gpv-view-grid.is-comparing { grid-template-columns: repeat(var(--gpv-columns, 2), minmax(0, 1fr)); }
+  #generic-protein-viewer .gpv-view-grid[data-panes="5"] .gpv-stage, #generic-protein-viewer .gpv-view-grid[data-panes="6"] .gpv-stage { height: 380px; }
+  #generic-protein-viewer .gpv-view-pane { position: relative; min-width: 0; min-height: 0; }
+  #generic-protein-viewer .gpv-view-label { position: absolute; z-index: 2; top: 8px; left: 8px; pointer-events: none; max-width: calc(100% - 16px); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  #generic-protein-viewer .gpv-panel-row .form-select { flex: 1 1 200px; min-width: 0; }
+  #generic-protein-viewer .gpv-hint { margin: -2px 0 10px; }
+  #generic-protein-viewer .gpv-subheading { font-size: 0.95rem; margin: 14px 0 4px; }
+  #generic-protein-viewer .gpv-stage.is-drawing { outline: 2px dashed var(--primary); outline-offset: -2px; cursor: crosshair; }
+  #generic-protein-viewer .gpv-tip { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin: 0 0 10px; padding: 8px 10px; border: 1px dashed var(--border); border-radius: 10px; color: var(--muted-foreground); }
+  #generic-protein-viewer .gpv-tip[hidden] { display: none; }
+  #generic-protein-viewer .gpv-tip > i { color: var(--primary); display: inline-flex; }
+  #generic-protein-viewer .gpv-tip > span { flex: 1 1 240px; }
+  #generic-protein-viewer .gpv-stage-empty button { pointer-events: auto; margin-top: 8px; }
   #generic-protein-viewer .gpv-stage-empty { position: absolute; inset: 0; display: grid; place-content: center; justify-items: center; gap: 6px; pointer-events: none; text-align: center; }
   #generic-protein-viewer .gpv-stage-empty[hidden] { display: none; }
   #generic-protein-viewer .gpv-stage-empty > i { color: var(--primary); }
@@ -1128,7 +1170,7 @@ html>body{padding:0}</style>
   @media (prefers-reduced-motion: reduce) { #generic-protein-viewer .gpv-spinner { animation-duration: 2.4s; } }
 
   /* ---- Full screen ---- */
-  #generic-protein-viewer .gpv-view-grid.is-fullscreen { position: fixed; inset: 0; z-index: 40; padding: 8px; gap: 8px; background: var(--background); }
+  #generic-protein-viewer .gpv-view-grid.is-fullscreen { position: fixed; inset: 0; z-index: 40; padding: 8px; gap: 8px; background: var(--background); grid-auto-rows: minmax(0, 1fr); }
   #generic-protein-viewer .gpv-view-grid.is-fullscreen .gpv-stage { height: 100%; }
   #generic-protein-viewer .gpv-view-grid.is-fullscreen .gpv-view-pane { height: 100%; }
 
@@ -1203,10 +1245,14 @@ html>body{padding:0}</style>
   let measurementRecords = [];
   let measurementDraft = [];
   let measurementActive = false;
+  let annotationRecords = [];
+  let annotationDraft = [];
+  let annotationActive = false;
   let savedViews = [];
   let nextAnnotationId = 1;
-  let compareViewer = null;
-  let compareModel = null;
+  let comparePanels = [];
+  let nextPanelId = 1;
+  const maxComparePanels = 5;
   let syncingView = false;
   let compareSyncFrame = 0;
   let pendingScene = null;
@@ -1215,7 +1261,7 @@ html>body{padding:0}</style>
   let busyDepth = 0;
   let restoreMotion = null;
   const listPageSize = 60;
-  const viewerVersion = '2.1.0';
+  const viewerVersion = '2.2.0';
   const preferenceKey = 'protein-structure-viewer:preferences';
   const themeKey = 'protein-structure-viewer:theme';
   const labelColors = getComputedStyle(root);
@@ -1603,11 +1649,12 @@ html>body{padding:0}</style>
     root.querySelector('#gpv-background-color').disabled = root.querySelector('#gpv-background').value !== 'custom';
     viewer.setBackgroundColor(background.color, background.alpha);
     if (typeof viewer.setProjection === 'function') viewer.setProjection(root.querySelector('#gpv-projection').value);
-    if (compareViewer) {
-      compareViewer.setBackgroundColor(background.color, background.alpha);
-      if (typeof compareViewer.setProjection === 'function') compareViewer.setProjection(root.querySelector('#gpv-projection').value);
-      compareViewer.render();
-    }
+    comparePanels.forEach(panel => {
+      if (!panel.viewer) return;
+      panel.viewer.setBackgroundColor(background.color, background.alpha);
+      if (typeof panel.viewer.setProjection === 'function') panel.viewer.setProjection(root.querySelector('#gpv-projection').value);
+      panel.viewer.render();
+    });
     viewer.render();
   }
 
@@ -1643,9 +1690,14 @@ html>body{padding:0}</style>
     root.querySelector('#gpv-contact-sheet').disabled = savedViews.length === 0;
     root.querySelector('#gpv-captions').disabled = savedViews.length === 0;
     updateReportEstimate();
-    ['#gpv-current', '#gpv-reference', '#gpv-selection-model', '#gpv-left-model', '#gpv-right-model', '#gpv-previous', '#gpv-next', '#gpv-cycle', '#gpv-align', '#gpv-restore', '#gpv-add-selection'].forEach(selector => {
+    ['#gpv-current', '#gpv-reference', '#gpv-selection-model', '#gpv-left-model', '#gpv-previous', '#gpv-next', '#gpv-cycle', '#gpv-align', '#gpv-restore', '#gpv-add-selection', '#gpv-annotate', '#gpv-add-screen-text'].forEach(selector => {
       root.querySelector(selector).disabled = structures.length === 0;
     });
+    const comparing = root.querySelector('#gpv-side-by-side').checked && comparePanels.length > 0 && structures.length > 0;
+    root.querySelector('#gpv-add-panel').disabled = structures.length === 0 || comparePanels.length >= maxComparePanels;
+    root.querySelector('#gpv-clear-panels').disabled = comparePanels.length === 0;
+    root.querySelector('#gpv-compare-image').disabled = !comparing;
+    if (comparing) root.querySelector('#gpv-count').textContent += ' · ' + (comparePanels.length + 1) + ' panels';
   }
 
   function materializeEntry(entry) {
@@ -1660,7 +1712,6 @@ html>body{padding:0}</style>
     entry.atoms = atoms;
     if (!entry.scores.length) entry.scores = modelScores(model);
     entry.originalAtoms = atoms.map(atom => ({ x: atom.x, y: atom.y, z: atom.z }));
-    viewer.setClickable({ model: model.getID() }, true, atom => handleAtomClick(entry, atom));
     return model;
   }
 
@@ -1699,9 +1750,8 @@ html>body{padding:0}</style>
     releaseHiddenModels(shown);
     applySelections(shown);
     root.querySelector('#gpv-plddt-legend').hidden = root.querySelector('#gpv-color-mode').value !== 'plddt';
-    rebuildLabels(false);
-    rebuildMeasurements(false);
-    renderCompareViewer();
+    rebuildOverlays(false);
+    renderComparePanels();
     viewer.render();
     if (!root.querySelector('[data-gpv-panel="confidence"]').hidden) renderConfidence();
     updateStatus();
@@ -1710,7 +1760,7 @@ html>body{padding:0}</style>
   function syncModelControls() {
     if (!structures.length) activeId = null;
     if (structures.length && !structures.some(entry => entry.id === activeId)) activeId = structures[0].id;
-    ['#gpv-current', '#gpv-reference', '#gpv-selection-model', '#gpv-left-model', '#gpv-right-model'].forEach(selector => {
+    ['#gpv-current', '#gpv-reference', '#gpv-selection-model', '#gpv-left-model'].forEach(selector => {
       const select = root.querySelector(selector);
       const previous = selector === '#gpv-current' ? activeId : (select.value || (selector === '#gpv-left-model' ? activeId : ''));
       select.replaceChildren();
@@ -1722,8 +1772,7 @@ html>body{padding:0}</style>
       });
       if (structures.some(entry => String(entry.id) === String(previous))) select.value = String(previous);
     });
-    const right = root.querySelector('#gpv-right-model');
-    if (structures.length > 1 && (!right.value || right.value === root.querySelector('#gpv-left-model').value)) right.value = String(structures[1].id);
+    renderPanelControls();
     const sourceFilter = root.querySelector('#gpv-source-filter');
     const previousSource = sourceFilter.value || 'all';
     sourceFilter.replaceChildren(new Option('All loaded sources', 'all'));
@@ -1939,7 +1988,7 @@ html>body{padding:0}</style>
     const index = labelRecords.findIndex(label => label.key === key);
     if (index >= 0) labelRecords[index] = record;
     else labelRecords.push(record);
-    rebuildLabels();
+    rebuildOverlays();
     updateStatus(index >= 0 ? 'Residue label updated' : 'Residue label added');
   }
 
@@ -1956,25 +2005,41 @@ html>body{padding:0}</style>
     };
   }
 
-  function rebuildLabels(shouldRender = true) {
-    viewer.removeAllLabels();
-    const shownIds = new Set(displayedEntries().map(entry => entry.id));
+  function drawLabels(target, shownIds) {
     const byId = entriesById();
     labelRecords.filter(label => shownIds.has(label.entryId)).forEach(label => {
       const entry = byId.get(label.entryId);
       const atom = entry && entry.atoms.find(item => (item.chain || '') === label.chain && item.resi === label.resi && (item.atom === 'CA' || item.atom === label.atom));
       const position = atom ? { x: atom.x, y: atom.y, z: atom.z } : { x: label.x, y: label.y, z: label.z };
-      viewer.addLabel(label.text, labelStyle(position));
+      target.addLabel(label.text, labelStyle(position));
     });
     if (root.querySelector('#gpv-all-labels').checked) {
       const entry = activeEntry();
       if (entry && shownIds.has(entry.id)) {
         entry.atoms.filter(atom => atom.atom === 'CA').forEach(atom => {
           const text = (atom.resn || 'RES') + atom.resi + (atom.chain ? ' · ' + atom.chain : '');
-          viewer.addLabel(text, labelStyle({ x: atom.x, y: atom.y, z: atom.z }));
+          target.addLabel(text, labelStyle({ x: atom.x, y: atom.y, z: atom.z }));
         });
       }
     }
+  }
+
+  /* Labels, measurements, and figure annotations share one pass so that adding
+     any one of them never wipes the others, and so exports and comparison panels
+     can draw the same overlays into their own viewers. */
+  function drawOverlays(target, shownIds, dimensions, includeScreenText = true) {
+    drawLabels(target, shownIds);
+    drawMeasurements(target, shownIds);
+    drawAnnotations(target, shownIds, dimensions, includeScreenText);
+  }
+
+  function rebuildOverlays(shouldRender = true) {
+    viewer.removeAllLabels();
+    viewer.removeAllShapes();
+    const stage = root.querySelector('#gpv-stage');
+    /* The model badge sits in the top-left corner while comparing; keep corner titles clear of it. */
+    const topInset = root.querySelector('#gpv-left-label').hidden ? 0 : 34;
+    drawOverlays(viewer, new Set(displayedEntries().map(entry => entry.id)), { width: stage.clientWidth, height: stage.clientHeight, topInset });
     if (shouldRender) viewer.render();
   }
 
@@ -2059,19 +2124,158 @@ html>body{padding:0}</style>
     return Math.acos(Math.max(-1, Math.min(1, cosine))) * 180 / Math.PI;
   }
 
-  function rebuildMeasurements(shouldRender = true) {
-    viewer.removeAllShapes();
+  function measurementText(record) {
+    const value = measurementValue(record);
+    return value === null ? '—' : value.toFixed(2) + (record.type === 'distance' ? ' Å' : '°');
+  }
+
+  function midpoint(a, b) {
+    return { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2, z: (a.z + b.z) / 2 };
+  }
+
+  function drawMeasurements(target, shownIds) {
     measurementRecords.forEach(record => {
+      if (!record.points.every(point => shownIds.has(point.entryId))) return;
       const points = record.points.map(resolvePoint);
       if (points.some(point => !point)) return;
-      const line = (start, end) => viewer.addLine({ start, end, color: '#e11d48', dashed: true, linewidth: 2 });
+      const line = (start, end) => target.addLine({ start, end, color: '#e11d48', dashed: true, linewidth: 2 });
       line(points[0], points[1]);
       if (record.type === 'angle') line(points[1], points[2]);
-      const value = measurementValue(record);
-      const position = record.type === 'angle' ? points[1] : { x: (points[0].x + points[1].x) / 2, y: (points[0].y + points[1].y) / 2, z: (points[0].z + points[1].z) / 2 };
-      viewer.addLabel(value === null ? '—' : value.toFixed(2) + (record.type === 'distance' ? ' Å' : '°'), labelStyle(position));
+      target.addLabel(measurementText(record), labelStyle(record.type === 'angle' ? points[1] : midpoint(points[0], points[1])));
     });
-    if (shouldRender) viewer.render();
+  }
+
+  /* ---------- Figure annotations ---------- */
+
+  const annotationTools = {
+    arrow: { points: 2, label: 'Arrow' },
+    line: { points: 2, label: 'Line' },
+    marker: { points: 1, label: 'Residue marker' },
+    callout: { points: 1, label: 'Text callout' }
+  };
+  const screenCorners = ['top-left', 'top-right', 'bottom-left', 'bottom-right'];
+
+  function annotationSettings() {
+    return {
+      color: root.querySelector('#gpv-annotation-color').value,
+      size: Number(root.querySelector('#gpv-annotation-size').value) || 1,
+      dashed: root.querySelector('#gpv-annotation-dashed').checked,
+      text: root.querySelector('#gpv-annotation-text').value.trim()
+    };
+  }
+
+  function annotationLabelStyle(position, record, scale = 1) {
+    return { ...labelStyle(position), fontSize: Math.round(13 * record.size * scale), fontColor: record.color, borderColor: record.color, backgroundOpacity: 0.85 };
+  }
+
+  function modelCentroid(entry) {
+    const alphaCarbons = entry.atoms.filter(atom => atom.atom === 'CA');
+    const source = alphaCarbons.length ? alphaCarbons : entry.atoms;
+    if (!source.length) return { x: 0, y: 0, z: 0 };
+    const sum = source.reduce((total, atom) => ({ x: total.x + atom.x, y: total.y + atom.y, z: total.z + atom.z }), { x: 0, y: 0, z: 0 });
+    return { x: sum.x / source.length, y: sum.y / source.length, z: sum.z / source.length };
+  }
+
+  /* A callout floats outward from the model centre so its leader line clears the structure. */
+  function calloutAnchor(point, record) {
+    const entry = entryById(record.points[0].entryId);
+    const centre = entry ? modelCentroid(entry) : { x: 0, y: 0, z: 0 };
+    const direction = { x: point.x - centre.x, y: point.y - centre.y, z: point.z - centre.z };
+    const length = Math.hypot(direction.x, direction.y, direction.z) || 1;
+    const distance = 8 * record.size;
+    return { x: point.x + direction.x / length * distance, y: point.y + direction.y / length * distance, z: point.z + direction.z / length * distance };
+  }
+
+  function screenTextSpec(record, dimensions, scale) {
+    const margin = Math.round(16 * scale);
+    const width = dimensions && dimensions.width ? dimensions.width : 800;
+    const height = dimensions && dimensions.height ? dimensions.height : 480;
+    const right = record.corner.endsWith('right'); const bottom = record.corner.startsWith('bottom');
+    const top = margin + (dimensions && dimensions.topInset ? dimensions.topInset : 0);
+    return {
+      ...annotationLabelStyle({ x: right ? width - margin : margin, y: bottom ? height - margin : top, z: 0 }, record, scale),
+      useScreen: true,
+      alignment: (bottom ? 'bottom' : 'top') + (right ? 'Right' : 'Left'),
+      fontSize: Math.round(16 * record.size * scale)
+    };
+  }
+
+  function drawAnnotations(target, shownIds, dimensions, includeScreenText = true) {
+    /* Exports are several times wider than the on-screen stage; keep annotation text legible at print size. */
+    const scale = dimensions && dimensions.width ? Math.max(1, dimensions.width / 600) : 1;
+    annotationRecords.forEach(record => {
+      if (record.type === 'screen') {
+        if (includeScreenText) target.addLabel(record.text, screenTextSpec(record, dimensions, scale));
+        return;
+      }
+      if (!record.points.every(point => shownIds.has(point.entryId))) return;
+      const points = record.points.map(resolvePoint);
+      if (points.some(point => !point)) return;
+      if (record.type === 'arrow') target.addArrow({ start: points[0], end: points[1], radius: 0.35 * record.size, radiusRatio: 2.2, mid: 0.72, color: record.color });
+      if (record.type === 'line') target.addCylinder({ start: points[0], end: points[1], radius: 0.15 * record.size, color: record.color, dashed: record.dashed, fromCap: 1, toCap: 1 });
+      if (record.type === 'marker') target.addSphere({ center: points[0], radius: 1.4 * record.size, color: record.color, alpha: 0.55 });
+      if (record.type === 'callout') {
+        const anchor = calloutAnchor(points[0], record);
+        target.addCylinder({ start: points[0], end: anchor, radius: 0.08 * record.size, color: record.color, dashed: record.dashed, fromCap: 1, toCap: 1 });
+        target.addSphere({ center: points[0], radius: 0.45 * record.size, color: record.color });
+        target.addLabel(record.text || pointName(record.points[0]), annotationLabelStyle(anchor, record, scale));
+        return;
+      }
+      if (record.text) target.addLabel(record.text, annotationLabelStyle(points.length > 1 ? midpoint(points[0], points[1]) : points[0], record, scale));
+    });
+  }
+
+  function annotationSummary(record) {
+    if (record.type === 'screen') return 'Screen text · "' + record.text + '" · ' + record.corner.replace('-', ' ');
+    return annotationTools[record.type].label + ' · ' + record.points.map(pointName).join(' → ') + (record.text ? ' · "' + record.text + '"' : '');
+  }
+
+  function renderAnnotationList() {
+    const list = root.querySelector('#gpv-annotation-list'); list.replaceChildren();
+    annotationRecords.forEach(record => {
+      const row = document.createElement('div'); row.className = 'gpv-entry';
+      const swatch = document.createElement('i'); swatch.className = 'gpv-swatch'; swatch.style.background = record.color;
+      const label = document.createElement('span'); label.className = 'gpv-entry-name'; label.textContent = annotationSummary(record);
+      const remove = document.createElement('button'); remove.className = 'btn btn-ghost'; remove.type = 'button'; remove.textContent = 'Remove';
+      remove.addEventListener('click', () => { annotationRecords = annotationRecords.filter(item => item.id !== record.id); renderAnnotationList(); rebuildOverlays(); updateStatus('Annotation removed'); });
+      row.append(swatch, label, remove); list.append(row);
+    });
+  }
+
+  function annotationPrompt() {
+    const type = root.querySelector('#gpv-annotation-type').value;
+    const remaining = annotationTools[type].points - annotationDraft.length;
+    return 'Click ' + remaining + ' atom' + (remaining === 1 ? '' : 's') + ' in the main viewer for the ' + annotationTools[type].label.toLowerCase() + '.';
+  }
+
+  function toggleAnnotating(force = null) {
+    annotationActive = force === null ? !annotationActive : force;
+    annotationDraft = [];
+    if (annotationActive && measurementActive) toggleMeasurement();
+    setButtonText(root.querySelector('#gpv-annotate'), annotationActive ? 'Stop drawing' : 'Start drawing');
+    root.querySelector('#gpv-stage').classList.toggle('is-drawing', annotationActive);
+    root.querySelector('#gpv-annotation-state').textContent = annotationActive ? annotationPrompt() : 'Pick a tool, start drawing, then click atoms in the main viewer.';
+  }
+
+  function handleAnnotationClick(entry, atom) {
+    annotationDraft.push(atomReference(entry, atom));
+    const type = root.querySelector('#gpv-annotation-type').value;
+    const needed = annotationTools[type].points;
+    if (annotationDraft.length < needed) { root.querySelector('#gpv-annotation-state').textContent = annotationPrompt(); return; }
+    annotationRecords.push({ id: nextAnnotationId++, type, points: annotationDraft.slice(0, needed), ...annotationSettings() });
+    annotationDraft = [];
+    renderAnnotationList(); rebuildOverlays();
+    root.querySelector('#gpv-annotation-state').textContent = annotationTools[type].label + ' added. ' + annotationPrompt();
+    updateStatus(annotationTools[type].label + ' added');
+  }
+
+  function addScreenText() {
+    const text = root.querySelector('#gpv-screen-text').value.trim();
+    if (!text) { updateStatus('Type the screen text first'); return; }
+    const settings = annotationSettings();
+    annotationRecords.push({ id: nextAnnotationId++, type: 'screen', points: [], text, color: settings.color, size: settings.size, dashed: false, corner: root.querySelector('#gpv-screen-corner').value });
+    root.querySelector('#gpv-screen-text').value = '';
+    renderAnnotationList(); rebuildOverlays(); updateStatus('Screen text added');
   }
 
   function renderMeasurementList() {
@@ -2082,13 +2286,45 @@ html>body{padding:0}</style>
       const value = measurementValue(record);
       label.textContent = record.points.map(pointName).join(record.type === 'distance' ? ' ↔ ' : ' → ') + ' · ' + (value === null ? '—' : value.toFixed(2) + (record.type === 'distance' ? ' Å' : '°'));
       const remove = document.createElement('button'); remove.className = 'btn btn-ghost'; remove.type = 'button'; remove.textContent = 'Remove';
-      remove.addEventListener('click', () => { measurementRecords = measurementRecords.filter(item => item.id !== record.id); renderMeasurementList(); rebuildMeasurements(); });
+      remove.addEventListener('click', () => { measurementRecords = measurementRecords.filter(item => item.id !== record.id); renderMeasurementList(); rebuildOverlays(); });
       row.append(label, remove); list.append(row);
+    });
+  }
+
+  /* 3Dmol's own hit-testing only knows the geometry it drew — in cartoon mode
+     that is a small sphere per Cα — so clicks on a ribbon mostly miss. Picking
+     the nearest projected atom within a few pixels makes labels, measurements,
+     and figure annotations land where the user clicked, in any representation. */
+  function pickAtomAt(pageX, pageY) {
+    if (typeof viewer.modelToScreen !== 'function') return null;
+    let best = null; let bestDistance = 14;
+    displayedEntries().filter(entry => entry.model).forEach(entry => {
+      const candidates = entry.atoms.length > 3000 ? entry.atoms.filter(atom => atom.atom === 'CA' || atom.atom === 'P' || atom.hetflag) : entry.atoms;
+      candidates.forEach(atom => {
+        const screen = viewer.modelToScreen({ x: atom.x, y: atom.y, z: atom.z });
+        if (!screen) return;
+        const distance = Math.hypot(screen.x - pageX, screen.y - pageY);
+        if (distance < bestDistance) { bestDistance = distance; best = { entry, atom }; }
+      });
+    });
+    return best;
+  }
+
+  let pointerStart = null;
+  function watchStageClicks() {
+    const stage = root.querySelector('#gpv-stage');
+    stage.addEventListener('pointerdown', event => { if (event.button === 0) pointerStart = { x: event.pageX, y: event.pageY, time: Date.now() }; });
+    stage.addEventListener('pointerup', event => {
+      const start = pointerStart; pointerStart = null;
+      if (!start || event.button !== 0 || Math.hypot(event.pageX - start.x, event.pageY - start.y) > 4 || Date.now() - start.time > 700) return;
+      const hit = pickAtomAt(event.pageX, event.pageY);
+      if (hit) handleAtomClick(hit.entry, hit.atom);
     });
   }
 
   function handleAtomClick(entry, atom) {
     selectResidue(entry, atom);
+    if (annotationActive) { handleAnnotationClick(entry, atom); return; }
     if (!measurementActive) return;
     measurementDraft.push(atomReference(entry, atom));
     const required = root.querySelector('#gpv-measure-type').value === 'angle' ? 3 : 2;
@@ -2096,51 +2332,237 @@ html>body{padding:0}</style>
     if (measurementDraft.length >= required) {
       measurementRecords.push({ id: nextAnnotationId++, type: root.querySelector('#gpv-measure-type').value, points: measurementDraft.slice(0, required) });
       measurementDraft = [];
-      renderMeasurementList(); rebuildMeasurements();
+      renderMeasurementList(); rebuildOverlays();
       root.querySelector('#gpv-measure-state').textContent = 'Measurement added. Select ' + required + ' atoms for another.';
     }
   }
 
   function toggleMeasurement() {
     measurementActive = !measurementActive; measurementDraft = [];
+    if (measurementActive && annotationActive) toggleAnnotating(false);
     root.querySelector('#gpv-measure').textContent = measurementActive ? 'Stop measuring' : 'Start measuring';
     const required = root.querySelector('#gpv-measure-type').value === 'angle' ? 3 : 2;
     root.querySelector('#gpv-measure-state').textContent = measurementActive ? 'Select ' + required + ' atoms in the viewer.' : 'Measurement mode is off.';
   }
 
-  function ensureCompareViewer() {
-    if (compareViewer) return compareViewer;
-    compareViewer = $3Dmol.createViewer(root.querySelector('#gpv-stage-compare'), { backgroundColor: '#ffffff', backgroundAlpha: 0, antialias: true });
-    applyAppearance();
-    return compareViewer;
+  /* ---------- Synchronized multi-view ---------- */
+
+  /* Up to three panels sit in one row; four make a 2 × 2 grid; five or six use three columns. */
+  function panelColumns(total) {
+    return total <= 3 ? total : total <= 4 ? 2 : 3;
   }
 
-  function renderCompareViewer() {
-    const enabled = root.querySelector('#gpv-side-by-side').checked && structures.length > 0;
-    root.querySelector('#gpv-compare-pane').hidden = !enabled;
-    root.querySelector('#gpv-left-label').hidden = !enabled;
-    root.querySelector('#gpv-view-grid').classList.toggle('is-comparing', enabled);
-    if (!enabled) return;
-    const target = entryById(Number(root.querySelector('#gpv-right-model').value));
-    if (!target) return;
-    /* Without this, a lazily-loaded model has no atoms of its own and the clone
-       silently shows unaligned, unstyled coordinates. */
-    if (!target.model) {
-      try { materializeEntry(target); }
-      catch (error) { showImportErrors([error.message]); return; }
+  function panelViewers() {
+    return [viewer, ...comparePanels.filter(panel => panel.viewer).map(panel => panel.viewer)];
+  }
+
+  function panelNames() {
+    return comparePanels.map(panel => (entryById(panel.entryId) || {}).name).filter(Boolean);
+  }
+
+  function legacyPanelNames(state) {
+    if (Array.isArray(state.comparePanels)) return state.comparePanels;
+    return state.rightModel ? [state.rightModel] : [];
+  }
+
+  /* Rotation-only sync keeps each panel's own centre and zoom (view[0..3]) and
+     shares just the quaternion, so assemblies of very different size stay framed. */
+  function copyView(source, target) {
+    if (typeof source.getView !== 'function' || typeof target.setView !== 'function') return;
+    const from = source.getView();
+    if (root.querySelector('#gpv-sync-mode').value === 'full') { target.setView(from); return; }
+    const own = target.getView();
+    target.setView([own[0], own[1], own[2], own[3], from[4], from[5], from[6], from[7]]);
+  }
+
+  const lastViews = new Map();
+
+  function sameView(a, b) {
+    if (!a || !b || a.length !== b.length) return false;
+    for (let index = 0; index < a.length; index += 1) if (Math.abs(a[index] - b[index]) > 1e-9) return false;
+    return true;
+  }
+
+  function seedViews() {
+    panelViewers().forEach(target => { if (typeof target.getView === 'function') lastViews.set(target, target.getView()); });
+  }
+
+  function syncViewsFrom(source) {
+    if (!root.querySelector('#gpv-side-by-side').checked) return;
+    syncingView = true;
+    panelViewers().forEach(target => { if (target !== source) copyView(source, target); });
+    seedViews();
+    syncingView = false;
+  }
+
+  /* 3Dmol redraws drags, wheel zooms, and spins through an internal path that
+     bypasses its state-change callback, so the panels are kept in step by
+     watching every camera once per frame instead. */
+  function syncTick() {
+    compareSyncFrame = 0;
+    const viewers = panelViewers();
+    if (viewers.length < 2 || !root.querySelector('#gpv-side-by-side').checked) { lastViews.clear(); return; }
+    const changed = viewers.find(target => typeof target.getView === 'function' && !sameView(lastViews.get(target), target.getView()));
+    if (changed) syncViewsFrom(changed);
+    compareSyncFrame = requestAnimationFrame(syncTick);
+  }
+
+  function ensureSyncLoop() {
+    if (compareSyncFrame || !root.querySelector('#gpv-side-by-side').checked || !comparePanels.some(panel => panel.viewer)) return;
+    compareSyncFrame = requestAnimationFrame(syncTick);
+  }
+
+  function newPanel(entryId) {
+    return { id: nextPanelId++, entryId, element: null, stage: null, label: null, viewer: null, model: null, observer: null };
+  }
+
+  function defaultPanelEntry() {
+    const taken = new Set([Number(root.querySelector('#gpv-left-model').value), ...comparePanels.map(panel => panel.entryId)]);
+    return structures.find(entry => !taken.has(entry.id)) || structures[structures.length - 1] || null;
+  }
+
+  function addComparePanel(entryId = null) {
+    if (comparePanels.length >= maxComparePanels || !structures.length) return null;
+    const entry = entryId === null ? defaultPanelEntry() : entryById(entryId);
+    if (!entry) return null;
+    const panel = newPanel(entry.id);
+    comparePanels.push(panel);
+    root.querySelector('#gpv-side-by-side').checked = true;
+    renderPanelControls();
+    applyStyle();
+    return panel;
+  }
+
+  function destroyPanelViewer(panel) {
+    if (panel.observer) { panel.observer.disconnect(); panel.observer = null; }
+    if (panel.viewer) lastViews.delete(panel.viewer);
+    if (panel.element) {
+      const canvas = panel.element.querySelector('canvas');
+      const context = canvas && (canvas.getContext('webgl2') || canvas.getContext('webgl'));
+      const lose = context && context.getExtension('WEBGL_lose_context');
+      if (lose) lose.loseContext();
+      panel.element.remove();
     }
-    const secondary = ensureCompareViewer();
-    secondary.removeAllModels(); secondary.removeAllLabels(); secondary.removeAllShapes();
-    compareModel = secondary.addModel(target.text, target.format);
-    const cloneAtoms = compareModel.selectedAtoms({});
-    cloneAtoms.forEach((atom, index) => { if (target.atoms[index]) { atom.x = target.atoms[index].x; atom.y = target.atoms[index].y; atom.z = target.atoms[index].z; } });
-    compareModel.setStyle({}, styleFor(target));
-    const background = backgroundSpec(); secondary.setBackgroundColor(background.color, background.alpha);
-    if (typeof secondary.setProjection === 'function') secondary.setProjection(root.querySelector('#gpv-projection').value);
-    secondary.zoomTo();
-    if (typeof viewer.getView === 'function' && typeof secondary.setView === 'function') secondary.setView(viewer.getView());
-    secondary.render();
-    setTimeout(() => secondary.resize(), 0);
+    panel.element = null; panel.stage = null; panel.label = null; panel.viewer = null; panel.model = null;
+  }
+
+  function removeComparePanel(id) {
+    const panel = comparePanels.find(item => item.id === id);
+    if (!panel) return;
+    destroyPanelViewer(panel);
+    comparePanels = comparePanels.filter(item => item.id !== id);
+    renderPanelControls();
+    applyStyle();
+  }
+
+  function clearComparePanels() {
+    comparePanels.forEach(destroyPanelViewer);
+    comparePanels = [];
+    renderPanelControls();
+  }
+
+  function setComparePanels(entries) {
+    clearComparePanels();
+    entries.slice(0, maxComparePanels).forEach(entry => comparePanels.push(newPanel(entry.id)));
+    renderPanelControls();
+  }
+
+  function renderPanelControls() {
+    const list = root.querySelector('#gpv-compare-panels');
+    list.replaceChildren();
+    comparePanels.forEach((panel, index) => {
+      if (structures.length && !structures.some(entry => entry.id === panel.entryId)) panel.entryId = structures[0].id;
+      const row = document.createElement('div'); row.className = 'gpv-entry gpv-panel-row';
+      const name = document.createElement('span'); name.className = 'gpv-entry-score'; name.textContent = 'Panel ' + (index + 2);
+      const select = document.createElement('select'); select.className = 'form-select'; select.setAttribute('aria-label', 'Model shown in panel ' + (index + 2));
+      structures.forEach(entry => select.append(new Option((entry.collection ? entry.collection + ' › ' : '') + entry.name, String(entry.id))));
+      select.value = String(panel.entryId);
+      select.disabled = !structures.length;
+      select.addEventListener('change', () => {
+        panel.entryId = Number(select.value);
+        renderComparePanels();
+        updateStatus('Panel ' + (index + 2) + ' shows ' + ((entryById(panel.entryId) || {}).name || 'nothing'));
+      });
+      const remove = document.createElement('button'); remove.className = 'btn btn-ghost'; remove.type = 'button'; remove.textContent = 'Remove';
+      remove.addEventListener('click', () => { removeComparePanel(panel.id); updateStatus('Panel removed'); });
+      row.append(name, select, remove);
+      list.append(row);
+    });
+    root.querySelector('#gpv-add-panel').disabled = !structures.length || comparePanels.length >= maxComparePanels;
+    root.querySelector('#gpv-clear-panels').disabled = !comparePanels.length;
+  }
+
+  function ensurePanelViewer(panel, index) {
+    if (panel.viewer) return panel.viewer;
+    const pane = document.createElement('div'); pane.className = 'gpv-view-pane';
+    const label = document.createElement('span'); label.className = 'viz-badge gpv-view-label';
+    const stage = document.createElement('div');
+    stage.className = 'card gpv-stage gpv-stage-compare';
+    stage.setAttribute('role', 'application');
+    stage.setAttribute('aria-label', 'Synchronized comparison viewport ' + (index + 2) + '. Drag to rotate every panel.');
+    stage.tabIndex = 0;
+    /* The first comparison stage keeps its historical id; the test suite addresses it. */
+    if (index === 0) stage.id = 'gpv-stage-compare';
+    pane.append(label, stage);
+    root.querySelector('#gpv-view-grid').append(pane);
+    panel.element = pane; panel.stage = stage; panel.label = label;
+    panel.viewer = $3Dmol.createViewer(stage, { backgroundColor: '#ffffff', backgroundAlpha: 0, antialias: true });
+    panel.observer = new ResizeObserver(() => { if (panel.viewer) panel.viewer.resize(); });
+    panel.observer.observe(stage);
+    return panel.viewer;
+  }
+
+  function renderComparePanels() {
+    const grid = root.querySelector('#gpv-view-grid');
+    const enabled = root.querySelector('#gpv-side-by-side').checked && structures.length > 0 && comparePanels.length > 0;
+    const label = root.querySelector('#gpv-left-label');
+    label.hidden = !enabled;
+    grid.classList.toggle('is-comparing', enabled);
+    grid.style.setProperty('--gpv-columns', String(panelColumns(1 + comparePanels.length)));
+    grid.dataset.panes = String(enabled ? 1 + comparePanels.length : 1);
+    if (!enabled) { comparePanels.forEach(destroyPanelViewer); return; }
+    const primary = activeEntry();
+    label.textContent = primary ? primary.name : 'Primary';
+    label.title = primary ? primary.name : '';
+    const shown = new Set(displayedEntries());
+    const broken = [];
+    comparePanels.forEach((panel, index) => {
+      const target = entryById(panel.entryId);
+      const secondary = ensurePanelViewer(panel, index);
+      secondary.removeAllModels(); secondary.removeAllLabels(); secondary.removeAllShapes();
+      panel.label.textContent = target ? target.name : 'Empty panel';
+      panel.label.title = target ? target.name : '';
+      if (!target) return;
+      /* Without this, a lazily-loaded model has no atoms of its own and the clone
+         silently shows unaligned, unstyled coordinates. */
+      if (!target.model) {
+        try { materializeEntry(target); if (!shown.has(target)) target.model.setStyle({}, {}); }
+        catch (error) { broken.push(error.message); return; }
+      }
+      panel.model = secondary.addModel(target.text, target.format);
+      panel.model.selectedAtoms({}).forEach((atom, atomIndex) => {
+        const source = target.atoms[atomIndex];
+        if (source) { atom.x = source.x; atom.y = source.y; atom.z = source.z; }
+      });
+      panel.model.setStyle({}, styleFor(target));
+      drawOverlays(secondary, new Set([target.id]), { width: panel.stage.clientWidth, height: panel.stage.clientHeight }, false);
+      const background = backgroundSpec();
+      secondary.setBackgroundColor(background.color, background.alpha);
+      if (typeof secondary.setProjection === 'function') secondary.setProjection(root.querySelector('#gpv-projection').value);
+      secondary.zoomTo();
+      copyView(viewer, secondary);
+      secondary.render();
+    });
+    if (broken.length) showImportErrors(broken);
+    seedViews();
+    ensureSyncLoop();
+    setTimeout(() => { panelViewers().forEach(target => target.resize()); seedViews(); }, 0);
+  }
+
+  function fitAllViews() {
+    viewer.zoomTo(); viewer.render();
+    comparePanels.forEach(panel => { if (panel.viewer) { panel.viewer.zoomTo(); panel.viewer.render(); } });
+    syncViewsFrom(viewer);
   }
 
   function restoreCoordinates(shouldRender = true) {
@@ -2508,8 +2930,9 @@ html>body{padding:0}</style>
         background: root.querySelector('#gpv-background').value,
         backgroundColor: root.querySelector('#gpv-background-color').value,
         sideBySide: root.querySelector('#gpv-side-by-side').checked,
+        syncMode: root.querySelector('#gpv-sync-mode').value,
         leftModel: (structures.find(entry => entry.id === Number(root.querySelector('#gpv-left-model').value)) || {}).name || null,
-        rightModel: (structures.find(entry => entry.id === Number(root.querySelector('#gpv-right-model').value)) || {}).name || null,
+        comparePanels: panelNames(),
         camera: typeof viewer.getView === 'function' ? viewer.getView() : null
       },
       labels: labelRecords.map(label => ({
@@ -2521,6 +2944,7 @@ html>body{padding:0}</style>
       })),
       selections: selectionRecords.map(record => ({ model: (structures.find(entry => entry.id === record.entryId) || {}).name, chain: record.chain, residues: record.residues, action: record.action, color: record.color })),
       measurements: measurementRecords.map(record => ({ type: record.type, points: record.points.map(point => ({ model: (structures.find(entry => entry.id === point.entryId) || {}).name, chain: point.chain, resi: point.resi, atom: point.atom, index: point.index })) })),
+      annotations: annotationRecords.map(record => ({ type: record.type, text: record.text, color: record.color, size: record.size, dashed: record.dashed, corner: record.corner, points: record.points.map(point => ({ model: (structures.find(entry => entry.id === point.entryId) || {}).name, chain: point.chain, resi: point.resi, atom: point.atom, index: point.index })) })),
       savedViews: savedViews.map(view => ({ ...view }))
     };
     downloadBlob(JSON.stringify(scene, null, 2), 'application/json', 'protein-viewer-scene.json');
@@ -2568,6 +2992,13 @@ html>body{padding:0}</style>
       const points = (record.points || []).map(point => { const entry = byName.get(point.model); return entry ? { entryId: entry.id, chain: point.chain || '', resi: point.resi, atom: point.atom || '', index: point.index } : null; }).filter(Boolean);
       return points.length >= 2 ? { id: nextAnnotationId++, type: record.type === 'angle' ? 'angle' : 'distance', points } : null;
     }).filter(Boolean);
+    annotationRecords = (scene.annotations || []).map(record => {
+      const type = record.type === 'screen' || annotationTools[record.type] ? record.type : null;
+      if (!type) return null;
+      const points = (record.points || []).map(point => { const entry = byName.get(point.model); return entry ? { entryId: entry.id, chain: point.chain || '', resi: point.resi, atom: point.atom || '', index: point.index } : null; }).filter(Boolean);
+      if (type !== 'screen' && points.length < annotationTools[type].points) return null;
+      return { id: nextAnnotationId++, type, points, text: String(record.text || ''), color: /^#[0-9a-f]{6}$/i.test(record.color || '') ? record.color : '#f97316', size: Math.min(3, Math.max(0.5, Number(record.size) || 1)), dashed: record.dashed === true, corner: screenCorners.includes(record.corner) ? record.corner : 'top-left' };
+    }).filter(Boolean);
     savedViews = (scene.savedViews || []).map(view => ({ ...view, id: nextAnnotationId++ }));
     root.querySelector('#gpv-all-labels').checked = settings.allResidueLabels === true;
     const provenance = scene.provenance || {};
@@ -2578,11 +3009,12 @@ html>body{padding:0}</style>
     applyModelOrder();
     renderList();
     if (reference) root.querySelector('#gpv-reference').value = String(reference.id);
-    const left = byName.get(settings.leftModel); const right = byName.get(settings.rightModel);
+    const left = byName.get(settings.leftModel);
     if (left) root.querySelector('#gpv-left-model').value = String(left.id);
-    if (right) root.querySelector('#gpv-right-model').value = String(right.id);
+    if (['rotation', 'full'].includes(settings.syncMode)) root.querySelector('#gpv-sync-mode').value = settings.syncMode;
+    setComparePanels(legacyPanelNames(settings).map(name => byName.get(name)).filter(Boolean));
     root.querySelector('#gpv-side-by-side').checked = settings.sideBySide === true;
-    renderSelectionList(); renderMeasurementList(); renderSavedViews(); applyAppearance();
+    renderSelectionList(); renderMeasurementList(); renderAnnotationList(); renderSavedViews(); applyAppearance();
     applyStyle();
     if (settings.alignmentApplied && reference) alignVisible();
     if (settings.camera && typeof viewer.setView === 'function') viewer.setView(settings.camera);
@@ -2738,6 +3170,13 @@ html>body{padding:0}</style>
     updateStatus(motion === 'off' ? 'Ready' : root.querySelector('#gpv-motion').selectedOptions[0].text);
   }
 
+  function toggleSpin() {
+    if (restoreMotion !== null) return;
+    const motion = root.querySelector('#gpv-motion');
+    motion.value = motion.value === 'spin' ? 'off' : 'spin';
+    applyMotion();
+  }
+
   function captureViewState(name = '', caption = '') {
     const active = activeEntry();
     return {
@@ -2753,8 +3192,10 @@ html>body{padding:0}</style>
       background: root.querySelector('#gpv-background').value,
       backgroundColor: root.querySelector('#gpv-background-color').value,
       sideBySide: root.querySelector('#gpv-side-by-side').checked,
+      syncMode: root.querySelector('#gpv-sync-mode').value,
       leftModel: (structures.find(entry => entry.id === Number(root.querySelector('#gpv-left-model').value)) || {}).name || null,
-      rightModel: (structures.find(entry => entry.id === Number(root.querySelector('#gpv-right-model').value)) || {}).name || null
+      comparePanels: panelNames(),
+      panelCameras: comparePanels.map(panel => panel.viewer && typeof panel.viewer.getView === 'function' ? panel.viewer.getView() : null)
     };
   }
 
@@ -2773,13 +3214,19 @@ html>body{padding:0}</style>
     if (['transparent', 'white', 'dark', 'custom'].includes(state.background)) root.querySelector('#gpv-background').value = state.background;
     if (/^#[0-9a-f]{6}$/i.test(state.backgroundColor || '')) root.querySelector('#gpv-background-color').value = state.backgroundColor;
     root.querySelector('#gpv-side-by-side').checked = state.sideBySide === true;
-    const left = byName.get(state.leftModel); const right = byName.get(state.rightModel);
+    if (['rotation', 'full'].includes(state.syncMode)) root.querySelector('#gpv-sync-mode').value = state.syncMode;
+    const left = byName.get(state.leftModel);
+    if (state.sideBySide === true) setComparePanels(legacyPanelNames(state).map(name => byName.get(name)).filter(Boolean));
     renderList();
     if (left) root.querySelector('#gpv-left-model').value = String(left.id);
-    if (right) root.querySelector('#gpv-right-model').value = String(right.id);
     applyAppearance(); applyStyle();
     if (state.camera && typeof viewer.setView === 'function') viewer.setView(state.camera);
-    viewer.render(); renderCompareViewer();
+    viewer.render();
+    const cameras = Array.isArray(state.panelCameras) ? state.panelCameras : [];
+    comparePanels.forEach((panel, index) => {
+      if (panel.viewer && cameras[index] && typeof panel.viewer.setView === 'function') { panel.viewer.setView(cameras[index]); panel.viewer.render(); }
+    });
+    if (!cameras.length) syncViewsFrom(viewer);
   }
 
   function renderSavedViews() {
@@ -2866,6 +3313,7 @@ html>body{padding:0}</style>
       atoms.forEach((atom, index) => { if (entry.atoms[index]) { atom.x = entry.atoms[index].x; atom.y = entry.atoms[index].y; atom.z = entry.atoms[index].z; } });
       model.setStyle({}, styleFor(entry));
     });
+    drawOverlays(target, new Set(displayedEntries().map(entry => entry.id)), dimensions);
     target.zoomTo();
     if (typeof viewer.getView === 'function' && typeof target.setView === 'function') target.setView(viewer.getView());
     target.render();
@@ -2894,6 +3342,99 @@ html>body{padding:0}</style>
       releaseExportViewer();
       done();
       button.disabled = structures.length === 0; button.textContent = 'Download publication PNG';
+    }
+  }
+
+  function hexLuminance(hex) {
+    const value = /^#([0-9a-f]{6})$/i.exec(hex || '');
+    if (!value) return 1;
+    const channels = [0, 2, 4].map(offset => parseInt(value[1].slice(offset, offset + 2), 16) / 255);
+    return 0.2126 * channels[0] + 0.7152 * channels[1] + 0.0722 * channels[2];
+  }
+
+  function figurePalette() {
+    const mode = root.querySelector('#gpv-background').value;
+    const background = backgroundSpec();
+    const dark = mode === 'dark' || (mode === 'custom' && hexLuminance(background.color) < 0.45);
+    return { paper: background.alpha ? background.color : '#ffffff', ink: dark ? '#f8fafc' : '#111827' };
+  }
+
+  function truncateToWidth(context, text, maxWidth) {
+    let value = String(text || '');
+    if (context.measureText(value).width <= maxWidth) return value;
+    while (value.length > 1 && context.measureText(value + '…').width > maxWidth) value = value.slice(0, -1);
+    return value + '…';
+  }
+
+  async function renderEntryImage(entry, camera, dimensions) {
+    const target = acquireExportViewer(dimensions.width, dimensions.height);
+    const background = backgroundSpec();
+    target.setBackgroundColor(background.color, background.alpha);
+    if (typeof target.setProjection === 'function') target.setProjection(root.querySelector('#gpv-projection').value);
+    if (!entry.model) materializeEntry(entry);
+    const model = target.addModel(entry.text, entry.format);
+    model.selectedAtoms({}).forEach((atom, index) => { const source = entry.atoms[index]; if (source) { atom.x = source.x; atom.y = source.y; atom.z = source.z; } });
+    model.setStyle({}, styleFor(entry));
+    drawOverlays(target, new Set([entry.id]), dimensions, false);
+    target.zoomTo();
+    if (camera && typeof target.setView === 'function') target.setView(camera);
+    target.render();
+    await afterPaint();
+    return target.pngURI();
+  }
+
+  function comparisonPanes() {
+    const panes = [{ entry: activeEntry(), camera: typeof viewer.getView === 'function' ? viewer.getView() : null }];
+    comparePanels.forEach(panel => panes.push({ entry: entryById(panel.entryId), camera: panel.viewer && typeof panel.viewer.getView === 'function' ? panel.viewer.getView() : null }));
+    return panes.filter(pane => pane.entry);
+  }
+
+  async function downloadComparisonPng() {
+    const panes = comparisonPanes();
+    if (panes.length < 2) { announce('Turn on the synchronized multi-view with at least one panel first', 'error'); return; }
+    const button = root.querySelector('#gpv-compare-image');
+    const requested = exportDimensions();
+    const columns = panelColumns(panes.length); const rows = Math.ceil(panes.length / columns);
+    let cellWidth = requested.width; let cellHeight = requested.height;
+    const maxPixels = 24000000;
+    if (cellWidth * cellHeight * panes.length > maxPixels) {
+      const correction = Math.sqrt(maxPixels / (cellWidth * cellHeight * panes.length));
+      cellWidth = Math.floor(cellWidth * correction); cellHeight = Math.floor(cellHeight * correction);
+    }
+    const captionHeight = Math.round(cellHeight * 0.09);
+    const palette = figurePalette();
+    const done = setBusy('Rendering comparison…');
+    button.disabled = true; button.textContent = 'Rendering…';
+    await afterPaint();
+    try {
+      const canvas = document.createElement('canvas');
+      canvas.width = columns * cellWidth; canvas.height = rows * (cellHeight + captionHeight);
+      const context = canvas.getContext('2d');
+      context.fillStyle = palette.paper; context.fillRect(0, 0, canvas.width, canvas.height);
+      for (let index = 0; index < panes.length; index += 1) {
+        button.textContent = 'Rendering ' + (index + 1) + ' / ' + panes.length + '…';
+        await afterPaint();
+        const uri = await renderEntryImage(panes[index].entry, panes[index].camera, { width: cellWidth, height: cellHeight });
+        const imageValue = await loadImage(uri);
+        const x = (index % columns) * cellWidth; const y = Math.floor(index / columns) * (cellHeight + captionHeight);
+        context.drawImage(imageValue, x, y, cellWidth, cellHeight);
+        context.fillStyle = palette.ink; context.textBaseline = 'middle';
+        context.font = '700 ' + Math.round(captionHeight * 0.46) + 'px system-ui';
+        context.fillText(String.fromCharCode(65 + index), x + Math.round(cellWidth * 0.025), y + cellHeight + captionHeight / 2);
+        const score = mean(panes[index].entry.scores);
+        context.font = '500 ' + Math.round(captionHeight * 0.34) + 'px system-ui';
+        const caption = panes[index].entry.name + (score === null ? '' : ' · mean pLDDT ' + score.toFixed(1));
+        context.fillText(truncateToWidth(context, caption, cellWidth * 0.9), x + Math.round(cellWidth * 0.08), y + cellHeight + captionHeight / 2);
+      }
+      const link = document.createElement('a'); link.href = canvas.toDataURL('image/png'); link.download = 'protein-comparison-' + panes.length + '-panels.png'; link.click();
+      announce('Comparison figure downloaded · ' + panes.length + ' panels · ' + canvas.width + ' × ' + canvas.height);
+    } catch (error) {
+      announce('Could not render the comparison figure: ' + error.message, 'error');
+    } finally {
+      releaseExportViewer();
+      done();
+      button.textContent = 'Download comparison PNG';
+      button.disabled = !(root.querySelector('#gpv-side-by-side').checked && comparePanels.length);
     }
   }
 
@@ -2986,6 +3527,54 @@ html>body{padding:0}</style>
     return confidence;
   }
 
+  function reportCoordinates(entry) {
+    if (!entry.model || !entry.originalAtoms.length) return null;
+    const moved = entry.atoms.some((atom, index) => {
+      const original = entry.originalAtoms[index];
+      return original && (Math.abs(atom.x - original.x) > 0.001 || Math.abs(atom.y - original.y) > 0.001 || Math.abs(atom.z - original.z) > 0.001);
+    });
+    if (!moved) return null;
+    const round = value => Math.round(value * 1000) / 1000;
+    return entry.atoms.flatMap(atom => [round(atom.x), round(atom.y), round(atom.z)]);
+  }
+
+  function reportShapes(entry) {
+    const round = value => Math.round(value * 1000) / 1000;
+    const xyz = point => ({ x: round(point.x), y: round(point.y), z: round(point.z) });
+    const shapes = [];
+    measurementRecords.forEach(record => {
+      if (!record.points.every(point => point.entryId === entry.id)) return;
+      const points = record.points.map(resolvePoint);
+      if (points.some(point => !point)) return;
+      shapes.push({ kind: 'line', start: xyz(points[0]), end: xyz(points[1]), color: '#e11d48', dashed: true });
+      if (record.type === 'angle') shapes.push({ kind: 'line', start: xyz(points[1]), end: xyz(points[2]), color: '#e11d48', dashed: true });
+      shapes.push({ kind: 'label', position: xyz(record.type === 'angle' ? points[1] : midpoint(points[0], points[1])), text: measurementText(record), color: '#111827', size: 1 });
+    });
+    annotationRecords.forEach(record => {
+      if (record.type === 'screen' || !record.points.every(point => point.entryId === entry.id)) return;
+      const points = record.points.map(resolvePoint);
+      if (points.some(point => !point)) return;
+      if (record.type === 'arrow') shapes.push({ kind: 'arrow', start: xyz(points[0]), end: xyz(points[1]), radius: 0.35 * record.size, color: record.color });
+      if (record.type === 'line') shapes.push({ kind: 'cylinder', start: xyz(points[0]), end: xyz(points[1]), radius: 0.15 * record.size, color: record.color, dashed: record.dashed });
+      if (record.type === 'marker') shapes.push({ kind: 'sphere', center: xyz(points[0]), radius: 1.4 * record.size, color: record.color, alpha: 0.55 });
+      if (record.type === 'callout') {
+        const anchor = calloutAnchor(points[0], record);
+        shapes.push({ kind: 'cylinder', start: xyz(points[0]), end: xyz(anchor), radius: 0.08 * record.size, color: record.color, dashed: record.dashed });
+        shapes.push({ kind: 'sphere', center: xyz(points[0]), radius: 0.45 * record.size, color: record.color, alpha: 1 });
+        shapes.push({ kind: 'label', position: xyz(anchor), text: record.text || pointName(record.points[0]), color: record.color, size: record.size });
+        return;
+      }
+      if (record.text) shapes.push({ kind: 'label', position: xyz(points.length > 1 ? midpoint(points[0], points[1]) : points[0]), text: record.text, color: record.color, size: record.size });
+    });
+    return shapes;
+  }
+
+  function reportPanelNames() {
+    const primary = activeEntry();
+    if (!root.querySelector('#gpv-side-by-side').checked || !comparePanels.length) return primary ? [primary.name] : [];
+    return [primary ? primary.name : null, ...panelNames()].filter(Boolean);
+  }
+
   function downloadReport() {
     const chosen = reportEntries();
     if (!chosen.length) { announce('Load a model before building a report', 'error'); return; }
@@ -2994,54 +3583,33 @@ html>body{padding:0}</style>
       text: entry.text,
       format: entry.format,
       color: entry.color,
-      confidence: reportConfidence(entry),
       rank: entry.rank,
-      labels: labelRecords.filter(label => label.entryId === entry.id).map(label => ({
-        text: label.text,
-        chain: label.chain,
-        resi: label.resi,
-        atom: label.atom,
-        x: label.x,
-        y: label.y,
-        z: label.z
-      }))
+      confidence: reportConfidence(entry),
+      coords: reportCoordinates(entry),
+      shapes: reportShapes(entry),
+      labels: labelRecords.filter(label => label.entryId === entry.id).map(label => ({ text: label.text, chain: label.chain, resi: label.resi, atom: label.atom, x: label.x, y: label.y, z: label.z }))
     }));
-    const payload = JSON.stringify(exported).replace(/</g, '\\u003c');
-    const reportMetadata = JSON.stringify(provenanceValues()).replace(/</g, '\\u003c');
-    const reportViews = JSON.stringify(savedViews).replace(/</g, '\\u003c');
-    const reportSeconds = Number(root.querySelector('#gpv-video-length').value) || 5;
-    const html = [
-      "<!doctype html>",
-      "<html lang='en'><head><meta charset='utf-8'>",
-      "<meta name='viewport' content='width=device-width,initial-scale=1'>",
-      "<title>" + (provenanceValues().title || 'Protein Model Report').replace(/[<>&]/g, '') + "</title>",
-      "<link rel='icon' type='image/svg+xml' href=\"data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' rx='7' fill='%23339cff'/><circle cx='16' cy='16' r='3' fill='%23fff'/></svg>\">",
-      "<style>",
-      ":root{color-scheme:light dark;font-family:system-ui,sans-serif}body{margin:0;padding:18px;background:#111827;color:#f8fafc}main{max-width:1100px;margin:auto}.controls{display:flex;gap:10px;flex-wrap:wrap;align-items:end;margin-bottom:12px}label{display:grid;gap:4px}button,select,input{font:inherit;padding:7px 10px}#view{position:relative;overflow:hidden;height:65vh;min-height:420px;background:#020617}#view canvas{display:block}#status{display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-top:8px;color:#cbd5e1}.legend{display:flex;gap:12px;flex-wrap:wrap;margin:8px 0}.legend span{display:flex;align-items:center;gap:5px}.swatch{width:12px;height:12px;display:inline-block}.vlow{background:#ff7d45}.low{background:#ffdb13}.conf{background:#65cbf3}.vhigh{background:#0053d6}#caption{padding:10px 0;font-size:1.05rem}#pae-wrap{max-width:360px;margin-top:14px}#pae{display:block;width:100%;height:auto}#pae-detail{margin-top:5px;color:#cbd5e1}.meta{white-space:pre-wrap;color:#cbd5e1}@media(prefers-color-scheme:light){body{background:#f8fafc;color:#0f172a}#view{background:#e2e8f0}#status,#pae-detail,.meta{color:#475569}}",
-      "</style></head><body><main>",
-      "<h1 id='project-title' hidden></h1><p class='meta' id='project-meta'></p>",
-      "<p class='meta'>Interactive report generated by Protein Structure Viewer " + viewerVersion + " on " + new Date().toISOString().slice(0, 10) + ". Predicted structures are predictions, not experimental determinations.</p>",
-      "<div class='controls'><label id='guided-wrap'>Guided view<select id='guided'><option value=''>Choose a saved view</option></select></label><label>Model<select id='model'></select></label><button id='previous'>Previous</button><button id='next'>Next</button><button id='play'>Play cycle</button><label>Interval (seconds)<input id='interval' type='number' min='0.5' max='20' step='0.5' value='2'></label><label>Representation<select id='style'><option value='cartoon'>Cartoon</option><option value='stick'>Sticks</option><option value='sphere'>Spheres</option><option value='line'>Lines</option></select></label><label>Colors<select id='colors'><option value='plddt'>pLDDT</option><option value='structure'>Model color</option><option value='chain'>Chain</option><option value='spectrum'>Spectrum</option><option value='element'>Element</option></select></label><button id='spin'>Spin</button><button id='png'>Download PNG</button><button id='video'>Record " + reportSeconds + "s video</button></div><div id='caption' hidden></div>",
-      "<div class='legend'><span><i class='swatch vlow'></i>&lt;50</span><span><i class='swatch low'></i>50–70</span><span><i class='swatch conf'></i>70–90</span><span><i class='swatch vhigh'></i>≥90</span></div>",
-      "<div id='view'></div><div id='status'><span id='name'></span><span id='score'></span><span id='model-confidence'></span><span id='position'></span></div><div id='pae-wrap' hidden><canvas id='pae' width='360' height='360' aria-label='Predicted aligned error heatmap'></canvas><div id='pae-detail'>Predicted aligned error (Å)</div></div>",
-      "<script src='https://cdnjs.cloudflare.com/ajax/libs/3Dmol/2.4.2/3Dmol-min.js'><" + "/script>",
-      "<script>",
-      "const structures=" + payload + ";",
-      "const savedViews=" + reportViews + ";const guided=document.getElementById('guided'),guidedWrap=document.getElementById('guided-wrap');if(!savedViews.length)guidedWrap.hidden=true;savedViews.forEach((v,i)=>{const o=document.createElement('option');o.value=i;o.textContent=String.fromCharCode(65+i)+' · '+v.name;guided.append(o)});",
-      "const metadata=" + reportMetadata + ";const title=document.getElementById('project-title');if(metadata.title){title.hidden=false;title.textContent=metadata.title}document.getElementById('project-meta').textContent=[metadata.source,metadata.method,metadata.notes].filter(Boolean).join(' · ');",
-      "const viewer=$3Dmol.createViewer(document.getElementById('view'),{backgroundColor:'#ffffff',backgroundAlpha:0,antialias:true});let current=0,timer=0,spinning=false;",
-      "const picker=document.getElementById('model');structures.forEach((s,i)=>{const o=document.createElement('option');o.value=i;o.textContent=s.name;picker.append(o)});",
-      "function pcolor(v){return v<50?'#ff7d45':v<70?'#ffdb13':v<90?'#65cbf3':'#0053d6'}",
-      "function mean(a){return a.length?a.reduce((s,v)=>s+v,0)/a.length:null}",
-      "function metric(v,d=3){return Number.isFinite(Number(v))?Number(v).toFixed(d):'—'}function drawPae(s){const wrap=document.getElementById('pae-wrap'),c=s.confidence||{},matrix=c.pae;if(!Array.isArray(matrix)||!matrix.length){wrap.hidden=true;return}wrap.hidden=false;const canvas=document.getElementById('pae'),ctx=canvas.getContext('2d'),image=ctx.createImageData(canvas.width,canvas.height);let max=1;matrix.forEach(r=>r.forEach(v=>{if(Number.isFinite(Number(v)))max=Math.max(max,Number(v))}));for(let y=0;y<canvas.height;y++){const row=matrix[Math.min(matrix.length-1,Math.floor(y*matrix.length/canvas.height))]||[];for(let x=0;x<canvas.width;x++){const v=Number(row[Math.min(row.length-1,Math.floor(x*row.length/canvas.width))])||0,t=Math.max(0,Math.min(1,v/max)),o=(y*canvas.width+x)*4;image.data[o]=Math.round(255*t);image.data[o+1]=Math.round(83+136*t);image.data[o+2]=Math.round(214-195*t);image.data[o+3]=255}}ctx.putImageData(image,0,0);document.getElementById('pae-detail').textContent='PAE · '+(c.paeOriginalSize||matrix.length)+' × '+(c.paeOriginalSize||matrix.length)+' tokens · maximum '+max.toFixed(1)+' Å'+(c.paeDownsampled?' · heatmap downsampled for report':'')}",
-      "function show(i,preserveView=false){const oldView=preserveView&&viewer.getView?viewer.getView():null;current=(Number(i)+structures.length)%structures.length;picker.value=current;const s=structures[current];viewer.removeAllModels();viewer.removeAllLabels();const m=viewer.addModel(s.text,s.format);const rep=document.getElementById('style').value;const mode=document.getElementById('colors').value;let options={color:s.color};if(mode==='plddt')options={colorfunc:a=>pcolor(Number(a.b||0))};if(mode==='chain')options={colorscheme:'chainHetatm'};if(mode==='spectrum')options={colorscheme:'spectrum'};if(mode==='element')options={colorscheme:'default'};if(rep==='line')options.linewidth=2;const spec={};spec[rep]=options;m.setStyle({},spec);(s.labels||[]).forEach(l=>viewer.addLabel(l.text,{position:{x:l.x,y:l.y,z:l.z},backgroundColor:'#fff',fontColor:'#111827',borderColor:'#94a3b8',borderThickness:1,fontSize:12,inFront:true}));if(oldView&&viewer.setView)viewer.setView(oldView);else viewer.zoomTo();viewer.render();const values=m.selectedAtoms({}).filter(a=>a.atom==='CA'&&Number.isFinite(Number(a.b))).map(a=>Number(a.b));const avg=mean(values),c=s.confidence||{};document.getElementById('name').textContent=s.name;document.getElementById('score').textContent=avg===null?'Mean pLDDT —':'Mean pLDDT '+avg.toFixed(1);document.getElementById('model-confidence').textContent='pTM '+metric(c.ptm)+' · ipTM '+metric(c.iptm)+' · ranking '+metric(c.rankingScore)+(c.hasClash?' · clash warning':'');document.getElementById('position').textContent=(current+1)+' / '+structures.length;drawPae(s)}",
-      "function stop(){clearInterval(timer);timer=0;document.getElementById('play').textContent='Play cycle'}",
-      "function guide(i){const v=savedViews[Number(i)];if(!v)return;stop();const modelIndex=structures.findIndex(s=>s.name===v.activeModel);if(v.representation)document.getElementById('style').value=v.representation;if(v.colorMode)document.getElementById('colors').value=v.colorMode;show(modelIndex>=0?modelIndex:current);if(v.camera&&viewer.setView)viewer.setView(v.camera);viewer.render();const caption=document.getElementById('caption');caption.hidden=false;caption.textContent=v.name+(v.caption?' — '+v.caption:'')}",
-      "function play(){if(timer){stop();return}const seconds=Math.max(.5,Number(document.getElementById('interval').value)||2);timer=setInterval(()=>show(current+1,true),seconds*1000);document.getElementById('play').textContent='Pause cycle'}",
-      "const seconds=" + reportSeconds + ";function record(){const canvas=document.querySelector('#view canvas'),button=document.getElementById('video');if(!canvas||!canvas.captureStream||typeof MediaRecorder==='undefined'){alert('Video recording is not supported by this browser.');return}const stream=canvas.captureStream(30),type=MediaRecorder.isTypeSupported('video/webm;codecs=vp9')?'video/webm;codecs=vp9':'video/webm',recorder=new MediaRecorder(stream,{mimeType:type}),chunks=[];recorder.ondataavailable=e=>{if(e.data.size)chunks.push(e.data)};recorder.onstop=()=>{viewer.spin(false);stream.getTracks().forEach(t=>t.stop());const url=URL.createObjectURL(new Blob(chunks,{type:'video/webm'})),a=document.createElement('a');a.href=url;a.download='protein-spin.webm';a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);button.disabled=false;button.textContent='Record '+seconds+'s video'};button.disabled=true;button.textContent='Recording…';viewer.spin('y',.8);recorder.start();setTimeout(()=>recorder.stop(),seconds*1000)}",
-      "guided.addEventListener('change',e=>guide(e.target.value));picker.addEventListener('change',e=>{stop();show(e.target.value)});document.getElementById('previous').onclick=()=>{stop();show(current-1)};document.getElementById('next').onclick=()=>{stop();show(current+1)};document.getElementById('play').onclick=play;document.getElementById('style').onchange=()=>show(current);document.getElementById('colors').onchange=()=>show(current);document.getElementById('spin').onclick=()=>{spinning=!spinning;viewer.spin(spinning?'y':false);document.getElementById('spin').textContent=spinning?'Stop spin':'Spin'};document.getElementById('png').onclick=()=>{const a=document.createElement('a');a.href=viewer.pngURI();a.download='protein-model.png';a.click()};document.getElementById('video').onclick=record;window.addEventListener('keydown',e=>{if(e.target instanceof Element&&e.target.matches('input,select,textarea'))return;if(e.key==='ArrowLeft'){stop();show(current-1)}if(e.key==='ArrowRight'){stop();show(current+1)}});new ResizeObserver(()=>viewer.resize()).observe(document.getElementById('view'));show(0);",
-      "<" + "/script></main></body></html>"
-    ].join('\n');
+    const chosenNames = new Set(chosen.map(entry => entry.name));
+    const initial = {
+      panels: reportPanelNames().filter(name => chosenNames.has(name)),
+      sync: root.querySelector('#gpv-sync-mode').value,
+      camera: typeof viewer.getView === 'function' ? viewer.getView() : null,
+      representation: root.querySelector('#gpv-style').value,
+      colorMode: root.querySelector('#gpv-color-mode').value,
+      aligned: exported.some(entry => Array.isArray(entry.coords)),
+      screenText: annotationRecords.filter(record => record.type === 'screen').map(record => ({ text: record.text, color: record.color, size: record.size, corner: record.corner })),
+      seconds: Number(root.querySelector('#gpv-video-length').value) || 5,
+      generated: new Date().toISOString().slice(0, 10),
+      version: viewerVersion
+    };
+    const embed = value => JSON.stringify(value).replace(/</g, '\\u003c');
+    const html = reportTemplate({
+      title: (provenanceValues().title || 'Protein Model Report').replace(/[<>&]/g, ''),
+      structures: embed(exported),
+      views: embed(savedViews),
+      metadata: embed(provenanceValues()),
+      initial: embed(initial)
+    });
     const blob = new Blob([html], { type: 'text/html' });
     const link = document.createElement('a');
     link.href = URL.createObjectURL(blob);
@@ -3049,6 +3617,345 @@ html>body{padding:0}</style>
     link.click();
     setTimeout(() => URL.revokeObjectURL(link.href), 1000);
     announce('HTML report downloaded · ' + chosen.length + ' model' + (chosen.length === 1 ? '' : 's') + ' · ' + formatBytes(blob.size));
+  }
+
+  /* The report is a standalone page: no build step, one CDN script, and every
+     control wired by hand so it opens from a USB stick or an email attachment. */
+  function reportTemplate(data) {
+    return `<!doctype html>
+<html lang='en'><head><meta charset='utf-8'>
+<meta name='viewport' content='width=device-width,initial-scale=1'>
+<title>${data.title}</title>
+<link rel='icon' type='image/svg+xml' href="data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' rx='7' fill='%23339cff'/><circle cx='16' cy='16' r='3' fill='%23fff'/></svg>">
+<style>
+:root{color-scheme:dark;font-family:system-ui,sans-serif}
+[hidden]{display:none!important}
+body{margin:0;padding:18px;background:#111827;color:#f8fafc}
+body[data-background='light'],body[data-background='white']{background:#f8fafc;color:#0f172a;color-scheme:light}
+main{max-width:1440px;margin:auto}
+h1{margin:0 0 6px;font-size:1.5rem}
+.controls{display:flex;gap:10px;flex-wrap:wrap;align-items:end;margin:0 0 12px}
+label{display:grid;gap:4px;font-size:.85rem}
+button,select,input{font:inherit;padding:7px 10px;border-radius:8px;border:1px solid #475569;background:#1e293b;color:inherit}
+body[data-background='light'] :is(button,select,input),body[data-background='white'] :is(button,select,input){background:#fff;border-color:#cbd5e1}
+button{cursor:pointer}button:hover{filter:brightness(1.12)}button:disabled{opacity:.6;cursor:default}
+#view{display:grid;gap:8px}
+#view:fullscreen{background:#020617;padding:8px;overflow:hidden}
+.pane{display:grid;gap:4px;min-width:0;align-content:start}
+.pane-head{display:grid;gap:2px;min-width:0}
+.pane-model{width:100%;min-width:0;padding:4px 8px}
+.pane-stats{font-size:.78rem;opacity:.8;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;padding:0 2px}
+.stage{position:relative;overflow:hidden;background:#020617;border-radius:10px;border:2px solid transparent;height:60vh;min-height:220px}
+body[data-background='light'] .stage,body[data-background='white'] .stage{background:#e2e8f0}
+.pane.is-focused .stage{border-color:#339cff}
+.stage canvas{display:block}
+#status{display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-top:8px;opacity:.85;font-size:.9rem}
+.legend{display:flex;gap:12px;flex-wrap:wrap;margin:8px 0;font-size:.85rem}
+.legend span{display:flex;align-items:center;gap:5px}.swatch{width:12px;height:12px;display:inline-block;border-radius:2px}
+.vlow{background:#ff7d45}.low{background:#ffdb13}.conf{background:#65cbf3}.vhigh{background:#0053d6}
+#caption{padding:10px 12px;font-size:1.05rem;background:rgba(51,156,255,.12);border-left:3px solid #339cff;border-radius:8px;margin-bottom:10px}
+#pae-wrap{max-width:360px;margin-top:14px}#pae{display:block;width:100%;height:auto}#pae-detail{margin-top:5px;opacity:.8}
+.meta{white-space:pre-wrap;opacity:.85;font-size:.9rem}
+.tips{font-size:.85rem;opacity:.7;margin-top:12px}
+kbd{font:inherit;padding:0 5px;border:1px solid currentColor;border-radius:4px;font-size:.8em}
+</style></head><body data-background='dark'><main>
+<h1 id='project-title' hidden></h1><p class='meta' id='project-meta'></p>
+<p class='meta' id='generated'></p>
+<div class='controls'>
+<label id='guided-wrap'>Guided view<select id='guided'><option value=''>Choose a saved view</option></select></label>
+<label>Panels<select id='panels'></select></label>
+<label>Camera sync<select id='sync'><option value='rotation'>Rotation only</option><option value='full'>Rotation and zoom</option><option value='off'>Independent</option></select></label>
+<button id='previous'>Previous</button><button id='next'>Next</button><button id='play'>Play cycle</button>
+<label>Interval (seconds)<input id='interval' type='number' min='0.5' max='20' step='0.5' value='2'></label>
+<label>Representation<select id='style'><option value='cartoon'>Cartoon</option><option value='stick'>Sticks</option><option value='sphere'>Spheres</option><option value='line'>Lines</option></select></label>
+<label>Colors<select id='colors'><option value='plddt'>pLDDT</option><option value='structure'>Model color</option><option value='chain'>Chain</option><option value='spectrum'>Spectrum</option><option value='element'>Element</option></select></label>
+<label>Background<select id='background'><option value='dark'>Dark</option><option value='light'>Light</option><option value='white'>White</option><option value='transparent'>Transparent</option></select></label>
+<button id='spin'>Spin</button><button id='fit'>Fit</button><button id='fullscreen'>Full screen</button><button id='png'>Download PNG</button><button id='video'>Record video</button>
+</div>
+<div id='caption' hidden></div>
+<div class='legend' id='legend'><span><i class='swatch vlow'></i>&lt;50</span><span><i class='swatch low'></i>50–70</span><span><i class='swatch conf'></i>70–90</span><span><i class='swatch vhigh'></i>≥90</span></div>
+<div id='view'></div>
+<div id='status'><span id='name'></span><span id='score'></span><span id='model-confidence'></span><span id='position'></span></div>
+<div id='pae-wrap' hidden><canvas id='pae' width='360' height='360' aria-label='Predicted aligned error heatmap'></canvas><div id='pae-detail'>Predicted aligned error (Å)</div></div>
+<p class='tips'>Drag any panel to rotate them all · scroll to zoom · click a panel to focus it for the readout and PAE · <kbd>←</kbd> <kbd>→</kbd> step every panel · <kbd>Space</kbd> plays · <kbd>F</kbd> fits · <kbd>S</kbd> spins</p>
+<script src='https://cdnjs.cloudflare.com/ajax/libs/3Dmol/2.4.2/3Dmol-min.js'><\/script>
+<script>
+const structures=${data.structures};
+const savedViews=${data.views};
+const metadata=${data.metadata};
+const initial=${data.initial};
+const el = id => document.getElementById(id);
+const MAX_PANES = 6;
+const panes = [];
+let timer = 0, spinning = false, syncing = false, syncFrame = 0, focused = 0, recording = false;
+const title = el('project-title');
+if (metadata.title) { title.hidden = false; title.textContent = metadata.title; }
+el('project-meta').textContent = [metadata.source, metadata.method, metadata.notes].filter(Boolean).join(' · ');
+el('generated').textContent = 'Interactive report generated by Protein Structure Viewer ' + initial.version + ' on ' + initial.generated + '. Predicted structures are predictions, not experimental determinations.' + (initial.aligned ? ' Superposed models are shown in their aligned positions.' : '');
+const guided = el('guided'), guidedWrap = el('guided-wrap');
+if (!savedViews.length) guidedWrap.hidden = true;
+savedViews.forEach((v, i) => { const o = document.createElement('option'); o.value = i; o.textContent = String.fromCharCode(65 + i) + ' · ' + v.name; guided.append(o); });
+const panelSelect = el('panels');
+for (let n = 1; n <= Math.min(MAX_PANES, Math.max(1, structures.length)); n++) panelSelect.append(new Option(n === 1 ? '1 panel' : n + ' panels', String(n)));
+if (['cartoon', 'stick', 'sphere', 'line'].includes(initial.representation)) el('style').value = initial.representation;
+if (['plddt', 'structure', 'chain', 'spectrum', 'element'].includes(initial.colorMode)) el('colors').value = initial.colorMode;
+el('sync').value = initial.sync === 'full' ? 'full' : 'rotation';
+el('video').textContent = 'Record ' + initial.seconds + 's video';
+function pcolor(v) { return v < 50 ? '#ff7d45' : v < 70 ? '#ffdb13' : v < 90 ? '#65cbf3' : '#0053d6'; }
+function mean(a) { return a.length ? a.reduce((s, v) => s + v, 0) / a.length : null; }
+function metric(v, d) { return Number.isFinite(Number(v)) ? Number(v).toFixed(d === undefined ? 3 : d) : '—'; }
+function backgroundFor(mode) { if (mode === 'white') return { color: '#ffffff', alpha: 1 }; if (mode === 'light') return { color: '#e2e8f0', alpha: 1 }; if (mode === 'transparent') return { color: '#ffffff', alpha: 0 }; return { color: '#0f172a', alpha: 1 }; }
+function columnsFor(n) { return n <= 3 ? n : n <= 4 ? 2 : 3; }
+function layout() {
+  const view = el('view'), n = panes.length, cols = columnsFor(n), rows = Math.ceil(n / cols);
+  view.style.gridTemplateColumns = 'repeat(' + cols + ', minmax(0, 1fr))';
+  const full = document.fullscreenElement === view;
+  const height = full ? 'calc((100vh - ' + (rows * 58 + (rows - 1) * 8 + 16) + 'px) / ' + rows + ')' : n <= 2 ? 'clamp(300px, 62vh, 720px)' : n <= 4 ? 'clamp(240px, 40vh, 480px)' : 'clamp(200px, 32vh, 400px)';
+  panes.forEach(p => { p.stage.style.height = height; });
+  requestAnimationFrame(() => panes.forEach(p => { p.viewer.resize(); p.viewer.render(); }));
+}
+function styleSpec(s) {
+  const rep = el('style').value, mode = el('colors').value;
+  let options = { color: s.color };
+  if (mode === 'plddt') options = { colorfunc: a => pcolor(Number(a.b || 0)) };
+  if (mode === 'chain') options = { colorscheme: 'chainHetatm' };
+  if (mode === 'spectrum') options = { colorscheme: 'spectrum' };
+  if (mode === 'element') options = { colorscheme: 'default' };
+  if (rep === 'line') options.linewidth = 2;
+  const spec = {}; spec[rep] = options; return spec;
+}
+function copyView(source, target) {
+  const mode = el('sync').value; if (mode === 'off') return;
+  const from = source.getView();
+  if (mode === 'full') { target.setView(from); return; }
+  const own = target.getView();
+  target.setView([own[0], own[1], own[2], own[3], from[4], from[5], from[6], from[7]]);
+}
+const lastViews = new Map();
+function sameView(a, b) { if (!a || !b || a.length !== b.length) return false; for (let i = 0; i < a.length; i++) if (Math.abs(a[i] - b[i]) > 1e-9) return false; return true; }
+function seedViews() { panes.forEach(p => lastViews.set(p, p.viewer.getView())); }
+function syncNow(pane) {
+  if (!pane || el('sync').value === 'off' || panes.length < 2) { seedViews(); return; }
+  panes.forEach(p => { if (p !== pane) copyView(pane.viewer, p.viewer); });
+  seedViews();
+}
+function syncTick() {
+  if (panes.length > 1 && el('sync').value !== 'off') {
+    const changed = panes.find(p => !sameView(lastViews.get(p), p.viewer.getView()));
+    if (changed) syncNow(changed);
+  }
+  requestAnimationFrame(syncTick);
+}
+requestAnimationFrame(syncTick);
+function show(pane, preserveView) {
+  const oldView = preserveView ? pane.viewer.getView() : null;
+  pane.index = ((pane.index % structures.length) + structures.length) % structures.length;
+  pane.select.value = String(pane.index);
+  const s = structures[pane.index];
+  pane.viewer.removeAllModels(); pane.viewer.removeAllLabels(); pane.viewer.removeAllShapes();
+  const m = pane.viewer.addModel(s.text, s.format);
+  if (Array.isArray(s.coords)) m.selectedAtoms({}).forEach((a, i) => { if (s.coords.length >= i * 3 + 3) { a.x = s.coords[i * 3]; a.y = s.coords[i * 3 + 1]; a.z = s.coords[i * 3 + 2]; } });
+  m.setStyle({}, styleSpec(s));
+  (s.labels || []).forEach(l => pane.viewer.addLabel(l.text, { position: { x: l.x, y: l.y, z: l.z }, backgroundColor: '#fff', fontColor: '#111827', borderColor: '#94a3b8', borderThickness: 1, fontSize: 12, inFront: true }));
+  (s.shapes || []).forEach(sh => {
+    if (sh.kind === 'arrow') pane.viewer.addArrow({ start: sh.start, end: sh.end, radius: sh.radius, radiusRatio: 2.2, mid: 0.72, color: sh.color });
+    else if (sh.kind === 'cylinder') pane.viewer.addCylinder({ start: sh.start, end: sh.end, radius: sh.radius, color: sh.color, dashed: !!sh.dashed, fromCap: 1, toCap: 1 });
+    else if (sh.kind === 'line') pane.viewer.addLine({ start: sh.start, end: sh.end, color: sh.color, dashed: !!sh.dashed, linewidth: 2 });
+    else if (sh.kind === 'sphere') pane.viewer.addSphere({ center: sh.center, radius: sh.radius, color: sh.color, alpha: sh.alpha === undefined ? 1 : sh.alpha });
+    else if (sh.kind === 'label') pane.viewer.addLabel(sh.text, { position: sh.position, backgroundColor: '#fff', fontColor: sh.color || '#111827', borderColor: sh.color || '#94a3b8', borderThickness: 1, fontSize: Math.round(13 * (sh.size || 1)), inFront: true, backgroundOpacity: 0.85 });
+  });
+  if (panes.indexOf(pane) === 0) (initial.screenText || []).forEach(t => {
+    const w = pane.stage.clientWidth || 800, h = pane.stage.clientHeight || 480, margin = 16, right = t.corner.endsWith('right'), bottom = t.corner.startsWith('bottom');
+    pane.viewer.addLabel(t.text, { position: { x: right ? w - margin : margin, y: bottom ? h - margin : margin, z: 0 }, useScreen: true, alignment: (bottom ? 'bottom' : 'top') + (right ? 'Right' : 'Left'), backgroundColor: '#fff', fontColor: t.color, borderColor: t.color, borderThickness: 1, fontSize: Math.round(16 * (t.size || 1)), inFront: true, backgroundOpacity: 0.85 });
+  });
+  if (oldView) pane.viewer.setView(oldView); else pane.viewer.zoomTo();
+  pane.viewer.render();
+  lastViews.set(pane, pane.viewer.getView());
+  pane.plddt = mean(m.selectedAtoms({}).filter(a => a.atom === 'CA' && Number.isFinite(Number(a.b))).map(a => Number(a.b)));
+  const c = s.confidence || {};
+  pane.stats.textContent = (pane.plddt === null ? 'pLDDT —' : 'pLDDT ' + pane.plddt.toFixed(1)) + (Number.isFinite(Number(c.iptm)) ? ' · ipTM ' + metric(c.iptm, 2) : Number.isFinite(Number(c.ptm)) ? ' · pTM ' + metric(c.ptm, 2) : '');
+  if (panes[focused] === pane) describe(pane);
+}
+function describe(pane) {
+  const s = structures[pane.index], c = s.confidence || {};
+  el('name').textContent = s.name;
+  el('score').textContent = pane.plddt === null ? 'Mean pLDDT —' : 'Mean pLDDT ' + pane.plddt.toFixed(1);
+  el('model-confidence').textContent = 'pTM ' + metric(c.ptm) + ' · ipTM ' + metric(c.iptm) + ' · ranking ' + metric(c.rankingScore) + (c.hasClash ? ' · clash warning' : '');
+  el('position').textContent = (pane.index + 1) + ' / ' + structures.length + (panes.length > 1 ? ' · panel ' + (panes.indexOf(pane) + 1) : '');
+  drawPae(s);
+}
+function focusPane(pane) {
+  if (!pane) return;
+  focused = Math.max(0, panes.indexOf(pane));
+  panes.forEach(p => p.element.classList.toggle('is-focused', p === pane));
+  describe(pane);
+}
+function drawPae(s) {
+  const wrap = el('pae-wrap'), c = s.confidence || {}, matrix = c.pae;
+  if (!Array.isArray(matrix) || !matrix.length) { wrap.hidden = true; return; }
+  wrap.hidden = false;
+  const canvas = el('pae'), ctx = canvas.getContext('2d'), image = ctx.createImageData(canvas.width, canvas.height);
+  let max = 1;
+  matrix.forEach(r => r.forEach(v => { if (Number.isFinite(Number(v))) max = Math.max(max, Number(v)); }));
+  for (let y = 0; y < canvas.height; y++) {
+    const row = matrix[Math.min(matrix.length - 1, Math.floor(y * matrix.length / canvas.height))] || [];
+    for (let x = 0; x < canvas.width; x++) {
+      const v = Number(row[Math.min(row.length - 1, Math.floor(x * row.length / canvas.width))]) || 0, t = Math.max(0, Math.min(1, v / max)), o = (y * canvas.width + x) * 4;
+      image.data[o] = Math.round(255 * t); image.data[o + 1] = Math.round(83 + 136 * t); image.data[o + 2] = Math.round(214 - 195 * t); image.data[o + 3] = 255;
+    }
+  }
+  ctx.putImageData(image, 0, 0);
+  el('pae-detail').textContent = 'PAE · ' + (c.paeOriginalSize || matrix.length) + ' × ' + (c.paeOriginalSize || matrix.length) + ' tokens · maximum ' + max.toFixed(1) + ' Å' + (c.paeDownsampled ? ' · heatmap downsampled for report' : '');
+}
+function addPane(index) {
+  const element = document.createElement('div'); element.className = 'pane';
+  const head = document.createElement('div'); head.className = 'pane-head';
+  const select = document.createElement('select'); select.className = 'pane-model'; select.setAttribute('aria-label', 'Model shown in this panel');
+  structures.forEach((s, i) => select.append(new Option(s.name, String(i))));
+  const stats = document.createElement('span'); stats.className = 'pane-stats';
+  head.append(select, stats);
+  const stage = document.createElement('div'); stage.className = 'stage';
+  element.append(head, stage); el('view').append(element);
+  const viewer = $3Dmol.createViewer(stage, { backgroundColor: '#ffffff', backgroundAlpha: 0, antialias: true });
+  const pane = { element, stage, select, stats, viewer, index, plddt: null };
+  const bg = backgroundFor(el('background').value); viewer.setBackgroundColor(bg.color, bg.alpha);
+  select.addEventListener('change', () => { stop(); pane.index = Number(select.value); show(pane, true); focusPane(pane); });
+  stage.addEventListener('pointerdown', () => focusPane(pane));
+  new ResizeObserver(() => viewer.resize()).observe(stage);
+  panes.push(pane);
+  return pane;
+}
+function removePane() {
+  const pane = panes.pop(); if (!pane) return;
+  lastViews.delete(pane);
+  const canvas = pane.stage.querySelector('canvas');
+  const gl = canvas && (canvas.getContext('webgl2') || canvas.getContext('webgl'));
+  const lose = gl && gl.getExtension('WEBGL_lose_context'); if (lose) lose.loseContext();
+  pane.element.remove();
+  if (focused >= panes.length && panes.length) focusPane(panes[panes.length - 1]);
+}
+function setPanels(count) {
+  count = Math.max(1, Math.min(MAX_PANES, structures.length, Number(count) || 1));
+  while (panes.length > count) removePane();
+  while (panes.length < count) { const last = panes[panes.length - 1]; show(addPane(last ? last.index + 1 : 0), false); }
+  panelSelect.value = String(panes.length);
+  layout();
+  syncNow(panes[0]);
+  applySpin();
+}
+function shift(delta) { panes.forEach(p => { p.index += delta; show(p, true); }); }
+function refreshAll() { panes.forEach(p => show(p, true)); }
+function stop() { clearInterval(timer); timer = 0; el('play').textContent = 'Play cycle'; }
+function play() { if (timer) { stop(); return; } const seconds = Math.max(0.5, Number(el('interval').value) || 2); timer = setInterval(() => shift(1), seconds * 1000); el('play').textContent = 'Pause cycle'; }
+function applySpin() {
+  panes.forEach((p, i) => p.viewer.spin(spinning && (i === 0 || el('sync').value === 'off') ? 'y' : false));
+  el('spin').textContent = spinning ? 'Stop spin' : 'Spin';
+}
+function fit() { panes.forEach(p => { p.viewer.zoomTo(); p.viewer.render(); }); syncNow(panes[0]); }
+function applyBackground() {
+  const mode = el('background').value, bg = backgroundFor(mode);
+  panes.forEach(p => { p.viewer.setBackgroundColor(bg.color, bg.alpha); p.viewer.render(); });
+  document.body.dataset.background = mode;
+}
+function guide(i) {
+  const v = savedViews[Number(i)]; if (!v) return; stop();
+  if (v.representation) el('style').value = v.representation;
+  if (v.colorMode) el('colors').value = v.colorMode;
+  const extra = v.sideBySide ? (Array.isArray(v.comparePanels) ? v.comparePanels : (v.rightModel ? [v.rightModel] : [])) : [];
+  const indices = [v.activeModel].concat(extra).map(n => structures.findIndex(s => s.name === n)).filter(k => k >= 0);
+  if (indices.length) { setPanels(indices.length); indices.forEach((idx, k) => { panes[k].index = idx; }); }
+  panes.forEach(p => show(p, false));
+  if (v.camera) { panes[0].viewer.setView(v.camera); panes[0].viewer.render(); }
+  const cameras = Array.isArray(v.panelCameras) ? v.panelCameras : [];
+  cameras.forEach((cam, k) => { if (cam && panes[k + 1]) { panes[k + 1].viewer.setView(cam); panes[k + 1].viewer.render(); } });
+  if (!cameras.length) syncNow(panes[0]);
+  focusPane(panes[0]);
+  el('legend').hidden = el('colors').value !== 'plddt';
+  const caption = el('caption'); caption.hidden = false;
+  caption.textContent = String.fromCharCode(65 + Number(i)) + ' · ' + v.name + (v.caption ? ' — ' + v.caption : '');
+}
+function loadImage(uri) { return new Promise((resolve, reject) => { const img = new Image(); img.onload = () => resolve(img); img.onerror = reject; img.src = uri; }); }
+async function downloadPng() {
+  if (panes.length === 1) { const a = document.createElement('a'); a.href = panes[0].viewer.pngURI(); a.download = 'protein-model.png'; a.click(); return; }
+  const images = await Promise.all(panes.map(p => loadImage(p.viewer.pngURI())));
+  const cols = columnsFor(panes.length), rows = Math.ceil(panes.length / cols);
+  const w = Math.max.apply(null, images.map(i => i.width)), h = Math.max.apply(null, images.map(i => i.height)), cap = Math.round(h * 0.09);
+  const canvas = document.createElement('canvas'); canvas.width = cols * w; canvas.height = rows * (h + cap);
+  const ctx = canvas.getContext('2d'), dark = el('background').value === 'dark';
+  ctx.fillStyle = dark ? '#0f172a' : '#ffffff'; ctx.fillRect(0, 0, canvas.width, canvas.height);
+  images.forEach((img, i) => {
+    const x = (i % cols) * w, y = Math.floor(i / cols) * (h + cap);
+    ctx.drawImage(img, x, y);
+    ctx.fillStyle = dark ? '#f8fafc' : '#111827'; ctx.textBaseline = 'middle';
+    ctx.font = '700 ' + Math.round(cap * 0.46) + 'px system-ui';
+    ctx.fillText(String.fromCharCode(65 + i), x + Math.round(w * 0.025), y + h + cap / 2);
+    ctx.font = '500 ' + Math.round(cap * 0.34) + 'px system-ui';
+    const s = structures[panes[i].index];
+    ctx.fillText(s.name + (panes[i].plddt === null ? '' : ' · mean pLDDT ' + panes[i].plddt.toFixed(1)), x + Math.round(w * 0.08), y + h + cap / 2);
+  });
+  const a = document.createElement('a'); a.href = canvas.toDataURL('image/png'); a.download = 'protein-comparison-' + panes.length + '-panels.png'; a.click();
+}
+function record() {
+  if (recording) return;
+  if (typeof MediaRecorder === 'undefined' || !HTMLCanvasElement.prototype.captureStream) { alert('Video recording is not supported by this browser. Chrome and Firefox support it; Safari does not.'); return; }
+  const button = el('video'), seconds = initial.seconds;
+  const sources = panes.map(p => p.stage.querySelector('canvas')).filter(Boolean);
+  if (!sources.length) return;
+  const cols = columnsFor(sources.length), rows = Math.ceil(sources.length / cols);
+  const w = Math.max.apply(null, sources.map(c => c.width)), h = Math.max.apply(null, sources.map(c => c.height));
+  const composite = document.createElement('canvas'); composite.width = cols * w; composite.height = rows * h;
+  const ctx = composite.getContext('2d'), bg = backgroundFor(el('background').value);
+  let frame = 0;
+  const draw = () => { ctx.fillStyle = bg.alpha ? bg.color : '#ffffff'; ctx.fillRect(0, 0, composite.width, composite.height); sources.forEach((c, i) => ctx.drawImage(c, (i % cols) * w, Math.floor(i / cols) * h, w, h)); frame = requestAnimationFrame(draw); };
+  const stream = composite.captureStream(30);
+  const type = MediaRecorder.isTypeSupported('video/webm;codecs=vp9') ? 'video/webm;codecs=vp9' : 'video/webm';
+  const recorder = new MediaRecorder(stream, { mimeType: type }), chunks = [];
+  const wasSpinning = spinning;
+  recorder.ondataavailable = e => { if (e.data.size) chunks.push(e.data); };
+  recorder.onstop = () => {
+    cancelAnimationFrame(frame); stream.getTracks().forEach(t => t.stop());
+    spinning = wasSpinning; applySpin();
+    const url = URL.createObjectURL(new Blob(chunks, { type: 'video/webm' })), a = document.createElement('a');
+    a.href = url; a.download = 'protein-spin.webm'; a.click(); setTimeout(() => URL.revokeObjectURL(url), 1000);
+    recording = false; button.disabled = false; button.textContent = 'Record ' + seconds + 's video';
+  };
+  recording = true; button.disabled = true; button.textContent = 'Recording…';
+  spinning = true; applySpin(); draw(); recorder.start();
+  setTimeout(() => recorder.stop(), seconds * 1000);
+}
+guided.addEventListener('change', e => guide(e.target.value));
+panelSelect.addEventListener('change', e => { stop(); setPanels(e.target.value); });
+el('sync').addEventListener('change', () => { applySpin(); syncNow(panes[focused] || panes[0]); });
+el('previous').onclick = () => { stop(); shift(-1); };
+el('next').onclick = () => { stop(); shift(1); };
+el('play').onclick = play;
+el('style').onchange = refreshAll;
+el('colors').onchange = () => { refreshAll(); el('legend').hidden = el('colors').value !== 'plddt'; };
+el('background').onchange = applyBackground;
+el('spin').onclick = () => { spinning = !spinning; applySpin(); };
+el('fit').onclick = fit;
+el('fullscreen').onclick = () => { const view = el('view'); if (document.fullscreenElement) document.exitFullscreen(); else if (view.requestFullscreen) view.requestFullscreen(); };
+document.addEventListener('fullscreenchange', () => { el('fullscreen').textContent = document.fullscreenElement ? 'Exit full screen' : 'Full screen'; layout(); });
+el('png').onclick = downloadPng;
+el('video').onclick = record;
+window.addEventListener('keydown', e => {
+  if (e.target instanceof Element && e.target.matches('input,select,textarea')) return;
+  if (e.key === 'ArrowLeft') { stop(); shift(-1); }
+  if (e.key === 'ArrowRight') { stop(); shift(1); }
+  if (e.key === ' ') { e.preventDefault(); play(); }
+  if (e.key === 'f' || e.key === 'F') fit();
+  if (e.key === 's' || e.key === 'S') { spinning = !spinning; applySpin(); }
+});
+const startIndices = (initial.panels || []).map(n => structures.findIndex(s => s.name === n)).filter(k => k >= 0);
+setPanels(Math.max(1, startIndices.length));
+startIndices.forEach((idx, k) => { if (panes[k]) panes[k].index = idx; });
+panes.forEach(p => show(p, false));
+if (initial.camera && panes[0]) { const own = panes[0].viewer.getView(); panes[0].viewer.setView([own[0], own[1], own[2], own[3], initial.camera[4], initial.camera[5], initial.camera[6], initial.camera[7]]); panes[0].viewer.render(); }
+syncNow(panes[0]);
+focusPane(panes[0]);
+el('legend').hidden = el('colors').value !== 'plddt';
+applyBackground();
+<\/script></main></body></html>`;
   }
 
   /* ---------- Appearance theme ---------- */
@@ -3092,7 +3999,7 @@ html>body{padding:0}</style>
     requestAnimationFrame(() => {
       viewer.resize();
       viewer.render();
-      if (compareViewer) { compareViewer.resize(); compareViewer.render(); }
+      comparePanels.forEach(panel => { if (panel.viewer) { panel.viewer.resize(); panel.viewer.render(); } });
     });
   }
 
@@ -3320,7 +4227,7 @@ html>body{padding:0}</style>
     viewer.removeAllModels();
     viewer.removeAllLabels();
     viewer.removeAllShapes();
-    if (compareViewer) { compareViewer.removeAllModels(); compareViewer.removeAllLabels(); compareViewer.removeAllShapes(); compareViewer.render(); }
+    comparePanels.forEach(destroyPanelViewer);
     releaseExportViewer();
     structures = [];
     activeId = null;
@@ -3330,6 +4237,12 @@ html>body{padding:0}</style>
     measurementRecords = [];
     measurementDraft = [];
     measurementActive = false;
+    annotationRecords = [];
+    annotationDraft = [];
+    annotationActive = false;
+    setButtonText(root.querySelector('#gpv-annotate'), 'Start drawing');
+    root.querySelector('#gpv-stage').classList.remove('is-drawing');
+    root.querySelector('#gpv-annotation-state').textContent = 'Pick a tool, start drawing, then click atoms in the main viewer.';
     savedViews = [];
     confidenceAssets = [];
     alignmentResults = [];
@@ -3339,6 +4252,7 @@ html>body{padding:0}</style>
     root.querySelector('#gpv-add-label').disabled = true;
     root.querySelector('#gpv-all-labels').checked = false;
     root.querySelector('#gpv-side-by-side').checked = false;
+    clearComparePanels();
     root.querySelector('#gpv-model-search').value = '';
     root.querySelector('#gpv-measure').textContent = 'Start measuring';
     root.querySelector('#gpv-measure-state').textContent = 'Measurement mode is off.';
@@ -3352,10 +4266,11 @@ html>body{padding:0}</style>
     renderAlignmentResults();
     renderSelectionList();
     renderMeasurementList();
+    renderAnnotationList();
     renderSavedViews();
     renderList();
     applyStyle();
-    renderCompareViewer();
+    renderComparePanels();
     announce('Cleared everything');
   });
   root.querySelector('#gpv-show-all').addEventListener('click', () => {
@@ -3368,29 +4283,46 @@ html>body{padding:0}</style>
     renderList();
     applyStyle();
   });
-  root.querySelector('#gpv-fit').addEventListener('click', () => { viewer.zoomTo(); viewer.render(); });
+  root.querySelector('#gpv-fit').addEventListener('click', () => { fitAllViews(); updateStatus('Fitted every panel'); });
   root.querySelector('#gpv-align').addEventListener('click', alignVisible);
   root.querySelector('#gpv-alignment-csv').addEventListener('click', downloadAlignmentCsv);
   root.querySelector('#gpv-restore').addEventListener('click', () => restoreCoordinates(true));
   root.querySelector('#gpv-add-label').addEventListener('click', addOrEditLabel);
   root.querySelector('#gpv-label-text').addEventListener('keydown', event => { if (event.key === 'Enter') addOrEditLabel(); });
-  root.querySelector('#gpv-all-labels').addEventListener('change', rebuildLabels);
+  root.querySelector('#gpv-all-labels').addEventListener('change', () => rebuildOverlays());
   root.querySelector('#gpv-clear-labels').addEventListener('click', () => {
     labelRecords = [];
     root.querySelector('#gpv-all-labels').checked = false;
     root.querySelector('#gpv-label-text').value = '';
-    rebuildLabels();
+    rebuildOverlays();
     updateStatus('Residue labels cleared');
   });
   root.querySelector('#gpv-add-selection').addEventListener('click', addSelection);
   root.querySelector('#gpv-selection-range').addEventListener('keydown', event => { if (event.key === 'Enter') addSelection(); });
   root.querySelector('#gpv-clear-selections').addEventListener('click', () => { selectionRecords = []; renderSelectionList(); applyStyle(); updateStatus('Selections cleared'); });
   root.querySelector('#gpv-measure').addEventListener('click', toggleMeasurement);
+  root.querySelector('#gpv-annotate').addEventListener('click', () => toggleAnnotating());
+  root.querySelector('#gpv-annotation-type').addEventListener('change', () => { annotationDraft = []; if (annotationActive) root.querySelector('#gpv-annotation-state').textContent = annotationPrompt(); });
+  root.querySelector('#gpv-annotation-size').addEventListener('input', () => { root.querySelector('#gpv-annotation-size-value').textContent = String(Number(root.querySelector('#gpv-annotation-size').value)) + '×'; });
+  root.querySelector('#gpv-add-screen-text').addEventListener('click', addScreenText);
+  root.querySelector('#gpv-screen-text').addEventListener('keydown', event => { if (event.key === 'Enter') addScreenText(); });
+  root.querySelector('#gpv-clear-annotations').addEventListener('click', () => { annotationRecords = []; annotationDraft = []; renderAnnotationList(); rebuildOverlays(); updateStatus('Annotations cleared'); });
   root.querySelector('#gpv-measure-type').addEventListener('change', () => { measurementDraft = []; if (measurementActive) root.querySelector('#gpv-measure-state').textContent = 'Select ' + (root.querySelector('#gpv-measure-type').value === 'angle' ? 3 : 2) + ' atoms in the viewer.'; });
-  root.querySelector('#gpv-clear-measurements').addEventListener('click', () => { measurementRecords = []; measurementDraft = []; renderMeasurementList(); rebuildMeasurements(); updateStatus('Measurements cleared'); });
-  root.querySelector('#gpv-side-by-side').addEventListener('change', () => { stopCycle(); const left = structures.find(entry => entry.id === Number(root.querySelector('#gpv-left-model').value)); if (left) activeId = left.id; applyStyle(); setTimeout(() => viewer.resize(), 0); });
-  root.querySelector('#gpv-left-model').addEventListener('change', event => { activeId = Number(event.target.value); root.querySelector('#gpv-current').value = event.target.value; applyStyle(); viewer.zoomTo(); viewer.render(); });
-  root.querySelector('#gpv-right-model').addEventListener('change', renderCompareViewer);
+  root.querySelector('#gpv-clear-measurements').addEventListener('click', () => { measurementRecords = []; measurementDraft = []; renderMeasurementList(); rebuildOverlays(); updateStatus('Measurements cleared'); });
+  root.querySelector('#gpv-side-by-side').addEventListener('change', event => {
+    stopCycle();
+    const left = structures.find(entry => entry.id === Number(root.querySelector('#gpv-left-model').value));
+    if (left) activeId = left.id;
+    if (event.target.checked && !comparePanels.length && structures.length) addComparePanel();
+    else applyStyle();
+    setTimeout(() => panelViewers().forEach(target => target.resize()), 0);
+    updateStatus(event.target.checked ? 'Synchronized multi-view on · drag any panel' : 'Single view');
+  });
+  root.querySelector('#gpv-left-model').addEventListener('change', event => { activeId = Number(event.target.value); root.querySelector('#gpv-current').value = event.target.value; applyStyle(); viewer.zoomTo(); viewer.render(); syncViewsFrom(viewer); });
+  root.querySelector('#gpv-sync-mode').addEventListener('change', () => { fitAllViews(); updateStatus(root.querySelector('#gpv-sync-mode').value === 'full' ? 'Cameras locked together' : 'Rotation shared · each panel keeps its own framing'); });
+  root.querySelector('#gpv-add-panel').addEventListener('click', () => { const panel = addComparePanel(); if (panel) updateStatus('Added panel ' + (comparePanels.length + 1) + ' · ' + ((entryById(panel.entryId) || {}).name || '')); });
+  root.querySelector('#gpv-clear-panels').addEventListener('click', () => { clearComparePanels(); applyStyle(); setTimeout(() => viewer.resize(), 0); updateStatus('Comparison panels removed'); });
+  root.querySelector('#gpv-compare-image').addEventListener('click', downloadComparisonPng);
   root.querySelector('#gpv-image').addEventListener('click', downloadPublicationPng);
   root.querySelector('#gpv-save-view').addEventListener('click', saveCurrentView);
   root.querySelector('#gpv-contact-sheet').addEventListener('click', downloadContactSheet);
@@ -3447,14 +4379,16 @@ html>body{padding:0}</style>
     if (event.key === '?') { event.preventDefault(); openHelp(); return; }
     if (event.key === 'Escape') {
       if (fullscreen) { setFullscreen(false); return; }
+      if (annotationActive) { toggleAnnotating(false); return; }
       if (measurementActive) { toggleMeasurement(); return; }
       return;
     }
     if (event.key === 'ArrowLeft') { event.preventDefault(); stopCycle(); selectRelative(-1); return; }
     if (event.key === 'ArrowRight') { event.preventDefault(); stopCycle(); selectRelative(1); return; }
     const key = event.key.toLowerCase();
-    if (key === 'f') { event.preventDefault(); if (event.shiftKey) setFullscreen(!fullscreen); else { viewer.zoomTo(); viewer.render(); } return; }
+    if (key === 'f') { event.preventDefault(); if (event.shiftKey) setFullscreen(!fullscreen); else fitAllViews(); return; }
     if (key === 'c' && !event.shiftKey) { event.preventDefault(); toggleCycle(); return; }
+    if (key === 's' && !event.shiftKey) { event.preventDefault(); toggleSpin(); return; }
     const tabIndex = Number(event.key) - 1;
     if (Number.isInteger(tabIndex) && tabIndex >= 0 && tabIndex < tabOrder.length) {
       event.preventDefault();
@@ -3463,17 +4397,34 @@ html>body{padding:0}</style>
     }
   });
   new ResizeObserver(() => viewer.resize()).observe(root.querySelector('#gpv-stage'));
-  new ResizeObserver(() => { if (compareViewer) compareViewer.resize(); }).observe(root.querySelector('#gpv-stage-compare'));
-  if (typeof viewer.setStateChangeCallback === 'function') viewer.setStateChangeCallback(() => {
-    if (!compareViewer || syncingView || compareSyncFrame || !root.querySelector('#gpv-side-by-side').checked) return;
-    compareSyncFrame = requestAnimationFrame(() => {
-      compareSyncFrame = 0;
-      if (!compareViewer || !root.querySelector('#gpv-side-by-side').checked) return;
-      syncingView = true;
-      if (typeof compareViewer.setView === 'function') compareViewer.setView(viewer.getView());
-      compareViewer.render(); syncingView = false;
-    });
-  });
+  /* ---------- Tips ---------- */
+
+  const tipsKey = 'protein-structure-viewer:tips-hidden';
+  const tips = [
+    'Drop several AlphaFold result ZIPs at once. Each becomes its own source you can filter by in the Models tab.',
+    'Compare → Synchronized multi-view shows up to six models side by side. Drag, spin, or rock any panel and the rest follow.',
+    'Pick Rotation only when the models differ in size, and Rotation and zoom after Align visible to inspect a superposition.',
+    'Colour by pLDDT confidence and switch to orthographic projection for figures; perspective exaggerates whatever is closest.',
+    'Save named views with captions in Publish. They become lettered figure panels, a caption file, and a guided tour in the report.',
+    'Share report packs coordinates, aligned positions, confidence, and PAE into one HTML file a reviewer opens with no install.',
+    'Keyboard: F refits every panel, S spins, C cycles models, ← → step through them, 1–6 jump between tabs, ? opens help.',
+    'Click any atom to read its residue and pLDDT, then add a label. Labels travel into the report and into PNG exports.',
+    'Download comparison PNG stitches the current panels into one lettered figure at the export size you chose.',
+    'Annotate → Figure annotations: start drawing, then click two atoms for an arrow or line, or one atom for a marker or callout.',
+    'Scene JSON records everything except coordinates. Archive it next to the structure files to rebuild a figure later.',
+    'Full screen (Shift+F) keeps every synchronized panel on screen, which works well for a live walkthrough with reviewers.'
+  ];
+  let tipIndex = Math.floor(Math.random() * tips.length);
+  function renderTip() {
+    root.querySelector('#gpv-tip').hidden = readJson(tipsKey, false) === true;
+    root.querySelector('#gpv-tip-text').textContent = tips[tipIndex % tips.length];
+  }
+  root.querySelector('#gpv-tip-next').addEventListener('click', () => { tipIndex += 1; renderTip(); });
+  root.querySelector('#gpv-tip-hide').addEventListener('click', () => { writeJson(tipsKey, true); renderTip(); updateStatus('Tips hidden · bring them back from the help dialog (?)'); });
+  root.querySelector('#gpv-tips-reset').addEventListener('click', () => { writeJson(tipsKey, false); tipIndex += 1; renderTip(); });
+  root.querySelector('#gpv-demo').addEventListener('click', () => { root.querySelector('#gpv-fetch-id').value = '1ubq'; root.querySelector('#gpv-fetch').click(); });
+  renderTip();
+  watchStageClicks();
   restorePreferences();
   applyTheme(readJson(themeKey, 'system'));
   selectToolTab('models');

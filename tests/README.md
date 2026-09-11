@@ -35,9 +35,11 @@ PSV_CHROMIUM=/opt/pw-browsers/chromium/chrome-linux/chrome npm test
 - Appearance: every representation, colour scheme, projection, background, motion;
   pLDDT legend; theme cycling; preference persistence across a reload
 - Compare: sequence-aware and identifier alignment, non-zero RMSD against a
-  deliberately different model, CSV export, synchronised side-by-side, restore
+  deliberately different model, CSV export, synchronised multi-view with a third panel that
+  follows a real drag on the primary, restore
 - Annotate: residue-range highlight, blank chain meaning every chain, rejection of an
-  unparseable range, label-every-residue
+  unparseable range, an arrow annotation from two real atom clicks plus a corner title,
+  label-every-residue
 - Confidence: metrics table, CSV export
 - Publish: export reachability, the busy state painting before the render blocks,
   button re-enabling, contact sheet, **the main viewport surviving seven off-screen
@@ -45,7 +47,8 @@ PSV_CHROMIUM=/opt/pw-browsers/chromium/chrome-linux/chrome npm test
 - Interface: help via `?`, `?` not hijacked while typing, full screen, cycle button
   keeping its icon, invalid fetch identifier
 - Generated report: renders, carries provenance, **keeps its canvas inside `#view`**,
-  guided views, navigation by real click, play/pause, element colouring
+  guided views, navigation by real click, play/pause, element colouring, two panels that
+  rotate together under a real drag
 
 The two emphasised checks are regressions against bugs that shipped in 2.0.
 

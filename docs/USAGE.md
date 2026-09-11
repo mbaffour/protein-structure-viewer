@@ -53,11 +53,12 @@ Anything the viewer cannot interpret is skipped and reported in the red notice b
 | --- | --- |
 | <kbd>←</kbd> / <kbd>→</kbd> | Previous / next model |
 | <kbd>C</kbd> | Start or pause automatic cycling |
-| <kbd>F</kbd> | Fit the view to what is displayed |
+| <kbd>F</kbd> | Fit every panel to what it displays |
+| <kbd>S</kbd> | Start or stop spinning |
 | <kbd>Shift</kbd> + <kbd>F</kbd> | Toggle full screen |
 | <kbd>1</kbd>–<kbd>6</kbd> | Jump to Models / Appearance / Annotate / Compare / Confidence / Publish |
 | <kbd>?</kbd> | Open in-app help |
-| <kbd>Esc</kbd> | Close help, leave full screen, or stop measurement mode |
+| <kbd>Esc</kbd> | Close help, leave full screen, or stop measuring or drawing |
 
 Shortcuts are suppressed while you are typing in a field.
 
@@ -88,7 +89,8 @@ sessions.
 
 ## Annotate tab
 
-**Inspecting.** Click any atom to see its model, residue, chain, atom name, and pLDDT.
+**Inspecting.** Click any atom to see its model, residue, chain, atom name, and pLDDT. Clicks pick
+the nearest atom within a few pixels, so a click on a cartoon ribbon lands on the closest Cα.
 
 **Labels.** With an atom selected, edit the suggested text and press **Add or update**. *Label every
 residue* annotates all Cα atoms of the current model — useful for small structures, unreadable for
@@ -101,6 +103,15 @@ range to every chain.
 **Measurements.** Choose distance (two atoms) or angle (three atoms), press **Start measuring**, and
 click the atoms in the viewport. Values update as coordinates change — so aligning models updates
 the distances between them. <kbd>Esc</kbd> leaves measurement mode.
+
+**Figure annotations.** Pick a tool, press **Start drawing**, and click atoms in the main viewer:
+an **arrow** or **line** joins two clicked atoms, a **residue marker** drops a translucent sphere on
+one atom, and a **text callout** places your text on a leader line pointing away from the model.
+Choose colour, size, dashed style, and optional label text before you click. **Screen text** adds a
+corner title (for panel letters or captions) that stays put while the model rotates. Annotations are
+anchored to atoms, so they follow rotation and alignment, and they are drawn into publication and
+comparison PNGs, comparison panels, and the shared report. Remove any one from the list, or clear
+them all. <kbd>Esc</kbd> stops drawing.
 
 ## Compare tab
 
@@ -119,8 +130,14 @@ paired Cα atoms, and reports per-model Cα pairs, sequence identity, RMSD, and 
 Alignment needs at least three paired Cα atoms. If nothing aligns, the models likely share no chains
 under the chosen mapping — try the sequence-aware mode.
 
-**Side-by-side.** Enable the synchronised view to put two models in adjacent viewports that share a
-camera. Rotating the left pane rotates the right one.
+**Synchronized multi-view.** Turn it on to place up to six models in linked viewports — the primary
+panel plus up to five more, each with its own model picker and name badge. Two or three panels sit in
+one row, four make a 2 × 2 grid, five or six use three columns. Dragging, wheel-zooming, spinning, or
+rocking any panel moves them all. **Camera sync** chooses what is shared: *Rotation only* keeps each
+model framed on its own centre, which suits assemblies of different size; *Rotation and zoom* locks
+the cameras completely, which suits superposed models after **Align visible**. **Fit** (or
+<kbd>F</kbd>) refits every panel. The panel set, sync mode, and each panel's camera are stored in saved
+views and scene manifests, and the shared report opens with the same panels.
 
 ## Confidence tab
 
@@ -144,6 +161,11 @@ Rendering is one long synchronous WebGL call, so the page stops responding while
 few seconds on a machine with a real GPU and considerably longer without one. A warning appears above
 6 megapixels. If you only need a figure for a slide, 1× scale is four times faster than 2×.
 
+**Comparison figure.** With the synchronized multi-view on, **Download comparison PNG** renders every
+panel at the chosen size and stitches them into one lettered figure with each model's name and mean
+pLDDT in a caption strip. The total is capped at roughly 24 megapixels, so six panels at a large
+size come out smaller per panel than one.
+
 **Video.** Record a 5, 10, or 15 second WebM of the structure spinning. Chrome and Firefox support
 this; Safari does not, and the viewer will say so.
 
@@ -151,10 +173,14 @@ this; Safari does not, and the viewer will say so.
 under a name and caption. Saved views can be reloaded, exported as a multi-panel contact sheet with
 lettered captions, exported as caption text, and followed as a guided tour inside the shared report.
 
-**Reports.** **Share report** builds a standalone HTML file with the coordinate data embedded.
-Choose whether it carries the models currently shown or every loaded model; the estimated size is
-shown before you build it. The report opens with no server and lets a reader pick models, navigate,
-cycle, follow your guided views, read pLDDT and PAE, and export their own PNG or video.
+**Reports.** **Share report** builds a standalone HTML file with the coordinate data embedded —
+including aligned positions if you superposed models, plus labels, measurements, and figure
+annotations. Choose whether it carries the models currently shown or every loaded model; the
+estimated size is shown before you build it. The report opens with no server and lets a reader show
+one to six synchronized panels (it starts with the panels you had open), pick a model per panel, step
+every panel forward and backward or cycle automatically, spin and fit them together, switch the
+background, follow your guided views, read pLDDT and PAE for the focused panel, and export a stitched
+lettered PNG or a composite video of their own.
 
 **Provenance.** Fill in the figure title, model source, method and version, and notes. These travel
 into the report header, the caption export, and the scene manifest.

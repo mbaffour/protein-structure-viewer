@@ -57,15 +57,19 @@ downloadable confidence-metrics CSV.
 
 **Compare.** Sequence-aware Cα alignment (global Needleman–Wunsch per chain pair, greedily matched)
 or strict chain/residue-ID alignment, with per-model aligned-residue count, sequence identity, chain
-mapping, and Cα RMSD, plus a CSV export and a one-click coordinate restore. Synchronised
-side-by-side view for two selected models.
+mapping, and Cα RMSD, plus a CSV export and a one-click coordinate restore. Synchronized
+multi-view of up to six models whose cameras follow each other — rotation only, so assemblies of
+different size stay framed, or rotation and zoom for superposed models.
 
 **Annotate.** Click any atom to inspect its model, residue, chain, atom name, and pLDDT. Add or edit
 custom residue labels, or label every residue in the current model. Highlight or hide chain/residue
-ranges, and add atom-to-atom distance or three-atom angle measurements.
+ranges, and add atom-to-atom distance or three-atom angle measurements. Draw figure annotations —
+arrows, lines, residue markers, text callouts, and corner titles — that follow rotation and alignment
+and appear in every export.
 
-**Publish.** Fixed-size, supersampled PNG export and 5-, 10-, or 15-second WebM spin-video export.
-Reusable named views with captions, multi-panel contact-sheet export, and caption-text export.
+**Publish.** Fixed-size, supersampled PNG export, a stitched lettered comparison figure of every
+synchronized panel, and 5-, 10-, or 15-second WebM spin-video export. Reusable named views with
+captions, multi-panel contact-sheet export, and caption-text export.
 Self-contained interactive HTML reports. Reproducible scene manifests carrying SHA-256 structure-file
 hashes, camera, model state, colours, labels, selections, measurements, saved views, comparison and
 alignment settings, and your provenance notes.
@@ -78,10 +82,12 @@ alignment settings, and your provenance notes.
    **Share report**.
 4. Open the resulting `protein-model-report.html` in any browser.
 
-The report *is* the figure: it embeds the coordinate data and lets a reader choose models, step
-forward and backward, cycle automatically, follow your saved guided views and captions, inspect
-pLDDT and PAE, and export a PNG or spin video of their own. Like the main viewer it loads 3Dmol.js
-from a CDN when opened.
+The report *is* the figure: it embeds the coordinate data — aligned positions included — and lets a
+reader show one to six synchronized panels, pick a model per panel, step every panel forward and
+backward, cycle automatically, spin and fit them together, switch the background, follow your saved
+guided views and captions, inspect pLDDT and PAE, and export a stitched PNG or composite video of
+their own. Labels, measurements, and figure annotations travel with it. Like the main viewer it
+loads 3Dmol.js from a CDN when opened.
 
 The Publish tab shows the estimated report size before you build it — embedding a few hundred models
 produces a file that is slow to open, so narrow the selection when the report is for a reviewer.
