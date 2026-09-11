@@ -1014,7 +1014,8 @@ html&gt;body{padding:0}&lt;/style&gt;
 (() =&gt; {
   const root = document.getElementById(&#x27;generic-protein-viewer&#x27;);
   const viewer = $3Dmol.createViewer(root.querySelector(&#x27;#gpv-stage&#x27;), {
-    backgroundColor: &#x27;rgba(0,0,0,0)&#x27;,
+    backgroundColor: &#x27;#ffffff&#x27;,
+    backgroundAlpha: 0,
     antialias: true
   });
   const palette = [&#x27;#8b5cf6&#x27;, &#x27;#06b6d4&#x27;, &#x27;#f97316&#x27;, &#x27;#22c55e&#x27;, &#x27;#ec4899&#x27;, &#x27;#eab308&#x27;, &#x27;#3b82f6&#x27;, &#x27;#ef4444&#x27;];
@@ -1038,6 +1039,7 @@ html&gt;body{padding:0}&lt;/style&gt;
   let compareViewer = null;
   let compareModel = null;
   let syncingView = false;
+  let compareSyncFrame = 0;
   let pendingScene = null;
   const viewerVersion = &#x27;2.0.0&#x27;;
   const labelColors = getComputedStyle(root);
@@ -1397,10 +1399,10 @@ html&gt;body{padding:0}&lt;/style&gt;
     });
     applySelections();
     root.querySelector(&#x27;#gpv-plddt-legend&#x27;).hidden = root.querySelector(&#x27;#gpv-color-mode&#x27;).value !== &#x27;plddt&#x27;;
-    viewer.render();
-    rebuildLabels();
-    rebuildMeasurements();
+    rebuildLabels(false);
+    rebuildMeasurements(false);
     renderCompareViewer();
+    viewer.render();
     renderConfidence();
     updateStatus();
   }
@@ -1528,17 +1530,16 @@ html&gt;body{padding:0}&lt;/style&gt;
     root.querySelector(&#x27;#gpv-current&#x27;).value = String(entry.id);
     root.querySelector(&#x27;#gpv-view-mode&#x27;).value = &#x27;single&#x27;;
     applyStyle();
-    if (fit) viewer.zoomTo({ model: entry.model.getID() });
-    viewer.render();
+    if (fit) { viewer.zoomTo({ model: entry.model.getID() }); viewer.render(); }
     updateStatus(&#x27;Showing &#x27; + entry.name);
   }
 
-  function selectRelative(delta) {
+  function selectRelative(delta, fit = true) {
     const candidates = visibleEntries();
     if (!candidates.length) return;
     let index = candidates.findIndex(entry =&gt; entry.id === activeId);
     if (index &lt; 0) index = 0;
-    selectModel(candidates[(index + delta + candidates.length) % candidates.length]);
+    selectModel(candidates[(index + delta + candidates.length) % candidates.length], fit);
   }
 
   function toggleCycle() {
@@ -1546,7 +1547,7 @@ html&gt;body{padding:0}&lt;/style&gt;
     if (!visibleEntries().length) return;
     root.querySelector(&#x27;#gpv-view-mode&#x27;).value = &#x27;single&#x27;;
     const delay = Math.max(500, Number(root.querySelector(&#x27;#gpv-cycle-speed&#x27;).value) * 1000);
-    cycleTimer = setInterval(() =&gt; selectRelative(1), delay);
+    cycleTimer = setInterval(() =&gt; selectRelative(1, false), delay);
     root.querySelector(&#x27;#gpv-cycle&#x27;).textContent = &#x27;Pause cycle&#x27;;
     selectModel(activeEntry(), false);
   }
@@ -1606,7 +1607,7 @@ html&gt;body{padding:0}&lt;/style&gt;
     };
   }
 
-  function rebuildLabels() {
+  function rebuildLabels(shouldRender = true) {
     viewer.removeAllLabels();
     const shownIds = new Set(displayedEntries().map(entry =&gt; entry.id));
     labelRecords.filter(label =&gt; shownIds.has(label.entryId)).forEach(label =&gt; {
@@ -1624,7 +1625,7 @@ html&gt;body{padding:0}&lt;/style&gt;
         });
       }
     }
-    viewer.render();
+    if (shouldRender) viewer.render();
   }
 
   function parseResidueRange(value) {
@@ -1704,7 +1705,7 @@ html&gt;body{padding:0}&lt;/style&gt;
     return Math.acos(Math.max(-1, Math.min(1, cosine))) * 180 / Math.PI;
   }
 
-  function rebuildMeasurements() {
+  function rebuildMeasurements(shouldRender = true) {
     viewer.removeAllShapes();
     measurementRecords.forEach(record =&gt; {
       const points = record.points.map(resolvePoint);
@@ -1716,7 +1717,7 @@ html&gt;body{padding:0}&lt;/style&gt;
       const position = record.type === &#x27;angle&#x27; ? points[1] : { x: (points[0].x + points[1].x) / 2, y: (points[0].y + points[1].y) / 2, z: (points[0].z + points[1].z) / 2 };
       viewer.addLabel(value === null ? &#x27;—&#x27; : value.toFixed(2) + (record.type === &#x27;distance&#x27; ? &#x27; Å&#x27; : &#x27;°&#x27;), labelStyle(position));
     });
-    viewer.render();
+    if (shouldRender) viewer.render();
   }
 
   function renderMeasurementList() {
@@ -1755,7 +1756,7 @@ html&gt;body{padding:0}&lt;/style&gt;
 
   function ensureCompareViewer() {
     if (compareViewer) return compareViewer;
-    compareViewer = $3Dmol.createViewer(root.querySelector(&#x27;#gpv-stage-compare&#x27;), { backgroundColor: &#x27;rgba(0,0,0,0)&#x27;, antialias: true });
+    compareViewer = $3Dmol.createViewer(root.querySelector(&#x27;#gpv-stage-compare&#x27;), { backgroundColor: &#x27;#ffffff&#x27;, backgroundAlpha: 0, antialias: true });
     applyAppearance();
     return compareViewer;
   }
@@ -2363,7 +2364,7 @@ html&gt;body{padding:0}&lt;/style&gt;
     const restore = captureViewState();
     if (state) applyViewState(state);
     const surface = document.createElement(&#x27;div&#x27;); surface.className = &#x27;gpv-export-surface&#x27;; surface.style.width = dimensions.width + &#x27;px&#x27;; surface.style.height = dimensions.height + &#x27;px&#x27;; root.append(surface);
-    const exportViewer = $3Dmol.createViewer(surface, { backgroundColor: &#x27;rgba(0,0,0,0)&#x27;, antialias: true, upscale: true });
+    const exportViewer = $3Dmol.createViewer(surface, { backgroundColor: &#x27;#ffffff&#x27;, backgroundAlpha: 0, antialias: true, upscale: true });
     const background = backgroundSpec(); exportViewer.setBackgroundColor(background.color, background.alpha);
     if (typeof exportViewer.setProjection === &#x27;function&#x27;) exportViewer.setProjection(root.querySelector(&#x27;#gpv-projection&#x27;).value);
     displayedEntries().forEach(entry =&gt; {
@@ -2472,15 +2473,15 @@ html&gt;body{padding:0}&lt;/style&gt;
       &quot;const structures=&quot; + payload + &quot;;&quot;,
       &quot;const savedViews=&quot; + reportViews + &quot;;const guided=document.getElementById(&#x27;guided&#x27;),guidedWrap=document.getElementById(&#x27;guided-wrap&#x27;);if(!savedViews.length)guidedWrap.hidden=true;savedViews.forEach((v,i)=&gt;{const o=document.createElement(&#x27;option&#x27;);o.value=i;o.textContent=String.fromCharCode(65+i)+&#x27; · &#x27;+v.name;guided.append(o)});&quot;,
       &quot;const metadata=&quot; + reportMetadata + &quot;;const title=document.getElementById(&#x27;project-title&#x27;);if(metadata.title){title.hidden=false;title.textContent=metadata.title}document.getElementById(&#x27;project-meta&#x27;).textContent=[metadata.source,metadata.method,metadata.notes].filter(Boolean).join(&#x27; · &#x27;);&quot;,
-      &quot;const viewer=$3Dmol.createViewer(document.getElementById(&#x27;view&#x27;),{backgroundColor:&#x27;rgba(0,0,0,0)&#x27;,antialias:true});let current=0,timer=0,spinning=false;&quot;,
+      &quot;const viewer=$3Dmol.createViewer(document.getElementById(&#x27;view&#x27;),{backgroundColor:&#x27;#ffffff&#x27;,backgroundAlpha:0,antialias:true});let current=0,timer=0,spinning=false;&quot;,
       &quot;const picker=document.getElementById(&#x27;model&#x27;);structures.forEach((s,i)=&gt;{const o=document.createElement(&#x27;option&#x27;);o.value=i;o.textContent=s.name;picker.append(o)});&quot;,
       &quot;function pcolor(v){return v&lt;50?&#x27;#ff7d45&#x27;:v&lt;70?&#x27;#ffdb13&#x27;:v&lt;90?&#x27;#65cbf3&#x27;:&#x27;#0053d6&#x27;}&quot;,
       &quot;function mean(a){return a.length?a.reduce((s,v)=&gt;s+v,0)/a.length:null}&quot;,
       &quot;function metric(v,d=3){return Number.isFinite(Number(v))?Number(v).toFixed(d):&#x27;—&#x27;}function drawPae(s){const wrap=document.getElementById(&#x27;pae-wrap&#x27;),c=s.confidence||{},matrix=c.pae;if(!Array.isArray(matrix)||!matrix.length){wrap.hidden=true;return}wrap.hidden=false;const canvas=document.getElementById(&#x27;pae&#x27;),ctx=canvas.getContext(&#x27;2d&#x27;),image=ctx.createImageData(canvas.width,canvas.height);let max=1;matrix.forEach(r=&gt;r.forEach(v=&gt;{if(Number.isFinite(Number(v)))max=Math.max(max,Number(v))}));for(let y=0;y&lt;canvas.height;y++){const row=matrix[Math.min(matrix.length-1,Math.floor(y*matrix.length/canvas.height))]||[];for(let x=0;x&lt;canvas.width;x++){const v=Number(row[Math.min(row.length-1,Math.floor(x*row.length/canvas.width))])||0,t=Math.max(0,Math.min(1,v/max)),o=(y*canvas.width+x)*4;image.data[o]=Math.round(255*t);image.data[o+1]=Math.round(83+136*t);image.data[o+2]=Math.round(214-195*t);image.data[o+3]=255}}ctx.putImageData(image,0,0);document.getElementById(&#x27;pae-detail&#x27;).textContent=&#x27;PAE · &#x27;+(c.paeOriginalSize||matrix.length)+&#x27; × &#x27;+(c.paeOriginalSize||matrix.length)+&#x27; tokens · maximum &#x27;+max.toFixed(1)+&#x27; Å&#x27;+(c.paeDownsampled?&#x27; · heatmap downsampled for report&#x27;:&#x27;&#x27;)}&quot;,
-      &quot;function show(i){current=(Number(i)+structures.length)%structures.length;picker.value=current;const s=structures[current];viewer.removeAllModels();viewer.removeAllLabels();const m=viewer.addModel(s.text,s.format);const rep=document.getElementById(&#x27;style&#x27;).value;const mode=document.getElementById(&#x27;colors&#x27;).value;let options={color:s.color};if(mode===&#x27;plddt&#x27;)options={colorfunc:a=&gt;pcolor(Number(a.b||0))};if(mode===&#x27;chain&#x27;)options={colorscheme:&#x27;chainHetatm&#x27;};if(mode===&#x27;spectrum&#x27;)options={colorscheme:&#x27;spectrum&#x27;};if(rep===&#x27;line&#x27;)options.linewidth=2;const spec={};spec[rep]=options;m.setStyle({},spec);(s.labels||[]).forEach(l=&gt;viewer.addLabel(l.text,{position:{x:l.x,y:l.y,z:l.z},backgroundColor:&#x27;#fff&#x27;,fontColor:&#x27;#111827&#x27;,borderColor:&#x27;#94a3b8&#x27;,borderThickness:1,fontSize:12,inFront:true}));viewer.zoomTo();viewer.render();const values=m.selectedAtoms({}).filter(a=&gt;a.atom===&#x27;CA&#x27;&amp;&amp;Number.isFinite(Number(a.b))).map(a=&gt;Number(a.b));const avg=mean(values),c=s.confidence||{};document.getElementById(&#x27;name&#x27;).textContent=s.name;document.getElementById(&#x27;score&#x27;).textContent=avg===null?&#x27;Mean pLDDT —&#x27;:&#x27;Mean pLDDT &#x27;+avg.toFixed(1);document.getElementById(&#x27;model-confidence&#x27;).textContent=&#x27;pTM &#x27;+metric(c.ptm)+&#x27; · ipTM &#x27;+metric(c.iptm)+&#x27; · ranking &#x27;+metric(c.rankingScore)+(c.hasClash?&#x27; · clash warning&#x27;:&#x27;&#x27;);document.getElementById(&#x27;position&#x27;).textContent=(current+1)+&#x27; / &#x27;+structures.length;drawPae(s)}&quot;,
+      &quot;function show(i,preserveView=false){const oldView=preserveView&amp;&amp;viewer.getView?viewer.getView():null;current=(Number(i)+structures.length)%structures.length;picker.value=current;const s=structures[current];viewer.removeAllModels();viewer.removeAllLabels();const m=viewer.addModel(s.text,s.format);const rep=document.getElementById(&#x27;style&#x27;).value;const mode=document.getElementById(&#x27;colors&#x27;).value;let options={color:s.color};if(mode===&#x27;plddt&#x27;)options={colorfunc:a=&gt;pcolor(Number(a.b||0))};if(mode===&#x27;chain&#x27;)options={colorscheme:&#x27;chainHetatm&#x27;};if(mode===&#x27;spectrum&#x27;)options={colorscheme:&#x27;spectrum&#x27;};if(rep===&#x27;line&#x27;)options.linewidth=2;const spec={};spec[rep]=options;m.setStyle({},spec);(s.labels||[]).forEach(l=&gt;viewer.addLabel(l.text,{position:{x:l.x,y:l.y,z:l.z},backgroundColor:&#x27;#fff&#x27;,fontColor:&#x27;#111827&#x27;,borderColor:&#x27;#94a3b8&#x27;,borderThickness:1,fontSize:12,inFront:true}));if(oldView&amp;&amp;viewer.setView)viewer.setView(oldView);else viewer.zoomTo();viewer.render();const values=m.selectedAtoms({}).filter(a=&gt;a.atom===&#x27;CA&#x27;&amp;&amp;Number.isFinite(Number(a.b))).map(a=&gt;Number(a.b));const avg=mean(values),c=s.confidence||{};document.getElementById(&#x27;name&#x27;).textContent=s.name;document.getElementById(&#x27;score&#x27;).textContent=avg===null?&#x27;Mean pLDDT —&#x27;:&#x27;Mean pLDDT &#x27;+avg.toFixed(1);document.getElementById(&#x27;model-confidence&#x27;).textContent=&#x27;pTM &#x27;+metric(c.ptm)+&#x27; · ipTM &#x27;+metric(c.iptm)+&#x27; · ranking &#x27;+metric(c.rankingScore)+(c.hasClash?&#x27; · clash warning&#x27;:&#x27;&#x27;);document.getElementById(&#x27;position&#x27;).textContent=(current+1)+&#x27; / &#x27;+structures.length;drawPae(s)}&quot;,
       &quot;function stop(){clearInterval(timer);timer=0;document.getElementById(&#x27;play&#x27;).textContent=&#x27;Play cycle&#x27;}&quot;,
       &quot;function guide(i){const v=savedViews[Number(i)];if(!v)return;stop();const modelIndex=structures.findIndex(s=&gt;s.name===v.activeModel);if(modelIndex&gt;=0)show(modelIndex);if(v.representation)document.getElementById(&#x27;style&#x27;).value=v.representation;if(v.colorMode)document.getElementById(&#x27;colors&#x27;).value=v.colorMode===&#x27;element&#x27;?&#x27;structure&#x27;:v.colorMode;if(modelIndex&gt;=0)show(modelIndex);if(v.camera&amp;&amp;viewer.setView)viewer.setView(v.camera);viewer.render();const caption=document.getElementById(&#x27;caption&#x27;);caption.hidden=false;caption.textContent=v.name+(v.caption?&#x27; — &#x27;+v.caption:&#x27;&#x27;)}&quot;,
-      &quot;function play(){if(timer){stop();return}const seconds=Math.max(.5,Number(document.getElementById(&#x27;interval&#x27;).value)||2);timer=setInterval(()=&gt;show(current+1),seconds*1000);document.getElementById(&#x27;play&#x27;).textContent=&#x27;Pause cycle&#x27;}&quot;,
+      &quot;function play(){if(timer){stop();return}const seconds=Math.max(.5,Number(document.getElementById(&#x27;interval&#x27;).value)||2);timer=setInterval(()=&gt;show(current+1,true),seconds*1000);document.getElementById(&#x27;play&#x27;).textContent=&#x27;Pause cycle&#x27;}&quot;,
       &quot;function record(){const canvas=document.querySelector(&#x27;#view canvas&#x27;),button=document.getElementById(&#x27;video&#x27;);if(!canvas||!canvas.captureStream||typeof MediaRecorder===&#x27;undefined&#x27;){alert(&#x27;Video recording is not supported by this browser.&#x27;);return}const stream=canvas.captureStream(30),type=MediaRecorder.isTypeSupported(&#x27;video/webm;codecs=vp9&#x27;)?&#x27;video/webm;codecs=vp9&#x27;:&#x27;video/webm&#x27;,recorder=new MediaRecorder(stream,{mimeType:type}),chunks=[];recorder.ondataavailable=e=&gt;{if(e.data.size)chunks.push(e.data)};recorder.onstop=()=&gt;{viewer.spin(false);stream.getTracks().forEach(t=&gt;t.stop());const url=URL.createObjectURL(new Blob(chunks,{type:&#x27;video/webm&#x27;})),a=document.createElement(&#x27;a&#x27;);a.href=url;a.download=&#x27;protein-spin.webm&#x27;;a.click();setTimeout(()=&gt;URL.revokeObjectURL(url),1000);button.disabled=false;button.textContent=&#x27;Record 5s video&#x27;};button.disabled=true;button.textContent=&#x27;Recording…&#x27;;viewer.spin(&#x27;y&#x27;,.8);recorder.start();setTimeout(()=&gt;recorder.stop(),5000)}&quot;,
       &quot;guided.addEventListener(&#x27;change&#x27;,e=&gt;guide(e.target.value));picker.addEventListener(&#x27;change&#x27;,e=&gt;{stop();show(e.target.value)});document.getElementById(&#x27;previous&#x27;).onclick=()=&gt;{stop();show(current-1)};document.getElementById(&#x27;next&#x27;).onclick=()=&gt;{stop();show(current+1)};document.getElementById(&#x27;play&#x27;).onclick=play;document.getElementById(&#x27;style&#x27;).onchange=()=&gt;show(current);document.getElementById(&#x27;colors&#x27;).onchange=()=&gt;show(current);document.getElementById(&#x27;spin&#x27;).onclick=()=&gt;{spinning=!spinning;viewer.spin(spinning?&#x27;y&#x27;:false);document.getElementById(&#x27;spin&#x27;).textContent=spinning?&#x27;Stop spin&#x27;:&#x27;Spin&#x27;};document.getElementById(&#x27;png&#x27;).onclick=()=&gt;{const a=document.createElement(&#x27;a&#x27;);a.href=viewer.pngURI();a.download=&#x27;protein-model.png&#x27;;a.click()};document.getElementById(&#x27;video&#x27;).onclick=record;window.addEventListener(&#x27;keydown&#x27;,e=&gt;{if(e.key===&#x27;ArrowLeft&#x27;){stop();show(current-1)}if(e.key===&#x27;ArrowRight&#x27;){stop();show(current+1)}});new ResizeObserver(()=&gt;viewer.resize()).observe(document.getElementById(&#x27;view&#x27;));show(0);&quot;,
       &quot;&lt;&quot; + &quot;/script&gt;&lt;/main&gt;&lt;/body&gt;&lt;/html&gt;&quot;
@@ -2660,10 +2661,14 @@ html&gt;body{padding:0}&lt;/style&gt;
   });
   new ResizeObserver(() =&gt; viewer.resize()).observe(root.querySelector(&#x27;#gpv-stage&#x27;));
   if (typeof viewer.setStateChangeCallback === &#x27;function&#x27;) viewer.setStateChangeCallback(() =&gt; {
-    if (!compareViewer || syncingView || !root.querySelector(&#x27;#gpv-side-by-side&#x27;).checked) return;
-    syncingView = true;
-    if (typeof compareViewer.setView === &#x27;function&#x27;) compareViewer.setView(viewer.getView());
-    compareViewer.render(); syncingView = false;
+    if (!compareViewer || syncingView || compareSyncFrame || !root.querySelector(&#x27;#gpv-side-by-side&#x27;).checked) return;
+    compareSyncFrame = requestAnimationFrame(() =&gt; {
+      compareSyncFrame = 0;
+      if (!compareViewer || !root.querySelector(&#x27;#gpv-side-by-side&#x27;).checked) return;
+      syncingView = true;
+      if (typeof compareViewer.setView === &#x27;function&#x27;) compareViewer.setView(viewer.getView());
+      compareViewer.render(); syncingView = false;
+    });
   });
   applyAppearance();
   updateStatus();
