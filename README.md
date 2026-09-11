@@ -1,80 +1,147 @@
 # Protein Structure Viewer
 
-A lightweight, single-file browser viewer for protein structures. Nothing is uploaded to a server: selected structure files are read locally by the browser.
+A single-file, browser-based viewer for predicted and experimental protein structures. It is built
+for the everyday work around a structure prediction run: look at the models, compare them, check
+what the confidence numbers actually say, annotate what matters, and get a figure or a shareable
+interactive report out the other end.
 
-## Launch locally
+Structure files you open stay in the browser. Nothing is uploaded.
 
-- macOS: double-click `Launch Protein Viewer.command`.
-- Any platform: open `index.html` in a modern browser.
+- **Live viewer:** <https://mbaffour.github.io/protein-structure-viewer/>
+- **Usage guide:** [`docs/USAGE.md`](docs/USAGE.md)
+- **Scientific and publication-readiness audit:** [`SCIENTIFIC-AUDIT.md`](SCIENTIFIC-AUDIT.md)
+- **Release notes:** [`CHANGELOG.md`](CHANGELOG.md)
 
-An internet connection is required when the page starts because it loads the [3Dmol.js](https://3dmol.org/) rendering library from a CDN.
+## Quick start
 
-## Load AlphaFold models
+1. Open the [hosted viewer](https://mbaffour.github.io/protein-structure-viewer/), or open
+   `index.html` from a local copy. On macOS you can double-click `Launch Protein Viewer.command`.
+2. Drop a `.pdb`, `.cif`/`.mmcif`, or a complete AlphaFold result `.zip` anywhere on the page.
+   You can also type an identifier and press **Fetch**:
+   - `1ubq` — a PDB entry from RCSB
+   - `P69905` — a UniProt accession, resolved against AlphaFold DB
+   - `AF-P0DTC2-F1` — an AlphaFold DB entry name
+3. Use the tool tabs underneath the viewport: **Models**, **Appearance**, **Annotate**,
+   **Compare**, **Confidence**, **Publish**.
 
-1. Download the result from AlphaFold Server or another prediction tool.
-2. Open the viewer.
-3. Drop one or several AlphaFold `.zip` archives directly onto the viewer, or use the visible file picker to select multiple `.zip`, `.pdb`, `.cif`, or `.mmcif` files.
+Press <kbd>?</kbd> in the viewer for keyboard shortcuts and inline help.
 
-When AlphaFold ZIPs are loaded, model structures are extracted automatically, grouped by source archive, and template-hit files are ignored. Multi-model archives open in one-at-a-time mode so the browser does not attempt to render every prediction as a single overlay. Large archives load models lazily and skip their very large `full_data` PAE payloads; those JSON files can still be added separately when needed.
+### What loads
 
-Multiple structures can be displayed together. Each loaded structure has its own visibility switch, color picker, mean pLDDT readout, and remove button.
+| You drop | What happens |
+| --- | --- |
+| `.pdb`, `.cif`, `.mmcif` | Loaded as a model |
+| AlphaFold result `.zip` | Every model is extracted and grouped under the archive name; template hits are ignored |
+| `*_confidences.json`, `*_summary_confidences.json` | pTM, ipTM, ranking score, clash flag, and PAE are attached to matching models |
+| `ranking_debug.json`, `ranking_scores.csv` | Ranks and ranking scores are attached to matching models |
+| A scene JSON saved from the Publish tab | The whole annotated scene is restored once its structures are present |
 
-## Features
+Multi-model archives open one model at a time so the browser does not try to render hundreds of
+predictions as a single overlay. Large archives load models lazily and skip their very large
+`full_data` PAE payloads; those files can still be added individually when you need them.
 
-- Multiple PDB, CIF, and mmCIF files—or a complete AlphaFold result ZIP—in one view
-- Reliable visible file picker, multi-ZIP drag-and-drop loading, progress feedback, automatic ZIP extraction, and show-all/hide-all controls
-- Source-archive filtering and model-name/stoichiometry search for large prediction collections
-- Lazy model rendering and guarded PAE import for archives containing hundreds of predictions
-- Automatic AlphaFold 2/3 confidence JSON and ranking CSV association when filenames match their models
-- Independent visibility and colors per structure
-- Full model names in the model list and navigator
-- Overlay mode or one-model-at-a-time mode, with previous/next controls, keyboard navigation, adjustable automatic cycling, and sorting by ranking score or mean pLDDT
-- Cartoon, stick, sphere, and line representations
-- Per-structure, per-chain, pLDDT, sequence-spectrum, and element color schemes
-- Perspective or orthographic projection plus transparent, white, dark, or custom backgrounds
-- Standard AlphaFold pLDDT legend and mean pLDDT calculation from Cα B-factor values
-- Interactive PAE heatmaps with residue/token inspection and PNG export
-- Model-level pTM, ipTM, ranking score, rank, and clash indicators, plus chain-pair ipTM and minimum PAE when available
-- Downloadable confidence-metrics CSV
-- Click any atom to inspect its model, residue, chain, atom name, and pLDDT
-- Add or edit custom residue labels, or label every residue in the current model
-- Highlight or hide chain/residue ranges and add atom-to-atom distance or three-atom angle measurements
-- Sequence-aware Cα alignment or strict chain/residue-ID alignment, with a one-click coordinate restore
-- Per-model aligned-residue count, sequence identity, chain mapping, Cα RMSD, and downloadable alignment CSV
-- Synchronized side-by-side comparison for two selected models
-- Spin and rocking animations with adjustable speed
-- Fixed-size, supersampled publication PNG export and 5-, 10-, or 15-second WebM spin-video export
-- Reusable named views with captions, multi-panel contact-sheet export, and caption-text export
-- Downloadable HTML reports with every selected model embedded
-- Previous/next navigation, automatic cycling, arrow-key navigation, guided saved views, captions, custom labels, pLDDT/PAE confidence, provenance, PNG export, and WebM spin-video recording inside generated reports
-- Reproducible scene manifests with SHA-256 structure-file hashes, camera, model state, colors, labels, selections, measurements, saved views, comparison settings, alignment settings, and scientific provenance
-- No build step, account, backend, or bundled example data
+## What it does
 
-## Create a shareable model report
+**Look at models.** Multiple structures at once with independent visibility, colour, and
+ranking-score readout per model. Overlay mode or one-at-a-time mode, with previous/next controls,
+arrow-key navigation, adjustable automatic cycling, and sorting by ranking score or mean pLDDT.
+Source-archive filtering and name/stoichiometry search keep large prediction sets navigable.
+Cartoon, stick, sphere, and line representations; per-structure, per-chain, pLDDT, sequence-spectrum,
+and element colouring; perspective or orthographic projection; transparent, white, dark, or custom
+backgrounds.
 
-1. Load all model files that should appear in the report.
+**Read the confidence.** Mean pLDDT from Cα B-factors with the standard AlphaFold legend.
+Model-level pTM, ipTM, ranking score, rank, and clash flag, plus chain-pair ipTM and minimum PAE
+when the data is there. Interactive PAE heatmaps with per-token inspection and PNG export, and a
+downloadable confidence-metrics CSV.
+
+**Compare.** Sequence-aware Cα alignment (global Needleman–Wunsch per chain pair, greedily matched)
+or strict chain/residue-ID alignment, with per-model aligned-residue count, sequence identity, chain
+mapping, and Cα RMSD, plus a CSV export and a one-click coordinate restore. Synchronised
+side-by-side view for two selected models.
+
+**Annotate.** Click any atom to inspect its model, residue, chain, atom name, and pLDDT. Add or edit
+custom residue labels, or label every residue in the current model. Highlight or hide chain/residue
+ranges, and add atom-to-atom distance or three-atom angle measurements.
+
+**Publish.** Fixed-size, supersampled PNG export and 5-, 10-, or 15-second WebM spin-video export.
+Reusable named views with captions, multi-panel contact-sheet export, and caption-text export.
+Self-contained interactive HTML reports. Reproducible scene manifests carrying SHA-256 structure-file
+hashes, camera, model state, colours, labels, selections, measurements, saved views, comparison and
+alignment settings, and your provenance notes.
+
+## Shareable reports
+
+1. Load the models that should appear in the report.
 2. Optionally save named views and captions in the **Publish** tab.
-3. Select **Share report**.
-4. Open the resulting `protein-model-report.html` in a browser.
+3. Choose whether the report carries the models currently shown or every loaded model, then select
+   **Share report**.
+4. Open the resulting `protein-model-report.html` in any browser.
 
-The report is the live figure: it embeds all loaded coordinate data and lets a reader choose models, move forward or backward, automatically cycle through them, or follow your saved guided views and captions. Like the main viewer, it loads 3Dmol.js from a CDN when opened.
+The report *is* the figure: it embeds the coordinate data and lets a reader choose models, step
+forward and backward, cycle automatically, follow your saved guided views and captions, inspect
+pLDDT and PAE, and export a PNG or spin video of their own. Like the main viewer it loads 3Dmol.js
+from a CDN when opened.
+
+The Publish tab shows the estimated report size before you build it — embedding a few hundred models
+produces a file that is slow to open, so narrow the selection when the report is for a reviewer.
+
+## Privacy and network use
+
+Files you open are read by the browser and never leave the machine. The page makes network requests
+in exactly two situations:
+
+- On load, to fetch the pinned 3Dmol.js, JSZip, and numeric.js libraries from `cdnjs.cloudflare.com`.
+  All three are integrity-pinned with SRI hashes, so a tampered or substituted file will not execute.
+- When you use **Fetch** to download a structure by identifier, to `files.rcsb.org` or
+  `alphafold.ebi.ac.uk`. That request sends only the identifier you typed.
+
+A Content-Security-Policy header restricts the page to exactly those origins. If the libraries cannot
+be reached, the viewer says so rather than failing silently.
 
 ## Scientific-use notes
 
-- pLDDT is a per-residue confidence measure. It does not by itself establish that a multimeric interface or relative chain placement is correct.
-- Alignment is intended for visual comparison of related models. Sequence-aware mode globally aligns amino-acid sequences and reports its chain mapping, identity, aligned Cα count, and RMSD; inspect those values before interpreting an overlay.
-- The generated report is a presentation artifact, not a replacement for the original coordinate files, AlphaFold confidence JSON, PAE plots, or experimental validation.
+- pLDDT is a per-residue confidence measure. It does not by itself establish that a multimeric
+  interface or the relative placement of chains is correct — read PAE and ipTM for that.
+- Alignment is for visual comparison of related models. Sequence-aware mode globally aligns amino-acid
+  sequences and reports its chain mapping, identity, aligned Cα count, and RMSD; inspect those values
+  before interpreting an overlay, and report them alongside any RMSD you quote.
+- Generated reports and exported images are presentation artefacts, not replacements for the original
+  coordinate files, confidence JSON, PAE data, or experimental validation.
+- Present predictions as predictions, and keep them distinct from experimentally determined structures.
 
-See [`SCIENTIFIC-AUDIT.md`](SCIENTIFIC-AUDIT.md) for the publication/reviewer-readiness audit and remaining roadmap.
+## Hosting it yourself
 
-## GitHub Pages
+The application is one self-contained `index.html` with no build step, so any static host works.
+For GitHub Pages: repository **Settings → Pages**, deploy from the `main` branch, root folder. The
+`.nojekyll` file is already present so the site is served verbatim.
 
-Because the application is a single `index.html`, it can be hosted directly with GitHub Pages. In repository settings, choose **Pages**, deploy from the `main` branch, and select the repository root.
+## Development
 
-## Privacy
+There is nothing to build or install — edit `index.html` and reload the page.
 
-Structure files remain in browser memory and are not transmitted by this application.
+A headless regression suite lives in [`tests/`](tests/):
+
+```
+cd tests && npm install && npm test
+```
+
+It drives the real viewer in Chromium and covers import, navigation, appearance, both alignment modes,
+annotation, confidence export, the full publish path, and the generated report. Run it before changing
+the alignment or export code.
+
+The file is laid out as: design-system CSS variables and base styles, the viewer markup, viewer-specific
+CSS, the main application script, and a small inline icon set and tooltip helper. The application
+script is a single IIFE holding all viewer state (`structures`, `labelRecords`, `selectionRecords`,
+`measurementRecords`, `savedViews`, `confidenceAssets`) and the functions that render from it.
+
+Third-party libraries are pinned by exact version *and* SRI hash. When bumping one, update the
+`integrity` attribute together with the URL — the authoritative hash is available from
+`https://api.cdnjs.com/libraries/<name>/<version>?fields=sri`.
 
 ## License
 
-MIT
+MIT — see [`LICENSE`](LICENSE).
+
+3Dmol.js, JSZip, and numeric.js are loaded at runtime under their own licences. The bundled icon set
+is from [Lucide](https://lucide.dev) (ISC).

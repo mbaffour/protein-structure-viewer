@@ -4,8 +4,11 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="referrer" content="no-referrer">
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'unsafe-inline' 'unsafe-eval' 'wasm-unsafe-eval' blob: data: https://cdnjs.cloudflare.com https://cdn.jsdelivr.net https://esm.sh https://fonts.bunny.net https://fonts.googleapis.com https://fonts.gstatic.com https://unpkg.com; style-src 'unsafe-inline' blob: data: https://cdnjs.cloudflare.com https://cdn.jsdelivr.net https://esm.sh https://fonts.bunny.net https://fonts.googleapis.com https://fonts.gstatic.com https://unpkg.com; img-src blob: data: https://cdnjs.cloudflare.com https://cdn.jsdelivr.net https://esm.sh https://fonts.bunny.net https://fonts.googleapis.com https://fonts.gstatic.com https://unpkg.com; font-src blob: data: https://cdnjs.cloudflare.com https://cdn.jsdelivr.net https://esm.sh https://fonts.bunny.net https://fonts.googleapis.com https://fonts.gstatic.com https://unpkg.com; media-src blob: data: https://cdnjs.cloudflare.com https://cdn.jsdelivr.net https://esm.sh https://fonts.bunny.net https://fonts.googleapis.com https://fonts.gstatic.com https://unpkg.com; worker-src blob:; connect-src blob: data:; frame-src 'none'; object-src 'none'; base-uri 'none'; form-action 'none'">
-<title>Generic Protein Viewer</title>
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self' 'unsafe-inline' 'unsafe-eval' 'wasm-unsafe-eval' blob: https://cdnjs.cloudflare.com; style-src 'self' 'unsafe-inline'; img-src 'self' blob: data:; font-src 'self' data:; media-src 'self' blob: data:; connect-src 'self' blob: data: https://files.rcsb.org https://alphafold.ebi.ac.uk; worker-src blob:; frame-src 'none'; object-src 'none'; base-uri 'none'; form-action 'none'">
+<title>Protein Structure Viewer</title>
+<meta name="description" content="A single-file, offline-capable browser viewer for AlphaFold and experimental protein structures: overlay, align, measure, inspect confidence, and export publication figures without uploading anything.">
+<meta name="color-scheme" content="light dark">
+<link rel="icon" type="image/svg+xml" href="data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' rx='7' fill='%23339cff'/><path d='M9 24c0-9 14-7 14-16' stroke='%23fff' stroke-width='2.6' stroke-linecap='round' fill='none'/><path d='M9 8c0 9 14 7 14 16' stroke='%23fff' stroke-width='2.6' stroke-linecap='round' fill='none' opacity='.55'/><circle cx='16' cy='16' r='2.6' fill='%23fff'/></svg>">
 <style>:root {
   color-scheme: light dark;
   background-color: var(--background) !important;
@@ -458,7 +461,14 @@ a.btn {
   opacity: 0.4;
 }
 
-[data-lucide] {
+[data-icon] {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: center;
+}
+
+[data-icon] svg {
   stroke-width: 1.6;
 }
 
@@ -803,12 +813,33 @@ html>body{padding:0}</style>
 </head>
 <body>
 <div id="generic-protein-viewer">
+  <header class="gpv-header">
+    <div class="gpv-brand">
+      <span class="gpv-brand-mark" aria-hidden="true"><i data-icon="orbit"></i></span>
+      <span class="gpv-brand-copy">
+        <strong>Protein Structure Viewer</strong>
+        <span class="text-muted text-small">Compare, annotate, and publish predicted and experimental structures — entirely in your browser</span>
+      </span>
+    </div>
+    <div class="gpv-header-actions">
+      <button class="btn btn-ghost gpv-icon-btn" type="button" id="gpv-theme" data-tooltip="Switch between system, light, and dark appearance" aria-label="Appearance: follow system"><i data-icon="monitor" aria-hidden="true"></i><span class="gpv-theme-text">System</span></button>
+      <button class="btn btn-ghost gpv-icon-btn" type="button" id="gpv-help-open" data-tooltip="Keyboard shortcuts and quick help (?)" aria-label="Open help"><i data-icon="circle-help" aria-hidden="true"></i><span class="gpv-hide-narrow">Help</span></button>
+    </div>
+  </header>
+
   <div class="card gpv-drop" id="gpv-drop">
-    <span class="gpv-drop-icon" aria-hidden="true"><i data-lucide="folder-up"></i></span>
+    <span class="gpv-drop-icon" aria-hidden="true"><i data-icon="folder-up"></i></span>
     <strong>Add structures or AlphaFold result ZIPs</strong>
-    <span class="text-muted">Drop several archives together or choose PDB, CIF/mmCIF, JSON, CSV, and ZIP files</span>
+    <span class="text-muted">Drop files anywhere on this page, or choose PDB, CIF/mmCIF, JSON, CSV, and ZIP files</span>
     <span class="gpv-drop-badges"><span class="viz-badge">Multiple ZIPs</span><span class="viz-badge">Local processing</span><span class="viz-badge">No upload</span></span>
-    <label class="form-label gpv-file-picker"><span class="sr-only">Choose model files</span><input class="form-control" id="gpv-files" aria-label="Choose model files" type="file" accept=".pdb,.cif,.mmcif,.json,.csv,.zip" multiple></label>
+    <div class="gpv-drop-actions">
+      <input class="form-control gpv-file-input" id="gpv-files" aria-label="Choose model files" type="file" accept=".pdb,.cif,.mmcif,.json,.csv,.zip" multiple>
+      <form class="gpv-fetch" id="gpv-fetch-form">
+        <input class="form-control gpv-fetch-field" id="gpv-fetch-id" type="text" autocomplete="off" spellcheck="false" aria-label="Structure identifier to fetch" placeholder="or fetch an ID: 1ubq, P69905">
+        <button class="btn" type="submit" id="gpv-fetch" data-tooltip="Download a PDB entry from RCSB, or an AlphaFold DB model from EMBL-EBI"><i data-icon="cloud-download" aria-hidden="true"></i>Fetch</button>
+      </form>
+    </div>
+    <span class="text-muted text-small gpv-fetch-note">Fetching contacts <code>files.rcsb.org</code> or <code>alphafold.ebi.ac.uk</code>. Files you open locally are never sent anywhere.</span>
   </div>
   <div class="gpv-import-state" id="gpv-import-state" hidden aria-live="polite">
     <progress id="gpv-import-progress" value="0" max="1"></progress>
@@ -820,27 +851,29 @@ html>body{padding:0}</style>
     <label class="form-label gpv-current-label">Current model
       <select class="form-select" id="gpv-current" disabled><option>No models loaded</option></select>
     </label>
-    <button class="btn" type="button" id="gpv-previous" disabled><i data-lucide="chevron-left" aria-hidden="true"></i>Previous</button>
-    <button class="btn" type="button" id="gpv-next" disabled>Next<i data-lucide="chevron-right" aria-hidden="true"></i></button>
-    <button class="btn" type="button" id="gpv-fit"><i data-lucide="scan" aria-hidden="true"></i>Fit</button>
-    <button class="btn btn-primary" type="button" id="gpv-report" disabled><i data-lucide="share-2" aria-hidden="true"></i>Share report</button>
+    <button class="btn" type="button" id="gpv-previous" disabled data-tooltip="Previous model (left arrow)"><i data-icon="chevron-left" aria-hidden="true"></i>Previous</button>
+    <button class="btn" type="button" id="gpv-next" disabled data-tooltip="Next model (right arrow)">Next<i data-icon="chevron-right" aria-hidden="true"></i></button>
+    <button class="btn" type="button" id="gpv-fit" data-tooltip="Recentre and zoom to everything on screen (F)"><i data-icon="scan" aria-hidden="true"></i>Fit</button>
+    <button class="btn" type="button" id="gpv-fullscreen" data-tooltip="Expand the 3D view to fill the screen (Shift + F)"><i data-icon="maximize" aria-hidden="true"></i>Full screen</button>
+    <button class="btn btn-primary" type="button" id="gpv-report" disabled data-tooltip="Download a self-contained interactive HTML report"><i data-icon="share-2" aria-hidden="true"></i>Share report</button>
   </div>
 
   <div class="gpv-view-grid" id="gpv-view-grid">
     <div class="gpv-view-pane">
       <span class="viz-badge gpv-view-label" id="gpv-left-label" hidden>Primary</span>
-      <div class="card gpv-stage" id="gpv-stage" role="img" aria-label="Interactive three-dimensional protein structure viewer"></div>
-      <div class="gpv-stage-empty" id="gpv-stage-empty"><i data-lucide="orbit" aria-hidden="true"></i><strong>Ready for a structure adventure</strong><span class="text-muted">Drop one or several AlphaFold ZIPs above</span></div>
+      <div class="card gpv-stage" id="gpv-stage" tabindex="0" role="application" aria-label="Interactive three-dimensional protein structure viewer. Drag to rotate, scroll to zoom, click an atom to inspect it."></div>
+      <div class="gpv-stage-empty" id="gpv-stage-empty"><i data-icon="orbit" aria-hidden="true"></i><strong>No structure loaded yet</strong><span class="text-muted">Drop a PDB, CIF, or AlphaFold ZIP anywhere on this page, or fetch an ID above</span></div>
+      <div class="gpv-busy" id="gpv-busy" hidden aria-hidden="true"><span class="gpv-spinner"></span><span id="gpv-busy-label">Working…</span></div>
     </div>
     <div class="gpv-view-pane" id="gpv-compare-pane" hidden>
       <span class="viz-badge gpv-view-label">Comparison</span>
       <div class="card gpv-stage" id="gpv-stage-compare" role="img" aria-label="Synchronized comparison structure viewer"></div>
     </div>
   </div>
-  <div class="gpv-status text-small" aria-live="polite">
+  <div class="gpv-status text-small">
     <span id="gpv-count">0 structures</span>
     <span id="gpv-confidence">Mean pLDDT —</span>
-    <span id="gpv-state">Ready</span>
+    <span id="gpv-state" aria-live="polite">Ready</span>
   </div>
 
   <div class="gpv-legend text-small" id="gpv-plddt-legend" hidden aria-label="pLDDT confidence color legend">
@@ -851,12 +884,12 @@ html>body{padding:0}</style>
   </div>
 
   <div class="viz-controls gpv-tabs" role="tablist" aria-label="Viewer tools">
-    <button class="btn" type="button" role="tab" aria-selected="true" data-gpv-tab="models"><i data-lucide="layers-3" aria-hidden="true"></i>Models</button>
-    <button class="btn" type="button" role="tab" aria-selected="false" data-gpv-tab="appearance"><i data-lucide="palette" aria-hidden="true"></i>Appearance</button>
-    <button class="btn" type="button" role="tab" aria-selected="false" data-gpv-tab="annotate"><i data-lucide="mouse-pointer-2" aria-hidden="true"></i>Annotate</button>
-    <button class="btn" type="button" role="tab" aria-selected="false" data-gpv-tab="compare"><i data-lucide="columns-2" aria-hidden="true"></i>Compare</button>
-    <button class="btn" type="button" role="tab" aria-selected="false" data-gpv-tab="confidence"><i data-lucide="chart-no-axes-column-increasing" aria-hidden="true"></i>Confidence</button>
-    <button class="btn" type="button" role="tab" aria-selected="false" data-gpv-tab="publish"><i data-lucide="image-down" aria-hidden="true"></i>Publish</button>
+    <button class="btn" type="button" role="tab" aria-selected="true" data-gpv-tab="models"><i data-icon="layers-3" aria-hidden="true"></i>Models</button>
+    <button class="btn" type="button" role="tab" aria-selected="false" data-gpv-tab="appearance"><i data-icon="palette" aria-hidden="true"></i>Appearance</button>
+    <button class="btn" type="button" role="tab" aria-selected="false" data-gpv-tab="annotate"><i data-icon="mouse-pointer-2" aria-hidden="true"></i>Annotate</button>
+    <button class="btn" type="button" role="tab" aria-selected="false" data-gpv-tab="compare"><i data-icon="columns-2" aria-hidden="true"></i>Compare</button>
+    <button class="btn" type="button" role="tab" aria-selected="false" data-gpv-tab="confidence"><i data-icon="chart-no-axes-column-increasing" aria-hidden="true"></i>Confidence</button>
+    <button class="btn" type="button" role="tab" aria-selected="false" data-gpv-tab="publish"><i data-icon="image-down" aria-hidden="true"></i>Publish</button>
   </div>
 
   <section class="gpv-tool-panel" data-gpv-panel="models">
@@ -865,13 +898,17 @@ html>body{padding:0}</style>
       <label class="form-label gpv-current-label">Find models<input class="form-control" id="gpv-model-search" type="search" placeholder="Filter by name or stoichiometry"></label>
       <label class="form-label">View mode<select class="form-select" id="gpv-view-mode"><option value="overlay">Overlay selected</option><option value="single">One at a time</option></select></label>
       <label class="form-label">Model order<select class="form-select" id="gpv-order"><option value="loaded">As loaded</option><option value="ranking">Ranking score</option><option value="plddt">Mean pLDDT</option></select></label>
-      <button class="btn" type="button" id="gpv-cycle" disabled>Cycle models</button>
-      <label class="form-label">Interval <span id="gpv-cycle-value">2.0 s</span><input class="form-range" id="gpv-cycle-speed" type="range" min="0.5" max="10" value="2" step="0.5"></label>
-      <button class="btn" type="button" id="gpv-show-all">Show all</button>
-      <button class="btn" type="button" id="gpv-hide-all">Hide all</button>
-      <button class="btn btn-ghost" type="button" id="gpv-clear">Clear all</button>
+      <button class="btn" type="button" id="gpv-cycle" disabled data-tooltip="Step through the filtered models automatically (C)"><i data-icon="play" aria-hidden="true"></i>Cycle models</button>
+      <label class="form-label gpv-slider-label">Interval <span id="gpv-cycle-value">2.0 s</span><input class="form-range" id="gpv-cycle-speed" type="range" min="0.5" max="10" value="2" step="0.5"></label>
+      <button class="btn" type="button" id="gpv-show-all" data-tooltip="Show every model that matches the current filter"><i data-icon="eye" aria-hidden="true"></i>Show all</button>
+      <button class="btn" type="button" id="gpv-hide-all" data-tooltip="Hide every model that matches the current filter"><i data-icon="eye-off" aria-hidden="true"></i>Hide all</button>
+      <button class="btn btn-ghost" type="button" id="gpv-clear" data-tooltip="Remove all models, annotations, and saved views"><i data-icon="trash-2" aria-hidden="true"></i>Clear all</button>
     </div>
     <div class="gpv-list" id="gpv-list" aria-label="Loaded structures"></div>
+    <div class="viz-controls gpv-list-more" id="gpv-list-more" hidden>
+      <span class="text-muted text-small" id="gpv-list-more-label"></span>
+      <button class="btn btn-ghost" type="button" id="gpv-show-more"><i data-icon="chevron-down" aria-hidden="true"></i>Show more</button>
+    </div>
     <div class="gpv-empty text-muted" id="gpv-empty">Load one or more structures to begin.</div>
   </section>
 
@@ -883,7 +920,7 @@ html>body{padding:0}</style>
       <label class="form-label">Background<select class="form-select" id="gpv-background"><option value="transparent">Transparent</option><option value="white">White</option><option value="dark">Dark</option><option value="custom">Custom</option></select></label>
       <label class="form-label">Custom background<input class="form-control form-control-color" id="gpv-background-color" type="color" value="#ffffff"></label>
       <label class="form-label">Motion<select class="form-select" id="gpv-motion"><option value="off">Off</option><option value="spin">Spin</option><option value="rock">Rock</option></select></label>
-      <label class="form-label">Speed <span id="gpv-speed-value">1.0×</span><input class="form-range" id="gpv-speed" type="range" min="0.25" max="2.5" value="1" step="0.25"></label>
+      <label class="form-label gpv-slider-label">Speed <span id="gpv-speed-value">1.0×</span><input class="form-range" id="gpv-speed" type="range" min="0.25" max="2.5" value="1" step="0.25"></label>
     </div>
   </section>
 
@@ -943,7 +980,11 @@ html>body{padding:0}</style>
       <label class="form-label">Scale<select class="form-select" id="gpv-export-scale"><option value="1">1×</option><option value="2" selected>2×</option><option value="4">4×</option></select></label>
       <button class="btn" type="button" id="gpv-image" disabled>Download publication PNG</button>
       <label class="form-label">Video length<select class="form-select" id="gpv-video-length"><option value="5">5 seconds</option><option value="10">10 seconds</option><option value="15">15 seconds</option></select></label>
-      <button class="btn" type="button" id="gpv-video" disabled>Record spin video</button>
+      <button class="btn" type="button" id="gpv-video" disabled data-tooltip="Record the viewport spinning once, as a WebM file">Record spin video</button>
+    </div>
+    <div class="viz-controls">
+      <label class="form-label gpv-current-label">Report contents<select class="form-select" id="gpv-report-scope"><option value="visible">Models currently shown</option><option value="all">Every loaded model</option></select></label>
+      <span class="text-muted text-small" id="gpv-report-size">Load models to estimate the report size.</span>
     </div>
     <div class="viz-controls">
       <label class="form-label">View name<input class="form-control" id="gpv-view-name" type="text" placeholder="Overview, interface, pore…"></label>
@@ -956,6 +997,47 @@ html>body{padding:0}</style>
     <div class="gpv-list" id="gpv-saved-views" aria-label="Saved publication views"></div>
     <details class="gpv-provenance" open><summary>Provenance and reproducible scene</summary><div class="viz-controls"><label class="form-label">Figure or project title<input class="form-control" id="gpv-project-title" type="text"></label><label class="form-label">Model source or run<input class="form-control" id="gpv-project-source" type="text" placeholder="Job, accession, or run ID"></label><label class="form-label">Method and version<input class="form-control" id="gpv-project-method" type="text" placeholder="For example AlphaFold 3"></label><label class="form-label">Notes<textarea class="form-control" id="gpv-project-notes" rows="2"></textarea></label></div><div class="viz-controls"><button class="btn" type="button" id="gpv-save-scene" disabled>Download scene JSON</button><label class="form-label">Restore scene JSON<input class="form-control" id="gpv-load-scene" type="file" accept=".json"></label></div></details>
   </section>
+
+  <div class="gpv-toasts" id="gpv-toasts" aria-live="polite" aria-atomic="false"></div>
+
+  <dialog class="gpv-dialog" id="gpv-help">
+    <form method="dialog" class="gpv-dialog-head">
+      <h2>Help and keyboard shortcuts</h2>
+      <button class="btn btn-ghost gpv-icon-btn" value="close" aria-label="Close help"><i data-icon="x" aria-hidden="true"></i></button>
+    </form>
+    <div class="gpv-dialog-body">
+      <h3>Getting structures in</h3>
+      <ul>
+        <li>Drop <code>.pdb</code>, <code>.cif</code>, <code>.mmcif</code>, or whole AlphaFold result <code>.zip</code> archives anywhere on the page.</li>
+        <li>Add AlphaFold <code>*_confidences.json</code>, <code>*_summary_confidences.json</code>, <code>ranking_debug.json</code>, or <code>ranking_scores.csv</code> to attach pTM, ipTM, ranking scores, and PAE to matching models.</li>
+        <li>Type an identifier to fetch it: a four-character PDB ID (<code>1ubq</code>), a UniProt accession (<code>P69905</code>), or an AlphaFold DB name (<code>AF-P0DTC2-F1</code>).</li>
+      </ul>
+      <h3>In the 3D view</h3>
+      <ul>
+        <li>Drag to rotate, scroll to zoom, right-drag or two-finger drag to pan.</li>
+        <li>Click any atom to inspect its residue, chain, and pLDDT, and to place a label.</li>
+      </ul>
+      <h3>Keyboard</h3>
+      <table class="table table-sm gpv-shortcuts">
+        <tbody>
+          <tr><th><kbd>←</kbd> <kbd>→</kbd></th><td>Previous / next model</td></tr>
+          <tr><th><kbd>C</kbd></th><td>Start or pause automatic cycling</td></tr>
+          <tr><th><kbd>F</kbd></th><td>Fit the view to what is displayed</td></tr>
+          <tr><th><kbd>Shift</kbd> + <kbd>F</kbd></th><td>Toggle full screen</td></tr>
+          <tr><th><kbd>1</kbd> – <kbd>6</kbd></th><td>Jump to a tool tab</td></tr>
+          <tr><th><kbd>?</kbd></th><td>Open this help</td></tr>
+          <tr><th><kbd>Esc</kbd></th><td>Close help, leave full screen, stop measuring</td></tr>
+        </tbody>
+      </table>
+      <h3>Reading the numbers</h3>
+      <ul>
+        <li><strong>pLDDT</strong> is per-residue local confidence. High pLDDT does not mean the relative placement of chains is right.</li>
+        <li><strong>PAE</strong> and <strong>ipTM</strong> are what to read for interfaces and domain placement in complexes.</li>
+        <li><strong>RMSD</strong> from the Compare tab is a visual-comparison aid. Always report the alignment method, chain mapping, and aligned Cα count alongside it.</li>
+      </ul>
+      <p class="text-muted text-small">Everything runs locally. Structure files you open are read in the browser and are never uploaded.</p>
+    </div>
+  </dialog>
 </div>
 
 <style>
@@ -963,19 +1045,24 @@ html>body{padding:0}</style>
   #generic-protein-viewer .viz-controls { margin-bottom: 12px; align-items: end; }
   #generic-protein-viewer .form-label { min-width: 126px; flex: 1 1 138px; }
   #generic-protein-viewer .gpv-current-label { flex: 3 1 280px; }
-  #generic-protein-viewer .gpv-drop { display: grid; gap: 6px; text-align: center; margin-bottom: 10px; }
-  #generic-protein-viewer .gpv-file-picker { justify-self: center; text-align: left; }
-  #generic-protein-viewer .gpv-drop-icon { color: var(--primary); justify-self: center; }
+  #generic-protein-viewer .gpv-drop { display: grid; gap: 6px; justify-items: center; text-align: center; margin-bottom: 10px; }
+  #generic-protein-viewer .gpv-drop-icon { color: var(--primary); }
   #generic-protein-viewer .gpv-drop-badges { display: flex; justify-content: center; gap: 6px; flex-wrap: wrap; }
+  #generic-protein-viewer .gpv-drop-actions { display: flex; align-items: center; justify-content: center; gap: 8px; flex-wrap: wrap; max-width: 100%; }
+  #generic-protein-viewer .gpv-file-input { width: auto; max-width: 100%; flex: 0 1 auto; }
   #generic-protein-viewer .gpv-drop.is-dragging { outline: 2px solid var(--ring); outline-offset: 2px; }
-  #generic-protein-viewer .gpv-drop.is-compact { grid-template-columns: auto minmax(0, 1fr) auto; align-items: end; text-align: left; }
-  #generic-protein-viewer .gpv-drop.is-compact .gpv-drop-icon { align-self: center; }
+  /* Once structures are loaded the card shrinks to a single toolbar row so the
+     3D view keeps as much of the viewport as possible. */
+  #generic-protein-viewer .gpv-drop.is-compact { display: flex; align-items: center; justify-items: stretch; gap: 8px; flex-wrap: wrap; text-align: left; }
+  #generic-protein-viewer .gpv-drop.is-compact > strong { margin-right: auto; }
+  #generic-protein-viewer .gpv-drop.is-compact .gpv-drop-actions { justify-content: flex-end; }
   #generic-protein-viewer .gpv-drop.is-compact > .text-muted, #generic-protein-viewer .gpv-drop.is-compact > .gpv-drop-badges { display: none; }
   #generic-protein-viewer .gpv-import-state[hidden] { display: none; }
   #generic-protein-viewer .gpv-import-state { display: grid; grid-template-columns: minmax(120px, 1fr) auto; gap: 10px; align-items: center; margin-bottom: 10px; }
   #generic-protein-viewer .gpv-import-state progress { width: 100%; accent-color: var(--primary); }
   #generic-protein-viewer .gpv-primary { margin-bottom: 8px; }
   #generic-protein-viewer .form-range { width: 100%; }
+  #generic-protein-viewer .gpv-slider-label { flex: 0 1 170px; min-width: 120px; }
   #generic-protein-viewer .gpv-list { display: grid; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); gap: 8px; margin: 0 0 10px; }
   #generic-protein-viewer .gpv-entry { display: flex; align-items: center; gap: 8px; min-width: 0; padding: 8px 0; border-bottom: 1px solid var(--border); }
   #generic-protein-viewer .gpv-entry-copy { display: grid; flex: 1; min-width: 0; gap: 2px; }
@@ -1013,18 +1100,88 @@ html>body{padding:0}</style>
   #generic-protein-viewer .gpv-vhigh { background: #0053d6; }
   #generic-protein-viewer .gpv-stage { position: relative; width: 100%; height: 480px; min-height: 320px; overflow: hidden; }
   #generic-protein-viewer .gpv-stage canvas { display: block; }
-  #generic-protein-viewer .gpv-status { display: flex; justify-content: space-between; gap: 12px; flex-wrap: wrap; margin-top: 8px; color: var(--muted-foreground); }
+  #generic-protein-viewer .gpv-status { display: flex; gap: 16px; flex-wrap: wrap; margin-top: 8px; color: var(--muted-foreground); }
+  #generic-protein-viewer .gpv-status > :last-child { margin-left: auto; text-align: right; }
   #generic-protein-viewer .gpv-export-surface { position: absolute; left: -100000px; top: 0; overflow: hidden; }
+
+  /* ---- Header ---- */
+  #generic-protein-viewer .gpv-header { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; margin-bottom: 12px; }
+  #generic-protein-viewer .gpv-brand { display: flex; align-items: center; gap: 10px; min-width: 0; }
+  #generic-protein-viewer .gpv-brand-mark { display: grid; place-items: center; width: 32px; height: 32px; flex: 0 0 auto; border-radius: var(--radius-md); color: var(--primary-foreground); background: var(--primary); }
+  #generic-protein-viewer .gpv-brand-copy { display: grid; gap: 1px; min-width: 0; }
+  #generic-protein-viewer .gpv-brand-copy > strong { font-size: var(--font-size-h3); }
+  #generic-protein-viewer .gpv-header-actions { display: flex; gap: 6px; flex: 0 0 auto; }
+  #generic-protein-viewer .gpv-icon-btn { gap: 6px; }
+
+  /* ---- Import ---- */
+  #generic-protein-viewer .gpv-fetch { display: flex; align-items: center; gap: 6px; flex: 0 1 auto; min-width: 0; }
+  #generic-protein-viewer .gpv-fetch-field { width: 250px; max-width: 100%; min-width: 0; }
+  #generic-protein-viewer .gpv-drop.is-compact > .gpv-fetch-note { display: none; }
+  #generic-protein-viewer .gpv-drop.is-dragging { outline-width: 2px; background: var(--accent); }
+
+  /* ---- Stage overlays ---- */
+  #generic-protein-viewer .gpv-stage:focus-visible { outline: 2px solid var(--ring); outline-offset: 2px; }
+  #generic-protein-viewer .gpv-busy { position: absolute; inset: auto 8px 8px auto; display: flex; align-items: center; gap: 8px; padding: 6px 10px; border-radius: var(--radius-md); color: var(--popover-foreground); background: var(--popover); border: 1px solid var(--border); font-size: var(--font-size-small); }
+  #generic-protein-viewer .gpv-busy[hidden] { display: none; }
+  #generic-protein-viewer .gpv-spinner { width: 13px; height: 13px; border-radius: 50%; border: 2px solid var(--border); border-top-color: var(--primary); animation: gpv-spin 0.8s linear infinite; }
+  @keyframes gpv-spin { to { transform: rotate(360deg); } }
+  @media (prefers-reduced-motion: reduce) { #generic-protein-viewer .gpv-spinner { animation-duration: 2.4s; } }
+
+  /* ---- Full screen ---- */
+  #generic-protein-viewer .gpv-view-grid.is-fullscreen { position: fixed; inset: 0; z-index: 40; padding: 8px; gap: 8px; background: var(--background); }
+  #generic-protein-viewer .gpv-view-grid.is-fullscreen .gpv-stage { height: 100%; }
+  #generic-protein-viewer .gpv-view-grid.is-fullscreen .gpv-view-pane { height: 100%; }
+
+  /* ---- Lists ---- */
+  #generic-protein-viewer .gpv-list-more { justify-content: center; align-items: center; margin-bottom: 10px; }
+  #generic-protein-viewer .gpv-list-more[hidden] { display: none; }
+  #generic-protein-viewer .gpv-entry.is-active { border-radius: var(--radius-sm); padding-inline: 6px; }
+  #generic-protein-viewer .gpv-entry-score { font-variant-numeric: tabular-nums; }
+
+  /* ---- Toasts ---- */
+  #generic-protein-viewer .gpv-toasts { position: fixed; z-index: 60; bottom: 12px; right: 12px; display: grid; gap: 6px; justify-items: end; pointer-events: none; max-width: min(440px, calc(100vw - 24px)); }
+  #generic-protein-viewer .gpv-toast { pointer-events: none; padding: 7px 12px; border-radius: var(--radius-full); border: 1px solid var(--border); color: var(--popover-foreground); background: var(--popover); box-shadow: 0 6px 20px -8px rgb(0 0 0 / 35%); font-size: var(--font-size-small); animation: gpv-toast-in 0.18s ease-out; }
+  #generic-protein-viewer .gpv-toast.is-error { color: var(--destructive); border-color: color-mix(in srgb, var(--destructive) 40%, var(--border)); }
+  #generic-protein-viewer .gpv-toast.is-leaving { opacity: 0; transition: opacity 0.25s ease-in; }
+  @keyframes gpv-toast-in { from { opacity: 0; transform: translateY(6px); } }
+  @media (prefers-reduced-motion: reduce) { #generic-protein-viewer .gpv-toast { animation: none; } }
+
+  /* ---- Help dialog ---- */
+  #generic-protein-viewer .gpv-dialog { width: min(680px, calc(100vw - 32px)); max-height: min(84vh, 780px); padding: 0; border: 1px solid var(--border); border-radius: var(--radius-lg); color: var(--foreground); background: var(--popover); overflow: hidden; }
+  #generic-protein-viewer .gpv-dialog::backdrop { background: rgb(0 0 0 / 45%); }
+  #generic-protein-viewer .gpv-dialog-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 12px 16px; border-bottom: 1px solid var(--border); }
+  #generic-protein-viewer .gpv-dialog-head h2 { margin: 0; font-size: var(--font-size-h3); }
+  #generic-protein-viewer .gpv-dialog-body { padding: 4px 16px 18px; overflow-y: auto; max-height: calc(min(84vh, 780px) - 52px); }
+  #generic-protein-viewer .gpv-dialog-body h3 { margin: 16px 0 6px; font-size: var(--font-size-normal); }
+  #generic-protein-viewer .gpv-dialog-body ul { margin: 0; padding-left: 18px; display: grid; gap: 4px; }
+  #generic-protein-viewer .gpv-dialog-body code { font-family: var(--font-mono); font-size: var(--font-size-small); padding: 1px 4px; border-radius: var(--radius-sm); background: var(--muted); }
+  #generic-protein-viewer .gpv-shortcuts th { white-space: nowrap; width: 1%; }
+  #generic-protein-viewer kbd { font-family: var(--font-mono); font-size: var(--font-size-small); padding: 1px 5px; border: 1px solid var(--border); border-bottom-width: 2px; border-radius: var(--radius-sm); background: var(--muted); }
+
   @media (max-width: 680px) { #generic-protein-viewer .gpv-confidence-layout, #generic-protein-viewer .gpv-view-grid.is-comparing, #generic-protein-viewer .gpv-import-state, #generic-protein-viewer .gpv-drop.is-compact { grid-template-columns: 1fr; } }
+  @media (max-width: 560px) { #generic-protein-viewer .gpv-hide-narrow { display: none; } #generic-protein-viewer .gpv-header-actions { gap: 4px; } }
   @media (max-width: 520px) { #generic-protein-viewer .gpv-stage { height: 380px; } }
 </style>
 
-<script src="https://cdnjs.cloudflare.com/ajax/libs/3Dmol/2.4.2/3Dmol-min.js"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/numeric/1.2.6/numeric.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/3Dmol/2.4.2/3Dmol-min.js" integrity="sha512-hMLvWa58N20AYqzvAVgf4Utdz0jGshnzaknHRzQSm3I7TUeN6ehikRsICUbDB8JIt625tPV3a3s6I9BMrxT0Gg==" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js" integrity="sha512-XMVd28F1oH/O71fzwBnV7HucLxVwtxf26XV8P4wPk26EDxuGZ91N8bsOttmnomcCD3CS5ZMRL50H0GgOHvegtg==" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/numeric/1.2.6/numeric.min.js" integrity="sha512-BK/c8SKG4PMGMg8wo/56FdGMkgQFJgFl8rnVdF1wqIZW73Vw6M/Tde9GmwibV8MoBSBJcwurXGg6B9yvd/Fvcw==" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
 <script>
 (() => {
   const root = document.getElementById('generic-protein-viewer');
+
+  /* 3Dmol.js is the one hard dependency. Without it nothing below can run, so
+     fail loudly and usefully instead of leaving a blank page behind. */
+  if (typeof $3Dmol === 'undefined' || typeof $3Dmol.createViewer !== 'function') {
+    const notice = root.querySelector('#gpv-import-errors');
+    notice.hidden = false;
+    notice.textContent = 'The 3Dmol.js rendering library could not be loaded from the CDN. '
+      + 'Check your internet connection (or any blocker or offline cache) and reload the page.';
+    root.querySelector('#gpv-stage-empty').hidden = true;
+    root.querySelectorAll('button, select, input').forEach(control => { control.disabled = true; });
+    return;
+  }
+
   const viewer = $3Dmol.createViewer(root.querySelector('#gpv-stage'), {
     backgroundColor: '#ffffff',
     backgroundAlpha: 0,
@@ -1053,8 +1210,74 @@ html>body{padding:0}</style>
   let syncingView = false;
   let compareSyncFrame = 0;
   let pendingScene = null;
-  const viewerVersion = '2.0.0';
+  let listLimit = 60;
+  let fullscreen = false;
+  let busyDepth = 0;
+  let restoreMotion = null;
+  const listPageSize = 60;
+  const viewerVersion = '2.1.0';
+  const preferenceKey = 'protein-structure-viewer:preferences';
+  const themeKey = 'protein-structure-viewer:theme';
   const labelColors = getComputedStyle(root);
+  const reduceMotion = matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+  /* ---------- Small UI helpers ---------- */
+
+  function toast(message, kind = 'info') {
+    const host = root.querySelector('#gpv-toasts');
+    const item = document.createElement('div');
+    item.className = 'gpv-toast' + (kind === 'error' ? ' is-error' : '');
+    item.setAttribute('role', kind === 'error' ? 'alert' : 'status');
+    item.textContent = message;
+    host.append(item);
+    while (host.children.length > 3) host.firstElementChild.remove();
+    setTimeout(() => {
+      item.classList.add('is-leaving');
+      setTimeout(() => item.remove(), 280);
+    }, kind === 'error' ? 6000 : 3200);
+  }
+
+  function announce(message, kind = 'info') {
+    updateStatus(message);
+    toast(message, kind);
+  }
+
+  function setBusy(label) {
+    busyDepth += 1;
+    const badge = root.querySelector('#gpv-busy');
+    root.querySelector('#gpv-busy-label').textContent = label;
+    badge.hidden = false;
+    return () => {
+      busyDepth = Math.max(0, busyDepth - 1);
+      if (busyDepth === 0) badge.hidden = true;
+    };
+  }
+
+  function setButtonText(button, text) {
+    const last = button.lastChild;
+    if (last && last.nodeType === Node.TEXT_NODE) last.nodeValue = text;
+    else button.append(text);
+  }
+
+  function showImportErrors(messages) {
+    const panel = root.querySelector('#gpv-import-errors');
+    panel.hidden = messages.length === 0;
+    panel.textContent = messages.length
+      ? messages.slice(0, 3).join(' · ') + (messages.length > 3 ? ' · +' + (messages.length - 3) + ' more' : '')
+      : '';
+    if (messages.length) console.warn('Protein viewer notes:', messages);
+  }
+
+  function readJson(key, fallback) {
+    try {
+      const stored = localStorage.getItem(key);
+      return stored ? JSON.parse(stored) : fallback;
+    } catch (error) { return fallback; }
+  }
+
+  function writeJson(key, value) {
+    try { localStorage.setItem(key, JSON.stringify(value)); } catch (error) { /* private mode */ }
+  }
 
   function plddtColor(score) {
     if (score < 50) return '#ff7d45';
@@ -1312,15 +1535,32 @@ html>body{padding:0}</style>
     return '"' + String(value ?? '').replace(/"/g, '""') + '"';
   }
 
+  function confidenceSourcesByEntry() {
+    const sources = new Map(structures.map(entry => [entry.id, []]));
+    confidenceAssets.forEach(asset => {
+      structures.forEach(entry => { if (assetFitsEntry(asset, entry)) sources.get(entry.id).push(asset.name); });
+    });
+    return sources;
+  }
+
   function downloadConfidenceCsv() {
-    const rows = [['model', 'mean_plddt', 'ptm', 'iptm', 'ranking_score', 'rank', 'has_clash', 'confidence_sources']];
+    if (!structures.length) { announce('Load a model before exporting confidence metrics', 'error'); return; }
+    const sources = confidenceSourcesByEntry();
+    const rows = [['model', 'source_archive', 'mean_plddt', 'ptm', 'iptm', 'ranking_score', 'rank', 'has_clash', 'confidence_sources']];
     structures.forEach(entry => {
       const confidence = entry.confidence || {};
-      const sources = confidenceAssets.filter(asset => assetFitsEntry(asset, entry)).map(asset => asset.name).join('; ');
-      rows.push([entry.name, mean(entry.scores) ?? '', confidence.ptm ?? '', confidence.iptm ?? '', confidence.rankingScore ?? '', entry.rank ?? '', Object.prototype.hasOwnProperty.call(confidence, 'hasClash') ? confidence.hasClash : '', sources]);
+      rows.push([entry.name, entry.collection ?? '', mean(entry.scores) ?? '', confidence.ptm ?? '', confidence.iptm ?? '', confidence.rankingScore ?? '', entry.rank ?? '', Object.prototype.hasOwnProperty.call(confidence, 'hasClash') ? confidence.hasClash : '', (sources.get(entry.id) || []).join('; ')]);
     });
     downloadBlob(rows.map(row => row.map(csvCell).join(',')).join('\n'), 'text/csv', 'protein-confidence-metrics.csv');
-    updateStatus('Confidence CSV downloaded');
+    announce('Confidence CSV downloaded');
+  }
+
+  function entriesById() {
+    return new Map(structures.map(entry => [entry.id, entry]));
+  }
+
+  function entryById(id) {
+    return structures.find(entry => entry.id === id) || null;
   }
 
   function activeEntry() {
@@ -1402,6 +1642,7 @@ html>body{padding:0}</style>
     root.querySelector('#gpv-save-view').disabled = structures.length === 0;
     root.querySelector('#gpv-contact-sheet').disabled = savedViews.length === 0;
     root.querySelector('#gpv-captions').disabled = savedViews.length === 0;
+    updateReportEstimate();
     ['#gpv-current', '#gpv-reference', '#gpv-selection-model', '#gpv-left-model', '#gpv-right-model', '#gpv-previous', '#gpv-next', '#gpv-cycle', '#gpv-align', '#gpv-restore', '#gpv-add-selection'].forEach(selector => {
       root.querySelector(selector).disabled = structures.length === 0;
     });
@@ -1440,17 +1681,23 @@ html>body{padding:0}</style>
   }
 
   function applyStyle() {
-    const shown = new Set(displayedEntries());
+    let shown = new Set(displayedEntries());
+    const broken = [];
     structures.forEach(entry => {
       if (shown.has(entry) && !entry.model) {
-        try { materializeEntry(entry); } catch (error) { entry.visible = false; updateStatus(error.message); }
+        try { materializeEntry(entry); }
+        catch (error) { entry.visible = false; shown.delete(entry); broken.push(error.message); }
       }
       if (!entry.model) return;
       entry.model.setStyle({}, {});
       if (shown.has(entry)) entry.model.setStyle({}, styleFor(entry));
     });
+    if (broken.length) {
+      shown = new Set(displayedEntries());
+      showImportErrors(broken);
+    }
     releaseHiddenModels(shown);
-    applySelections();
+    applySelections(shown);
     root.querySelector('#gpv-plddt-legend').hidden = root.querySelector('#gpv-color-mode').value !== 'plddt';
     rebuildLabels(false);
     rebuildMeasurements(false);
@@ -1465,7 +1712,7 @@ html>body{padding:0}</style>
     if (structures.length && !structures.some(entry => entry.id === activeId)) activeId = structures[0].id;
     ['#gpv-current', '#gpv-reference', '#gpv-selection-model', '#gpv-left-model', '#gpv-right-model'].forEach(selector => {
       const select = root.querySelector(selector);
-      const previous = selector === '#gpv-current' || selector === '#gpv-left-model' ? activeId : select.value;
+      const previous = selector === '#gpv-current' ? activeId : (select.value || (selector === '#gpv-left-model' ? activeId : ''));
       select.replaceChildren();
       structures.forEach(entry => {
         const option = document.createElement('option');
@@ -1495,7 +1742,16 @@ html>body{padding:0}</style>
     syncModelControls();
     const list = root.querySelector('#gpv-list');
     list.replaceChildren();
-    filteredStructures().forEach(entry => {
+    const matching = filteredStructures();
+    /* Large AlphaFold archives routinely hold hundreds of models. Building a row
+       for every one of them makes each re-render visibly slow, so page them. */
+    const shownRows = matching.slice(0, listLimit);
+    const more = root.querySelector('#gpv-list-more');
+    more.hidden = matching.length <= shownRows.length;
+    root.querySelector('#gpv-list-more-label').textContent = more.hidden
+      ? ''
+      : 'Showing ' + shownRows.length + ' of ' + matching.length + ' models';
+    shownRows.forEach(entry => {
       const row = document.createElement('div');
       row.className = 'gpv-entry' + (entry.id === activeId ? ' is-active' : '');
       row.dataset.entryId = String(entry.id);
@@ -1586,7 +1842,12 @@ html>body{padding:0}</style>
   function stopCycle() {
     clearInterval(cycleTimer);
     cycleTimer = 0;
-    root.querySelector('#gpv-cycle').textContent = 'Cycle models';
+    const button = root.querySelector('#gpv-cycle');
+    setButtonText(button, 'Cycle models');
+    const host = button.querySelector('[data-icon]');
+    host.setAttribute('data-icon', 'play');
+    host.replaceChildren();
+    if (typeof gpvRenderIcons === 'function') gpvRenderIcons(button);
   }
 
   function visibleEntries() {
@@ -1629,7 +1890,12 @@ html>body{padding:0}</style>
     root.querySelector('#gpv-view-mode').value = 'single';
     const delay = Math.max(500, Number(root.querySelector('#gpv-cycle-speed').value) * 1000);
     cycleTimer = setInterval(() => selectRelative(1, false), delay);
-    root.querySelector('#gpv-cycle').textContent = 'Pause cycle';
+    const button = root.querySelector('#gpv-cycle');
+    setButtonText(button, 'Pause cycle');
+    const host = button.querySelector('[data-icon]');
+    host.setAttribute('data-icon', 'pause');
+    host.replaceChildren();
+    if (typeof gpvRenderIcons === 'function') gpvRenderIcons(button);
     const candidates = cycleEntries();
     const active = activeEntry();
     selectModel(candidates.includes(active) ? active : candidates[0], false);
@@ -1693,8 +1959,9 @@ html>body{padding:0}</style>
   function rebuildLabels(shouldRender = true) {
     viewer.removeAllLabels();
     const shownIds = new Set(displayedEntries().map(entry => entry.id));
+    const byId = entriesById();
     labelRecords.filter(label => shownIds.has(label.entryId)).forEach(label => {
-      const entry = structures.find(item => item.id === label.entryId);
+      const entry = byId.get(label.entryId);
       const atom = entry && entry.atoms.find(item => (item.chain || '') === label.chain && item.resi === label.resi && (item.atom === 'CA' || item.atom === label.atom));
       const position = atom ? { x: atom.x, y: atom.y, z: atom.z } : { x: label.x, y: label.y, z: label.z };
       viewer.addLabel(label.text, labelStyle(position));
@@ -1724,11 +1991,15 @@ html>body{padding:0}</style>
     return [...residues];
   }
 
-  function applySelections() {
+  function applySelections(shown = new Set(displayedEntries())) {
+    const byId = entriesById();
     selectionRecords.forEach(record => {
-      const entry = structures.find(item => item.id === record.entryId);
-      if (!entry || !displayedEntries().includes(entry)) return;
-      const selection = { chain: record.chain, resi: record.residues };
+      const entry = byId.get(record.entryId);
+      /* A record can outlive its model: the entry may have been released to save
+         memory, or its coordinates may have failed to parse. */
+      if (!entry || !entry.model || !shown.has(entry)) return;
+      const selection = { resi: record.residues };
+      if (record.chain) selection.chain = record.chain;
       if (record.action === 'hide') entry.model.setStyle(selection, {});
       else if (typeof entry.model.addStyle === 'function') entry.model.addStyle(selection, { stick: { color: record.color, radius: 0.25 }, sphere: { color: record.color, scale: 0.3 } });
     });
@@ -1850,8 +2121,14 @@ html>body{padding:0}</style>
     root.querySelector('#gpv-left-label').hidden = !enabled;
     root.querySelector('#gpv-view-grid').classList.toggle('is-comparing', enabled);
     if (!enabled) return;
-    const target = structures.find(entry => entry.id === Number(root.querySelector('#gpv-right-model').value));
+    const target = entryById(Number(root.querySelector('#gpv-right-model').value));
     if (!target) return;
+    /* Without this, a lazily-loaded model has no atoms of its own and the clone
+       silently shows unaligned, unstyled coordinates. */
+    if (!target.model) {
+      try { materializeEntry(target); }
+      catch (error) { showImportErrors([error.message]); return; }
+    }
     const secondary = ensureCompareViewer();
     secondary.removeAllModels(); secondary.removeAllLabels(); secondary.removeAllShapes();
     compareModel = secondary.addModel(target.text, target.format);
@@ -1869,6 +2146,8 @@ html>body{padding:0}</style>
   function restoreCoordinates(shouldRender = true) {
     structures.filter(entry => entry.model).forEach(entry => entry.atoms.forEach((atom, index) => {
       const original = entry.originalAtoms[index];
+      /* originalAtoms is cleared when a model is released to reclaim memory. */
+      if (!original) return;
       atom.x = original.x;
       atom.y = original.y;
       atom.z = original.z;
@@ -2048,19 +2327,31 @@ html>body{padding:0}</style>
   }
 
   function alignVisible() {
+    if (typeof numeric === 'undefined' || typeof numeric.svd !== 'function') {
+      announce('Alignment needs the numeric.js library, which did not load. Reload the page and try again.', 'error');
+      return;
+    }
     const referenceId = Number(root.querySelector('#gpv-reference').value);
-    const reference = structures.find(entry => entry.id === referenceId);
+    const reference = entryById(referenceId);
     if (!reference) return;
-    materializeEntry(reference);
-    visibleEntries().forEach(entry => materializeEntry(entry));
+    const done = setBusy('Aligning…');
+    const failures = [];
+    const ready = entry => {
+      try { materializeEntry(entry); return true; }
+      catch (error) { failures.push(error.message); entry.visible = false; return false; }
+    };
+    if (!ready(reference)) { done(); showImportErrors(failures); announce('The reference model could not be read', 'error'); return; }
+    const targets = visibleEntries().filter(ready);
     restoreCoordinates(false);
     const results = [];
-    visibleEntries().forEach(entry => {
+    targets.forEach(entry => {
       if (entry !== reference) {
         const result = alignEntry(reference, entry);
         if (result) results.push(result);
       }
     });
+    done();
+    showImportErrors(failures);
     alignmentResults = results;
     renderAlignmentResults();
     applyStyle();
@@ -2069,16 +2360,17 @@ html>body{padding:0}</style>
     if (results.length) {
       const averageRmsd = mean(results.map(result => result.rmsd));
       const identities = results.map(result => result.identity).filter(value => value !== null);
-      updateStatus('Aligned ' + results.length + ' model' + (results.length === 1 ? '' : 's') + ' · mean Cα RMSD ' + averageRmsd.toFixed(2) + ' Å' + (identities.length ? ' · mean identity ' + (mean(identities) * 100).toFixed(1) + '%' : ''));
-    } else updateStatus('No model had enough matching residues');
+      announce('Aligned ' + results.length + ' model' + (results.length === 1 ? '' : 's') + ' · mean Cα RMSD ' + averageRmsd.toFixed(2) + ' Å' + (identities.length ? ' · mean identity ' + (mean(identities) * 100).toFixed(1) + '%' : ''));
+    } else announce('No model had at least three matching Cα atoms to align on', 'error');
   }
 
   function recordSpinVideo() {
     const canvas = root.querySelector('#gpv-stage canvas');
     if (!canvas || !canvas.captureStream || typeof MediaRecorder === 'undefined') {
-      updateStatus('Video recording is not supported by this browser');
+      announce('This browser cannot record video from a canvas. Safari in particular does not support it; Chrome and Firefox do.', 'error');
       return;
     }
+    if (restoreMotion !== null) return;
     const button = root.querySelector('#gpv-video');
     const duration = Number(root.querySelector('#gpv-video-length').value) || 5;
     const stream = canvas.captureStream(30);
@@ -2095,16 +2387,19 @@ html>body{padding:0}</style>
       link.download = 'protein-spin.webm';
       link.click();
       setTimeout(() => URL.revokeObjectURL(url), 1000);
-      button.disabled = false;
+      button.disabled = structures.length === 0;
       button.textContent = 'Record spin video';
-      updateStatus('Spin video downloaded');
+      /* Recording commandeers the viewer's motion; put the user's choice back. */
+      if (restoreMotion !== null) { root.querySelector('#gpv-motion').value = restoreMotion; restoreMotion = null; applyMotion(); }
+      announce('Spin video downloaded');
     };
+    restoreMotion = root.querySelector('#gpv-motion').value;
     stopMotion();
     button.disabled = true;
     button.textContent = 'Recording ' + duration + 's…';
     recorder.start();
     viewer.spin('y', 0.8);
-    updateStatus('Recording spin video…');
+    announce('Recording a ' + duration + ' second spin video…');
     setTimeout(() => recorder.stop(), duration * 1000);
   }
 
@@ -2300,6 +2595,10 @@ html>body{padding:0}</style>
     return new Promise(resolve => requestAnimationFrame(() => resolve()));
   }
 
+  function afterPaint() {
+    return new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+  }
+
   function importProgress(value, maximum, label) {
     const state = root.querySelector('#gpv-import-state');
     state.hidden = false;
@@ -2319,7 +2618,9 @@ html>body{padding:0}</style>
 
   async function loadFiles(files) {
     if (!files.length) return;
-    root.querySelector('#gpv-import-errors').hidden = true;
+    showImportErrors([]);
+    listLimit = listPageSize;
+    const doneBusy = setBusy('Importing ' + files.length + ' file' + (files.length === 1 ? '' : 's') + '…');
     stopCycle(); stopMotion();
     importProgress(0, files.length, 'Reading ' + files.length + ' file' + (files.length === 1 ? '' : 's') + '…');
     updateStatus('Loading…');
@@ -2403,10 +2704,10 @@ html>body{padding:0}</style>
       const note = loaded ? 'Loaded ' + loaded + ' model' + (loaded === 1 ? '' : 's') + ' from ' + files.length + ' source' + (files.length === 1 ? '' : 's') : pendingScene ? 'Scene loaded; now add its matching structure files' : confidenceAssets.length ? 'Confidence data loaded; add matching structures' : 'No supported structures found';
       updateStatus(note + (confidenceAssets.length ? ' · confidence attached' : '') + (deferredPae ? ' · skipped ' + deferredPae + ' large PAE files for performance' : '') + (skipped ? ' · ' + skipped + ' skipped' : ''));
     }
-    if (failures.length) console.warn('Protein viewer import notes:', failures.slice(0, 20));
-    const errorPanel = root.querySelector('#gpv-import-errors');
-    errorPanel.hidden = failures.length === 0;
-    errorPanel.textContent = failures.length ? failures.slice(0, 3).join(' · ') + (failures.length > 3 ? ' · +' + (failures.length - 3) + ' more' : '') : '';
+    showImportErrors(failures);
+    doneBusy();
+    if (loaded) toast('Loaded ' + loaded + ' model' + (loaded === 1 ? '' : 's') + (skipped ? ' · ' + skipped + ' skipped' : ''));
+    else if (failures.length) toast(failures[0], 'error');
   }
 
   function stopMotion() {
@@ -2512,44 +2813,112 @@ html>body{padding:0}</style>
     return { width, height, capped: width !== parts[0] * requestedScale || height !== parts[1] * requestedScale };
   }
 
+  /* Off-screen render target for PNG export.
+     Browsers cap the number of live WebGL contexts (commonly 8–16) and silently
+     kill the oldest one past the limit — which used to be the main viewer's.
+     A contact sheet created one context per panel, so a 10-panel sheet reliably
+     lost the scene. One reusable surface is created here instead, and released
+     as soon as the export job finishes. */
+  let exportSurface = null;
+  let exportViewer = null;
+
+  function acquireExportViewer(width, height) {
+    if (!exportSurface) {
+      exportSurface = document.createElement('div');
+      exportSurface.className = 'gpv-export-surface';
+      root.append(exportSurface);
+    }
+    exportSurface.style.width = width + 'px';
+    exportSurface.style.height = height + 'px';
+    if (!exportViewer) {
+      exportViewer = $3Dmol.createViewer(exportSurface, { backgroundColor: '#ffffff', backgroundAlpha: 0, antialias: true, upscale: true });
+    } else {
+      exportViewer.removeAllModels();
+      exportViewer.removeAllLabels();
+      exportViewer.removeAllShapes();
+      exportViewer.resize();
+    }
+    return exportViewer;
+  }
+
+  function releaseExportViewer() {
+    if (!exportSurface) return;
+    const canvas = exportSurface.querySelector('canvas');
+    const context = canvas && (canvas.getContext('webgl2') || canvas.getContext('webgl'));
+    const lose = context && context.getExtension('WEBGL_lose_context');
+    if (lose) lose.loseContext();
+    exportSurface.remove();
+    exportSurface = null;
+    exportViewer = null;
+  }
+
   async function renderPublicationImage(state = null, dimensions = exportDimensions()) {
-    const restore = captureViewState();
+    const restore = state ? captureViewState() : null;
     if (state) applyViewState(state);
-    const surface = document.createElement('div'); surface.className = 'gpv-export-surface'; surface.style.width = dimensions.width + 'px'; surface.style.height = dimensions.height + 'px'; root.append(surface);
-    const exportViewer = $3Dmol.createViewer(surface, { backgroundColor: '#ffffff', backgroundAlpha: 0, antialias: true, upscale: true });
-    const background = backgroundSpec(); exportViewer.setBackgroundColor(background.color, background.alpha);
-    if (typeof exportViewer.setProjection === 'function') exportViewer.setProjection(root.querySelector('#gpv-projection').value);
+    const target = acquireExportViewer(dimensions.width, dimensions.height);
+    const background = backgroundSpec();
+    target.setBackgroundColor(background.color, background.alpha);
+    if (typeof target.setProjection === 'function') target.setProjection(root.querySelector('#gpv-projection').value);
     displayedEntries().forEach(entry => {
-      const model = exportViewer.addModel(entry.text, entry.format); const atoms = model.selectedAtoms({});
+      if (!entry.model) return;
+      const model = target.addModel(entry.text, entry.format);
+      const atoms = model.selectedAtoms({});
       atoms.forEach((atom, index) => { if (entry.atoms[index]) { atom.x = entry.atoms[index].x; atom.y = entry.atoms[index].y; atom.z = entry.atoms[index].z; } });
       model.setStyle({}, styleFor(entry));
     });
-    exportViewer.zoomTo();
-    if (typeof viewer.getView === 'function' && typeof exportViewer.setView === 'function') exportViewer.setView(viewer.getView());
-    exportViewer.render();
+    target.zoomTo();
+    if (typeof viewer.getView === 'function' && typeof target.setView === 'function') target.setView(viewer.getView());
+    target.render();
     await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
-    const uri = exportViewer.pngURI(); surface.remove();
-    if (state) applyViewState(restore);
+    const uri = target.pngURI();
+    if (restore) applyViewState(restore);
     return uri;
   }
 
   async function downloadPublicationPng() {
-    const button = root.querySelector('#gpv-image'); button.disabled = true; button.textContent = 'Rendering…';
+    const button = root.querySelector('#gpv-image');
+    const requested = exportDimensions();
+    if (requested.width * requested.height > 6000000) {
+      toast('Rendering ' + requested.width + ' × ' + requested.height + ' — this can take a while and the page will not respond meanwhile.');
+    }
+    const done = setBusy('Rendering PNG…');
+    button.disabled = true; button.textContent = 'Rendering…';
+    await afterPaint();
     try {
-      const dimensions = exportDimensions(); const uri = await renderPublicationImage(null, dimensions);
-      const link = document.createElement('a'); link.href = uri; link.download = 'protein-publication-' + dimensions.width + 'x' + dimensions.height + '.png'; link.click();
-      updateStatus('Publication PNG downloaded' + (dimensions.capped ? ' · size capped for browser stability' : ''));
-    } catch (error) { updateStatus('Could not render publication PNG'); }
-    button.disabled = false; button.textContent = 'Download publication PNG';
+      const uri = await renderPublicationImage(null, requested);
+      const link = document.createElement('a'); link.href = uri; link.download = 'protein-publication-' + requested.width + 'x' + requested.height + '.png'; link.click();
+      announce('Publication PNG downloaded' + (requested.capped ? ' · size capped for browser stability' : ''));
+    } catch (error) {
+      announce('Could not render the publication PNG: ' + error.message, 'error');
+    } finally {
+      releaseExportViewer();
+      done();
+      button.disabled = structures.length === 0; button.textContent = 'Download publication PNG';
+    }
   }
 
   function loadImage(uri) {
     return new Promise((resolve, reject) => { const imageValue = new Image(); imageValue.onload = () => resolve(imageValue); imageValue.onerror = reject; imageValue.src = uri; });
   }
 
+  function wrapText(context, text, maxWidth) {
+    const lines = [];
+    let line = '';
+    String(text || '').split(/\s+/).filter(Boolean).forEach(word => {
+      const candidate = line ? line + ' ' + word : word;
+      if (context.measureText(candidate).width > maxWidth && line) { lines.push(line); line = word; }
+      else line = candidate;
+    });
+    if (line) lines.push(line);
+    return lines;
+  }
+
   async function downloadContactSheet() {
     if (!savedViews.length) return;
-    const button = root.querySelector('#gpv-contact-sheet'); button.disabled = true; button.textContent = 'Rendering panels…';
+    const button = root.querySelector('#gpv-contact-sheet');
+    const done = setBusy('Rendering panels…');
+    button.disabled = true; button.textContent = 'Rendering panels…';
+    await afterPaint();
     const restore = captureViewState(); const columns = Number(root.querySelector('#gpv-panel-columns').value) || 2;
     const cellWidth = 1200; const imageHeight = 900; const captionHeight = 140; const rows = Math.ceil(savedViews.length / columns);
     const canvas = document.createElement('canvas'); canvas.width = columns * cellWidth; canvas.height = rows * (imageHeight + captionHeight); const context = canvas.getContext('2d');
@@ -2557,21 +2926,51 @@ html>body{padding:0}</style>
     try {
       for (let index = 0; index < savedViews.length; index += 1) {
         button.textContent = 'Rendering ' + (index + 1) + ' / ' + savedViews.length + '…';
+        await afterPaint();
         const uri = await renderPublicationImage(savedViews[index], { width: cellWidth, height: imageHeight }); const imageValue = await loadImage(uri);
         const x = (index % columns) * cellWidth; const y = Math.floor(index / columns) * (imageHeight + captionHeight); context.drawImage(imageValue, x, y, cellWidth, imageHeight);
         context.font = '700 42px system-ui'; context.fillText(String.fromCharCode(65 + index), x + 32, y + imageHeight + 24);
         context.font = '600 30px system-ui'; context.fillText(savedViews[index].name, x + 96, y + imageHeight + 24);
-        context.font = '24px system-ui'; context.fillText(savedViews[index].caption || '', x + 96, y + imageHeight + 70, cellWidth - 128);
+        context.font = '24px system-ui';
+        wrapText(context, savedViews[index].caption, cellWidth - 128).slice(0, 3)
+          .forEach((line, lineIndex) => context.fillText(line, x + 96, y + imageHeight + 70 + lineIndex * 30));
       }
-      const link = document.createElement('a'); link.href = canvas.toDataURL('image/png'); link.download = 'protein-figure-panels.png'; link.click(); updateStatus('Figure panels downloaded');
-    } catch (error) { updateStatus('Could not render figure panels'); }
-    applyViewState(restore); button.disabled = false; button.textContent = 'Download figure panels';
+      const link = document.createElement('a'); link.href = canvas.toDataURL('image/png'); link.download = 'protein-figure-panels.png'; link.click();
+      announce('Figure panels downloaded');
+    } catch (error) {
+      announce('Could not render the figure panels: ' + error.message, 'error');
+    } finally {
+      releaseExportViewer();
+      done();
+    }
+    applyViewState(restore); button.disabled = savedViews.length === 0; button.textContent = 'Download figure panels';
   }
 
   function downloadCaptions() {
     const provenance = provenanceValues();
     const lines = [provenance.title || 'Protein structure figure', provenance.source, provenance.method, '', ...savedViews.map((view, index) => String.fromCharCode(65 + index) + '. ' + view.name + (view.caption ? ': ' + view.caption : '')), '', provenance.notes].filter((line, index, array) => line || array[index - 1]);
     downloadBlob(lines.join('\n'), 'text/plain', 'protein-figure-captions.txt'); updateStatus('Figure captions downloaded');
+  }
+
+  function reportEntries() {
+    if (root.querySelector('#gpv-report-scope').value === 'all') return structures;
+    const visible = structures.filter(entry => entry.visible);
+    return visible.length ? visible : structures;
+  }
+
+  function formatBytes(bytes) {
+    if (bytes < 1024) return bytes + ' B';
+    if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(0) + ' KB';
+    return (bytes / (1024 * 1024)).toFixed(1) + ' MB';
+  }
+
+  function updateReportEstimate() {
+    const label = root.querySelector('#gpv-report-size');
+    if (!structures.length) { label.textContent = 'Load models to estimate the report size.'; return; }
+    const chosen = reportEntries();
+    const bytes = chosen.reduce((sum, entry) => sum + entry.text.length, 0);
+    label.textContent = chosen.length + ' model' + (chosen.length === 1 ? '' : 's') + ' · roughly ' + formatBytes(bytes)
+      + (bytes > 40 * 1024 * 1024 ? ' — large enough to be slow to open; consider narrowing the selection.' : '');
   }
 
   function reportConfidence(entry) {
@@ -2588,7 +2987,9 @@ html>body{padding:0}</style>
   }
 
   function downloadReport() {
-    const exported = structures.map(entry => ({
+    const chosen = reportEntries();
+    if (!chosen.length) { announce('Load a model before building a report', 'error'); return; }
+    const exported = chosen.map(entry => ({
       name: entry.name,
       text: entry.text,
       format: entry.format,
@@ -2608,16 +3009,19 @@ html>body{padding:0}</style>
     const payload = JSON.stringify(exported).replace(/</g, '\\u003c');
     const reportMetadata = JSON.stringify(provenanceValues()).replace(/</g, '\\u003c');
     const reportViews = JSON.stringify(savedViews).replace(/</g, '\\u003c');
+    const reportSeconds = Number(root.querySelector('#gpv-video-length').value) || 5;
     const html = [
       "<!doctype html>",
       "<html lang='en'><head><meta charset='utf-8'>",
       "<meta name='viewport' content='width=device-width,initial-scale=1'>",
-      "<title>Protein Model Report</title>",
+      "<title>" + (provenanceValues().title || 'Protein Model Report').replace(/[<>&]/g, '') + "</title>",
+      "<link rel='icon' type='image/svg+xml' href=\"data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' rx='7' fill='%23339cff'/><circle cx='16' cy='16' r='3' fill='%23fff'/></svg>\">",
       "<style>",
-      ":root{color-scheme:light dark;font-family:system-ui,sans-serif}body{margin:0;padding:18px;background:#111827;color:#f8fafc}main{max-width:1100px;margin:auto}.controls{display:flex;gap:10px;flex-wrap:wrap;align-items:end;margin-bottom:12px}label{display:grid;gap:4px}button,select,input{font:inherit;padding:7px 10px}#view{height:65vh;min-height:420px;background:#020617}#status{display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-top:8px;color:#cbd5e1}.legend{display:flex;gap:12px;flex-wrap:wrap;margin:8px 0}.legend span{display:flex;align-items:center;gap:5px}.swatch{width:12px;height:12px;display:inline-block}.vlow{background:#ff7d45}.low{background:#ffdb13}.conf{background:#65cbf3}.vhigh{background:#0053d6}#caption{padding:10px 0;font-size:1.05rem}#pae-wrap{max-width:360px;margin-top:14px}#pae{display:block;width:100%;height:auto}#pae-detail{margin-top:5px;color:#cbd5e1}.meta{white-space:pre-wrap;color:#cbd5e1}@media(prefers-color-scheme:light){body{background:#f8fafc;color:#0f172a}#view{background:#e2e8f0}#status,#pae-detail,.meta{color:#475569}}",
+      ":root{color-scheme:light dark;font-family:system-ui,sans-serif}body{margin:0;padding:18px;background:#111827;color:#f8fafc}main{max-width:1100px;margin:auto}.controls{display:flex;gap:10px;flex-wrap:wrap;align-items:end;margin-bottom:12px}label{display:grid;gap:4px}button,select,input{font:inherit;padding:7px 10px}#view{position:relative;overflow:hidden;height:65vh;min-height:420px;background:#020617}#view canvas{display:block}#status{display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-top:8px;color:#cbd5e1}.legend{display:flex;gap:12px;flex-wrap:wrap;margin:8px 0}.legend span{display:flex;align-items:center;gap:5px}.swatch{width:12px;height:12px;display:inline-block}.vlow{background:#ff7d45}.low{background:#ffdb13}.conf{background:#65cbf3}.vhigh{background:#0053d6}#caption{padding:10px 0;font-size:1.05rem}#pae-wrap{max-width:360px;margin-top:14px}#pae{display:block;width:100%;height:auto}#pae-detail{margin-top:5px;color:#cbd5e1}.meta{white-space:pre-wrap;color:#cbd5e1}@media(prefers-color-scheme:light){body{background:#f8fafc;color:#0f172a}#view{background:#e2e8f0}#status,#pae-detail,.meta{color:#475569}}",
       "</style></head><body><main>",
       "<h1 id='project-title' hidden></h1><p class='meta' id='project-meta'></p>",
-      "<div class='controls'><label id='guided-wrap'>Guided view<select id='guided'><option value=''>Choose a saved view</option></select></label><label>Model<select id='model'></select></label><button id='previous'>Previous</button><button id='next'>Next</button><button id='play'>Play cycle</button><label>Interval (seconds)<input id='interval' type='number' min='0.5' max='20' step='0.5' value='2'></label><label>Representation<select id='style'><option value='cartoon'>Cartoon</option><option value='stick'>Sticks</option><option value='sphere'>Spheres</option><option value='line'>Lines</option></select></label><label>Colors<select id='colors'><option value='plddt'>pLDDT</option><option value='structure'>Model color</option><option value='chain'>Chain</option><option value='spectrum'>Spectrum</option></select></label><button id='spin'>Spin</button><button id='png'>Download PNG</button><button id='video'>Record 5s video</button></div><div id='caption' hidden></div>",
+      "<p class='meta'>Interactive report generated by Protein Structure Viewer " + viewerVersion + " on " + new Date().toISOString().slice(0, 10) + ". Predicted structures are predictions, not experimental determinations.</p>",
+      "<div class='controls'><label id='guided-wrap'>Guided view<select id='guided'><option value=''>Choose a saved view</option></select></label><label>Model<select id='model'></select></label><button id='previous'>Previous</button><button id='next'>Next</button><button id='play'>Play cycle</button><label>Interval (seconds)<input id='interval' type='number' min='0.5' max='20' step='0.5' value='2'></label><label>Representation<select id='style'><option value='cartoon'>Cartoon</option><option value='stick'>Sticks</option><option value='sphere'>Spheres</option><option value='line'>Lines</option></select></label><label>Colors<select id='colors'><option value='plddt'>pLDDT</option><option value='structure'>Model color</option><option value='chain'>Chain</option><option value='spectrum'>Spectrum</option><option value='element'>Element</option></select></label><button id='spin'>Spin</button><button id='png'>Download PNG</button><button id='video'>Record " + reportSeconds + "s video</button></div><div id='caption' hidden></div>",
       "<div class='legend'><span><i class='swatch vlow'></i>&lt;50</span><span><i class='swatch low'></i>50–70</span><span><i class='swatch conf'></i>70–90</span><span><i class='swatch vhigh'></i>≥90</span></div>",
       "<div id='view'></div><div id='status'><span id='name'></span><span id='score'></span><span id='model-confidence'></span><span id='position'></span></div><div id='pae-wrap' hidden><canvas id='pae' width='360' height='360' aria-label='Predicted aligned error heatmap'></canvas><div id='pae-detail'>Predicted aligned error (Å)</div></div>",
       "<script src='https://cdnjs.cloudflare.com/ajax/libs/3Dmol/2.4.2/3Dmol-min.js'><" + "/script>",
@@ -2630,12 +3034,12 @@ html>body{padding:0}</style>
       "function pcolor(v){return v<50?'#ff7d45':v<70?'#ffdb13':v<90?'#65cbf3':'#0053d6'}",
       "function mean(a){return a.length?a.reduce((s,v)=>s+v,0)/a.length:null}",
       "function metric(v,d=3){return Number.isFinite(Number(v))?Number(v).toFixed(d):'—'}function drawPae(s){const wrap=document.getElementById('pae-wrap'),c=s.confidence||{},matrix=c.pae;if(!Array.isArray(matrix)||!matrix.length){wrap.hidden=true;return}wrap.hidden=false;const canvas=document.getElementById('pae'),ctx=canvas.getContext('2d'),image=ctx.createImageData(canvas.width,canvas.height);let max=1;matrix.forEach(r=>r.forEach(v=>{if(Number.isFinite(Number(v)))max=Math.max(max,Number(v))}));for(let y=0;y<canvas.height;y++){const row=matrix[Math.min(matrix.length-1,Math.floor(y*matrix.length/canvas.height))]||[];for(let x=0;x<canvas.width;x++){const v=Number(row[Math.min(row.length-1,Math.floor(x*row.length/canvas.width))])||0,t=Math.max(0,Math.min(1,v/max)),o=(y*canvas.width+x)*4;image.data[o]=Math.round(255*t);image.data[o+1]=Math.round(83+136*t);image.data[o+2]=Math.round(214-195*t);image.data[o+3]=255}}ctx.putImageData(image,0,0);document.getElementById('pae-detail').textContent='PAE · '+(c.paeOriginalSize||matrix.length)+' × '+(c.paeOriginalSize||matrix.length)+' tokens · maximum '+max.toFixed(1)+' Å'+(c.paeDownsampled?' · heatmap downsampled for report':'')}",
-      "function show(i,preserveView=false){const oldView=preserveView&&viewer.getView?viewer.getView():null;current=(Number(i)+structures.length)%structures.length;picker.value=current;const s=structures[current];viewer.removeAllModels();viewer.removeAllLabels();const m=viewer.addModel(s.text,s.format);const rep=document.getElementById('style').value;const mode=document.getElementById('colors').value;let options={color:s.color};if(mode==='plddt')options={colorfunc:a=>pcolor(Number(a.b||0))};if(mode==='chain')options={colorscheme:'chainHetatm'};if(mode==='spectrum')options={colorscheme:'spectrum'};if(rep==='line')options.linewidth=2;const spec={};spec[rep]=options;m.setStyle({},spec);(s.labels||[]).forEach(l=>viewer.addLabel(l.text,{position:{x:l.x,y:l.y,z:l.z},backgroundColor:'#fff',fontColor:'#111827',borderColor:'#94a3b8',borderThickness:1,fontSize:12,inFront:true}));if(oldView&&viewer.setView)viewer.setView(oldView);else viewer.zoomTo();viewer.render();const values=m.selectedAtoms({}).filter(a=>a.atom==='CA'&&Number.isFinite(Number(a.b))).map(a=>Number(a.b));const avg=mean(values),c=s.confidence||{};document.getElementById('name').textContent=s.name;document.getElementById('score').textContent=avg===null?'Mean pLDDT —':'Mean pLDDT '+avg.toFixed(1);document.getElementById('model-confidence').textContent='pTM '+metric(c.ptm)+' · ipTM '+metric(c.iptm)+' · ranking '+metric(c.rankingScore)+(c.hasClash?' · clash warning':'');document.getElementById('position').textContent=(current+1)+' / '+structures.length;drawPae(s)}",
+      "function show(i,preserveView=false){const oldView=preserveView&&viewer.getView?viewer.getView():null;current=(Number(i)+structures.length)%structures.length;picker.value=current;const s=structures[current];viewer.removeAllModels();viewer.removeAllLabels();const m=viewer.addModel(s.text,s.format);const rep=document.getElementById('style').value;const mode=document.getElementById('colors').value;let options={color:s.color};if(mode==='plddt')options={colorfunc:a=>pcolor(Number(a.b||0))};if(mode==='chain')options={colorscheme:'chainHetatm'};if(mode==='spectrum')options={colorscheme:'spectrum'};if(mode==='element')options={colorscheme:'default'};if(rep==='line')options.linewidth=2;const spec={};spec[rep]=options;m.setStyle({},spec);(s.labels||[]).forEach(l=>viewer.addLabel(l.text,{position:{x:l.x,y:l.y,z:l.z},backgroundColor:'#fff',fontColor:'#111827',borderColor:'#94a3b8',borderThickness:1,fontSize:12,inFront:true}));if(oldView&&viewer.setView)viewer.setView(oldView);else viewer.zoomTo();viewer.render();const values=m.selectedAtoms({}).filter(a=>a.atom==='CA'&&Number.isFinite(Number(a.b))).map(a=>Number(a.b));const avg=mean(values),c=s.confidence||{};document.getElementById('name').textContent=s.name;document.getElementById('score').textContent=avg===null?'Mean pLDDT —':'Mean pLDDT '+avg.toFixed(1);document.getElementById('model-confidence').textContent='pTM '+metric(c.ptm)+' · ipTM '+metric(c.iptm)+' · ranking '+metric(c.rankingScore)+(c.hasClash?' · clash warning':'');document.getElementById('position').textContent=(current+1)+' / '+structures.length;drawPae(s)}",
       "function stop(){clearInterval(timer);timer=0;document.getElementById('play').textContent='Play cycle'}",
-      "function guide(i){const v=savedViews[Number(i)];if(!v)return;stop();const modelIndex=structures.findIndex(s=>s.name===v.activeModel);if(modelIndex>=0)show(modelIndex);if(v.representation)document.getElementById('style').value=v.representation;if(v.colorMode)document.getElementById('colors').value=v.colorMode==='element'?'structure':v.colorMode;if(modelIndex>=0)show(modelIndex);if(v.camera&&viewer.setView)viewer.setView(v.camera);viewer.render();const caption=document.getElementById('caption');caption.hidden=false;caption.textContent=v.name+(v.caption?' — '+v.caption:'')}",
+      "function guide(i){const v=savedViews[Number(i)];if(!v)return;stop();const modelIndex=structures.findIndex(s=>s.name===v.activeModel);if(v.representation)document.getElementById('style').value=v.representation;if(v.colorMode)document.getElementById('colors').value=v.colorMode;show(modelIndex>=0?modelIndex:current);if(v.camera&&viewer.setView)viewer.setView(v.camera);viewer.render();const caption=document.getElementById('caption');caption.hidden=false;caption.textContent=v.name+(v.caption?' — '+v.caption:'')}",
       "function play(){if(timer){stop();return}const seconds=Math.max(.5,Number(document.getElementById('interval').value)||2);timer=setInterval(()=>show(current+1,true),seconds*1000);document.getElementById('play').textContent='Pause cycle'}",
-      "function record(){const canvas=document.querySelector('#view canvas'),button=document.getElementById('video');if(!canvas||!canvas.captureStream||typeof MediaRecorder==='undefined'){alert('Video recording is not supported by this browser.');return}const stream=canvas.captureStream(30),type=MediaRecorder.isTypeSupported('video/webm;codecs=vp9')?'video/webm;codecs=vp9':'video/webm',recorder=new MediaRecorder(stream,{mimeType:type}),chunks=[];recorder.ondataavailable=e=>{if(e.data.size)chunks.push(e.data)};recorder.onstop=()=>{viewer.spin(false);stream.getTracks().forEach(t=>t.stop());const url=URL.createObjectURL(new Blob(chunks,{type:'video/webm'})),a=document.createElement('a');a.href=url;a.download='protein-spin.webm';a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);button.disabled=false;button.textContent='Record 5s video'};button.disabled=true;button.textContent='Recording…';viewer.spin('y',.8);recorder.start();setTimeout(()=>recorder.stop(),5000)}",
-      "guided.addEventListener('change',e=>guide(e.target.value));picker.addEventListener('change',e=>{stop();show(e.target.value)});document.getElementById('previous').onclick=()=>{stop();show(current-1)};document.getElementById('next').onclick=()=>{stop();show(current+1)};document.getElementById('play').onclick=play;document.getElementById('style').onchange=()=>show(current);document.getElementById('colors').onchange=()=>show(current);document.getElementById('spin').onclick=()=>{spinning=!spinning;viewer.spin(spinning?'y':false);document.getElementById('spin').textContent=spinning?'Stop spin':'Spin'};document.getElementById('png').onclick=()=>{const a=document.createElement('a');a.href=viewer.pngURI();a.download='protein-model.png';a.click()};document.getElementById('video').onclick=record;window.addEventListener('keydown',e=>{if(e.key==='ArrowLeft'){stop();show(current-1)}if(e.key==='ArrowRight'){stop();show(current+1)}});new ResizeObserver(()=>viewer.resize()).observe(document.getElementById('view'));show(0);",
+      "const seconds=" + reportSeconds + ";function record(){const canvas=document.querySelector('#view canvas'),button=document.getElementById('video');if(!canvas||!canvas.captureStream||typeof MediaRecorder==='undefined'){alert('Video recording is not supported by this browser.');return}const stream=canvas.captureStream(30),type=MediaRecorder.isTypeSupported('video/webm;codecs=vp9')?'video/webm;codecs=vp9':'video/webm',recorder=new MediaRecorder(stream,{mimeType:type}),chunks=[];recorder.ondataavailable=e=>{if(e.data.size)chunks.push(e.data)};recorder.onstop=()=>{viewer.spin(false);stream.getTracks().forEach(t=>t.stop());const url=URL.createObjectURL(new Blob(chunks,{type:'video/webm'})),a=document.createElement('a');a.href=url;a.download='protein-spin.webm';a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);button.disabled=false;button.textContent='Record '+seconds+'s video'};button.disabled=true;button.textContent='Recording…';viewer.spin('y',.8);recorder.start();setTimeout(()=>recorder.stop(),seconds*1000)}",
+      "guided.addEventListener('change',e=>guide(e.target.value));picker.addEventListener('change',e=>{stop();show(e.target.value)});document.getElementById('previous').onclick=()=>{stop();show(current-1)};document.getElementById('next').onclick=()=>{stop();show(current+1)};document.getElementById('play').onclick=play;document.getElementById('style').onchange=()=>show(current);document.getElementById('colors').onchange=()=>show(current);document.getElementById('spin').onclick=()=>{spinning=!spinning;viewer.spin(spinning?'y':false);document.getElementById('spin').textContent=spinning?'Stop spin':'Spin'};document.getElementById('png').onclick=()=>{const a=document.createElement('a');a.href=viewer.pngURI();a.download='protein-model.png';a.click()};document.getElementById('video').onclick=record;window.addEventListener('keydown',e=>{if(e.target instanceof Element&&e.target.matches('input,select,textarea'))return;if(e.key==='ArrowLeft'){stop();show(current-1)}if(e.key==='ArrowRight'){stop();show(current+1)}});new ResizeObserver(()=>viewer.resize()).observe(document.getElementById('view'));show(0);",
       "<" + "/script></main></body></html>"
     ].join('\n');
     const blob = new Blob([html], { type: 'text/html' });
@@ -2644,18 +3048,215 @@ html>body{padding:0}</style>
     link.download = 'protein-model-report.html';
     link.click();
     setTimeout(() => URL.revokeObjectURL(link.href), 1000);
-    updateStatus('HTML report downloaded');
+    announce('HTML report downloaded · ' + chosen.length + ' model' + (chosen.length === 1 ? '' : 's') + ' · ' + formatBytes(blob.size));
+  }
+
+  /* ---------- Appearance theme ---------- */
+
+  const themeModes = [
+    { value: 'system', icon: 'monitor', label: 'System' },
+    { value: 'light', icon: 'sun', label: 'Light' },
+    { value: 'dark', icon: 'moon', label: 'Dark' }
+  ];
+
+  function applyTheme(value) {
+    const mode = themeModes.find(item => item.value === value) || themeModes[0];
+    if (mode.value === 'system') document.documentElement.removeAttribute('data-theme');
+    else document.documentElement.setAttribute('data-theme', mode.value);
+    const button = root.querySelector('#gpv-theme');
+    button.dataset.mode = mode.value;
+    button.querySelector('.gpv-theme-text').textContent = mode.label;
+    const host = button.querySelector('[data-icon]');
+    host.setAttribute('data-icon', mode.icon);
+    host.replaceChildren();
+    if (typeof gpvRenderIcons === 'function') gpvRenderIcons(button);
+    button.setAttribute('aria-label', 'Appearance: ' + (mode.value === 'system' ? 'follow system' : mode.label.toLowerCase()));
+    writeJson(themeKey, mode.value);
+    /* The 3D canvas background follows the resolved theme, so repaint it. */
+    applyAppearance();
+  }
+
+  /* ---------- Full screen ---------- */
+
+  function setFullscreen(next) {
+    fullscreen = next;
+    const grid = root.querySelector('#gpv-view-grid');
+    grid.classList.toggle('is-fullscreen', fullscreen);
+    document.body.style.overflow = fullscreen ? 'hidden' : '';
+    const button = root.querySelector('#gpv-fullscreen');
+    const host = button.querySelector('[data-icon]');
+    host.setAttribute('data-icon', fullscreen ? 'minimize' : 'maximize');
+    host.replaceChildren();
+    if (typeof gpvRenderIcons === 'function') gpvRenderIcons(button);
+    button.lastChild.textContent = fullscreen ? 'Exit full screen' : 'Full screen';
+    requestAnimationFrame(() => {
+      viewer.resize();
+      viewer.render();
+      if (compareViewer) { compareViewer.resize(); compareViewer.render(); }
+    });
+  }
+
+  /* ---------- Help ---------- */
+
+  function openHelp() {
+    const dialog = root.querySelector('#gpv-help');
+    if (dialog.open) return;
+    if (typeof dialog.showModal === 'function') dialog.showModal();
+    else dialog.setAttribute('open', '');
+  }
+
+  /* ---------- Fetch a structure by identifier ---------- */
+
+  function parseIdentifier(raw) {
+    const id = raw.trim();
+    if (!id) return null;
+    /* AlphaFold DB entry name, with or without the fragment suffix. */
+    const alphafold = id.match(/^AF[-_]([A-Z0-9]+)(?:[-_]F(\d+))?$/i);
+    if (alphafold) return { kind: 'alphafold', accession: alphafold[1].toUpperCase(), fragment: Number(alphafold[2] || 1) };
+    /* A PDB ID is four characters and starts with a digit. */
+    if (/^[0-9][A-Za-z0-9]{3}$/.test(id)) return { kind: 'pdb', code: id.toLowerCase() };
+    /* Otherwise treat it as a UniProt accession and look it up in AlphaFold DB. */
+    if (/^[A-Z][A-Z0-9]{5,9}$/i.test(id)) return { kind: 'alphafold', accession: id.toUpperCase(), fragment: 1 };
+    return null;
+  }
+
+  async function fetchText(url, what) {
+    const response = await fetch(url, { referrerPolicy: 'no-referrer' });
+    if (!response.ok) {
+      throw new Error(response.status === 404 ? 'no ' + what + ' with that identifier' : what + ' request failed with status ' + response.status);
+    }
+    return response.text();
+  }
+
+  async function resolveAlphafold(target) {
+    /* The file names carry a model version that changes over time (v4 in 2023,
+       v6 today), so ask the API for the current URLs instead of guessing. */
+    const listing = JSON.parse(await fetchText('https://alphafold.ebi.ac.uk/api/prediction/' + encodeURIComponent(target.accession), 'AlphaFold DB entry'));
+    if (!Array.isArray(listing) || !listing.length) throw new Error('no AlphaFold DB model for ' + target.accession);
+    const record = listing.find(item => item.modelEntityId === 'AF-' + target.accession + '-F' + target.fragment) || listing[0];
+    if (!record.cifUrl) throw new Error('AlphaFold DB returned no coordinate file');
+    return {
+      url: record.cifUrl,
+      paeUrl: record.paeDocUrl || null,
+      name: (record.modelEntityId || 'AF-' + target.accession + '-F1') + '.cif',
+      format: 'cif',
+      collection: 'AlphaFold DB'
+    };
+  }
+
+  async function fetchStructure() {
+    const field = root.querySelector('#gpv-fetch-id');
+    const target = parseIdentifier(field.value);
+    if (!target) {
+      announce('Enter a four-character PDB ID (1ubq), a UniProt accession (P69905), or an AlphaFold DB name (AF-P0DTC2-F1)', 'error');
+      field.focus();
+      return;
+    }
+    const button = root.querySelector('#gpv-fetch');
+    const done = setBusy('Fetching ' + field.value.trim() + '…');
+    button.disabled = true;
+    try {
+      const source = target.kind === 'pdb'
+        ? { url: 'https://files.rcsb.org/download/' + target.code + '.cif', paeUrl: null, name: target.code + '.cif', format: 'cif', collection: 'RCSB PDB' }
+        : await resolveAlphafold(target);
+      const text = await fetchText(source.url, 'structure');
+      const entry = addStructure(uniqueModelName(source.name, source.collection), text, source.format, source.url, source.collection);
+      let note = '';
+      if (source.paeUrl) {
+        /* Best effort: a missing PAE file must not fail the whole fetch.
+           Attach it directly rather than through the filename-matching used for
+           local archives — AlphaFold DB file names carry a model version that
+           those heuristics do not recognise. */
+        try {
+          const confidence = confidenceFromJson(JSON.parse(await fetchText(source.paeUrl, 'PAE')));
+          if (confidence && Array.isArray(confidence.pae) && confidence.pae.length) {
+            entry.confidence = mergeConfidence(entry.confidence, confidence);
+            confidenceAssets.push({ name: source.paeUrl.split('/').pop(), confidence, rank: null, collection: source.collection, modelName: entry.name });
+            note = ' with predicted aligned error';
+          }
+        } catch (error) { note = ' (predicted aligned error unavailable)'; }
+      }
+      renderList();
+      applyStyle();
+      selectModel(entry);
+      field.value = '';
+      announce('Loaded ' + entry.name + ' from ' + source.collection + note);
+    } catch (error) {
+      announce('Could not fetch that structure: ' + error.message, 'error');
+    } finally {
+      done();
+      button.disabled = false;
+    }
+  }
+
+  /* ---------- Preference persistence ---------- */
+
+  const persistedControls = [
+    '#gpv-style', '#gpv-color-mode', '#gpv-projection', '#gpv-background', '#gpv-background-color',
+    '#gpv-view-mode', '#gpv-order', '#gpv-alignment-mode', '#gpv-export-size', '#gpv-export-scale',
+    '#gpv-panel-columns', '#gpv-video-length', '#gpv-cycle-speed', '#gpv-speed', '#gpv-report-scope'
+  ];
+
+  function savePreferences() {
+    writeJson(preferenceKey, Object.fromEntries(persistedControls.map(selector => [selector, root.querySelector(selector).value])));
+  }
+
+  function restorePreferences() {
+    const stored = readJson(preferenceKey, null);
+    if (!stored || typeof stored !== 'object') return;
+    persistedControls.forEach(selector => {
+      const control = root.querySelector(selector);
+      const value = stored[selector];
+      if (typeof value !== 'string') return;
+      /* Only accept values the control actually offers, so a stale or hand-edited
+         preference cannot put a control into an unhandled state. */
+      if (control.tagName === 'SELECT') {
+        if ([...control.options].some(option => option.value === value)) control.value = value;
+      } else control.value = value;
+    });
+    root.querySelector('#gpv-cycle-value').textContent = Number(root.querySelector('#gpv-cycle-speed').value).toFixed(1) + ' s';
+    root.querySelector('#gpv-speed-value').textContent = Number(root.querySelector('#gpv-speed').value).toFixed(2).replace(/0$/, '') + '×';
   }
 
   root.querySelector('#gpv-files').addEventListener('change', event => loadFiles([...event.target.files]));
+
   const dropZone = root.querySelector('#gpv-drop');
-  dropZone.addEventListener('dragover', event => { event.preventDefault(); dropZone.classList.add('is-dragging'); });
-  dropZone.addEventListener('dragleave', () => dropZone.classList.remove('is-dragging'));
-  dropZone.addEventListener('drop', event => {
+  let dragDepth = 0;
+  const carriesFiles = event => [...(event.dataTransfer ? event.dataTransfer.types : [])].includes('Files');
+  /* dragenter/dragleave fire for every child element, so count them rather than
+     toggling on each event — otherwise the highlight flickers while dragging. */
+  window.addEventListener('dragenter', event => {
+    if (!carriesFiles(event)) return;
     event.preventDefault();
-    dropZone.classList.remove('is-dragging');
-    loadFiles([...event.dataTransfer.files]);
+    dragDepth += 1;
+    dropZone.classList.add('is-dragging');
   });
+  window.addEventListener('dragover', event => { if (carriesFiles(event)) event.preventDefault(); });
+  window.addEventListener('dragleave', () => {
+    dragDepth = Math.max(0, dragDepth - 1);
+    if (!dragDepth) dropZone.classList.remove('is-dragging');
+  });
+  window.addEventListener('drop', event => {
+    /* Without this the browser opens the dropped file and the session is lost. */
+    event.preventDefault();
+    dragDepth = 0;
+    dropZone.classList.remove('is-dragging');
+    const files = [...(event.dataTransfer ? event.dataTransfer.files : [])];
+    if (files.length) loadFiles(files);
+  });
+  root.querySelector('#gpv-theme').addEventListener('click', () => {
+    const current = root.querySelector('#gpv-theme').dataset.mode || 'system';
+    const index = themeModes.findIndex(mode => mode.value === current);
+    applyTheme(themeModes[(index + 1) % themeModes.length].value);
+  });
+  root.querySelector('#gpv-help-open').addEventListener('click', openHelp);
+  root.querySelector('#gpv-fullscreen').addEventListener('click', () => setFullscreen(!fullscreen));
+  root.querySelector('#gpv-fetch-form').addEventListener('submit', event => { event.preventDefault(); fetchStructure(); });
+  persistedControls.forEach(selector => {
+    root.querySelector(selector).addEventListener('change', savePreferences);
+  });
+  root.querySelector('#gpv-show-more').addEventListener('click', () => { listLimit += listPageSize; renderList(); });
+  root.querySelector('#gpv-report-scope').addEventListener('change', updateReportEstimate);
   root.querySelector('#gpv-style').addEventListener('change', applyStyle);
   root.querySelector('#gpv-color-mode').addEventListener('change', applyStyle);
   root.querySelectorAll('[data-gpv-tab]').forEach((button, index, buttons) => {
@@ -2691,12 +3292,12 @@ html>body{padding:0}</style>
     updateStatus('Model order updated');
   });
   root.querySelector('#gpv-source-filter').addEventListener('change', () => {
-    stopCycle(); renderList();
+    stopCycle(); listLimit = listPageSize; renderList();
     const count = filteredStructures().length;
     updateStatus(count + ' model' + (count === 1 ? '' : 's') + ' in this source');
   });
   root.querySelector('#gpv-model-search').addEventListener('input', () => {
-    stopCycle(); renderList();
+    stopCycle(); listLimit = listPageSize; renderList();
     const count = filteredStructures().length;
     updateStatus(count + ' matching model' + (count === 1 ? '' : 's'));
   });
@@ -2704,7 +3305,7 @@ html>body{padding:0}</style>
   root.querySelector('#gpv-next').addEventListener('click', () => { stopCycle(); selectRelative(1); });
   root.querySelector('#gpv-cycle').addEventListener('click', toggleCycle);
   root.querySelector('#gpv-cycle-speed').addEventListener('input', event => {
-    root.querySelector('#gpv-cycle-value').textContent = Number(event.target.value).toFixed(1) + 's';
+    root.querySelector('#gpv-cycle-value').textContent = Number(event.target.value).toFixed(1) + ' s';
     if (cycleTimer) { stopCycle(); toggleCycle(); }
   });
   root.querySelector('#gpv-motion').addEventListener('change', applyMotion);
@@ -2713,9 +3314,14 @@ html>body{padding:0}</style>
     applyMotion();
   });
   root.querySelector('#gpv-clear').addEventListener('click', () => {
+    if (structures.length > 1 && !confirm('Remove all ' + structures.length + ' models, plus any labels, selections, measurements, and saved views?')) return;
     stopCycle();
     stopMotion();
     viewer.removeAllModels();
+    viewer.removeAllLabels();
+    viewer.removeAllShapes();
+    if (compareViewer) { compareViewer.removeAllModels(); compareViewer.removeAllLabels(); compareViewer.removeAllShapes(); compareViewer.render(); }
+    releaseExportViewer();
     structures = [];
     activeId = null;
     selectedResidue = null;
@@ -2736,12 +3342,21 @@ html>body{padding:0}</style>
     root.querySelector('#gpv-model-search').value = '';
     root.querySelector('#gpv-measure').textContent = 'Start measuring';
     root.querySelector('#gpv-measure-state').textContent = 'Measurement mode is off.';
+    root.querySelector('#gpv-source-filter').value = 'all';
+    root.querySelector('#gpv-import-errors').hidden = true;
+    root.querySelector('#gpv-pae-detail').textContent = 'Move over the heatmap to inspect a residue pair.';
+    root.querySelector('#gpv-fetch-id').value = '';
+    listLimit = listPageSize;
+    nextStructureId = 1;
+    nextAnnotationId = 1;
     renderAlignmentResults();
     renderSelectionList();
     renderMeasurementList();
     renderSavedViews();
     renderList();
     applyStyle();
+    renderCompareViewer();
+    announce('Cleared everything');
   });
   root.querySelector('#gpv-show-all').addEventListener('click', () => {
     filteredStructures().forEach(entry => { entry.visible = true; });
@@ -2809,20 +3424,46 @@ html>body{padding:0}</style>
     const matrix = entry && entry.confidence && entry.confidence.pae;
     if (!matrix || !matrix.length) return;
     const bounds = event.currentTarget.getBoundingClientRect();
-    const column = Math.min(matrix.length - 1, Math.max(0, Math.floor((event.clientX - bounds.left) * matrix.length / bounds.width)));
     const row = Math.min(matrix.length - 1, Math.max(0, Math.floor((event.clientY - bounds.top) * matrix.length / bounds.height)));
+    /* PAE matrices are square in practice, but do not assume it. */
+    const columns = Array.isArray(matrix[row]) ? matrix[row].length : matrix.length;
+    const column = Math.min(columns - 1, Math.max(0, Math.floor((event.clientX - bounds.left) * columns / bounds.width)));
     const value = finiteNumber(matrix[row] && matrix[row][column]);
     const chains = entry.confidence.tokenChainIds || [];
     const residues = entry.confidence.tokenResidueIds || [];
     const describe = index => 'token ' + (index + 1) + (chains[index] !== undefined ? ', chain ' + chains[index] : '') + (residues[index] !== undefined ? ', residue ' + residues[index] : '');
     root.querySelector('#gpv-pae-detail').textContent = describe(row) + ' → ' + describe(column) + ' · PAE ' + (value === null ? '—' : value.toFixed(2) + ' Å');
   });
+  const tabOrder = ['models', 'appearance', 'annotate', 'compare', 'confidence', 'publish'];
   window.addEventListener('keydown', event => {
-    if (event.target.matches('input, select, textarea')) return;
-    if (event.key === 'ArrowLeft') { stopCycle(); selectRelative(-1); }
-    if (event.key === 'ArrowRight') { stopCycle(); selectRelative(1); }
+    const target = event.target;
+    /* event.target is not always an Element (it can be the document), and a
+       shortcut must never swallow a character someone is typing — including the
+       "?" that opens help. */
+    if (target instanceof Element && (target.matches('input, select, textarea, [contenteditable]') || target.closest('dialog[open]'))) {
+      if (event.key !== 'Escape') return;
+    }
+    if (event.ctrlKey || event.metaKey || event.altKey) return;
+    if (event.key === '?') { event.preventDefault(); openHelp(); return; }
+    if (event.key === 'Escape') {
+      if (fullscreen) { setFullscreen(false); return; }
+      if (measurementActive) { toggleMeasurement(); return; }
+      return;
+    }
+    if (event.key === 'ArrowLeft') { event.preventDefault(); stopCycle(); selectRelative(-1); return; }
+    if (event.key === 'ArrowRight') { event.preventDefault(); stopCycle(); selectRelative(1); return; }
+    const key = event.key.toLowerCase();
+    if (key === 'f') { event.preventDefault(); if (event.shiftKey) setFullscreen(!fullscreen); else { viewer.zoomTo(); viewer.render(); } return; }
+    if (key === 'c' && !event.shiftKey) { event.preventDefault(); toggleCycle(); return; }
+    const tabIndex = Number(event.key) - 1;
+    if (Number.isInteger(tabIndex) && tabIndex >= 0 && tabIndex < tabOrder.length) {
+      event.preventDefault();
+      selectToolTab(tabOrder[tabIndex]);
+      root.querySelector('[data-gpv-tab="' + tabOrder[tabIndex] + '"]').focus();
+    }
   });
   new ResizeObserver(() => viewer.resize()).observe(root.querySelector('#gpv-stage'));
+  new ResizeObserver(() => { if (compareViewer) compareViewer.resize(); }).observe(root.querySelector('#gpv-stage-compare'));
   if (typeof viewer.setStateChangeCallback === 'function') viewer.setStateChangeCallback(() => {
     if (!compareViewer || syncingView || compareSyncFrame || !root.querySelector('#gpv-side-by-side').checked) return;
     compareSyncFrame = requestAnimationFrame(() => {
@@ -2833,247 +3474,101 @@ html>body{padding:0}</style>
       compareViewer.render(); syncingView = false;
     });
   });
+  restorePreferences();
+  applyTheme(readJson(themeKey, 'system'));
+  selectToolTab('models');
   applyAppearance();
+  applyStyle();
   updateStatus();
+  if (typeof gpvRenderIcons === 'function') gpvRenderIcons(root);
 })();
 </script>
 
-<script src="https://unpkg.com/@floating-ui/core@1.7.3/dist/floating-ui.core.umd.min.js"></script>
-<script src="https://unpkg.com/@floating-ui/dom@1.7.4/dist/floating-ui.dom.umd.min.js"></script>
 <script>
+/* Inline icon set (Lucide 1.17.0, ISC licence) and a self-contained tooltip.
+   Both used to be CDN downloads; keeping them local removes two network
+   round-trips and lets the page render correctly with no connectivity. */
 (() => {
-  if (window.FloatingUIDOM == null) {
-    return;
-  }
-  const { autoUpdate, computePosition, flip, offset, shift, size } =
-    window.FloatingUIDOM;
-  const tooltipPlacements = new Set(["top", "right", "bottom", "left"]);
-  const tooltipId = `codex-visualization-tooltip-${
-    window.crypto?.randomUUID?.() ?? Date.now().toString(36)
-  }`;
-  const tooltipGap = 5;
-  const hoverDelay = 700;
-  const skipDelay = 300;
-  let activeTrigger = null;
-  let pendingTrigger = null;
-  let tooltip = null;
-  let openTimeout = null;
-  let autoUpdateCleanup = null;
-  let positionRequest = 0;
-  let skipDelayUntil = 0;
-
-  const getTrigger = (target) =>
-    target?.nodeType === Node.ELEMENT_NODE
-      ? target.closest("[data-tooltip]")
-      : null;
-  const containsTarget = (trigger, target) =>
-    target?.nodeType != null && trigger.contains(target);
-  const getContent = (trigger) =>
-    trigger.getAttribute("data-tooltip")?.trim() ?? "";
-  const getPlacement = (trigger) => {
-    const placement = trigger.getAttribute("data-tooltip-placement");
-    return tooltipPlacements.has(placement) ? placement : "top";
-  };
-  const getTooltip = () => {
-    if (tooltip == null) {
-      tooltip = document.createElement("div");
-      tooltip.id = tooltipId;
-      tooltip.className = "tooltip";
-      tooltip.setAttribute("role", "tooltip");
-    }
-    return tooltip;
-  };
-  const setDescribedBy = (trigger, described) => {
-    const ids = new Set(
-      (trigger.getAttribute("aria-describedby") ?? "")
-        .split(/\s+/)
-        .filter(Boolean),
-    );
-    if (described) {
-      ids.add(tooltipId);
-    } else {
-      ids.delete(tooltipId);
-    }
-    if (ids.size === 0) {
-      trigger.removeAttribute("aria-describedby");
-    } else {
-      trigger.setAttribute("aria-describedby", [...ids].join(" "));
-    }
-  };
-  const clearOpenTimeout = () => {
-    if (openTimeout != null) {
-      window.clearTimeout(openTimeout);
-      openTimeout = null;
-    }
-    pendingTrigger = null;
-  };
-  const closeTooltip = (activateSkipDelay = true) => {
-    clearOpenTimeout();
-    positionRequest += 1;
-    autoUpdateCleanup?.();
-    autoUpdateCleanup = null;
-    if (activeTrigger == null) {
-      return;
-    }
-    setDescribedBy(activeTrigger, false);
-    activeTrigger = null;
-    tooltip?.remove();
-    if (activateSkipDelay) {
-      skipDelayUntil = Date.now() + skipDelay;
-    }
-  };
-  const updatePosition = (trigger, floating) => {
-    const request = ++positionRequest;
-    void computePosition(trigger, floating, {
-      middleware: [
-        offset(tooltipGap),
-        flip({ padding: tooltipGap }),
-        shift({ padding: tooltipGap }),
-        size({
-          padding: tooltipGap,
-          apply({ availableHeight, availableWidth, elements }) {
-            elements.floating.style.setProperty(
-              "--tooltip-available-width",
-              `${Math.max(0, availableWidth)}px`,
-            );
-            elements.floating.style.setProperty(
-              "--tooltip-available-height",
-              `${Math.max(0, availableHeight)}px`,
-            );
-          },
-        }),
-      ],
-      placement: getPlacement(trigger),
-      strategy: "fixed",
-    })
-      .then(({ x, y }) => {
-        if (activeTrigger !== trigger || request !== positionRequest) {
-          return;
-        }
-        const scale = window.devicePixelRatio || 1;
-        floating.style.transform = `translate(${Math.round(x * scale) / scale}px, ${Math.round(y * scale) / scale}px)`;
-        floating.style.visibility = "visible";
-      })
-      .catch(() => {
-        if (activeTrigger === trigger && request === positionRequest) {
-          closeTooltip(false);
-        }
-      });
-  };
-  const openTooltip = (trigger) => {
-    const content = getContent(trigger);
-    if (!trigger.isConnected || content.length === 0) {
-      return;
-    }
-    clearOpenTimeout();
-    if (activeTrigger === trigger) {
-      return;
-    }
-    closeTooltip();
-    const floating = getTooltip();
-    floating.textContent = content;
-    floating.style.visibility = "hidden";
-    floating.style.transform = "translate(0, 0)";
-    document.body.appendChild(floating);
-    activeTrigger = trigger;
-    setDescribedBy(trigger, true);
-    autoUpdateCleanup = autoUpdate(trigger, floating, () => {
-      updatePosition(trigger, floating);
+  const icons = {"folder-up":"<path d=\"M20 20a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.69-.9L9.6 3.9A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2Z\"/><path d=\"M12 10v6\"/><path d=\"m9 13 3-3 3 3\"/>","chevron-left":"<path d=\"m15 18-6-6 6-6\"/>","chevron-right":"<path d=\"m9 18 6-6-6-6\"/>","chevron-down":"<path d=\"m6 9 6 6 6-6\"/>","scan":"<path d=\"M3 7V5a2 2 0 0 1 2-2h2\"/><path d=\"M17 3h2a2 2 0 0 1 2 2v2\"/><path d=\"M21 17v2a2 2 0 0 1-2 2h-2\"/><path d=\"M7 21H5a2 2 0 0 1-2-2v-2\"/>","share-2":"<circle cx=\"18\" cy=\"5\" r=\"3\"/><circle cx=\"6\" cy=\"12\" r=\"3\"/><circle cx=\"18\" cy=\"19\" r=\"3\"/><line x1=\"8.59\" x2=\"15.42\" y1=\"13.51\" y2=\"17.49\"/><line x1=\"15.41\" x2=\"8.59\" y1=\"6.51\" y2=\"10.49\"/>","orbit":"<path d=\"M20.341 6.484A10 10 0 0 1 10.266 21.85\"/><path d=\"M3.659 17.516A10 10 0 0 1 13.74 2.152\"/><circle cx=\"12\" cy=\"12\" r=\"3\"/><circle cx=\"19\" cy=\"5\" r=\"2\"/><circle cx=\"5\" cy=\"19\" r=\"2\"/>","layers-3":"<path d=\"M12.83 2.18a2 2 0 0 0-1.66 0L2.6 6.08a1 1 0 0 0 0 1.83l8.58 3.91a2 2 0 0 0 1.66 0l8.58-3.9a1 1 0 0 0 0-1.83z\"/><path d=\"M2 12a1 1 0 0 0 .58.91l8.6 3.91a2 2 0 0 0 1.65 0l8.58-3.9A1 1 0 0 0 22 12\"/><path d=\"M2 17a1 1 0 0 0 .58.91l8.6 3.91a2 2 0 0 0 1.65 0l8.58-3.9A1 1 0 0 0 22 17\"/>","palette":"<path d=\"M12 22a1 1 0 0 1 0-20 10 9 0 0 1 10 9 5 5 0 0 1-5 5h-2.25a1.75 1.75 0 0 0-1.4 2.8l.3.4a1.75 1.75 0 0 1-1.4 2.8z\"/><circle cx=\"13.5\" cy=\"6.5\" r=\".5\" fill=\"currentColor\"/><circle cx=\"17.5\" cy=\"10.5\" r=\".5\" fill=\"currentColor\"/><circle cx=\"6.5\" cy=\"12.5\" r=\".5\" fill=\"currentColor\"/><circle cx=\"8.5\" cy=\"7.5\" r=\".5\" fill=\"currentColor\"/>","mouse-pointer-2":"<path d=\"M4.037 4.688a.495.495 0 0 1 .651-.651l16 6.5a.5.5 0 0 1-.063.947l-6.124 1.58a2 2 0 0 0-1.438 1.435l-1.579 6.126a.5.5 0 0 1-.947.063z\"/>","columns-2":"<rect width=\"18\" height=\"18\" x=\"3\" y=\"3\" rx=\"2\"/><path d=\"M12 3v18\"/>","chart-no-axes-column-increasing":"<path d=\"M5 21v-6\"/><path d=\"M12 21V9\"/><path d=\"M19 21V3\"/>","image-down":"<path d=\"M10.3 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2v10l-3.1-3.1a2 2 0 0 0-2.814.014L6 21\"/><path d=\"m14 19 3 3v-5.5\"/><path d=\"m17 22 3-3\"/><circle cx=\"9\" cy=\"9\" r=\"2\"/>","sun":"<circle cx=\"12\" cy=\"12\" r=\"4\"/><path d=\"M12 2v2\"/><path d=\"M12 20v2\"/><path d=\"m4.93 4.93 1.41 1.41\"/><path d=\"m17.66 17.66 1.41 1.41\"/><path d=\"M2 12h2\"/><path d=\"M20 12h2\"/><path d=\"m6.34 17.66-1.41 1.41\"/><path d=\"m19.07 4.93-1.41 1.41\"/>","moon":"<path d=\"M20.985 12.486a9 9 0 1 1-9.473-9.472c.405-.022.617.46.402.803a6 6 0 0 0 8.268 8.268c.344-.215.825-.004.803.401\"/>","monitor":"<rect width=\"20\" height=\"14\" x=\"2\" y=\"3\" rx=\"2\"/><line x1=\"8\" x2=\"16\" y1=\"21\" y2=\"21\"/><line x1=\"12\" x2=\"12\" y1=\"17\" y2=\"21\"/>","circle-help":"<circle cx=\"12\" cy=\"12\" r=\"10\"/><path d=\"M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3\"/><path d=\"M12 17h.01\"/>","maximize":"<path d=\"M8 3H5a2 2 0 0 0-2 2v3\"/><path d=\"M21 8V5a2 2 0 0 0-2-2h-3\"/><path d=\"M3 16v3a2 2 0 0 0 2 2h3\"/><path d=\"M16 21h3a2 2 0 0 0 2-2v-3\"/>","minimize":"<path d=\"M8 3v3a2 2 0 0 1-2 2H3\"/><path d=\"M21 8h-3a2 2 0 0 1-2-2V3\"/><path d=\"M3 16h3a2 2 0 0 1 2 2v3\"/><path d=\"M16 21v-3a2 2 0 0 1 2-2h3\"/>","download":"<path d=\"M12 15V3\"/><path d=\"M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4\"/><path d=\"m7 10 5 5 5-5\"/>","x":"<path d=\"M18 6 6 18\"/><path d=\"m6 6 12 12\"/>","search":"<path d=\"m21 21-4.34-4.34\"/><circle cx=\"11\" cy=\"11\" r=\"8\"/>","trash-2":"<path d=\"M10 11v6\"/><path d=\"M14 11v6\"/><path d=\"M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6\"/><path d=\"M3 6h18\"/><path d=\"M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2\"/>","play":"<path d=\"M5 5a2 2 0 0 1 3.008-1.728l11.997 6.998a2 2 0 0 1 .003 3.458l-12 7A2 2 0 0 1 5 19z\"/>","pause":"<rect x=\"14\" y=\"3\" width=\"5\" height=\"18\" rx=\"1\"/><rect x=\"5\" y=\"3\" width=\"5\" height=\"18\" rx=\"1\"/>","ruler":"<path d=\"M21.3 15.3a2.4 2.4 0 0 1 0 3.4l-2.6 2.6a2.4 2.4 0 0 1-3.4 0L2.7 8.7a2.41 2.41 0 0 1 0-3.4l2.6-2.6a2.41 2.41 0 0 1 3.4 0Z\"/><path d=\"m14.5 12.5 2-2\"/><path d=\"m11.5 9.5 2-2\"/><path d=\"m8.5 6.5 2-2\"/><path d=\"m17.5 15.5 2-2\"/>","tag":"<path d=\"M12.586 2.586A2 2 0 0 0 11.172 2H4a2 2 0 0 0-2 2v7.172a2 2 0 0 0 .586 1.414l8.704 8.704a2.426 2.426 0 0 0 3.42 0l6.58-6.58a2.426 2.426 0 0 0 0-3.42z\"/><circle cx=\"7.5\" cy=\"7.5\" r=\".5\" fill=\"currentColor\"/>","database":"<ellipse cx=\"12\" cy=\"5\" rx=\"9\" ry=\"3\"/><path d=\"M3 5V19A9 3 0 0 0 21 19V5\"/><path d=\"M3 12A9 3 0 0 0 21 12\"/>","rotate-ccw":"<path d=\"M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8\"/><path d=\"M3 3v5h5\"/>","eye":"<path d=\"M2.062 12.348a1 1 0 0 1 0-.696 10.75 10.75 0 0 1 19.876 0 1 1 0 0 1 0 .696 10.75 10.75 0 0 1-19.876 0\"/><circle cx=\"12\" cy=\"12\" r=\"3\"/>","eye-off":"<path d=\"M10.733 5.076a10.744 10.744 0 0 1 11.205 6.575 1 1 0 0 1 0 .696 10.747 10.747 0 0 1-1.444 2.49\"/><path d=\"M14.084 14.158a3 3 0 0 1-4.242-4.242\"/><path d=\"M17.479 17.499a10.75 10.75 0 0 1-15.417-5.151 1 1 0 0 1 0-.696 10.75 10.75 0 0 1 4.446-5.143\"/><path d=\"m2 2 20 20\"/>","triangle-alert":"<path d=\"m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3\"/><path d=\"M12 9v4\"/><path d=\"M12 17h.01\"/>","check":"<path d=\"M20 6 9 17l-5-5\"/>","refresh-cw":"<path d=\"M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8\"/><path d=\"M21 3v5h-5\"/><path d=\"M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16\"/><path d=\"M8 16H3v5\"/>","crosshair":"<circle cx=\"12\" cy=\"12\" r=\"10\"/><line x1=\"22\" x2=\"18\" y1=\"12\" y2=\"12\"/><line x1=\"6\" x2=\"2\" y1=\"12\" y2=\"12\"/><line x1=\"12\" x2=\"12\" y1=\"6\" y2=\"2\"/><line x1=\"12\" x2=\"12\" y1=\"22\" y2=\"18\"/>","file-down":"<path d=\"M6 22a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h8a2.4 2.4 0 0 1 1.704.706l3.588 3.588A2.4 2.4 0 0 1 20 8v12a2 2 0 0 1-2 2z\"/><path d=\"M14 2v5a1 1 0 0 0 1 1h5\"/><path d=\"M12 18v-6\"/><path d=\"m9 15 3 3 3-3\"/>","table":"<path d=\"M12 3v18\"/><rect width=\"18\" height=\"18\" x=\"3\" y=\"3\" rx=\"2\"/><path d=\"M3 9h18\"/><path d=\"M3 15h18\"/>","cloud-download":"<path d=\"M12 13v8l-4-4\"/><path d=\"m12 21 4-4\"/><path d=\"M4.393 15.269A7 7 0 1 1 15.71 8h1.79a4.5 4.5 0 0 1 2.436 8.284\"/>","info":"<circle cx=\"12\" cy=\"12\" r=\"10\"/><path d=\"M12 16v-4\"/><path d=\"M12 8h.01\"/>","circle-alert":"<circle cx=\"12\" cy=\"12\" r=\"10\"/><line x1=\"12\" x2=\"12\" y1=\"8\" y2=\"12\"/><line x1=\"12\" x2=\"12.01\" y1=\"16\" y2=\"16\"/>","external-link":"<path d=\"M15 3h6v6\"/><path d=\"M10 14 21 3\"/><path d=\"M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6\"/>","keyboard":"<path d=\"M10 8h.01\"/><path d=\"M12 12h.01\"/><path d=\"M14 8h.01\"/><path d=\"M16 12h.01\"/><path d=\"M18 8h.01\"/><path d=\"M6 8h.01\"/><path d=\"M7 16h10\"/><path d=\"M8 12h.01\"/><rect width=\"20\" height=\"16\" x=\"2\" y=\"4\" rx=\"2\"/>"};
+  const renderIcons = (scope = document) => {
+    scope.querySelectorAll('[data-icon]').forEach(host => {
+      const body = icons[host.getAttribute('data-icon')];
+      if (body === undefined || host.firstElementChild) return;
+      host.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24"'
+        + ' fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"'
+        + ' stroke-linejoin="round" aria-hidden="true" focusable="false">' + body + '</svg>';
     });
   };
-  const requestOpen = (trigger, immediate = false) => {
-    if (
-      getContent(trigger).length === 0 ||
-      activeTrigger === trigger ||
-      pendingTrigger === trigger
-    ) {
-      return;
-    }
-    clearOpenTimeout();
-    pendingTrigger = trigger;
-    const delay =
-      immediate || activeTrigger != null || Date.now() < skipDelayUntil
-        ? 0
-        : hoverDelay;
-    if (delay === 0) {
-      openTooltip(trigger);
-      return;
-    }
-    openTimeout = window.setTimeout(() => {
-      openTimeout = null;
-      pendingTrigger = null;
-      openTooltip(trigger);
-    }, delay);
-  };
-  const handlePointerOpen = (event) => {
-    if (event.pointerType === "touch") {
-      return;
-    }
-    const trigger = getTrigger(event.target);
-    if (trigger == null || containsTarget(trigger, event.relatedTarget)) {
-      return;
-    }
-    requestOpen(trigger);
-  };
-  const handleLeave = (event) => {
-    const trigger = getTrigger(event.target);
-    if (trigger == null || containsTarget(trigger, event.relatedTarget)) {
-      return;
-    }
-    if (activeTrigger === trigger || pendingTrigger === trigger) {
-      closeTooltip();
-    }
-  };
-  const handleFocusIn = (event) => {
-    const trigger = getTrigger(event.target);
-    if (trigger?.matches(":focus-visible")) {
-      requestOpen(trigger, true);
-    }
-  };
-  const handleKeyDown = (event) => {
-    if (event.key === "Escape") {
-      closeTooltip();
-    }
-  };
-  const handleContextMenu = (event) => {
-    const trigger = getTrigger(event.target);
-    if (activeTrigger === trigger || pendingTrigger === trigger) {
-      closeTooltip();
-    }
-  };
-  const destroy = () => {
-    closeTooltip(false);
-    document.removeEventListener("pointerover", handlePointerOpen);
-    document.removeEventListener("pointerout", handleLeave);
-    document.removeEventListener("focusin", handleFocusIn);
-    document.removeEventListener("focusout", handleLeave);
-    document.removeEventListener("keydown", handleKeyDown);
-    document.removeEventListener("contextmenu", handleContextMenu);
-    tooltip = null;
+  renderIcons();
+  globalThis.gpvRenderIcons = renderIcons;
+})();
+
+(() => {
+  /* Accessible hover/focus tooltips for [data-tooltip] elements. */
+  const openDelay = 450;
+  const tip = document.createElement('div');
+  tip.className = 'tooltip';
+  tip.id = 'gpv-tooltip';
+  tip.setAttribute('role', 'tooltip');
+  let current = null;
+  let timer = 0;
+
+  const place = () => {
+    if (!current) return;
+    const anchor = current.getBoundingClientRect();
+    const gap = 6;
+    tip.style.maxWidth = Math.min(280, window.innerWidth - 16) + 'px';
+    const box = tip.getBoundingClientRect();
+    let top = anchor.top - box.height - gap;
+    if (top < 4) top = Math.min(anchor.bottom + gap, window.innerHeight - box.height - 4);
+    let left = anchor.left + anchor.width / 2 - box.width / 2;
+    left = Math.max(8, Math.min(left, window.innerWidth - box.width - 8));
+    tip.style.transform = 'translate(' + Math.round(left) + 'px,' + Math.round(top) + 'px)';
+    tip.style.visibility = 'visible';
   };
 
-  document.addEventListener("pointerover", handlePointerOpen);
-  document.addEventListener("pointerout", handleLeave);
-  document.addEventListener("focusin", handleFocusIn);
-  document.addEventListener("focusout", handleLeave);
-  document.addEventListener("keydown", handleKeyDown);
-  document.addEventListener("contextmenu", handleContextMenu);
-  window.addEventListener("pagehide", destroy, { once: true });
-})();
-</script>
-<script id="codex-visualization-lucide" async src="https://unpkg.com/lucide@1.17.0/dist/umd/lucide.js"></script>
-<script>
-(() => {
-  const initialize = () => {
-    globalThis.lucide?.createIcons({ attrs: { width: 16, height: 16 } });
+  const hide = () => {
+    clearTimeout(timer);
+    timer = 0;
+    if (current) current.removeAttribute('aria-describedby');
+    current = null;
+    tip.remove();
   };
-  if (globalThis.lucide != null) {
-    initialize();
-    return;
-  }
-  document
-    .getElementById("codex-visualization-lucide")
-    ?.addEventListener("load", initialize, { once: true });
+
+  const show = element => {
+    const text = (element.getAttribute('data-tooltip') || '').trim();
+    if (!text || !element.isConnected) return;
+    hide();
+    current = element;
+    tip.textContent = text;
+    tip.style.visibility = 'hidden';
+    tip.style.transform = 'translate(0,0)';
+    document.body.append(tip);
+    element.setAttribute('aria-describedby', tip.id);
+    place();
+  };
+
+  const trigger = target => (target instanceof Element ? target.closest('[data-tooltip]') : null);
+
+  document.addEventListener('pointerover', event => {
+    if (event.pointerType === 'touch') return;
+    const element = trigger(event.target);
+    if (!element || element === current) return;
+    clearTimeout(timer);
+    timer = setTimeout(() => show(element), openDelay);
+  });
+  document.addEventListener('pointerout', event => {
+    const element = trigger(event.target);
+    if (element && (element === current || timer)) hide();
+  });
+  document.addEventListener('focusin', event => {
+    const element = trigger(event.target);
+    if (element && element.matches(':focus-visible')) show(element);
+  });
+  document.addEventListener('focusout', hide);
+  document.addEventListener('keydown', event => { if (event.key === 'Escape') hide(); });
+  window.addEventListener('scroll', hide, true);
+  window.addEventListener('resize', hide);
 })();
 </script>
 

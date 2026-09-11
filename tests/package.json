@@ -1,0 +1,12 @@
+{
+  "name": "protein-structure-viewer-tests",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "pretest": "node vendor.mjs",
+    "test": "node run.mjs"
+  },
+  "devDependencies": {
+    "playwright": "^1.55.0"
+  }
+}
