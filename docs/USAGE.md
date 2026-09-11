@@ -14,6 +14,7 @@ interpretation caveats see [`SCIENTIFIC-AUDIT.md`](../SCIENTIFIC-AUDIT.md).
 - [Confidence tab](#confidence-tab)
 - [Publish tab](#publish-tab)
 - [Reproducible scenes](#reproducible-scenes)
+- [Recipes](#recipes)
 - [Working with large AlphaFold archives](#working-with-large-alphafold-archives)
 - [Troubleshooting](#troubleshooting)
 
@@ -198,6 +199,31 @@ saved from.
 
 The manifest is what you archive alongside a figure so the scene can be rebuilt later. It is not a
 substitute for keeping the coordinate files.
+
+## Recipes
+
+Three workflows the viewer was built around, end to end.
+
+**A thesis figure comparing several predictions.** Drop the result archives. In **Models**, order by
+ranking score and hide anything you will not show. In **Appearance**, colour by pLDDT confidence and
+choose orthographic projection. In **Compare**, turn on **Synchronized multi-view**, add a panel per
+model, and leave the sync on *Rotation only* if the models differ in size. Drag any panel until the
+view makes your point, press <kbd>F</kbd> to refit. In **Annotate**, draw the arrow or callout that
+names the feature, and add a corner title. In **Publish**, pick the size and scale, then **Download
+comparison PNG**; save the view under a name too, so the same camera can be reused.
+
+**A report a reviewer can open on a laptop.** Load only the models the report should carry, or set
+*Report contents* to *Models currently shown*. Fill in the provenance fields — title, run, method —
+they become the report header. Save two or three named views with captions; they become the guided
+tour. Leave the multi-view on with the panels you want the reader to start from, and press **Share
+report**. The single HTML file embeds coordinates, aligned positions, confidence, PAE, labels, and
+annotations, and opens with no install. Download the scene JSON alongside it for your own records.
+
+**Checking a superposition honestly.** Show the models to compare, pick the reference in **Compare**,
+run **Align visible**, and read the table: aligned Cα count, identity, chain mapping, RMSD. If the
+mapping is not what you expected, switch residue mapping and align again. Then enable the multi-view
+with *Rotation and zoom* so every panel shares the exact camera, add a distance measurement across the
+region of interest, and quote the alignment statistics next to any RMSD you report.
 
 ## Working with large AlphaFold archives
 

@@ -4,7 +4,7 @@ This audit evaluates the viewer as a tool for comparing predicted structures, sh
 interactive review artefact, and preparing visual material for papers and theses. It is not a
 validation of any biological hypothesis, and nothing in the tool should be read as one.
 
-Audited against viewer version 2.1.0.
+Audited against viewer version 2.2.0.
 
 ## What is already strong
 
@@ -18,6 +18,13 @@ Audited against viewer version 2.1.0.
 - pLDDT colouring and per-model mean pLDDT help identify locally uncertain regions; PAE heatmaps,
   chain-pair ipTM, and minimum PAE carry the information pLDDT cannot.
 - Click inspection and editable residue labels support annotated figures and reviewer walkthroughs.
+  Clicks pick the nearest projected atom, so ribbons are as selectable as spheres.
+- Atom-anchored figure annotations — arrows, lines, residue markers, text callouts, corner titles —
+  follow rotation and re-alignment and are drawn into every export and the report, so a figure's
+  argument does not drift out of register when the view changes.
+- Synchronized multi-view places up to six models in linked viewports. Rotation-only sync keeps
+  differently sized models framed; full sync is available for superposed models. A stitched, lettered
+  comparison figure exports the panel set at publication size.
 - Cα alignment makes conformational and prediction-to-prediction comparison possible without a desktop
   molecular-graphics package, and reports the chain mapping, aligned count, and identity it used
   rather than only an RMSD number.
@@ -64,13 +71,18 @@ Audited against viewer version 2.1.0.
   perspective or orthographic projection
 - Named camera views and captions, downloadable multi-panel figure sheets, and caption text
 - Chain/residue-range highlighting or hiding, atom distances, and three-atom angles
-- Synchronised side-by-side model comparison
-- Guided saved views and captions in the downloadable live HTML report, with explicit control over
-  whether the report carries the displayed models or all of them
+- Synchronized multi-view of up to six models with rotation-only or rotation-and-zoom camera sync,
+  and a stitched lettered comparison figure of the panel set
+- Figure annotations anchored to atoms (arrows, lines, residue markers, text callouts, corner titles),
+  carried into PNG exports, comparison panels, scene manifests, and reports
+- Guided saved views and captions in the downloadable live HTML report, which now offers one to six
+  synchronized panels, per-panel model pickers, aligned coordinates, and stitched PNG or composite
+  video export, with explicit control over whether the report carries the displayed models or all of
+  them
 
 ## Supply-chain and integrity posture
 
-Reviewers and institutional IT increasingly ask what a browser tool loads and from where. As of 2.1.0:
+Reviewers and institutional IT increasingly ask what a browser tool loads and from where. As of 2.2.0:
 
 - All three runtime libraries (3Dmol.js, JSZip, numeric.js) are pinned by exact version *and*
   Subresource Integrity hash, so a substituted CDN file will refuse to execute.
@@ -86,7 +98,8 @@ Reviewers and institutional IT increasingly ask what a browser tool loads and fr
 ### P1 — remaining publication refinements
 
 1. **Vector overlays.** Export labels, legends, titles, and scale bars as SVG layered over a
-   high-resolution molecular render.
+   high-resolution molecular render. 2.2.0 draws annotations into the raster export; an editable
+   vector layer remains open.
 2. **Editable measurement labels.** Allow authors to override automatically generated distance and
    angle text.
 3. **Batch style locking.** Explicitly lock molecular scale and orientation across exported panel sets

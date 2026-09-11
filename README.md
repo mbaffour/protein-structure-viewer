@@ -11,6 +11,7 @@ Structure files you open stay in the browser. Nothing is uploaded.
 - **Usage guide:** [`docs/USAGE.md`](docs/USAGE.md)
 - **Scientific and publication-readiness audit:** [`SCIENTIFIC-AUDIT.md`](SCIENTIFIC-AUDIT.md)
 - **Release notes:** [`CHANGELOG.md`](CHANGELOG.md)
+- **Background and design notes:** [blog post](https://mbaffour.github.io/blog/protein-structure-viewer.html)
 
 ## Quick start
 
