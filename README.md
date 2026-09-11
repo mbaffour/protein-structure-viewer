@@ -29,28 +29,33 @@ Multiple structures can be displayed together. Each loaded structure has its own
 - Overlay mode or one-model-at-a-time mode, with previous/next controls, keyboard navigation, adjustable automatic cycling, and sorting by ranking score or mean pLDDT
 - Cartoon, stick, sphere, and line representations
 - Per-structure, per-chain, pLDDT, sequence-spectrum, and element color schemes
+- Perspective or orthographic projection plus transparent, white, dark, or custom backgrounds
 - Standard AlphaFold pLDDT legend and mean pLDDT calculation from Cα B-factor values
 - Interactive PAE heatmaps with residue/token inspection and PNG export
 - Model-level pTM, ipTM, ranking score, rank, and clash indicators, plus chain-pair ipTM and minimum PAE when available
 - Downloadable confidence-metrics CSV
 - Click any atom to inspect its model, residue, chain, atom name, and pLDDT
 - Add or edit custom residue labels, or label every residue in the current model
+- Highlight or hide chain/residue ranges and add atom-to-atom distance or three-atom angle measurements
 - Sequence-aware Cα alignment or strict chain/residue-ID alignment, with a one-click coordinate restore
 - Per-model aligned-residue count, sequence identity, chain mapping, Cα RMSD, and downloadable alignment CSV
+- Synchronized side-by-side comparison for two selected models
 - Spin and rocking animations with adjustable speed
-- PNG image export and 5-, 10-, or 15-second WebM spin-video export
+- Fixed-size, supersampled publication PNG export and 5-, 10-, or 15-second WebM spin-video export
+- Reusable named views with captions, multi-panel contact-sheet export, and caption-text export
 - Downloadable HTML reports with every selected model embedded
-- Previous/next navigation, automatic cycling, arrow-key navigation, saved custom labels, pLDDT/PAE confidence, provenance, PNG export, and WebM spin-video recording inside generated reports
-- Reproducible scene manifests with SHA-256 structure-file hashes, camera, model state, colors, labels, alignment settings, and scientific provenance
+- Previous/next navigation, automatic cycling, arrow-key navigation, guided saved views, captions, custom labels, pLDDT/PAE confidence, provenance, PNG export, and WebM spin-video recording inside generated reports
+- Reproducible scene manifests with SHA-256 structure-file hashes, camera, model state, colors, labels, selections, measurements, saved views, comparison settings, alignment settings, and scientific provenance
 - No build step, account, backend, or bundled example data
 
 ## Create a shareable model report
 
 1. Load all model files that should appear in the report.
-2. Select **Download HTML report**.
-3. Open the resulting `protein-model-report.html` in a browser.
+2. Optionally save named views and captions in the **Publish** tab.
+3. Select **Share report**.
+4. Open the resulting `protein-model-report.html` in a browser.
 
-The report embeds the loaded coordinate data and lets the reader choose models, move forward or backward, or automatically cycle through them. Like the main viewer, it loads 3Dmol.js from a CDN when opened.
+The report is the live figure: it embeds all loaded coordinate data and lets a reader choose models, move forward or backward, automatically cycle through them, or follow your saved guided views and captions. Like the main viewer, it loads 3Dmol.js from a CDN when opened.
 
 ## Scientific-use notes
 

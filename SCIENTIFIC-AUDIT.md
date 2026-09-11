@@ -29,28 +29,35 @@ This audit evaluates the viewer as a tool for comparing predicted structures, sh
 - SHA-256-backed scene manifests that retain provenance, camera, labels, colors, model order, and alignment state
 - Confidence, PAE, provenance, labels, and media controls in portable reviewer reports
 
+## Implemented publication and reviewer workflow
+
+- Viewer-first tabbed interface that keeps the molecular scene visible while tools are grouped into Models, Appearance, Annotate, Compare, Confidence, and Publish
+- Fixed-size, supersampled PNG export with transparent, white, dark, and custom backgrounds plus perspective or orthographic projection
+- Named camera views and captions, downloadable multi-panel figure sheets, and caption text
+- Chain/residue-range highlighting or hiding, atom distances, and three-atom angles
+- Synchronized side-by-side model comparison
+- Guided saved views and captions in the downloadable live HTML report
+- Scene manifests extended to preserve selections, measurements, saved views, background/projection, and comparison state
+
 ## Remaining roadmap
 
-### P1 — reviewer and publication workflow
+### P1 — remaining publication refinements
 
-1. **Publication export presets.** White/transparent/dark backgrounds, fixed canvas sizes, supersampled PNG at 2×–4×, and scale/orientation consistency across a batch.
-2. **Figure panels.** Save named views (for example overview, interface, pore, and confidence), arrange them into labelled panels, and export a contact sheet plus caption text.
-3. **Selections and measurements.** Select by chain/residue range, show/hide selections, highlight interfaces, and add distance/angle measurements with editable labels.
-4. **Side-by-side synchronized views.** Compare two or more models with linked rotation/zoom, avoiding ambiguity caused by translucent overlays.
-5. **Reviewer mode.** Read-only presentation mode with author-defined model order, captions, guided views, keyboard controls, and a table summarizing confidence and provenance.
-6. **Vector overlays.** Export labels, legends, titles, and scale bars as SVG layered over a high-resolution molecular render.
+1. **Vector overlays.** Export labels, legends, titles, and scale bars as SVG layered over a high-resolution molecular render.
+2. **Editable measurement labels.** Allow authors to override automatically generated distance and angle text.
+3. **Batch style locking.** Explicitly lock molecular scale and orientation across exported panel sets when cameras were not saved from the same frame.
 
 ### P2 — deeper structural analysis
 
-7. **Interface analysis.** Contact maps, inter-chain contact counts, buried-surface estimates, interface-residue tables, and exportable selections.
-8. **Membrane context.** Adjustable membrane planes and hydrophobic slab guides—particularly useful for holins and other membrane proteins.
-9. **Ensemble summaries.** Cluster models by structural similarity, show representative conformations, and graph pairwise RMSD alongside confidence metrics.
-10. **Sequence viewer.** Linked sequence and structure selection, residue search, domain annotations, mutation markers, and chain-aware numbering.
-11. **Validation warnings.** Flag missing residues/atoms, duplicate identifiers, implausible coordinate ranges, absent pLDDT, and incompatible models before alignment.
+4. **Interface analysis.** Contact maps, inter-chain contact counts, buried-surface estimates, interface-residue tables, and exportable selections.
+5. **Membrane context.** Adjustable membrane planes and hydrophobic slab guides—particularly useful for holins and other membrane proteins.
+6. **Ensemble summaries.** Cluster models by structural similarity, show representative conformations, and graph pairwise RMSD alongside confidence metrics.
+7. **Sequence viewer.** Linked sequence and structure selection, residue search, domain annotations, mutation markers, and chain-aware numbering.
+8. **Validation warnings.** Flag missing residues/atoms, duplicate identifiers, implausible coordinate ranges, absent pLDDT, and incompatible models before alignment.
 
 ## Recommended next milestone
 
-The most valuable next release is **publication figure preparation**: fixed-size high-resolution exports, reusable named views, selection and measurement tools, synchronized side-by-side comparison, and a guided reviewer mode.
+The most valuable next release is **membrane-aware interface analysis**: membrane planes, contact maps, interface-residue tables, contact counts, and ensemble clustering. Those additions would be especially useful for evaluating holin oligomer models without implying that a prediction proves pore formation.
 
 ## Technical notes
 

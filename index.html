@@ -6,7 +6,7 @@
 <meta name="referrer" content="no-referrer">
 <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'unsafe-inline' 'unsafe-eval' 'wasm-unsafe-eval' blob: data: https://cdnjs.cloudflare.com https://cdn.jsdelivr.net https://esm.sh https://fonts.bunny.net https://fonts.googleapis.com https://fonts.gstatic.com https://unpkg.com; style-src 'unsafe-inline' blob: data: https://cdnjs.cloudflare.com https://cdn.jsdelivr.net https://esm.sh https://fonts.bunny.net https://fonts.googleapis.com https://fonts.gstatic.com https://unpkg.com; img-src blob: data: https://cdnjs.cloudflare.com https://cdn.jsdelivr.net https://esm.sh https://fonts.bunny.net https://fonts.googleapis.com https://fonts.gstatic.com https://unpkg.com; font-src blob: data: https://cdnjs.cloudflare.com https://cdn.jsdelivr.net https://esm.sh https://fonts.bunny.net https://fonts.googleapis.com https://fonts.gstatic.com https://unpkg.com; media-src blob: data: https://cdnjs.cloudflare.com https://cdn.jsdelivr.net https://esm.sh https://fonts.bunny.net https://fonts.googleapis.com https://fonts.gstatic.com https://unpkg.com; worker-src blob:; connect-src blob: data:; frame-src 'self'; object-src 'none'; base-uri 'none'; form-action 'none'">
 <title>Generic Protein Viewer</title>
-<style>:root{color-scheme:light dark;background:light-dark(rgb(255 255 255), rgb(24 24 24))}html,body{margin:0}body{box-sizing:border-box;padding:1rem;background:inherit}iframe{display:block;width:100%;max-width:736px;height:calc(100vh - 2rem);margin:0 auto;border:0}</style>
+<style>:root{color-scheme:light dark;background:light-dark(rgb(255 255 255), rgb(24 24 24))}html,body{margin:0}body{box-sizing:border-box;padding:1rem;background:inherit}iframe{display:block;width:100%;max-width:1600px;height:calc(100vh - 2rem);margin:0 auto;border:0}</style>
 </head>
 <body>
 <iframe sandbox="allow-scripts allow-downloads" referrerpolicy="no-referrer" title="Generic Protein Viewer" srcdoc="&lt;!doctype html&gt;
@@ -815,152 +815,36 @@ html&gt;body{padding:0}&lt;/style&gt;
 &lt;body&gt;
 &lt;div id=&quot;generic-protein-viewer&quot;&gt;
   &lt;label class=&quot;card gpv-drop&quot; id=&quot;gpv-drop&quot; for=&quot;gpv-files&quot;&gt;
-    &lt;strong&gt;Drop an AlphaFold ZIP or structure files here&lt;/strong&gt;
-    &lt;span class=&quot;text-muted&quot;&gt;PDB, CIF/mmCIF, AlphaFold confidence JSON, scene JSON, and result ZIPs are supported. Files stay on this device.&lt;/span&gt;
+    &lt;strong&gt;Drop structures or an AlphaFold result ZIP&lt;/strong&gt;
+    &lt;span class=&quot;text-muted&quot;&gt;PDB, CIF/mmCIF, confidence JSON, ranking CSV, scene JSON, and ZIP · processed locally&lt;/span&gt;
+    &lt;input class=&quot;sr-only&quot; id=&quot;gpv-files&quot; type=&quot;file&quot; accept=&quot;.pdb,.cif,.mmcif,.json,.csv,.zip&quot; multiple&gt;
   &lt;/label&gt;
 
-  &lt;div class=&quot;viz-controls&quot; aria-label=&quot;Load protein structures&quot;&gt;
-    &lt;label class=&quot;form-label gpv-file-label&quot;&gt;Structure files
-      &lt;input class=&quot;form-control&quot; id=&quot;gpv-files&quot; type=&quot;file&quot; accept=&quot;.pdb,.cif,.mmcif,.json,.csv,.zip&quot; multiple&gt;
-    &lt;/label&gt;
-    &lt;button class=&quot;btn&quot; type=&quot;button&quot; id=&quot;gpv-clear&quot;&gt;Clear all&lt;/button&gt;
-    &lt;button class=&quot;btn&quot; type=&quot;button&quot; id=&quot;gpv-show-all&quot;&gt;Show all&lt;/button&gt;
-    &lt;button class=&quot;btn&quot; type=&quot;button&quot; id=&quot;gpv-hide-all&quot;&gt;Hide all&lt;/button&gt;
-    &lt;button class=&quot;btn&quot; type=&quot;button&quot; id=&quot;gpv-fit&quot;&gt;Fit visible&lt;/button&gt;
-    &lt;button class=&quot;btn&quot; type=&quot;button&quot; id=&quot;gpv-image&quot;&gt;Download PNG&lt;/button&gt;
-    &lt;button class=&quot;btn&quot; type=&quot;button&quot; id=&quot;gpv-video&quot; disabled&gt;Record spin video&lt;/button&gt;
-    &lt;button class=&quot;btn btn-primary&quot; type=&quot;button&quot; id=&quot;gpv-report&quot; disabled&gt;Download HTML report&lt;/button&gt;
-  &lt;/div&gt;
-
-  &lt;div class=&quot;viz-controls&quot; aria-label=&quot;Model navigation controls&quot;&gt;
-    &lt;label class=&quot;form-label&quot;&gt;View mode
-      &lt;select class=&quot;form-select&quot; id=&quot;gpv-view-mode&quot;&gt;
-        &lt;option value=&quot;overlay&quot;&gt;Overlay selected models&lt;/option&gt;
-        &lt;option value=&quot;single&quot;&gt;One model at a time&lt;/option&gt;
-      &lt;/select&gt;
-    &lt;/label&gt;
+  &lt;div class=&quot;viz-controls gpv-primary&quot; aria-label=&quot;Primary viewer controls&quot;&gt;
     &lt;label class=&quot;form-label gpv-current-label&quot;&gt;Current model
       &lt;select class=&quot;form-select&quot; id=&quot;gpv-current&quot; disabled&gt;&lt;option&gt;No models loaded&lt;/option&gt;&lt;/select&gt;
     &lt;/label&gt;
-    &lt;label class=&quot;form-label&quot;&gt;Model order
-      &lt;select class=&quot;form-select&quot; id=&quot;gpv-order&quot;&gt;
-        &lt;option value=&quot;loaded&quot;&gt;As loaded&lt;/option&gt;
-        &lt;option value=&quot;ranking&quot;&gt;Ranking score&lt;/option&gt;
-        &lt;option value=&quot;plddt&quot;&gt;Mean pLDDT&lt;/option&gt;
-      &lt;/select&gt;
-    &lt;/label&gt;
     &lt;button class=&quot;btn&quot; type=&quot;button&quot; id=&quot;gpv-previous&quot; disabled&gt;Previous&lt;/button&gt;
     &lt;button class=&quot;btn&quot; type=&quot;button&quot; id=&quot;gpv-next&quot; disabled&gt;Next&lt;/button&gt;
-    &lt;button class=&quot;btn&quot; type=&quot;button&quot; id=&quot;gpv-cycle&quot; disabled&gt;Cycle models&lt;/button&gt;
-    &lt;label class=&quot;form-label&quot;&gt;Cycle interval &lt;span id=&quot;gpv-cycle-value&quot;&gt;2.0 s&lt;/span&gt;
-      &lt;input class=&quot;form-range&quot; id=&quot;gpv-cycle-speed&quot; type=&quot;range&quot; min=&quot;0.5&quot; max=&quot;10&quot; value=&quot;2&quot; step=&quot;0.5&quot;&gt;
-    &lt;/label&gt;
+    &lt;button class=&quot;btn&quot; type=&quot;button&quot; id=&quot;gpv-fit&quot;&gt;Fit&lt;/button&gt;
+    &lt;button class=&quot;btn btn-primary&quot; type=&quot;button&quot; id=&quot;gpv-report&quot; disabled&gt;Share report&lt;/button&gt;
   &lt;/div&gt;
 
-  &lt;div class=&quot;viz-controls&quot; aria-label=&quot;Display controls&quot;&gt;
-    &lt;label class=&quot;form-label&quot;&gt;Representation
-      &lt;select class=&quot;form-select&quot; id=&quot;gpv-style&quot;&gt;
-        &lt;option value=&quot;cartoon&quot;&gt;Cartoon&lt;/option&gt;
-        &lt;option value=&quot;stick&quot;&gt;Sticks&lt;/option&gt;
-        &lt;option value=&quot;sphere&quot;&gt;Spheres&lt;/option&gt;
-        &lt;option value=&quot;line&quot;&gt;Lines&lt;/option&gt;
-      &lt;/select&gt;
-    &lt;/label&gt;
-    &lt;label class=&quot;form-label&quot;&gt;Color scheme
-      &lt;select class=&quot;form-select&quot; id=&quot;gpv-color-mode&quot;&gt;
-        &lt;option value=&quot;structure&quot;&gt;Per structure&lt;/option&gt;
-        &lt;option value=&quot;chain&quot;&gt;Per chain&lt;/option&gt;
-        &lt;option value=&quot;plddt&quot;&gt;pLDDT confidence&lt;/option&gt;
-        &lt;option value=&quot;spectrum&quot;&gt;Sequence spectrum&lt;/option&gt;
-        &lt;option value=&quot;element&quot;&gt;Element&lt;/option&gt;
-      &lt;/select&gt;
-    &lt;/label&gt;
-    &lt;label class=&quot;form-label&quot;&gt;Motion
-      &lt;select class=&quot;form-select&quot; id=&quot;gpv-motion&quot;&gt;
-        &lt;option value=&quot;off&quot;&gt;Off&lt;/option&gt;
-        &lt;option value=&quot;spin&quot;&gt;Spin&lt;/option&gt;
-        &lt;option value=&quot;rock&quot;&gt;Rock&lt;/option&gt;
-      &lt;/select&gt;
-    &lt;/label&gt;
-    &lt;label class=&quot;form-label&quot;&gt;Speed &lt;span id=&quot;gpv-speed-value&quot;&gt;1.0×&lt;/span&gt;
-      &lt;input class=&quot;form-range&quot; id=&quot;gpv-speed&quot; type=&quot;range&quot; min=&quot;0.25&quot; max=&quot;2.5&quot; value=&quot;1&quot; step=&quot;0.25&quot;&gt;
-    &lt;/label&gt;
-    &lt;label class=&quot;form-label&quot;&gt;Video length
-      &lt;select class=&quot;form-select&quot; id=&quot;gpv-video-length&quot;&gt;&lt;option value=&quot;5&quot;&gt;5 seconds&lt;/option&gt;&lt;option value=&quot;10&quot;&gt;10 seconds&lt;/option&gt;&lt;option value=&quot;15&quot;&gt;15 seconds&lt;/option&gt;&lt;/select&gt;
-    &lt;/label&gt;
-  &lt;/div&gt;
-
-  &lt;div class=&quot;viz-controls&quot; aria-label=&quot;Alignment controls&quot;&gt;
-    &lt;label class=&quot;form-label gpv-current-label&quot;&gt;Alignment reference
-      &lt;select class=&quot;form-select&quot; id=&quot;gpv-reference&quot; disabled&gt;&lt;option&gt;No models loaded&lt;/option&gt;&lt;/select&gt;
-    &lt;/label&gt;
-    &lt;label class=&quot;form-label&quot;&gt;Residue mapping
-      &lt;select class=&quot;form-select&quot; id=&quot;gpv-alignment-mode&quot;&gt;
-        &lt;option value=&quot;sequence&quot;&gt;Sequence-aware&lt;/option&gt;
-        &lt;option value=&quot;identifier&quot;&gt;Chain and residue IDs&lt;/option&gt;
-      &lt;/select&gt;
-    &lt;/label&gt;
-    &lt;button class=&quot;btn&quot; type=&quot;button&quot; id=&quot;gpv-align&quot; disabled&gt;Align selected models&lt;/button&gt;
-    &lt;button class=&quot;btn&quot; type=&quot;button&quot; id=&quot;gpv-restore&quot; disabled&gt;Restore coordinates&lt;/button&gt;
-    &lt;button class=&quot;btn&quot; type=&quot;button&quot; id=&quot;gpv-alignment-csv&quot; disabled&gt;Download RMSD CSV&lt;/button&gt;
-  &lt;/div&gt;
-
-  &lt;div class=&quot;table-responsive&quot; id=&quot;gpv-alignment-wrap&quot; hidden&gt;
-    &lt;table class=&quot;table table-sm&quot; aria-label=&quot;Structural alignment results&quot;&gt;
-      &lt;thead&gt;&lt;tr&gt;&lt;th&gt;Model&lt;/th&gt;&lt;th&gt;Reference&lt;/th&gt;&lt;th class=&quot;text-end&quot;&gt;Cα pairs&lt;/th&gt;&lt;th class=&quot;text-end&quot;&gt;Identity&lt;/th&gt;&lt;th class=&quot;text-end&quot;&gt;RMSD (Å)&lt;/th&gt;&lt;th&gt;Mapping&lt;/th&gt;&lt;/tr&gt;&lt;/thead&gt;
-      &lt;tbody id=&quot;gpv-alignment-results&quot;&gt;&lt;/tbody&gt;
-    &lt;/table&gt;
-  &lt;/div&gt;
-
-  &lt;div class=&quot;gpv-list&quot; id=&quot;gpv-list&quot; aria-label=&quot;Loaded structures&quot;&gt;&lt;/div&gt;
-  &lt;div class=&quot;gpv-empty text-muted&quot; id=&quot;gpv-empty&quot;&gt;Choose one or more PDB, CIF, or mmCIF files to begin.&lt;/div&gt;
-
-  &lt;div class=&quot;gpv-confidence-layout&quot; id=&quot;gpv-confidence-panel&quot; hidden&gt;
-    &lt;div&gt;
-      &lt;div class=&quot;viz-controls&quot;&gt;&lt;button class=&quot;btn&quot; type=&quot;button&quot; id=&quot;gpv-confidence-csv&quot;&gt;Download confidence CSV&lt;/button&gt;&lt;/div&gt;
-      &lt;div class=&quot;table-responsive&quot;&gt;
-        &lt;table class=&quot;table table-sm&quot; aria-label=&quot;AlphaFold model confidence metrics&quot;&gt;
-          &lt;thead&gt;&lt;tr&gt;&lt;th&gt;Model&lt;/th&gt;&lt;th class=&quot;text-end&quot;&gt;Mean pLDDT&lt;/th&gt;&lt;th class=&quot;text-end&quot;&gt;pTM&lt;/th&gt;&lt;th class=&quot;text-end&quot;&gt;ipTM&lt;/th&gt;&lt;th class=&quot;text-end&quot;&gt;Ranking score&lt;/th&gt;&lt;th class=&quot;text-end&quot;&gt;Rank&lt;/th&gt;&lt;th&gt;Clash&lt;/th&gt;&lt;/tr&gt;&lt;/thead&gt;
-          &lt;tbody id=&quot;gpv-metrics&quot;&gt;&lt;/tbody&gt;
-        &lt;/table&gt;
-      &lt;/div&gt;
+  &lt;div class=&quot;gpv-view-grid&quot; id=&quot;gpv-view-grid&quot;&gt;
+    &lt;div class=&quot;gpv-view-pane&quot;&gt;
+      &lt;span class=&quot;viz-badge gpv-view-label&quot; id=&quot;gpv-left-label&quot; hidden&gt;Primary&lt;/span&gt;
+      &lt;div class=&quot;gpv-stage&quot; id=&quot;gpv-stage&quot; role=&quot;img&quot; aria-label=&quot;Interactive three-dimensional protein structure viewer&quot;&gt;&lt;/div&gt;
     &lt;/div&gt;
-    &lt;div class=&quot;gpv-pae-panel&quot; id=&quot;gpv-pae-panel&quot; hidden&gt;
-      &lt;div id=&quot;gpv-pae-plot&quot; hidden&gt;
-        &lt;div class=&quot;viz-controls&quot;&gt;&lt;button class=&quot;btn&quot; type=&quot;button&quot; id=&quot;gpv-pae-png&quot;&gt;Download PAE PNG&lt;/button&gt;&lt;/div&gt;
-        &lt;canvas id=&quot;gpv-pae&quot; width=&quot;420&quot; height=&quot;420&quot; role=&quot;img&quot; aria-label=&quot;Predicted aligned error heatmap&quot;&gt;&lt;/canvas&gt;
-        &lt;div class=&quot;gpv-pae-legend text-small&quot;&gt;&lt;span&gt;Low error&lt;/span&gt;&lt;span&gt;PAE (Å)&lt;/span&gt;&lt;span&gt;High error&lt;/span&gt;&lt;/div&gt;
-        &lt;div class=&quot;text-small&quot; id=&quot;gpv-pae-detail&quot;&gt;Move over the heatmap to inspect a residue pair.&lt;/div&gt;
-      &lt;/div&gt;
-      &lt;div class=&quot;table-responsive&quot; id=&quot;gpv-interface-wrap&quot; hidden&gt;
-        &lt;table class=&quot;table table-sm&quot; aria-label=&quot;Chain-pair interface confidence&quot;&gt;&lt;thead&gt;&lt;tr&gt;&lt;th&gt;Chain pair&lt;/th&gt;&lt;th class=&quot;text-end&quot;&gt;ipTM&lt;/th&gt;&lt;th class=&quot;text-end&quot;&gt;Min PAE (Å)&lt;/th&gt;&lt;/tr&gt;&lt;/thead&gt;&lt;tbody id=&quot;gpv-interface-metrics&quot;&gt;&lt;/tbody&gt;&lt;/table&gt;
-      &lt;/div&gt;
+    &lt;div class=&quot;gpv-view-pane&quot; id=&quot;gpv-compare-pane&quot; hidden&gt;
+      &lt;span class=&quot;viz-badge gpv-view-label&quot;&gt;Comparison&lt;/span&gt;
+      &lt;div class=&quot;gpv-stage&quot; id=&quot;gpv-stage-compare&quot; role=&quot;img&quot; aria-label=&quot;Synchronized comparison structure viewer&quot;&gt;&lt;/div&gt;
     &lt;/div&gt;
   &lt;/div&gt;
-
-  &lt;div class=&quot;viz-controls&quot; aria-label=&quot;Residue labels&quot;&gt;
-    &lt;span id=&quot;gpv-residue&quot;&gt;Click a residue to inspect it.&lt;/span&gt;
-    &lt;label class=&quot;form-label&quot;&gt;Label text
-      &lt;input class=&quot;form-control&quot; id=&quot;gpv-label-text&quot; type=&quot;text&quot; placeholder=&quot;Optional custom label&quot;&gt;
-    &lt;/label&gt;
-    &lt;button class=&quot;btn&quot; type=&quot;button&quot; id=&quot;gpv-add-label&quot; disabled&gt;Add or edit label&lt;/button&gt;
-    &lt;label class=&quot;form-check form-switch&quot;&gt;&lt;input class=&quot;form-check-input&quot; id=&quot;gpv-all-labels&quot; type=&quot;checkbox&quot;&gt;&lt;span class=&quot;form-check-label&quot;&gt;Label every residue in current model&lt;/span&gt;&lt;/label&gt;
-    &lt;button class=&quot;btn&quot; type=&quot;button&quot; id=&quot;gpv-clear-labels&quot;&gt;Clear labels&lt;/button&gt;
+  &lt;div class=&quot;gpv-status text-small&quot; aria-live=&quot;polite&quot;&gt;
+    &lt;span id=&quot;gpv-count&quot;&gt;0 structures&lt;/span&gt;
+    &lt;span id=&quot;gpv-confidence&quot;&gt;Mean pLDDT —&lt;/span&gt;
+    &lt;span id=&quot;gpv-state&quot;&gt;Ready&lt;/span&gt;
   &lt;/div&gt;
-
-  &lt;details class=&quot;gpv-provenance&quot;&gt;
-    &lt;summary&gt;Provenance and reproducible scene&lt;/summary&gt;
-    &lt;div class=&quot;viz-controls&quot;&gt;
-      &lt;label class=&quot;form-label&quot;&gt;Figure or project title&lt;input class=&quot;form-control&quot; id=&quot;gpv-project-title&quot; type=&quot;text&quot;&gt;&lt;/label&gt;
-      &lt;label class=&quot;form-label&quot;&gt;Model source or run&lt;input class=&quot;form-control&quot; id=&quot;gpv-project-source&quot; type=&quot;text&quot; placeholder=&quot;AlphaFold Server job, accession, or run ID&quot;&gt;&lt;/label&gt;
-      &lt;label class=&quot;form-label&quot;&gt;Method and version&lt;input class=&quot;form-control&quot; id=&quot;gpv-project-method&quot; type=&quot;text&quot; placeholder=&quot;For example AlphaFold 3&quot;&gt;&lt;/label&gt;
-      &lt;label class=&quot;form-label&quot;&gt;Notes&lt;textarea class=&quot;form-control&quot; id=&quot;gpv-project-notes&quot; rows=&quot;2&quot;&gt;&lt;/textarea&gt;&lt;/label&gt;
-    &lt;/div&gt;
-    &lt;div class=&quot;viz-controls&quot;&gt;
-      &lt;button class=&quot;btn&quot; type=&quot;button&quot; id=&quot;gpv-save-scene&quot; disabled&gt;Download scene JSON&lt;/button&gt;
-      &lt;label class=&quot;form-label&quot;&gt;Restore scene JSON&lt;input class=&quot;form-control&quot; id=&quot;gpv-load-scene&quot; type=&quot;file&quot; accept=&quot;.json&quot;&gt;&lt;/label&gt;
-    &lt;/div&gt;
-  &lt;/details&gt;
 
   &lt;div class=&quot;gpv-legend text-small&quot; id=&quot;gpv-plddt-legend&quot; hidden aria-label=&quot;pLDDT confidence color legend&quot;&gt;
     &lt;span&gt;&lt;i class=&quot;gpv-swatch gpv-vlow&quot;&gt;&lt;/i&gt;Very low &amp;lt;50&lt;/span&gt;
@@ -969,28 +853,137 @@ html&gt;body{padding:0}&lt;/style&gt;
     &lt;span&gt;&lt;i class=&quot;gpv-swatch gpv-vhigh&quot;&gt;&lt;/i&gt;Very high ≥90&lt;/span&gt;
   &lt;/div&gt;
 
-  &lt;div class=&quot;gpv-stage&quot; id=&quot;gpv-stage&quot; role=&quot;img&quot; aria-label=&quot;Interactive three-dimensional protein structure viewer&quot;&gt;&lt;/div&gt;
-  &lt;div class=&quot;gpv-status text-small&quot; aria-live=&quot;polite&quot;&gt;
-    &lt;span id=&quot;gpv-count&quot;&gt;0 structures&lt;/span&gt;
-    &lt;span id=&quot;gpv-confidence&quot;&gt;Mean pLDDT —&lt;/span&gt;
-    &lt;span id=&quot;gpv-state&quot;&gt;Ready&lt;/span&gt;
+  &lt;div class=&quot;viz-controls gpv-tabs&quot; role=&quot;tablist&quot; aria-label=&quot;Viewer tools&quot;&gt;
+    &lt;button class=&quot;btn&quot; type=&quot;button&quot; role=&quot;tab&quot; aria-selected=&quot;true&quot; data-gpv-tab=&quot;models&quot;&gt;Models&lt;/button&gt;
+    &lt;button class=&quot;btn&quot; type=&quot;button&quot; role=&quot;tab&quot; aria-selected=&quot;false&quot; data-gpv-tab=&quot;appearance&quot;&gt;Appearance&lt;/button&gt;
+    &lt;button class=&quot;btn&quot; type=&quot;button&quot; role=&quot;tab&quot; aria-selected=&quot;false&quot; data-gpv-tab=&quot;annotate&quot;&gt;Annotate&lt;/button&gt;
+    &lt;button class=&quot;btn&quot; type=&quot;button&quot; role=&quot;tab&quot; aria-selected=&quot;false&quot; data-gpv-tab=&quot;compare&quot;&gt;Compare&lt;/button&gt;
+    &lt;button class=&quot;btn&quot; type=&quot;button&quot; role=&quot;tab&quot; aria-selected=&quot;false&quot; data-gpv-tab=&quot;confidence&quot;&gt;Confidence&lt;/button&gt;
+    &lt;button class=&quot;btn&quot; type=&quot;button&quot; role=&quot;tab&quot; aria-selected=&quot;false&quot; data-gpv-tab=&quot;publish&quot;&gt;Publish&lt;/button&gt;
   &lt;/div&gt;
+
+  &lt;section class=&quot;gpv-tool-panel&quot; data-gpv-panel=&quot;models&quot;&gt;
+    &lt;div class=&quot;viz-controls&quot;&gt;
+      &lt;label class=&quot;form-label&quot;&gt;View mode&lt;select class=&quot;form-select&quot; id=&quot;gpv-view-mode&quot;&gt;&lt;option value=&quot;overlay&quot;&gt;Overlay selected&lt;/option&gt;&lt;option value=&quot;single&quot;&gt;One at a time&lt;/option&gt;&lt;/select&gt;&lt;/label&gt;
+      &lt;label class=&quot;form-label&quot;&gt;Model order&lt;select class=&quot;form-select&quot; id=&quot;gpv-order&quot;&gt;&lt;option value=&quot;loaded&quot;&gt;As loaded&lt;/option&gt;&lt;option value=&quot;ranking&quot;&gt;Ranking score&lt;/option&gt;&lt;option value=&quot;plddt&quot;&gt;Mean pLDDT&lt;/option&gt;&lt;/select&gt;&lt;/label&gt;
+      &lt;button class=&quot;btn&quot; type=&quot;button&quot; id=&quot;gpv-cycle&quot; disabled&gt;Cycle models&lt;/button&gt;
+      &lt;label class=&quot;form-label&quot;&gt;Interval &lt;span id=&quot;gpv-cycle-value&quot;&gt;2.0 s&lt;/span&gt;&lt;input class=&quot;form-range&quot; id=&quot;gpv-cycle-speed&quot; type=&quot;range&quot; min=&quot;0.5&quot; max=&quot;10&quot; value=&quot;2&quot; step=&quot;0.5&quot;&gt;&lt;/label&gt;
+      &lt;button class=&quot;btn&quot; type=&quot;button&quot; id=&quot;gpv-show-all&quot;&gt;Show all&lt;/button&gt;
+      &lt;button class=&quot;btn&quot; type=&quot;button&quot; id=&quot;gpv-hide-all&quot;&gt;Hide all&lt;/button&gt;
+      &lt;button class=&quot;btn btn-ghost&quot; type=&quot;button&quot; id=&quot;gpv-clear&quot;&gt;Clear all&lt;/button&gt;
+    &lt;/div&gt;
+    &lt;div class=&quot;gpv-list&quot; id=&quot;gpv-list&quot; aria-label=&quot;Loaded structures&quot;&gt;&lt;/div&gt;
+    &lt;div class=&quot;gpv-empty text-muted&quot; id=&quot;gpv-empty&quot;&gt;Load one or more structures to begin.&lt;/div&gt;
+  &lt;/section&gt;
+
+  &lt;section class=&quot;gpv-tool-panel&quot; data-gpv-panel=&quot;appearance&quot; hidden&gt;
+    &lt;div class=&quot;viz-controls&quot;&gt;
+      &lt;label class=&quot;form-label&quot;&gt;Representation&lt;select class=&quot;form-select&quot; id=&quot;gpv-style&quot;&gt;&lt;option value=&quot;cartoon&quot;&gt;Cartoon&lt;/option&gt;&lt;option value=&quot;stick&quot;&gt;Sticks&lt;/option&gt;&lt;option value=&quot;sphere&quot;&gt;Spheres&lt;/option&gt;&lt;option value=&quot;line&quot;&gt;Lines&lt;/option&gt;&lt;/select&gt;&lt;/label&gt;
+      &lt;label class=&quot;form-label&quot;&gt;Color scheme&lt;select class=&quot;form-select&quot; id=&quot;gpv-color-mode&quot;&gt;&lt;option value=&quot;structure&quot;&gt;Per structure&lt;/option&gt;&lt;option value=&quot;chain&quot;&gt;Per chain&lt;/option&gt;&lt;option value=&quot;plddt&quot;&gt;pLDDT confidence&lt;/option&gt;&lt;option value=&quot;spectrum&quot;&gt;Sequence spectrum&lt;/option&gt;&lt;option value=&quot;element&quot;&gt;Element&lt;/option&gt;&lt;/select&gt;&lt;/label&gt;
+      &lt;label class=&quot;form-label&quot;&gt;Projection&lt;select class=&quot;form-select&quot; id=&quot;gpv-projection&quot;&gt;&lt;option value=&quot;perspective&quot;&gt;Perspective&lt;/option&gt;&lt;option value=&quot;orthographic&quot;&gt;Orthographic&lt;/option&gt;&lt;/select&gt;&lt;/label&gt;
+      &lt;label class=&quot;form-label&quot;&gt;Background&lt;select class=&quot;form-select&quot; id=&quot;gpv-background&quot;&gt;&lt;option value=&quot;transparent&quot;&gt;Transparent&lt;/option&gt;&lt;option value=&quot;white&quot;&gt;White&lt;/option&gt;&lt;option value=&quot;dark&quot;&gt;Dark&lt;/option&gt;&lt;option value=&quot;custom&quot;&gt;Custom&lt;/option&gt;&lt;/select&gt;&lt;/label&gt;
+      &lt;label class=&quot;form-label&quot;&gt;Custom background&lt;input class=&quot;form-control form-control-color&quot; id=&quot;gpv-background-color&quot; type=&quot;color&quot; value=&quot;#ffffff&quot;&gt;&lt;/label&gt;
+      &lt;label class=&quot;form-label&quot;&gt;Motion&lt;select class=&quot;form-select&quot; id=&quot;gpv-motion&quot;&gt;&lt;option value=&quot;off&quot;&gt;Off&lt;/option&gt;&lt;option value=&quot;spin&quot;&gt;Spin&lt;/option&gt;&lt;option value=&quot;rock&quot;&gt;Rock&lt;/option&gt;&lt;/select&gt;&lt;/label&gt;
+      &lt;label class=&quot;form-label&quot;&gt;Speed &lt;span id=&quot;gpv-speed-value&quot;&gt;1.0×&lt;/span&gt;&lt;input class=&quot;form-range&quot; id=&quot;gpv-speed&quot; type=&quot;range&quot; min=&quot;0.25&quot; max=&quot;2.5&quot; value=&quot;1&quot; step=&quot;0.25&quot;&gt;&lt;/label&gt;
+    &lt;/div&gt;
+  &lt;/section&gt;
+
+  &lt;section class=&quot;gpv-tool-panel&quot; data-gpv-panel=&quot;annotate&quot; hidden&gt;
+    &lt;div class=&quot;gpv-selected-state&quot; id=&quot;gpv-residue&quot;&gt;Click a residue to inspect it.&lt;/div&gt;
+    &lt;div class=&quot;viz-controls&quot;&gt;
+      &lt;label class=&quot;form-label&quot;&gt;Residue label&lt;input class=&quot;form-control&quot; id=&quot;gpv-label-text&quot; type=&quot;text&quot; placeholder=&quot;Custom label&quot;&gt;&lt;/label&gt;
+      &lt;button class=&quot;btn&quot; type=&quot;button&quot; id=&quot;gpv-add-label&quot; disabled&gt;Add or update&lt;/button&gt;
+      &lt;label class=&quot;form-check form-switch&quot;&gt;&lt;input class=&quot;form-check-input&quot; id=&quot;gpv-all-labels&quot; type=&quot;checkbox&quot;&gt;&lt;span class=&quot;form-check-label&quot;&gt;Label every residue&lt;/span&gt;&lt;/label&gt;
+      &lt;button class=&quot;btn btn-ghost&quot; type=&quot;button&quot; id=&quot;gpv-clear-labels&quot;&gt;Clear labels&lt;/button&gt;
+    &lt;/div&gt;
+    &lt;div class=&quot;viz-controls&quot;&gt;
+      &lt;label class=&quot;form-label gpv-current-label&quot;&gt;Selection model&lt;select class=&quot;form-select&quot; id=&quot;gpv-selection-model&quot; disabled&gt;&lt;option&gt;No models loaded&lt;/option&gt;&lt;/select&gt;&lt;/label&gt;
+      &lt;label class=&quot;form-label&quot;&gt;Chain&lt;input class=&quot;form-control&quot; id=&quot;gpv-selection-chain&quot; type=&quot;text&quot; placeholder=&quot;A&quot;&gt;&lt;/label&gt;
+      &lt;label class=&quot;form-label&quot;&gt;Residues&lt;input class=&quot;form-control&quot; id=&quot;gpv-selection-range&quot; type=&quot;text&quot; placeholder=&quot;20-45 or 20,24,31&quot;&gt;&lt;/label&gt;
+      &lt;label class=&quot;form-label&quot;&gt;Action&lt;select class=&quot;form-select&quot; id=&quot;gpv-selection-action&quot;&gt;&lt;option value=&quot;highlight&quot;&gt;Highlight&lt;/option&gt;&lt;option value=&quot;hide&quot;&gt;Hide&lt;/option&gt;&lt;/select&gt;&lt;/label&gt;
+      &lt;label class=&quot;form-label&quot;&gt;Highlight color&lt;input class=&quot;form-control form-control-color&quot; id=&quot;gpv-selection-color&quot; type=&quot;color&quot; value=&quot;#f97316&quot;&gt;&lt;/label&gt;
+      &lt;button class=&quot;btn&quot; type=&quot;button&quot; id=&quot;gpv-add-selection&quot; disabled&gt;Add selection&lt;/button&gt;
+      &lt;button class=&quot;btn btn-ghost&quot; type=&quot;button&quot; id=&quot;gpv-clear-selections&quot;&gt;Clear selections&lt;/button&gt;
+    &lt;/div&gt;
+    &lt;div class=&quot;gpv-list&quot; id=&quot;gpv-selection-list&quot; aria-label=&quot;Structure selections&quot;&gt;&lt;/div&gt;
+    &lt;div class=&quot;viz-controls&quot;&gt;
+      &lt;label class=&quot;form-label&quot;&gt;Measurement&lt;select class=&quot;form-select&quot; id=&quot;gpv-measure-type&quot;&gt;&lt;option value=&quot;distance&quot;&gt;Distance (2 atoms)&lt;/option&gt;&lt;option value=&quot;angle&quot;&gt;Angle (3 atoms)&lt;/option&gt;&lt;/select&gt;&lt;/label&gt;
+      &lt;button class=&quot;btn&quot; type=&quot;button&quot; id=&quot;gpv-measure&quot;&gt;Start measuring&lt;/button&gt;
+      &lt;button class=&quot;btn btn-ghost&quot; type=&quot;button&quot; id=&quot;gpv-clear-measurements&quot;&gt;Clear measurements&lt;/button&gt;
+      &lt;span class=&quot;text-muted&quot; id=&quot;gpv-measure-state&quot;&gt;Measurement mode is off.&lt;/span&gt;
+    &lt;/div&gt;
+    &lt;div class=&quot;gpv-list&quot; id=&quot;gpv-measurement-list&quot; aria-label=&quot;Measurements&quot;&gt;&lt;/div&gt;
+  &lt;/section&gt;
+
+  &lt;section class=&quot;gpv-tool-panel&quot; data-gpv-panel=&quot;compare&quot; hidden&gt;
+    &lt;div class=&quot;viz-controls&quot;&gt;
+      &lt;label class=&quot;form-label gpv-current-label&quot;&gt;Alignment reference&lt;select class=&quot;form-select&quot; id=&quot;gpv-reference&quot; disabled&gt;&lt;option&gt;No models loaded&lt;/option&gt;&lt;/select&gt;&lt;/label&gt;
+      &lt;label class=&quot;form-label&quot;&gt;Residue mapping&lt;select class=&quot;form-select&quot; id=&quot;gpv-alignment-mode&quot;&gt;&lt;option value=&quot;sequence&quot;&gt;Sequence-aware&lt;/option&gt;&lt;option value=&quot;identifier&quot;&gt;Chain and residue IDs&lt;/option&gt;&lt;/select&gt;&lt;/label&gt;
+      &lt;button class=&quot;btn&quot; type=&quot;button&quot; id=&quot;gpv-align&quot; disabled&gt;Align visible&lt;/button&gt;
+      &lt;button class=&quot;btn&quot; type=&quot;button&quot; id=&quot;gpv-restore&quot; disabled&gt;Restore coordinates&lt;/button&gt;
+      &lt;button class=&quot;btn&quot; type=&quot;button&quot; id=&quot;gpv-alignment-csv&quot; disabled&gt;Download RMSD CSV&lt;/button&gt;
+    &lt;/div&gt;
+    &lt;div class=&quot;table-responsive&quot; id=&quot;gpv-alignment-wrap&quot; hidden&gt;&lt;table class=&quot;table table-sm&quot; aria-label=&quot;Structural alignment results&quot;&gt;&lt;thead&gt;&lt;tr&gt;&lt;th&gt;Model&lt;/th&gt;&lt;th&gt;Reference&lt;/th&gt;&lt;th class=&quot;text-end&quot;&gt;Cα pairs&lt;/th&gt;&lt;th class=&quot;text-end&quot;&gt;Identity&lt;/th&gt;&lt;th class=&quot;text-end&quot;&gt;RMSD (Å)&lt;/th&gt;&lt;th&gt;Mapping&lt;/th&gt;&lt;/tr&gt;&lt;/thead&gt;&lt;tbody id=&quot;gpv-alignment-results&quot;&gt;&lt;/tbody&gt;&lt;/table&gt;&lt;/div&gt;
+    &lt;div class=&quot;viz-controls&quot;&gt;
+      &lt;label class=&quot;form-check form-switch&quot;&gt;&lt;input class=&quot;form-check-input&quot; id=&quot;gpv-side-by-side&quot; type=&quot;checkbox&quot;&gt;&lt;span class=&quot;form-check-label&quot;&gt;Synchronized side-by-side view&lt;/span&gt;&lt;/label&gt;
+      &lt;label class=&quot;form-label&quot;&gt;Left model&lt;select class=&quot;form-select&quot; id=&quot;gpv-left-model&quot; disabled&gt;&lt;option&gt;No models loaded&lt;/option&gt;&lt;/select&gt;&lt;/label&gt;
+      &lt;label class=&quot;form-label&quot;&gt;Right model&lt;select class=&quot;form-select&quot; id=&quot;gpv-right-model&quot; disabled&gt;&lt;option&gt;No models loaded&lt;/option&gt;&lt;/select&gt;&lt;/label&gt;
+    &lt;/div&gt;
+  &lt;/section&gt;
+
+  &lt;section class=&quot;gpv-tool-panel&quot; data-gpv-panel=&quot;confidence&quot; hidden&gt;
+    &lt;div class=&quot;gpv-confidence-layout&quot; id=&quot;gpv-confidence-panel&quot; hidden&gt;
+      &lt;div&gt;&lt;div class=&quot;viz-controls&quot;&gt;&lt;button class=&quot;btn&quot; type=&quot;button&quot; id=&quot;gpv-confidence-csv&quot;&gt;Download confidence CSV&lt;/button&gt;&lt;/div&gt;&lt;div class=&quot;table-responsive&quot;&gt;&lt;table class=&quot;table table-sm&quot; aria-label=&quot;AlphaFold model confidence metrics&quot;&gt;&lt;thead&gt;&lt;tr&gt;&lt;th&gt;Model&lt;/th&gt;&lt;th class=&quot;text-end&quot;&gt;Mean pLDDT&lt;/th&gt;&lt;th class=&quot;text-end&quot;&gt;pTM&lt;/th&gt;&lt;th class=&quot;text-end&quot;&gt;ipTM&lt;/th&gt;&lt;th class=&quot;text-end&quot;&gt;Ranking score&lt;/th&gt;&lt;th class=&quot;text-end&quot;&gt;Rank&lt;/th&gt;&lt;th&gt;Clash&lt;/th&gt;&lt;/tr&gt;&lt;/thead&gt;&lt;tbody id=&quot;gpv-metrics&quot;&gt;&lt;/tbody&gt;&lt;/table&gt;&lt;/div&gt;&lt;/div&gt;
+      &lt;div class=&quot;gpv-pae-panel&quot; id=&quot;gpv-pae-panel&quot; hidden&gt;&lt;div id=&quot;gpv-pae-plot&quot; hidden&gt;&lt;div class=&quot;viz-controls&quot;&gt;&lt;button class=&quot;btn&quot; type=&quot;button&quot; id=&quot;gpv-pae-png&quot;&gt;Download PAE PNG&lt;/button&gt;&lt;/div&gt;&lt;canvas id=&quot;gpv-pae&quot; width=&quot;420&quot; height=&quot;420&quot; role=&quot;img&quot; aria-label=&quot;Predicted aligned error heatmap&quot;&gt;&lt;/canvas&gt;&lt;div class=&quot;gpv-pae-legend text-small&quot;&gt;&lt;span&gt;Low error&lt;/span&gt;&lt;span&gt;PAE (Å)&lt;/span&gt;&lt;span&gt;High error&lt;/span&gt;&lt;/div&gt;&lt;div class=&quot;text-small&quot; id=&quot;gpv-pae-detail&quot;&gt;Move over the heatmap to inspect a residue pair.&lt;/div&gt;&lt;/div&gt;&lt;div class=&quot;table-responsive&quot; id=&quot;gpv-interface-wrap&quot; hidden&gt;&lt;table class=&quot;table table-sm&quot; aria-label=&quot;Chain-pair interface confidence&quot;&gt;&lt;thead&gt;&lt;tr&gt;&lt;th&gt;Chain pair&lt;/th&gt;&lt;th class=&quot;text-end&quot;&gt;ipTM&lt;/th&gt;&lt;th class=&quot;text-end&quot;&gt;Min PAE (Å)&lt;/th&gt;&lt;/tr&gt;&lt;/thead&gt;&lt;tbody id=&quot;gpv-interface-metrics&quot;&gt;&lt;/tbody&gt;&lt;/table&gt;&lt;/div&gt;&lt;/div&gt;
+    &lt;/div&gt;
+  &lt;/section&gt;
+
+  &lt;section class=&quot;gpv-tool-panel&quot; data-gpv-panel=&quot;publish&quot; hidden&gt;
+    &lt;div class=&quot;viz-controls&quot;&gt;
+      &lt;label class=&quot;form-label&quot;&gt;Image size&lt;select class=&quot;form-select&quot; id=&quot;gpv-export-size&quot;&gt;&lt;option value=&quot;1200x1200&quot;&gt;Square · 1200 × 1200&lt;/option&gt;&lt;option value=&quot;1800x1200&quot; selected&gt;Landscape · 1800 × 1200&lt;/option&gt;&lt;option value=&quot;1200x1800&quot;&gt;Portrait · 1200 × 1800&lt;/option&gt;&lt;option value=&quot;2400x1600&quot;&gt;Large landscape · 2400 × 1600&lt;/option&gt;&lt;/select&gt;&lt;/label&gt;
+      &lt;label class=&quot;form-label&quot;&gt;Scale&lt;select class=&quot;form-select&quot; id=&quot;gpv-export-scale&quot;&gt;&lt;option value=&quot;1&quot;&gt;1×&lt;/option&gt;&lt;option value=&quot;2&quot; selected&gt;2×&lt;/option&gt;&lt;option value=&quot;4&quot;&gt;4×&lt;/option&gt;&lt;/select&gt;&lt;/label&gt;
+      &lt;button class=&quot;btn&quot; type=&quot;button&quot; id=&quot;gpv-image&quot; disabled&gt;Download publication PNG&lt;/button&gt;
+      &lt;label class=&quot;form-label&quot;&gt;Video length&lt;select class=&quot;form-select&quot; id=&quot;gpv-video-length&quot;&gt;&lt;option value=&quot;5&quot;&gt;5 seconds&lt;/option&gt;&lt;option value=&quot;10&quot;&gt;10 seconds&lt;/option&gt;&lt;option value=&quot;15&quot;&gt;15 seconds&lt;/option&gt;&lt;/select&gt;&lt;/label&gt;
+      &lt;button class=&quot;btn&quot; type=&quot;button&quot; id=&quot;gpv-video&quot; disabled&gt;Record spin video&lt;/button&gt;
+    &lt;/div&gt;
+    &lt;div class=&quot;viz-controls&quot;&gt;
+      &lt;label class=&quot;form-label&quot;&gt;View name&lt;input class=&quot;form-control&quot; id=&quot;gpv-view-name&quot; type=&quot;text&quot; placeholder=&quot;Overview, interface, pore…&quot;&gt;&lt;/label&gt;
+      &lt;label class=&quot;form-label gpv-current-label&quot;&gt;Caption&lt;input class=&quot;form-control&quot; id=&quot;gpv-view-caption&quot; type=&quot;text&quot; placeholder=&quot;Short panel caption&quot;&gt;&lt;/label&gt;
+      &lt;button class=&quot;btn&quot; type=&quot;button&quot; id=&quot;gpv-save-view&quot; disabled&gt;Save current view&lt;/button&gt;
+      &lt;label class=&quot;form-label&quot;&gt;Panel columns&lt;select class=&quot;form-select&quot; id=&quot;gpv-panel-columns&quot;&gt;&lt;option value=&quot;1&quot;&gt;1&lt;/option&gt;&lt;option value=&quot;2&quot; selected&gt;2&lt;/option&gt;&lt;option value=&quot;3&quot;&gt;3&lt;/option&gt;&lt;/select&gt;&lt;/label&gt;
+      &lt;button class=&quot;btn&quot; type=&quot;button&quot; id=&quot;gpv-contact-sheet&quot; disabled&gt;Download figure panels&lt;/button&gt;
+      &lt;button class=&quot;btn&quot; type=&quot;button&quot; id=&quot;gpv-captions&quot; disabled&gt;Download captions&lt;/button&gt;
+    &lt;/div&gt;
+    &lt;div class=&quot;gpv-list&quot; id=&quot;gpv-saved-views&quot; aria-label=&quot;Saved publication views&quot;&gt;&lt;/div&gt;
+    &lt;details class=&quot;gpv-provenance&quot; open&gt;&lt;summary&gt;Provenance and reproducible scene&lt;/summary&gt;&lt;div class=&quot;viz-controls&quot;&gt;&lt;label class=&quot;form-label&quot;&gt;Figure or project title&lt;input class=&quot;form-control&quot; id=&quot;gpv-project-title&quot; type=&quot;text&quot;&gt;&lt;/label&gt;&lt;label class=&quot;form-label&quot;&gt;Model source or run&lt;input class=&quot;form-control&quot; id=&quot;gpv-project-source&quot; type=&quot;text&quot; placeholder=&quot;Job, accession, or run ID&quot;&gt;&lt;/label&gt;&lt;label class=&quot;form-label&quot;&gt;Method and version&lt;input class=&quot;form-control&quot; id=&quot;gpv-project-method&quot; type=&quot;text&quot; placeholder=&quot;For example AlphaFold 3&quot;&gt;&lt;/label&gt;&lt;label class=&quot;form-label&quot;&gt;Notes&lt;textarea class=&quot;form-control&quot; id=&quot;gpv-project-notes&quot; rows=&quot;2&quot;&gt;&lt;/textarea&gt;&lt;/label&gt;&lt;/div&gt;&lt;div class=&quot;viz-controls&quot;&gt;&lt;button class=&quot;btn&quot; type=&quot;button&quot; id=&quot;gpv-save-scene&quot; disabled&gt;Download scene JSON&lt;/button&gt;&lt;label class=&quot;form-label&quot;&gt;Restore scene JSON&lt;input class=&quot;form-control&quot; id=&quot;gpv-load-scene&quot; type=&quot;file&quot; accept=&quot;.json&quot;&gt;&lt;/label&gt;&lt;/div&gt;&lt;/details&gt;
+  &lt;/section&gt;
 &lt;/div&gt;
 
 &lt;style&gt;
   #generic-protein-viewer { width: 100%; color: var(--foreground); }
   #generic-protein-viewer .viz-controls { margin-bottom: 12px; align-items: end; }
   #generic-protein-viewer .form-label { min-width: 126px; flex: 1 1 138px; }
-  #generic-protein-viewer .gpv-file-label, #generic-protein-viewer .gpv-current-label { flex: 3 1 280px; }
-  #generic-protein-viewer .gpv-drop { display: grid; gap: 4px; text-align: center; margin-bottom: 12px; cursor: pointer; }
+  #generic-protein-viewer .gpv-current-label { flex: 3 1 280px; }
+  #generic-protein-viewer .gpv-drop { display: grid; gap: 4px; text-align: center; margin-bottom: 10px; padding: 12px; cursor: pointer; }
   #generic-protein-viewer .gpv-drop.is-dragging { outline: 2px solid var(--ring); outline-offset: 2px; }
+  #generic-protein-viewer .gpv-primary { margin-bottom: 8px; }
   #generic-protein-viewer .form-range { width: 100%; }
   #generic-protein-viewer .gpv-list { display: grid; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); gap: 8px; margin: 0 0 10px; }
-  #generic-protein-viewer .gpv-entry { display: flex; align-items: center; gap: 8px; min-width: 0; }
+  #generic-protein-viewer .gpv-entry { display: flex; align-items: center; gap: 8px; min-width: 0; padding: 8px 0; border-bottom: 1px solid var(--border); }
   #generic-protein-viewer .gpv-entry-name { flex: 1; min-width: 0; overflow-wrap: anywhere; }
   #generic-protein-viewer .gpv-entry-score { color: var(--muted-foreground); white-space: nowrap; }
   #generic-protein-viewer .gpv-entry .form-control-color { flex: 0 0 auto; }
   #generic-protein-viewer .gpv-empty { margin: 0 0 10px; }
+  #generic-protein-viewer .gpv-view-grid { display: grid; grid-template-columns: minmax(0, 1fr); gap: 8px; }
+  #generic-protein-viewer .gpv-view-grid.is-comparing { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  #generic-protein-viewer .gpv-view-pane { position: relative; min-width: 0; }
+  #generic-protein-viewer .gpv-view-label { position: absolute; z-index: 2; top: 8px; left: 8px; pointer-events: none; }
+  #generic-protein-viewer .gpv-tabs { margin-top: 14px; overflow-x: auto; flex-wrap: nowrap; padding-bottom: 2px; }
+  #generic-protein-viewer .gpv-tabs .btn { white-space: nowrap; }
+  #generic-protein-viewer .gpv-tabs [aria-selected=&quot;true&quot;] { border-color: var(--primary); color: var(--primary); }
+  #generic-protein-viewer .gpv-tool-panel { padding-top: 4px; }
+  #generic-protein-viewer .gpv-tool-panel[hidden] { display: none; }
+  #generic-protein-viewer .gpv-selected-state { padding: 10px 0; margin-bottom: 8px; border-bottom: 1px solid var(--border); }
   #generic-protein-viewer .gpv-confidence-layout { display: grid; grid-template-columns: minmax(0, 1fr) minmax(240px, 420px); gap: 16px; align-items: start; margin: 0 0 12px; }
   #generic-protein-viewer .gpv-confidence-layout[hidden], #generic-protein-viewer .gpv-pae-panel[hidden], #generic-protein-viewer #gpv-pae-plot[hidden], #generic-protein-viewer #gpv-interface-wrap[hidden], #generic-protein-viewer #gpv-alignment-wrap[hidden] { display: none; }
   #generic-protein-viewer .gpv-pae-panel { min-width: 0; }
@@ -1009,7 +1002,8 @@ html&gt;body{padding:0}&lt;/style&gt;
   #generic-protein-viewer .gpv-stage { position: relative; width: 100%; height: 520px; min-height: 360px; background: color-mix(in srgb, var(--muted) 35%, transparent); overflow: hidden; }
   #generic-protein-viewer .gpv-stage canvas { display: block; }
   #generic-protein-viewer .gpv-status { display: flex; justify-content: space-between; gap: 12px; flex-wrap: wrap; margin-top: 8px; color: var(--muted-foreground); }
-  @media (max-width: 680px) { #generic-protein-viewer .gpv-confidence-layout { grid-template-columns: 1fr; } }
+  #generic-protein-viewer .gpv-export-surface { position: absolute; left: -100000px; top: 0; overflow: hidden; }
+  @media (max-width: 680px) { #generic-protein-viewer .gpv-confidence-layout, #generic-protein-viewer .gpv-view-grid.is-comparing { grid-template-columns: 1fr; } }
   @media (max-width: 520px) { #generic-protein-viewer .gpv-stage { height: 400px; } }
 &lt;/style&gt;
 
@@ -1035,8 +1029,17 @@ html&gt;body{padding:0}&lt;/style&gt;
   let nextStructureId = 1;
   let confidenceAssets = [];
   let alignmentResults = [];
+  let selectionRecords = [];
+  let measurementRecords = [];
+  let measurementDraft = [];
+  let measurementActive = false;
+  let savedViews = [];
+  let nextAnnotationId = 1;
+  let compareViewer = null;
+  let compareModel = null;
+  let syncingView = false;
   let pendingScene = null;
-  const viewerVersion = &#x27;1.2.0&#x27;;
+  const viewerVersion = &#x27;2.0.0&#x27;;
   const labelColors = getComputedStyle(root);
 
   function plddtColor(score) {
@@ -1306,16 +1309,50 @@ html&gt;body{padding:0}&lt;/style&gt;
   }
 
   function activeEntry() {
+    if (root.querySelector(&#x27;#gpv-side-by-side&#x27;).checked) return structures.find(entry =&gt; entry.id === Number(root.querySelector(&#x27;#gpv-left-model&#x27;).value)) || structures[0] || null;
     return structures.find(entry =&gt; entry.id === activeId &amp;&amp; entry.visible) || structures.find(entry =&gt; entry.visible) || structures[0] || null;
   }
 
   function displayedEntries() {
+    if (root.querySelector(&#x27;#gpv-side-by-side&#x27;).checked) {
+      const left = structures.find(entry =&gt; entry.id === Number(root.querySelector(&#x27;#gpv-left-model&#x27;).value));
+      return left ? [left] : [];
+    }
     const visible = structures.filter(entry =&gt; entry.visible);
     if (root.querySelector(&#x27;#gpv-view-mode&#x27;).value === &#x27;single&#x27;) {
       const active = activeEntry();
       return active &amp;&amp; active.visible ? [active] : [];
     }
     return visible;
+  }
+
+  function selectToolTab(name) {
+    root.querySelectorAll(&#x27;[data-gpv-tab]&#x27;).forEach(button =&gt; {
+      const selected = button.dataset.gpvTab === name;
+      button.setAttribute(&#x27;aria-selected&#x27;, String(selected)); button.tabIndex = selected ? 0 : -1;
+    });
+    root.querySelectorAll(&#x27;[data-gpv-panel]&#x27;).forEach(panel =&gt; { panel.hidden = panel.dataset.gpvPanel !== name; });
+  }
+
+  function backgroundSpec() {
+    const mode = root.querySelector(&#x27;#gpv-background&#x27;).value;
+    if (mode === &#x27;transparent&#x27;) return { color: &#x27;#ffffff&#x27;, alpha: 0 };
+    if (mode === &#x27;dark&#x27;) return { color: &#x27;#101827&#x27;, alpha: 1 };
+    if (mode === &#x27;custom&#x27;) return { color: root.querySelector(&#x27;#gpv-background-color&#x27;).value, alpha: 1 };
+    return { color: &#x27;#ffffff&#x27;, alpha: 1 };
+  }
+
+  function applyAppearance() {
+    const background = backgroundSpec();
+    root.querySelector(&#x27;#gpv-background-color&#x27;).disabled = root.querySelector(&#x27;#gpv-background&#x27;).value !== &#x27;custom&#x27;;
+    viewer.setBackgroundColor(background.color, background.alpha);
+    if (typeof viewer.setProjection === &#x27;function&#x27;) viewer.setProjection(root.querySelector(&#x27;#gpv-projection&#x27;).value);
+    if (compareViewer) {
+      compareViewer.setBackgroundColor(background.color, background.alpha);
+      if (typeof compareViewer.setProjection === &#x27;function&#x27;) compareViewer.setProjection(root.querySelector(&#x27;#gpv-projection&#x27;).value);
+      compareViewer.render();
+    }
+    viewer.render();
   }
 
   function styleFor(entry) {
@@ -1341,9 +1378,13 @@ html&gt;body{padding:0}&lt;/style&gt;
     root.querySelector(&#x27;#gpv-state&#x27;).textContent = message;
     root.querySelector(&#x27;#gpv-empty&#x27;).hidden = structures.length &gt; 0;
     root.querySelector(&#x27;#gpv-report&#x27;).disabled = structures.length === 0;
+    root.querySelector(&#x27;#gpv-image&#x27;).disabled = structures.length === 0;
     root.querySelector(&#x27;#gpv-video&#x27;).disabled = structures.length === 0;
     root.querySelector(&#x27;#gpv-save-scene&#x27;).disabled = structures.length === 0;
-    [&#x27;#gpv-current&#x27;, &#x27;#gpv-reference&#x27;, &#x27;#gpv-previous&#x27;, &#x27;#gpv-next&#x27;, &#x27;#gpv-cycle&#x27;, &#x27;#gpv-align&#x27;, &#x27;#gpv-restore&#x27;].forEach(selector =&gt; {
+    root.querySelector(&#x27;#gpv-save-view&#x27;).disabled = structures.length === 0;
+    root.querySelector(&#x27;#gpv-contact-sheet&#x27;).disabled = savedViews.length === 0;
+    root.querySelector(&#x27;#gpv-captions&#x27;).disabled = savedViews.length === 0;
+    [&#x27;#gpv-current&#x27;, &#x27;#gpv-reference&#x27;, &#x27;#gpv-selection-model&#x27;, &#x27;#gpv-left-model&#x27;, &#x27;#gpv-right-model&#x27;, &#x27;#gpv-previous&#x27;, &#x27;#gpv-next&#x27;, &#x27;#gpv-cycle&#x27;, &#x27;#gpv-align&#x27;, &#x27;#gpv-restore&#x27;, &#x27;#gpv-add-selection&#x27;].forEach(selector =&gt; {
       root.querySelector(selector).disabled = structures.length === 0;
     });
   }
@@ -1354,9 +1395,12 @@ html&gt;body{padding:0}&lt;/style&gt;
       entry.model.setStyle({}, {});
       if (shown.has(entry)) entry.model.setStyle({}, styleFor(entry));
     });
+    applySelections();
     root.querySelector(&#x27;#gpv-plddt-legend&#x27;).hidden = root.querySelector(&#x27;#gpv-color-mode&#x27;).value !== &#x27;plddt&#x27;;
     viewer.render();
     rebuildLabels();
+    rebuildMeasurements();
+    renderCompareViewer();
     renderConfidence();
     updateStatus();
   }
@@ -1364,9 +1408,9 @@ html&gt;body{padding:0}&lt;/style&gt;
   function syncModelControls() {
     if (!structures.length) activeId = null;
     if (structures.length &amp;&amp; !structures.some(entry =&gt; entry.id === activeId)) activeId = structures[0].id;
-    [&#x27;#gpv-current&#x27;, &#x27;#gpv-reference&#x27;].forEach(selector =&gt; {
+    [&#x27;#gpv-current&#x27;, &#x27;#gpv-reference&#x27;, &#x27;#gpv-selection-model&#x27;, &#x27;#gpv-left-model&#x27;, &#x27;#gpv-right-model&#x27;].forEach(selector =&gt; {
       const select = root.querySelector(selector);
-      const previous = selector === &#x27;#gpv-current&#x27; ? activeId : select.value;
+      const previous = selector === &#x27;#gpv-current&#x27; || selector === &#x27;#gpv-left-model&#x27; ? activeId : select.value;
       select.replaceChildren();
       structures.forEach(entry =&gt; {
         const option = document.createElement(&#x27;option&#x27;);
@@ -1376,6 +1420,8 @@ html&gt;body{padding:0}&lt;/style&gt;
       });
       if (structures.some(entry =&gt; String(entry.id) === String(previous))) select.value = String(previous);
     });
+    const right = root.querySelector(&#x27;#gpv-right-model&#x27;);
+    if (structures.length &gt; 1 &amp;&amp; (!right.value || right.value === root.querySelector(&#x27;#gpv-left-model&#x27;).value)) right.value = String(structures[1].id);
     renderConfidence();
   }
 
@@ -1421,8 +1467,12 @@ html&gt;body{padding:0}&lt;/style&gt;
         viewer.removeModel(entry.model);
         structures = structures.filter(item =&gt; item !== entry);
         labelRecords = labelRecords.filter(label =&gt; label.entryId !== entry.id);
+        selectionRecords = selectionRecords.filter(selection =&gt; selection.entryId !== entry.id);
+        measurementRecords = measurementRecords.filter(measurement =&gt; measurement.points.every(point =&gt; point.entryId !== entry.id));
         alignmentResults = [];
         renderAlignmentResults();
+        renderSelectionList();
+        renderMeasurementList();
         renderList();
         applyStyle();
       });
@@ -1453,7 +1503,7 @@ html&gt;body{padding:0}&lt;/style&gt;
     };
     structures.push(entry);
     if (activeId === null) activeId = entry.id;
-    viewer.setClickable({ model: model.getID() }, true, atom =&gt; selectResidue(entry, atom));
+    viewer.setClickable({ model: model.getID() }, true, atom =&gt; handleAtomClick(entry, atom));
     sha256(text).then(hash =&gt; { entry.hash = hash; });
     return entry;
   }
@@ -1575,6 +1625,161 @@ html&gt;body{padding:0}&lt;/style&gt;
       }
     }
     viewer.render();
+  }
+
+  function parseResidueRange(value) {
+    const residues = new Set();
+    String(value || &#x27;&#x27;).split(&#x27;,&#x27;).forEach(part =&gt; {
+      const match = part.trim().match(/^(-?\d+)(?:\s*-\s*(-?\d+))?$/);
+      if (!match) return;
+      const start = Number(match[1]);
+      const end = match[2] === undefined ? start : Number(match[2]);
+      const step = start &lt;= end ? 1 : -1;
+      for (let residue = start; residue !== end + step &amp;&amp; residues.size &lt; 10000; residue += step) residues.add(residue);
+    });
+    return [...residues];
+  }
+
+  function applySelections() {
+    selectionRecords.forEach(record =&gt; {
+      const entry = structures.find(item =&gt; item.id === record.entryId);
+      if (!entry || !displayedEntries().includes(entry)) return;
+      const selection = { chain: record.chain, resi: record.residues };
+      if (record.action === &#x27;hide&#x27;) entry.model.setStyle(selection, {});
+      else if (typeof entry.model.addStyle === &#x27;function&#x27;) entry.model.addStyle(selection, { stick: { color: record.color, radius: 0.25 }, sphere: { color: record.color, scale: 0.3 } });
+    });
+  }
+
+  function renderSelectionList() {
+    const list = root.querySelector(&#x27;#gpv-selection-list&#x27;);
+    list.replaceChildren();
+    selectionRecords.forEach(record =&gt; {
+      const entry = structures.find(item =&gt; item.id === record.entryId);
+      if (!entry) return;
+      const row = document.createElement(&#x27;div&#x27;);
+      row.className = &#x27;gpv-entry&#x27;;
+      const name = document.createElement(&#x27;span&#x27;);
+      name.className = &#x27;gpv-entry-name&#x27;;
+      name.textContent = entry.name + &#x27; · chain &#x27; + (record.chain || &#x27;—&#x27;) + &#x27; · &#x27; + record.residues.join(&#x27;, &#x27;) + &#x27; · &#x27; + record.action;
+      const remove = document.createElement(&#x27;button&#x27;);
+      remove.className = &#x27;btn btn-ghost&#x27;; remove.type = &#x27;button&#x27;; remove.textContent = &#x27;Remove&#x27;;
+      remove.addEventListener(&#x27;click&#x27;, () =&gt; { selectionRecords = selectionRecords.filter(item =&gt; item.id !== record.id); renderSelectionList(); applyStyle(); });
+      row.append(name, remove); list.append(row);
+    });
+  }
+
+  function addSelection() {
+    const entryId = Number(root.querySelector(&#x27;#gpv-selection-model&#x27;).value);
+    const chain = root.querySelector(&#x27;#gpv-selection-chain&#x27;).value.trim();
+    const residues = parseResidueRange(root.querySelector(&#x27;#gpv-selection-range&#x27;).value);
+    if (!entryId || !residues.length) { updateStatus(&#x27;Enter a valid residue number or range&#x27;); return; }
+    selectionRecords.push({ id: nextAnnotationId++, entryId, chain, residues, action: root.querySelector(&#x27;#gpv-selection-action&#x27;).value, color: root.querySelector(&#x27;#gpv-selection-color&#x27;).value });
+    renderSelectionList(); applyStyle(); updateStatus(&#x27;Selection added&#x27;);
+  }
+
+  function atomReference(entry, atom) {
+    return { entryId: entry.id, chain: atom.chain || &#x27;&#x27;, resi: atom.resi, atom: atom.atom || &#x27;&#x27;, index: Number.isInteger(atom.index) ? atom.index : null };
+  }
+
+  function resolvePoint(reference) {
+    const entry = structures.find(item =&gt; item.id === reference.entryId);
+    if (!entry) return null;
+    return entry.atoms.find(atom =&gt; Number.isInteger(reference.index) &amp;&amp; atom.index === reference.index)
+      || entry.atoms.find(atom =&gt; (atom.chain || &#x27;&#x27;) === reference.chain &amp;&amp; atom.resi === reference.resi &amp;&amp; (atom.atom || &#x27;&#x27;) === reference.atom) || null;
+  }
+
+  function pointName(reference) {
+    const entry = structures.find(item =&gt; item.id === reference.entryId);
+    return (entry ? entry.name : &#x27;Missing model&#x27;) + &#x27; · &#x27; + (reference.chain || &#x27;—&#x27;) + &#x27;:&#x27; + reference.resi + &#x27; &#x27; + (reference.atom || &#x27;atom&#x27;);
+  }
+
+  function measurementValue(record) {
+    const points = record.points.map(resolvePoint);
+    if (points.some(point =&gt; !point)) return null;
+    const vector = (a, b) =&gt; [a.x - b.x, a.y - b.y, a.z - b.z];
+    const length = value =&gt; Math.hypot(...value);
+    if (record.type === &#x27;distance&#x27;) return length(vector(points[0], points[1]));
+    const a = vector(points[0], points[1]); const b = vector(points[2], points[1]);
+    const cosine = a.reduce((sum, value, index) =&gt; sum + value * b[index], 0) / Math.max(1e-9, length(a) * length(b));
+    return Math.acos(Math.max(-1, Math.min(1, cosine))) * 180 / Math.PI;
+  }
+
+  function rebuildMeasurements() {
+    viewer.removeAllShapes();
+    measurementRecords.forEach(record =&gt; {
+      const points = record.points.map(resolvePoint);
+      if (points.some(point =&gt; !point)) return;
+      const line = (start, end) =&gt; viewer.addLine({ start, end, color: &#x27;#e11d48&#x27;, dashed: true, linewidth: 2 });
+      line(points[0], points[1]);
+      if (record.type === &#x27;angle&#x27;) line(points[1], points[2]);
+      const value = measurementValue(record);
+      const position = record.type === &#x27;angle&#x27; ? points[1] : { x: (points[0].x + points[1].x) / 2, y: (points[0].y + points[1].y) / 2, z: (points[0].z + points[1].z) / 2 };
+      viewer.addLabel(value === null ? &#x27;—&#x27; : value.toFixed(2) + (record.type === &#x27;distance&#x27; ? &#x27; Å&#x27; : &#x27;°&#x27;), labelStyle(position));
+    });
+    viewer.render();
+  }
+
+  function renderMeasurementList() {
+    const list = root.querySelector(&#x27;#gpv-measurement-list&#x27;); list.replaceChildren();
+    measurementRecords.forEach(record =&gt; {
+      const row = document.createElement(&#x27;div&#x27;); row.className = &#x27;gpv-entry&#x27;;
+      const label = document.createElement(&#x27;span&#x27;); label.className = &#x27;gpv-entry-name&#x27;;
+      const value = measurementValue(record);
+      label.textContent = record.points.map(pointName).join(record.type === &#x27;distance&#x27; ? &#x27; ↔ &#x27; : &#x27; → &#x27;) + &#x27; · &#x27; + (value === null ? &#x27;—&#x27; : value.toFixed(2) + (record.type === &#x27;distance&#x27; ? &#x27; Å&#x27; : &#x27;°&#x27;));
+      const remove = document.createElement(&#x27;button&#x27;); remove.className = &#x27;btn btn-ghost&#x27;; remove.type = &#x27;button&#x27;; remove.textContent = &#x27;Remove&#x27;;
+      remove.addEventListener(&#x27;click&#x27;, () =&gt; { measurementRecords = measurementRecords.filter(item =&gt; item.id !== record.id); renderMeasurementList(); rebuildMeasurements(); });
+      row.append(label, remove); list.append(row);
+    });
+  }
+
+  function handleAtomClick(entry, atom) {
+    selectResidue(entry, atom);
+    if (!measurementActive) return;
+    measurementDraft.push(atomReference(entry, atom));
+    const required = root.querySelector(&#x27;#gpv-measure-type&#x27;).value === &#x27;angle&#x27; ? 3 : 2;
+    root.querySelector(&#x27;#gpv-measure-state&#x27;).textContent = &#x27;Selected &#x27; + measurementDraft.length + &#x27; of &#x27; + required + &#x27; atoms.&#x27;;
+    if (measurementDraft.length &gt;= required) {
+      measurementRecords.push({ id: nextAnnotationId++, type: root.querySelector(&#x27;#gpv-measure-type&#x27;).value, points: measurementDraft.slice(0, required) });
+      measurementDraft = [];
+      renderMeasurementList(); rebuildMeasurements();
+      root.querySelector(&#x27;#gpv-measure-state&#x27;).textContent = &#x27;Measurement added. Select &#x27; + required + &#x27; atoms for another.&#x27;;
+    }
+  }
+
+  function toggleMeasurement() {
+    measurementActive = !measurementActive; measurementDraft = [];
+    root.querySelector(&#x27;#gpv-measure&#x27;).textContent = measurementActive ? &#x27;Stop measuring&#x27; : &#x27;Start measuring&#x27;;
+    const required = root.querySelector(&#x27;#gpv-measure-type&#x27;).value === &#x27;angle&#x27; ? 3 : 2;
+    root.querySelector(&#x27;#gpv-measure-state&#x27;).textContent = measurementActive ? &#x27;Select &#x27; + required + &#x27; atoms in the viewer.&#x27; : &#x27;Measurement mode is off.&#x27;;
+  }
+
+  function ensureCompareViewer() {
+    if (compareViewer) return compareViewer;
+    compareViewer = $3Dmol.createViewer(root.querySelector(&#x27;#gpv-stage-compare&#x27;), { backgroundColor: &#x27;rgba(0,0,0,0)&#x27;, antialias: true });
+    applyAppearance();
+    return compareViewer;
+  }
+
+  function renderCompareViewer() {
+    const enabled = root.querySelector(&#x27;#gpv-side-by-side&#x27;).checked &amp;&amp; structures.length &gt; 0;
+    root.querySelector(&#x27;#gpv-compare-pane&#x27;).hidden = !enabled;
+    root.querySelector(&#x27;#gpv-left-label&#x27;).hidden = !enabled;
+    root.querySelector(&#x27;#gpv-view-grid&#x27;).classList.toggle(&#x27;is-comparing&#x27;, enabled);
+    if (!enabled) return;
+    const target = structures.find(entry =&gt; entry.id === Number(root.querySelector(&#x27;#gpv-right-model&#x27;).value));
+    if (!target) return;
+    const secondary = ensureCompareViewer();
+    secondary.removeAllModels(); secondary.removeAllLabels(); secondary.removeAllShapes();
+    compareModel = secondary.addModel(target.text, target.format);
+    const cloneAtoms = compareModel.selectedAtoms({});
+    cloneAtoms.forEach((atom, index) =&gt; { if (target.atoms[index]) { atom.x = target.atoms[index].x; atom.y = target.atoms[index].y; atom.z = target.atoms[index].z; } });
+    compareModel.setStyle({}, styleFor(target));
+    const background = backgroundSpec(); secondary.setBackgroundColor(background.color, background.alpha);
+    if (typeof secondary.setProjection === &#x27;function&#x27;) secondary.setProjection(root.querySelector(&#x27;#gpv-projection&#x27;).value);
+    secondary.zoomTo();
+    if (typeof viewer.getView === &#x27;function&#x27; &amp;&amp; typeof secondary.setView === &#x27;function&#x27;) secondary.setView(viewer.getView());
+    secondary.render();
+    setTimeout(() =&gt; secondary.resize(), 0);
   }
 
   function restoreCoordinates(shouldRender = true) {
@@ -1916,6 +2121,12 @@ html&gt;body{padding:0}&lt;/style&gt;
         activeModel: active ? active.name : null,
         referenceModel: reference ? reference.name : null,
         allResidueLabels: root.querySelector(&#x27;#gpv-all-labels&#x27;).checked,
+        projection: root.querySelector(&#x27;#gpv-projection&#x27;).value,
+        background: root.querySelector(&#x27;#gpv-background&#x27;).value,
+        backgroundColor: root.querySelector(&#x27;#gpv-background-color&#x27;).value,
+        sideBySide: root.querySelector(&#x27;#gpv-side-by-side&#x27;).checked,
+        leftModel: (structures.find(entry =&gt; entry.id === Number(root.querySelector(&#x27;#gpv-left-model&#x27;).value)) || {}).name || null,
+        rightModel: (structures.find(entry =&gt; entry.id === Number(root.querySelector(&#x27;#gpv-right-model&#x27;).value)) || {}).name || null,
         camera: typeof viewer.getView === &#x27;function&#x27; ? viewer.getView() : null
       },
       labels: labelRecords.map(label =&gt; ({
@@ -1924,7 +2135,10 @@ html&gt;body{padding:0}&lt;/style&gt;
         resi: label.resi,
         atom: label.atom,
         text: label.text
-      }))
+      })),
+      selections: selectionRecords.map(record =&gt; ({ model: (structures.find(entry =&gt; entry.id === record.entryId) || {}).name, chain: record.chain, residues: record.residues, action: record.action, color: record.color })),
+      measurements: measurementRecords.map(record =&gt; ({ type: record.type, points: record.points.map(point =&gt; ({ model: (structures.find(entry =&gt; entry.id === point.entryId) || {}).name, chain: point.chain, resi: point.resi, atom: point.atom, index: point.index })) })),
+      savedViews: savedViews.map(view =&gt; ({ ...view }))
     };
     downloadBlob(JSON.stringify(scene, null, 2), &#x27;application/json&#x27;, &#x27;protein-viewer-scene.json&#x27;);
     updateStatus(&#x27;Reproducible scene JSON downloaded&#x27;);
@@ -1950,6 +2164,9 @@ html&gt;body{padding:0}&lt;/style&gt;
     if ([&#x27;structure&#x27;, &#x27;chain&#x27;, &#x27;plddt&#x27;, &#x27;spectrum&#x27;, &#x27;element&#x27;].includes(settings.colorMode)) root.querySelector(&#x27;#gpv-color-mode&#x27;).value = settings.colorMode;
     if ([&#x27;loaded&#x27;, &#x27;ranking&#x27;, &#x27;plddt&#x27;].includes(settings.modelOrder)) root.querySelector(&#x27;#gpv-order&#x27;).value = settings.modelOrder;
     if ([&#x27;sequence&#x27;, &#x27;identifier&#x27;].includes(settings.alignmentMode)) root.querySelector(&#x27;#gpv-alignment-mode&#x27;).value = settings.alignmentMode;
+    if ([&#x27;perspective&#x27;, &#x27;orthographic&#x27;].includes(settings.projection)) root.querySelector(&#x27;#gpv-projection&#x27;).value = settings.projection;
+    if ([&#x27;transparent&#x27;, &#x27;white&#x27;, &#x27;dark&#x27;, &#x27;custom&#x27;].includes(settings.background)) root.querySelector(&#x27;#gpv-background&#x27;).value = settings.background;
+    if (/^#[0-9a-f]{6}$/i.test(settings.backgroundColor || &#x27;&#x27;)) root.querySelector(&#x27;#gpv-background-color&#x27;).value = settings.backgroundColor;
     const active = byName.get(settings.activeModel);
     if (active) activeId = active.id;
     const reference = byName.get(settings.referenceModel);
@@ -1960,6 +2177,15 @@ html&gt;body{padding:0}&lt;/style&gt;
       if (!atom) return null;
       return { entryId: entry.id, chain: label.chain || &#x27;&#x27;, resi: label.resi, atom: label.atom || &#x27;CA&#x27;, resn: atom.resn, x: atom.x, y: atom.y, z: atom.z, key: residueKey(entry.id, label.chain, label.resi), text: label.text };
     }).filter(Boolean);
+    selectionRecords = (scene.selections || []).map(record =&gt; {
+      const entry = byName.get(record.model); if (!entry) return null;
+      return { id: nextAnnotationId++, entryId: entry.id, chain: record.chain || &#x27;&#x27;, residues: (record.residues || []).map(Number).filter(Number.isFinite), action: record.action === &#x27;hide&#x27; ? &#x27;hide&#x27; : &#x27;highlight&#x27;, color: /^#[0-9a-f]{6}$/i.test(record.color || &#x27;&#x27;) ? record.color : &#x27;#f97316&#x27; };
+    }).filter(Boolean);
+    measurementRecords = (scene.measurements || []).map(record =&gt; {
+      const points = (record.points || []).map(point =&gt; { const entry = byName.get(point.model); return entry ? { entryId: entry.id, chain: point.chain || &#x27;&#x27;, resi: point.resi, atom: point.atom || &#x27;&#x27;, index: point.index } : null; }).filter(Boolean);
+      return points.length &gt;= 2 ? { id: nextAnnotationId++, type: record.type === &#x27;angle&#x27; ? &#x27;angle&#x27; : &#x27;distance&#x27;, points } : null;
+    }).filter(Boolean);
+    savedViews = (scene.savedViews || []).map(view =&gt; ({ ...view, id: nextAnnotationId++ }));
     root.querySelector(&#x27;#gpv-all-labels&#x27;).checked = settings.allResidueLabels === true;
     const provenance = scene.provenance || {};
     root.querySelector(&#x27;#gpv-project-title&#x27;).value = provenance.title || &#x27;&#x27;;
@@ -1969,6 +2195,11 @@ html&gt;body{padding:0}&lt;/style&gt;
     applyModelOrder();
     renderList();
     if (reference) root.querySelector(&#x27;#gpv-reference&#x27;).value = String(reference.id);
+    const left = byName.get(settings.leftModel); const right = byName.get(settings.rightModel);
+    if (left) root.querySelector(&#x27;#gpv-left-model&#x27;).value = String(left.id);
+    if (right) root.querySelector(&#x27;#gpv-right-model&#x27;).value = String(right.id);
+    root.querySelector(&#x27;#gpv-side-by-side&#x27;).checked = settings.sideBySide === true;
+    renderSelectionList(); renderMeasurementList(); renderSavedViews(); applyAppearance();
     applyStyle();
     if (settings.alignmentApplied &amp;&amp; reference) alignVisible();
     if (settings.camera &amp;&amp; typeof viewer.setView === &#x27;function&#x27;) viewer.setView(settings.camera);
@@ -2053,6 +2284,143 @@ html&gt;body{padding:0}&lt;/style&gt;
     updateStatus(motion === &#x27;off&#x27; ? &#x27;Ready&#x27; : root.querySelector(&#x27;#gpv-motion&#x27;).selectedOptions[0].text);
   }
 
+  function captureViewState(name = &#x27;&#x27;, caption = &#x27;&#x27;) {
+    const active = activeEntry();
+    return {
+      id: nextAnnotationId++, name, caption,
+      camera: typeof viewer.getView === &#x27;function&#x27; ? viewer.getView() : null,
+      activeModel: active ? active.name : null,
+      visibleModels: structures.filter(entry =&gt; entry.visible).map(entry =&gt; entry.name),
+      colors: Object.fromEntries(structures.map(entry =&gt; [entry.name, entry.color])),
+      viewMode: root.querySelector(&#x27;#gpv-view-mode&#x27;).value,
+      representation: root.querySelector(&#x27;#gpv-style&#x27;).value,
+      colorMode: root.querySelector(&#x27;#gpv-color-mode&#x27;).value,
+      projection: root.querySelector(&#x27;#gpv-projection&#x27;).value,
+      background: root.querySelector(&#x27;#gpv-background&#x27;).value,
+      backgroundColor: root.querySelector(&#x27;#gpv-background-color&#x27;).value,
+      sideBySide: root.querySelector(&#x27;#gpv-side-by-side&#x27;).checked,
+      leftModel: (structures.find(entry =&gt; entry.id === Number(root.querySelector(&#x27;#gpv-left-model&#x27;).value)) || {}).name || null,
+      rightModel: (structures.find(entry =&gt; entry.id === Number(root.querySelector(&#x27;#gpv-right-model&#x27;).value)) || {}).name || null
+    };
+  }
+
+  function applyViewState(state) {
+    const byName = new Map(structures.map(entry =&gt; [entry.name, entry]));
+    const visibleNames = new Set(state.visibleModels || []);
+    structures.forEach(entry =&gt; {
+      entry.visible = visibleNames.has(entry.name);
+      if (/^#[0-9a-f]{6}$/i.test((state.colors || {})[entry.name] || &#x27;&#x27;)) entry.color = state.colors[entry.name];
+    });
+    const active = byName.get(state.activeModel); if (active) activeId = active.id;
+    if ([&#x27;overlay&#x27;, &#x27;single&#x27;].includes(state.viewMode)) root.querySelector(&#x27;#gpv-view-mode&#x27;).value = state.viewMode;
+    if ([&#x27;cartoon&#x27;, &#x27;stick&#x27;, &#x27;sphere&#x27;, &#x27;line&#x27;].includes(state.representation)) root.querySelector(&#x27;#gpv-style&#x27;).value = state.representation;
+    if ([&#x27;structure&#x27;, &#x27;chain&#x27;, &#x27;plddt&#x27;, &#x27;spectrum&#x27;, &#x27;element&#x27;].includes(state.colorMode)) root.querySelector(&#x27;#gpv-color-mode&#x27;).value = state.colorMode;
+    if ([&#x27;perspective&#x27;, &#x27;orthographic&#x27;].includes(state.projection)) root.querySelector(&#x27;#gpv-projection&#x27;).value = state.projection;
+    if ([&#x27;transparent&#x27;, &#x27;white&#x27;, &#x27;dark&#x27;, &#x27;custom&#x27;].includes(state.background)) root.querySelector(&#x27;#gpv-background&#x27;).value = state.background;
+    if (/^#[0-9a-f]{6}$/i.test(state.backgroundColor || &#x27;&#x27;)) root.querySelector(&#x27;#gpv-background-color&#x27;).value = state.backgroundColor;
+    root.querySelector(&#x27;#gpv-side-by-side&#x27;).checked = state.sideBySide === true;
+    const left = byName.get(state.leftModel); const right = byName.get(state.rightModel);
+    renderList();
+    if (left) root.querySelector(&#x27;#gpv-left-model&#x27;).value = String(left.id);
+    if (right) root.querySelector(&#x27;#gpv-right-model&#x27;).value = String(right.id);
+    applyAppearance(); applyStyle();
+    if (state.camera &amp;&amp; typeof viewer.setView === &#x27;function&#x27;) viewer.setView(state.camera);
+    viewer.render(); renderCompareViewer();
+  }
+
+  function renderSavedViews() {
+    const list = root.querySelector(&#x27;#gpv-saved-views&#x27;); list.replaceChildren();
+    savedViews.forEach((view, index) =&gt; {
+      const row = document.createElement(&#x27;div&#x27;); row.className = &#x27;gpv-entry&#x27;;
+      const textValue = document.createElement(&#x27;span&#x27;); textValue.className = &#x27;gpv-entry-name&#x27;;
+      textValue.textContent = String.fromCharCode(65 + index) + &#x27; · &#x27; + view.name + (view.caption ? &#x27; — &#x27; + view.caption : &#x27;&#x27;);
+      const load = document.createElement(&#x27;button&#x27;); load.className = &#x27;btn&#x27;; load.type = &#x27;button&#x27;; load.textContent = &#x27;Load&#x27;; load.addEventListener(&#x27;click&#x27;, () =&gt; { applyViewState(view); updateStatus(&#x27;Loaded view &#x27; + view.name); });
+      const remove = document.createElement(&#x27;button&#x27;); remove.className = &#x27;btn btn-ghost&#x27;; remove.type = &#x27;button&#x27;; remove.textContent = &#x27;Remove&#x27;; remove.addEventListener(&#x27;click&#x27;, () =&gt; { savedViews = savedViews.filter(item =&gt; item.id !== view.id); renderSavedViews(); updateStatus(&#x27;Saved view removed&#x27;); });
+      row.append(textValue, load, remove); list.append(row);
+    });
+    updateStatus();
+  }
+
+  function saveCurrentView() {
+    const nameInput = root.querySelector(&#x27;#gpv-view-name&#x27;); const captionInput = root.querySelector(&#x27;#gpv-view-caption&#x27;);
+    const name = nameInput.value.trim() || &#x27;View &#x27; + (savedViews.length + 1);
+    savedViews.push(captureViewState(name, captionInput.value.trim()));
+    nameInput.value = &#x27;&#x27;; captionInput.value = &#x27;&#x27;; renderSavedViews(); updateStatus(&#x27;Saved publication view &#x27; + name);
+  }
+
+  function exportDimensions() {
+    const parts = root.querySelector(&#x27;#gpv-export-size&#x27;).value.split(&#x27;x&#x27;).map(Number);
+    const requestedScale = Number(root.querySelector(&#x27;#gpv-export-scale&#x27;).value) || 1;
+    let width = parts[0] * requestedScale; let height = parts[1] * requestedScale;
+    const maxPixels = 24000000;
+    if (width * height &gt; maxPixels) {
+      const correction = Math.sqrt(maxPixels / (width * height)); width = Math.floor(width * correction); height = Math.floor(height * correction);
+    }
+    return { width, height, capped: width !== parts[0] * requestedScale || height !== parts[1] * requestedScale };
+  }
+
+  async function renderPublicationImage(state = null, dimensions = exportDimensions()) {
+    const restore = captureViewState();
+    if (state) applyViewState(state);
+    const surface = document.createElement(&#x27;div&#x27;); surface.className = &#x27;gpv-export-surface&#x27;; surface.style.width = dimensions.width + &#x27;px&#x27;; surface.style.height = dimensions.height + &#x27;px&#x27;; root.append(surface);
+    const exportViewer = $3Dmol.createViewer(surface, { backgroundColor: &#x27;rgba(0,0,0,0)&#x27;, antialias: true, upscale: true });
+    const background = backgroundSpec(); exportViewer.setBackgroundColor(background.color, background.alpha);
+    if (typeof exportViewer.setProjection === &#x27;function&#x27;) exportViewer.setProjection(root.querySelector(&#x27;#gpv-projection&#x27;).value);
+    displayedEntries().forEach(entry =&gt; {
+      const model = exportViewer.addModel(entry.text, entry.format); const atoms = model.selectedAtoms({});
+      atoms.forEach((atom, index) =&gt; { if (entry.atoms[index]) { atom.x = entry.atoms[index].x; atom.y = entry.atoms[index].y; atom.z = entry.atoms[index].z; } });
+      model.setStyle({}, styleFor(entry));
+    });
+    exportViewer.zoomTo();
+    if (typeof viewer.getView === &#x27;function&#x27; &amp;&amp; typeof exportViewer.setView === &#x27;function&#x27;) exportViewer.setView(viewer.getView());
+    exportViewer.render();
+    await new Promise(resolve =&gt; requestAnimationFrame(() =&gt; requestAnimationFrame(resolve)));
+    const uri = exportViewer.pngURI(); surface.remove();
+    if (state) applyViewState(restore);
+    return uri;
+  }
+
+  async function downloadPublicationPng() {
+    const button = root.querySelector(&#x27;#gpv-image&#x27;); button.disabled = true; button.textContent = &#x27;Rendering…&#x27;;
+    try {
+      const dimensions = exportDimensions(); const uri = await renderPublicationImage(null, dimensions);
+      const link = document.createElement(&#x27;a&#x27;); link.href = uri; link.download = &#x27;protein-publication-&#x27; + dimensions.width + &#x27;x&#x27; + dimensions.height + &#x27;.png&#x27;; link.click();
+      updateStatus(&#x27;Publication PNG downloaded&#x27; + (dimensions.capped ? &#x27; · size capped for browser stability&#x27; : &#x27;&#x27;));
+    } catch (error) { updateStatus(&#x27;Could not render publication PNG&#x27;); }
+    button.disabled = false; button.textContent = &#x27;Download publication PNG&#x27;;
+  }
+
+  function loadImage(uri) {
+    return new Promise((resolve, reject) =&gt; { const imageValue = new Image(); imageValue.onload = () =&gt; resolve(imageValue); imageValue.onerror = reject; imageValue.src = uri; });
+  }
+
+  async function downloadContactSheet() {
+    if (!savedViews.length) return;
+    const button = root.querySelector(&#x27;#gpv-contact-sheet&#x27;); button.disabled = true; button.textContent = &#x27;Rendering panels…&#x27;;
+    const restore = captureViewState(); const columns = Number(root.querySelector(&#x27;#gpv-panel-columns&#x27;).value) || 2;
+    const cellWidth = 1200; const imageHeight = 900; const captionHeight = 140; const rows = Math.ceil(savedViews.length / columns);
+    const canvas = document.createElement(&#x27;canvas&#x27;); canvas.width = columns * cellWidth; canvas.height = rows * (imageHeight + captionHeight); const context = canvas.getContext(&#x27;2d&#x27;);
+    context.fillStyle = &#x27;#ffffff&#x27;; context.fillRect(0, 0, canvas.width, canvas.height); context.fillStyle = &#x27;#111827&#x27;; context.textBaseline = &#x27;top&#x27;;
+    try {
+      for (let index = 0; index &lt; savedViews.length; index += 1) {
+        button.textContent = &#x27;Rendering &#x27; + (index + 1) + &#x27; / &#x27; + savedViews.length + &#x27;…&#x27;;
+        const uri = await renderPublicationImage(savedViews[index], { width: cellWidth, height: imageHeight }); const imageValue = await loadImage(uri);
+        const x = (index % columns) * cellWidth; const y = Math.floor(index / columns) * (imageHeight + captionHeight); context.drawImage(imageValue, x, y, cellWidth, imageHeight);
+        context.font = &#x27;700 42px system-ui&#x27;; context.fillText(String.fromCharCode(65 + index), x + 32, y + imageHeight + 24);
+        context.font = &#x27;600 30px system-ui&#x27;; context.fillText(savedViews[index].name, x + 96, y + imageHeight + 24);
+        context.font = &#x27;24px system-ui&#x27;; context.fillText(savedViews[index].caption || &#x27;&#x27;, x + 96, y + imageHeight + 70, cellWidth - 128);
+      }
+      const link = document.createElement(&#x27;a&#x27;); link.href = canvas.toDataURL(&#x27;image/png&#x27;); link.download = &#x27;protein-figure-panels.png&#x27;; link.click(); updateStatus(&#x27;Figure panels downloaded&#x27;);
+    } catch (error) { updateStatus(&#x27;Could not render figure panels&#x27;); }
+    applyViewState(restore); button.disabled = false; button.textContent = &#x27;Download figure panels&#x27;;
+  }
+
+  function downloadCaptions() {
+    const provenance = provenanceValues();
+    const lines = [provenance.title || &#x27;Protein structure figure&#x27;, provenance.source, provenance.method, &#x27;&#x27;, ...savedViews.map((view, index) =&gt; String.fromCharCode(65 + index) + &#x27;. &#x27; + view.name + (view.caption ? &#x27;: &#x27; + view.caption : &#x27;&#x27;)), &#x27;&#x27;, provenance.notes].filter((line, index, array) =&gt; line || array[index - 1]);
+    downloadBlob(lines.join(&#x27;\n&#x27;), &#x27;text/plain&#x27;, &#x27;protein-figure-captions.txt&#x27;); updateStatus(&#x27;Figure captions downloaded&#x27;);
+  }
+
   function reportConfidence(entry) {
     const confidence = { ...(entry.confidence || {}) };
     const matrix = confidence.pae;
@@ -2086,21 +2454,23 @@ html&gt;body{padding:0}&lt;/style&gt;
     }));
     const payload = JSON.stringify(exported).replace(/&lt;/g, &#x27;\\u003c&#x27;);
     const reportMetadata = JSON.stringify(provenanceValues()).replace(/&lt;/g, &#x27;\\u003c&#x27;);
+    const reportViews = JSON.stringify(savedViews).replace(/&lt;/g, &#x27;\\u003c&#x27;);
     const html = [
       &quot;&lt;!doctype html&gt;&quot;,
       &quot;&lt;html lang=&#x27;en&#x27;&gt;&lt;head&gt;&lt;meta charset=&#x27;utf-8&#x27;&gt;&quot;,
       &quot;&lt;meta name=&#x27;viewport&#x27; content=&#x27;width=device-width,initial-scale=1&#x27;&gt;&quot;,
       &quot;&lt;title&gt;Protein Model Report&lt;/title&gt;&quot;,
       &quot;&lt;style&gt;&quot;,
-      &quot;:root{color-scheme:light dark;font-family:system-ui,sans-serif}body{margin:0;padding:18px;background:#111827;color:#f8fafc}main{max-width:1100px;margin:auto}.controls{display:flex;gap:10px;flex-wrap:wrap;align-items:end;margin-bottom:12px}label{display:grid;gap:4px}button,select,input{font:inherit;padding:7px 10px}#view{height:65vh;min-height:420px;background:#020617}#status{display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-top:8px;color:#cbd5e1}.legend{display:flex;gap:12px;flex-wrap:wrap;margin:8px 0}.legend span{display:flex;align-items:center;gap:5px}.swatch{width:12px;height:12px;display:inline-block}.vlow{background:#ff7d45}.low{background:#ffdb13}.conf{background:#65cbf3}.vhigh{background:#0053d6}#pae-wrap{max-width:360px;margin-top:14px}#pae{display:block;width:100%;height:auto}#pae-detail{margin-top:5px;color:#cbd5e1}.meta{white-space:pre-wrap;color:#cbd5e1}@media(prefers-color-scheme:light){body{background:#f8fafc;color:#0f172a}#view{background:#e2e8f0}#status,#pae-detail,.meta{color:#475569}}&quot;,
+      &quot;:root{color-scheme:light dark;font-family:system-ui,sans-serif}body{margin:0;padding:18px;background:#111827;color:#f8fafc}main{max-width:1100px;margin:auto}.controls{display:flex;gap:10px;flex-wrap:wrap;align-items:end;margin-bottom:12px}label{display:grid;gap:4px}button,select,input{font:inherit;padding:7px 10px}#view{height:65vh;min-height:420px;background:#020617}#status{display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-top:8px;color:#cbd5e1}.legend{display:flex;gap:12px;flex-wrap:wrap;margin:8px 0}.legend span{display:flex;align-items:center;gap:5px}.swatch{width:12px;height:12px;display:inline-block}.vlow{background:#ff7d45}.low{background:#ffdb13}.conf{background:#65cbf3}.vhigh{background:#0053d6}#caption{padding:10px 0;font-size:1.05rem}#pae-wrap{max-width:360px;margin-top:14px}#pae{display:block;width:100%;height:auto}#pae-detail{margin-top:5px;color:#cbd5e1}.meta{white-space:pre-wrap;color:#cbd5e1}@media(prefers-color-scheme:light){body{background:#f8fafc;color:#0f172a}#view{background:#e2e8f0}#status,#pae-detail,.meta{color:#475569}}&quot;,
       &quot;&lt;/style&gt;&lt;/head&gt;&lt;body&gt;&lt;main&gt;&quot;,
       &quot;&lt;h1 id=&#x27;project-title&#x27; hidden&gt;&lt;/h1&gt;&lt;p class=&#x27;meta&#x27; id=&#x27;project-meta&#x27;&gt;&lt;/p&gt;&quot;,
-      &quot;&lt;div class=&#x27;controls&#x27;&gt;&lt;label&gt;Model&lt;select id=&#x27;model&#x27;&gt;&lt;/select&gt;&lt;/label&gt;&lt;button id=&#x27;previous&#x27;&gt;Previous&lt;/button&gt;&lt;button id=&#x27;next&#x27;&gt;Next&lt;/button&gt;&lt;button id=&#x27;play&#x27;&gt;Play cycle&lt;/button&gt;&lt;label&gt;Interval (seconds)&lt;input id=&#x27;interval&#x27; type=&#x27;number&#x27; min=&#x27;0.5&#x27; max=&#x27;20&#x27; step=&#x27;0.5&#x27; value=&#x27;2&#x27;&gt;&lt;/label&gt;&lt;label&gt;Representation&lt;select id=&#x27;style&#x27;&gt;&lt;option value=&#x27;cartoon&#x27;&gt;Cartoon&lt;/option&gt;&lt;option value=&#x27;stick&#x27;&gt;Sticks&lt;/option&gt;&lt;option value=&#x27;sphere&#x27;&gt;Spheres&lt;/option&gt;&lt;option value=&#x27;line&#x27;&gt;Lines&lt;/option&gt;&lt;/select&gt;&lt;/label&gt;&lt;label&gt;Colors&lt;select id=&#x27;colors&#x27;&gt;&lt;option value=&#x27;plddt&#x27;&gt;pLDDT&lt;/option&gt;&lt;option value=&#x27;structure&#x27;&gt;Model color&lt;/option&gt;&lt;option value=&#x27;chain&#x27;&gt;Chain&lt;/option&gt;&lt;option value=&#x27;spectrum&#x27;&gt;Spectrum&lt;/option&gt;&lt;/select&gt;&lt;/label&gt;&lt;button id=&#x27;spin&#x27;&gt;Spin&lt;/button&gt;&lt;button id=&#x27;png&#x27;&gt;Download PNG&lt;/button&gt;&lt;button id=&#x27;video&#x27;&gt;Record 5s video&lt;/button&gt;&lt;/div&gt;&quot;,
+      &quot;&lt;div class=&#x27;controls&#x27;&gt;&lt;label id=&#x27;guided-wrap&#x27;&gt;Guided view&lt;select id=&#x27;guided&#x27;&gt;&lt;option value=&#x27;&#x27;&gt;Choose a saved view&lt;/option&gt;&lt;/select&gt;&lt;/label&gt;&lt;label&gt;Model&lt;select id=&#x27;model&#x27;&gt;&lt;/select&gt;&lt;/label&gt;&lt;button id=&#x27;previous&#x27;&gt;Previous&lt;/button&gt;&lt;button id=&#x27;next&#x27;&gt;Next&lt;/button&gt;&lt;button id=&#x27;play&#x27;&gt;Play cycle&lt;/button&gt;&lt;label&gt;Interval (seconds)&lt;input id=&#x27;interval&#x27; type=&#x27;number&#x27; min=&#x27;0.5&#x27; max=&#x27;20&#x27; step=&#x27;0.5&#x27; value=&#x27;2&#x27;&gt;&lt;/label&gt;&lt;label&gt;Representation&lt;select id=&#x27;style&#x27;&gt;&lt;option value=&#x27;cartoon&#x27;&gt;Cartoon&lt;/option&gt;&lt;option value=&#x27;stick&#x27;&gt;Sticks&lt;/option&gt;&lt;option value=&#x27;sphere&#x27;&gt;Spheres&lt;/option&gt;&lt;option value=&#x27;line&#x27;&gt;Lines&lt;/option&gt;&lt;/select&gt;&lt;/label&gt;&lt;label&gt;Colors&lt;select id=&#x27;colors&#x27;&gt;&lt;option value=&#x27;plddt&#x27;&gt;pLDDT&lt;/option&gt;&lt;option value=&#x27;structure&#x27;&gt;Model color&lt;/option&gt;&lt;option value=&#x27;chain&#x27;&gt;Chain&lt;/option&gt;&lt;option value=&#x27;spectrum&#x27;&gt;Spectrum&lt;/option&gt;&lt;/select&gt;&lt;/label&gt;&lt;button id=&#x27;spin&#x27;&gt;Spin&lt;/button&gt;&lt;button id=&#x27;png&#x27;&gt;Download PNG&lt;/button&gt;&lt;button id=&#x27;video&#x27;&gt;Record 5s video&lt;/button&gt;&lt;/div&gt;&lt;div id=&#x27;caption&#x27; hidden&gt;&lt;/div&gt;&quot;,
       &quot;&lt;div class=&#x27;legend&#x27;&gt;&lt;span&gt;&lt;i class=&#x27;swatch vlow&#x27;&gt;&lt;/i&gt;&amp;lt;50&lt;/span&gt;&lt;span&gt;&lt;i class=&#x27;swatch low&#x27;&gt;&lt;/i&gt;50–70&lt;/span&gt;&lt;span&gt;&lt;i class=&#x27;swatch conf&#x27;&gt;&lt;/i&gt;70–90&lt;/span&gt;&lt;span&gt;&lt;i class=&#x27;swatch vhigh&#x27;&gt;&lt;/i&gt;≥90&lt;/span&gt;&lt;/div&gt;&quot;,
       &quot;&lt;div id=&#x27;view&#x27;&gt;&lt;/div&gt;&lt;div id=&#x27;status&#x27;&gt;&lt;span id=&#x27;name&#x27;&gt;&lt;/span&gt;&lt;span id=&#x27;score&#x27;&gt;&lt;/span&gt;&lt;span id=&#x27;model-confidence&#x27;&gt;&lt;/span&gt;&lt;span id=&#x27;position&#x27;&gt;&lt;/span&gt;&lt;/div&gt;&lt;div id=&#x27;pae-wrap&#x27; hidden&gt;&lt;canvas id=&#x27;pae&#x27; width=&#x27;360&#x27; height=&#x27;360&#x27; aria-label=&#x27;Predicted aligned error heatmap&#x27;&gt;&lt;/canvas&gt;&lt;div id=&#x27;pae-detail&#x27;&gt;Predicted aligned error (Å)&lt;/div&gt;&lt;/div&gt;&quot;,
       &quot;&lt;script src=&#x27;https://cdnjs.cloudflare.com/ajax/libs/3Dmol/2.4.2/3Dmol-min.js&#x27;&gt;&lt;&quot; + &quot;/script&gt;&quot;,
       &quot;&lt;script&gt;&quot;,
       &quot;const structures=&quot; + payload + &quot;;&quot;,
+      &quot;const savedViews=&quot; + reportViews + &quot;;const guided=document.getElementById(&#x27;guided&#x27;),guidedWrap=document.getElementById(&#x27;guided-wrap&#x27;);if(!savedViews.length)guidedWrap.hidden=true;savedViews.forEach((v,i)=&gt;{const o=document.createElement(&#x27;option&#x27;);o.value=i;o.textContent=String.fromCharCode(65+i)+&#x27; · &#x27;+v.name;guided.append(o)});&quot;,
       &quot;const metadata=&quot; + reportMetadata + &quot;;const title=document.getElementById(&#x27;project-title&#x27;);if(metadata.title){title.hidden=false;title.textContent=metadata.title}document.getElementById(&#x27;project-meta&#x27;).textContent=[metadata.source,metadata.method,metadata.notes].filter(Boolean).join(&#x27; · &#x27;);&quot;,
       &quot;const viewer=$3Dmol.createViewer(document.getElementById(&#x27;view&#x27;),{backgroundColor:&#x27;rgba(0,0,0,0)&#x27;,antialias:true});let current=0,timer=0,spinning=false;&quot;,
       &quot;const picker=document.getElementById(&#x27;model&#x27;);structures.forEach((s,i)=&gt;{const o=document.createElement(&#x27;option&#x27;);o.value=i;o.textContent=s.name;picker.append(o)});&quot;,
@@ -2109,9 +2479,10 @@ html&gt;body{padding:0}&lt;/style&gt;
       &quot;function metric(v,d=3){return Number.isFinite(Number(v))?Number(v).toFixed(d):&#x27;—&#x27;}function drawPae(s){const wrap=document.getElementById(&#x27;pae-wrap&#x27;),c=s.confidence||{},matrix=c.pae;if(!Array.isArray(matrix)||!matrix.length){wrap.hidden=true;return}wrap.hidden=false;const canvas=document.getElementById(&#x27;pae&#x27;),ctx=canvas.getContext(&#x27;2d&#x27;),image=ctx.createImageData(canvas.width,canvas.height);let max=1;matrix.forEach(r=&gt;r.forEach(v=&gt;{if(Number.isFinite(Number(v)))max=Math.max(max,Number(v))}));for(let y=0;y&lt;canvas.height;y++){const row=matrix[Math.min(matrix.length-1,Math.floor(y*matrix.length/canvas.height))]||[];for(let x=0;x&lt;canvas.width;x++){const v=Number(row[Math.min(row.length-1,Math.floor(x*row.length/canvas.width))])||0,t=Math.max(0,Math.min(1,v/max)),o=(y*canvas.width+x)*4;image.data[o]=Math.round(255*t);image.data[o+1]=Math.round(83+136*t);image.data[o+2]=Math.round(214-195*t);image.data[o+3]=255}}ctx.putImageData(image,0,0);document.getElementById(&#x27;pae-detail&#x27;).textContent=&#x27;PAE · &#x27;+(c.paeOriginalSize||matrix.length)+&#x27; × &#x27;+(c.paeOriginalSize||matrix.length)+&#x27; tokens · maximum &#x27;+max.toFixed(1)+&#x27; Å&#x27;+(c.paeDownsampled?&#x27; · heatmap downsampled for report&#x27;:&#x27;&#x27;)}&quot;,
       &quot;function show(i){current=(Number(i)+structures.length)%structures.length;picker.value=current;const s=structures[current];viewer.removeAllModels();viewer.removeAllLabels();const m=viewer.addModel(s.text,s.format);const rep=document.getElementById(&#x27;style&#x27;).value;const mode=document.getElementById(&#x27;colors&#x27;).value;let options={color:s.color};if(mode===&#x27;plddt&#x27;)options={colorfunc:a=&gt;pcolor(Number(a.b||0))};if(mode===&#x27;chain&#x27;)options={colorscheme:&#x27;chainHetatm&#x27;};if(mode===&#x27;spectrum&#x27;)options={colorscheme:&#x27;spectrum&#x27;};if(rep===&#x27;line&#x27;)options.linewidth=2;const spec={};spec[rep]=options;m.setStyle({},spec);(s.labels||[]).forEach(l=&gt;viewer.addLabel(l.text,{position:{x:l.x,y:l.y,z:l.z},backgroundColor:&#x27;#fff&#x27;,fontColor:&#x27;#111827&#x27;,borderColor:&#x27;#94a3b8&#x27;,borderThickness:1,fontSize:12,inFront:true}));viewer.zoomTo();viewer.render();const values=m.selectedAtoms({}).filter(a=&gt;a.atom===&#x27;CA&#x27;&amp;&amp;Number.isFinite(Number(a.b))).map(a=&gt;Number(a.b));const avg=mean(values),c=s.confidence||{};document.getElementById(&#x27;name&#x27;).textContent=s.name;document.getElementById(&#x27;score&#x27;).textContent=avg===null?&#x27;Mean pLDDT —&#x27;:&#x27;Mean pLDDT &#x27;+avg.toFixed(1);document.getElementById(&#x27;model-confidence&#x27;).textContent=&#x27;pTM &#x27;+metric(c.ptm)+&#x27; · ipTM &#x27;+metric(c.iptm)+&#x27; · ranking &#x27;+metric(c.rankingScore)+(c.hasClash?&#x27; · clash warning&#x27;:&#x27;&#x27;);document.getElementById(&#x27;position&#x27;).textContent=(current+1)+&#x27; / &#x27;+structures.length;drawPae(s)}&quot;,
       &quot;function stop(){clearInterval(timer);timer=0;document.getElementById(&#x27;play&#x27;).textContent=&#x27;Play cycle&#x27;}&quot;,
+      &quot;function guide(i){const v=savedViews[Number(i)];if(!v)return;stop();const modelIndex=structures.findIndex(s=&gt;s.name===v.activeModel);if(modelIndex&gt;=0)show(modelIndex);if(v.representation)document.getElementById(&#x27;style&#x27;).value=v.representation;if(v.colorMode)document.getElementById(&#x27;colors&#x27;).value=v.colorMode===&#x27;element&#x27;?&#x27;structure&#x27;:v.colorMode;if(modelIndex&gt;=0)show(modelIndex);if(v.camera&amp;&amp;viewer.setView)viewer.setView(v.camera);viewer.render();const caption=document.getElementById(&#x27;caption&#x27;);caption.hidden=false;caption.textContent=v.name+(v.caption?&#x27; — &#x27;+v.caption:&#x27;&#x27;)}&quot;,
       &quot;function play(){if(timer){stop();return}const seconds=Math.max(.5,Number(document.getElementById(&#x27;interval&#x27;).value)||2);timer=setInterval(()=&gt;show(current+1),seconds*1000);document.getElementById(&#x27;play&#x27;).textContent=&#x27;Pause cycle&#x27;}&quot;,
       &quot;function record(){const canvas=document.querySelector(&#x27;#view canvas&#x27;),button=document.getElementById(&#x27;video&#x27;);if(!canvas||!canvas.captureStream||typeof MediaRecorder===&#x27;undefined&#x27;){alert(&#x27;Video recording is not supported by this browser.&#x27;);return}const stream=canvas.captureStream(30),type=MediaRecorder.isTypeSupported(&#x27;video/webm;codecs=vp9&#x27;)?&#x27;video/webm;codecs=vp9&#x27;:&#x27;video/webm&#x27;,recorder=new MediaRecorder(stream,{mimeType:type}),chunks=[];recorder.ondataavailable=e=&gt;{if(e.data.size)chunks.push(e.data)};recorder.onstop=()=&gt;{viewer.spin(false);stream.getTracks().forEach(t=&gt;t.stop());const url=URL.createObjectURL(new Blob(chunks,{type:&#x27;video/webm&#x27;})),a=document.createElement(&#x27;a&#x27;);a.href=url;a.download=&#x27;protein-spin.webm&#x27;;a.click();setTimeout(()=&gt;URL.revokeObjectURL(url),1000);button.disabled=false;button.textContent=&#x27;Record 5s video&#x27;};button.disabled=true;button.textContent=&#x27;Recording…&#x27;;viewer.spin(&#x27;y&#x27;,.8);recorder.start();setTimeout(()=&gt;recorder.stop(),5000)}&quot;,
-      &quot;picker.addEventListener(&#x27;change&#x27;,e=&gt;{stop();show(e.target.value)});document.getElementById(&#x27;previous&#x27;).onclick=()=&gt;{stop();show(current-1)};document.getElementById(&#x27;next&#x27;).onclick=()=&gt;{stop();show(current+1)};document.getElementById(&#x27;play&#x27;).onclick=play;document.getElementById(&#x27;style&#x27;).onchange=()=&gt;show(current);document.getElementById(&#x27;colors&#x27;).onchange=()=&gt;show(current);document.getElementById(&#x27;spin&#x27;).onclick=()=&gt;{spinning=!spinning;viewer.spin(spinning?&#x27;y&#x27;:false);document.getElementById(&#x27;spin&#x27;).textContent=spinning?&#x27;Stop spin&#x27;:&#x27;Spin&#x27;};document.getElementById(&#x27;png&#x27;).onclick=()=&gt;{const a=document.createElement(&#x27;a&#x27;);a.href=viewer.pngURI();a.download=&#x27;protein-model.png&#x27;;a.click()};document.getElementById(&#x27;video&#x27;).onclick=record;window.addEventListener(&#x27;keydown&#x27;,e=&gt;{if(e.key===&#x27;ArrowLeft&#x27;){stop();show(current-1)}if(e.key===&#x27;ArrowRight&#x27;){stop();show(current+1)}});new ResizeObserver(()=&gt;viewer.resize()).observe(document.getElementById(&#x27;view&#x27;));show(0);&quot;,
+      &quot;guided.addEventListener(&#x27;change&#x27;,e=&gt;guide(e.target.value));picker.addEventListener(&#x27;change&#x27;,e=&gt;{stop();show(e.target.value)});document.getElementById(&#x27;previous&#x27;).onclick=()=&gt;{stop();show(current-1)};document.getElementById(&#x27;next&#x27;).onclick=()=&gt;{stop();show(current+1)};document.getElementById(&#x27;play&#x27;).onclick=play;document.getElementById(&#x27;style&#x27;).onchange=()=&gt;show(current);document.getElementById(&#x27;colors&#x27;).onchange=()=&gt;show(current);document.getElementById(&#x27;spin&#x27;).onclick=()=&gt;{spinning=!spinning;viewer.spin(spinning?&#x27;y&#x27;:false);document.getElementById(&#x27;spin&#x27;).textContent=spinning?&#x27;Stop spin&#x27;:&#x27;Spin&#x27;};document.getElementById(&#x27;png&#x27;).onclick=()=&gt;{const a=document.createElement(&#x27;a&#x27;);a.href=viewer.pngURI();a.download=&#x27;protein-model.png&#x27;;a.click()};document.getElementById(&#x27;video&#x27;).onclick=record;window.addEventListener(&#x27;keydown&#x27;,e=&gt;{if(e.key===&#x27;ArrowLeft&#x27;){stop();show(current-1)}if(e.key===&#x27;ArrowRight&#x27;){stop();show(current+1)}});new ResizeObserver(()=&gt;viewer.resize()).observe(document.getElementById(&#x27;view&#x27;));show(0);&quot;,
       &quot;&lt;&quot; + &quot;/script&gt;&lt;/main&gt;&lt;/body&gt;&lt;/html&gt;&quot;
     ].join(&#x27;\n&#x27;);
     const blob = new Blob([html], { type: &#x27;text/html&#x27; });
@@ -2134,6 +2505,21 @@ html&gt;body{padding:0}&lt;/style&gt;
   });
   root.querySelector(&#x27;#gpv-style&#x27;).addEventListener(&#x27;change&#x27;, applyStyle);
   root.querySelector(&#x27;#gpv-color-mode&#x27;).addEventListener(&#x27;change&#x27;, applyStyle);
+  root.querySelectorAll(&#x27;[data-gpv-tab]&#x27;).forEach((button, index, buttons) =&gt; {
+    const panel = root.querySelector(&#x27;[data-gpv-panel=&quot;&#x27; + button.dataset.gpvTab + &#x27;&quot;]&#x27;);
+    button.id = &#x27;gpv-tab-&#x27; + button.dataset.gpvTab; button.setAttribute(&#x27;aria-controls&#x27;, &#x27;gpv-panel-&#x27; + button.dataset.gpvTab);
+    panel.id = &#x27;gpv-panel-&#x27; + button.dataset.gpvTab; panel.setAttribute(&#x27;role&#x27;, &#x27;tabpanel&#x27;); panel.setAttribute(&#x27;aria-labelledby&#x27;, button.id);
+    button.addEventListener(&#x27;click&#x27;, () =&gt; selectToolTab(button.dataset.gpvTab));
+    button.addEventListener(&#x27;keydown&#x27;, event =&gt; {
+      if (![&#x27;ArrowLeft&#x27;, &#x27;ArrowRight&#x27;, &#x27;Home&#x27;, &#x27;End&#x27;].includes(event.key)) return;
+      event.preventDefault();
+      const nextIndex = event.key === &#x27;Home&#x27; ? 0 : event.key === &#x27;End&#x27; ? buttons.length - 1 : (index + (event.key === &#x27;ArrowRight&#x27; ? 1 : -1) + buttons.length) % buttons.length;
+      selectToolTab(buttons[nextIndex].dataset.gpvTab); buttons[nextIndex].focus();
+    });
+  });
+  root.querySelector(&#x27;#gpv-projection&#x27;).addEventListener(&#x27;change&#x27;, applyAppearance);
+  root.querySelector(&#x27;#gpv-background&#x27;).addEventListener(&#x27;change&#x27;, applyAppearance);
+  root.querySelector(&#x27;#gpv-background-color&#x27;).addEventListener(&#x27;input&#x27;, applyAppearance);
   root.querySelector(&#x27;#gpv-view-mode&#x27;).addEventListener(&#x27;change&#x27;, () =&gt; {
     stopCycle();
     applyStyle();
@@ -2171,6 +2557,11 @@ html&gt;body{padding:0}&lt;/style&gt;
     activeId = null;
     selectedResidue = null;
     labelRecords = [];
+    selectionRecords = [];
+    measurementRecords = [];
+    measurementDraft = [];
+    measurementActive = false;
+    savedViews = [];
     confidenceAssets = [];
     alignmentResults = [];
     pendingScene = null;
@@ -2178,7 +2569,13 @@ html&gt;body{padding:0}&lt;/style&gt;
     root.querySelector(&#x27;#gpv-label-text&#x27;).value = &#x27;&#x27;;
     root.querySelector(&#x27;#gpv-add-label&#x27;).disabled = true;
     root.querySelector(&#x27;#gpv-all-labels&#x27;).checked = false;
+    root.querySelector(&#x27;#gpv-side-by-side&#x27;).checked = false;
+    root.querySelector(&#x27;#gpv-measure&#x27;).textContent = &#x27;Start measuring&#x27;;
+    root.querySelector(&#x27;#gpv-measure-state&#x27;).textContent = &#x27;Measurement mode is off.&#x27;;
     renderAlignmentResults();
+    renderSelectionList();
+    renderMeasurementList();
+    renderSavedViews();
     renderList();
     applyStyle();
   });
@@ -2206,12 +2603,19 @@ html&gt;body{padding:0}&lt;/style&gt;
     rebuildLabels();
     updateStatus(&#x27;Residue labels cleared&#x27;);
   });
-  root.querySelector(&#x27;#gpv-image&#x27;).addEventListener(&#x27;click&#x27;, () =&gt; {
-    const link = document.createElement(&#x27;a&#x27;);
-    link.href = viewer.pngURI();
-    link.download = &#x27;protein-view.png&#x27;;
-    link.click();
-  });
+  root.querySelector(&#x27;#gpv-add-selection&#x27;).addEventListener(&#x27;click&#x27;, addSelection);
+  root.querySelector(&#x27;#gpv-selection-range&#x27;).addEventListener(&#x27;keydown&#x27;, event =&gt; { if (event.key === &#x27;Enter&#x27;) addSelection(); });
+  root.querySelector(&#x27;#gpv-clear-selections&#x27;).addEventListener(&#x27;click&#x27;, () =&gt; { selectionRecords = []; renderSelectionList(); applyStyle(); updateStatus(&#x27;Selections cleared&#x27;); });
+  root.querySelector(&#x27;#gpv-measure&#x27;).addEventListener(&#x27;click&#x27;, toggleMeasurement);
+  root.querySelector(&#x27;#gpv-measure-type&#x27;).addEventListener(&#x27;change&#x27;, () =&gt; { measurementDraft = []; if (measurementActive) root.querySelector(&#x27;#gpv-measure-state&#x27;).textContent = &#x27;Select &#x27; + (root.querySelector(&#x27;#gpv-measure-type&#x27;).value === &#x27;angle&#x27; ? 3 : 2) + &#x27; atoms in the viewer.&#x27;; });
+  root.querySelector(&#x27;#gpv-clear-measurements&#x27;).addEventListener(&#x27;click&#x27;, () =&gt; { measurementRecords = []; measurementDraft = []; renderMeasurementList(); rebuildMeasurements(); updateStatus(&#x27;Measurements cleared&#x27;); });
+  root.querySelector(&#x27;#gpv-side-by-side&#x27;).addEventListener(&#x27;change&#x27;, () =&gt; { stopCycle(); const left = structures.find(entry =&gt; entry.id === Number(root.querySelector(&#x27;#gpv-left-model&#x27;).value)); if (left) activeId = left.id; applyStyle(); setTimeout(() =&gt; viewer.resize(), 0); });
+  root.querySelector(&#x27;#gpv-left-model&#x27;).addEventListener(&#x27;change&#x27;, event =&gt; { activeId = Number(event.target.value); root.querySelector(&#x27;#gpv-current&#x27;).value = event.target.value; applyStyle(); viewer.zoomTo(); viewer.render(); });
+  root.querySelector(&#x27;#gpv-right-model&#x27;).addEventListener(&#x27;change&#x27;, renderCompareViewer);
+  root.querySelector(&#x27;#gpv-image&#x27;).addEventListener(&#x27;click&#x27;, downloadPublicationPng);
+  root.querySelector(&#x27;#gpv-save-view&#x27;).addEventListener(&#x27;click&#x27;, saveCurrentView);
+  root.querySelector(&#x27;#gpv-contact-sheet&#x27;).addEventListener(&#x27;click&#x27;, downloadContactSheet);
+  root.querySelector(&#x27;#gpv-captions&#x27;).addEventListener(&#x27;click&#x27;, downloadCaptions);
   root.querySelector(&#x27;#gpv-video&#x27;).addEventListener(&#x27;click&#x27;, recordSpinVideo);
   root.querySelector(&#x27;#gpv-report&#x27;).addEventListener(&#x27;click&#x27;, downloadReport);
   root.querySelector(&#x27;#gpv-confidence-csv&#x27;).addEventListener(&#x27;click&#x27;, downloadConfidenceCsv);
@@ -2255,6 +2659,13 @@ html&gt;body{padding:0}&lt;/style&gt;
     if (event.key === &#x27;ArrowRight&#x27;) { stopCycle(); selectRelative(1); }
   });
   new ResizeObserver(() =&gt; viewer.resize()).observe(root.querySelector(&#x27;#gpv-stage&#x27;));
+  if (typeof viewer.setStateChangeCallback === &#x27;function&#x27;) viewer.setStateChangeCallback(() =&gt; {
+    if (!compareViewer || syncingView || !root.querySelector(&#x27;#gpv-side-by-side&#x27;).checked) return;
+    syncingView = true;
+    if (typeof compareViewer.setView === &#x27;function&#x27;) compareViewer.setView(viewer.getView());
+    compareViewer.render(); syncingView = false;
+  });
+  applyAppearance();
   updateStatus();
 })();
 &lt;/script&gt;
