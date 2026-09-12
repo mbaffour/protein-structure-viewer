@@ -4,7 +4,7 @@ This audit evaluates the viewer as a tool for comparing predicted structures, sh
 interactive review artefact, and preparing visual material for papers and theses. It is not a
 validation of any biological hypothesis, and nothing in the tool should be read as one.
 
-Audited against viewer version 2.7.0.
+Audited against viewer version 2.8.0.
 
 ## What is already strong
 
@@ -34,6 +34,9 @@ Audited against viewer version 2.7.0.
   alignment method and RMSD, ligand handling — which is the information reviewers most often find
   missing from structure figures. It is explicitly a draft.
 - Hetero groups are visible by default; a figure that silently drops a bound ligand or ion misleads.
+- The composition table makes the model's actual content — chains, lengths, ligands and ions —
+  explicit before any figure is made, and hiding a chain is recorded in the scene manifest rather
+  than happening silently.
 - Residue-property colouring (charge, hydrophobicity, type) is a look-up on residue identity, and the
   surface option paints that property onto a molecular surface. It is not an electrostatic potential;
   the usage guide and the generated legend say so, so it is not mistaken for a Poisson–Boltzmann map.

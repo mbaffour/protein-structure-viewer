@@ -91,6 +91,13 @@ table, annotation names, and the report show. The file name stays underneath as 
 scene manifests and saved views match on, so renaming never breaks a restore. Clear the field to go
 back to the file name.
 
+**Composition of the current model** lists each chain with its residue count, residue range, mean
+pLDDT and colour swatch, and a **Shown** switch. Unticking a chain hides it everywhere — viewer,
+synchronized panels, PNG and SVG exports, the surface — while the sequence strip keeps the row, dimmed
+and marked *hidden*, so you still see what is missing. **Show all chains** restores them. The line
+underneath counts ligands and ions by residue name (HEM ×4, ZN ×2 …); water is never counted. Hidden
+chains are stored in scene JSON, carried by share links, and respected by the report.
+
 **Download FASTA** writes the sequences of the displayed models, one record per chain. Headers carry
 the model's display name, chain, length and — for models with pLDDT — the chain's mean pLDDT.
 Standard amino acids and nucleotides get their single-letter codes; anything else is X.
@@ -151,6 +158,11 @@ sessions.
 **Inspecting.** Click any atom to see its model, residue, chain, atom name, and pLDDT. Clicks pick
 the nearest atom within a few pixels, so a click on a cartoon ribbon lands on the closest Cα.
 Hovering shows the nearest residue in the status bar without clicking.
+
+**Go to.** Type a residue in the *Go to* field — `B:45`, `45B`, or plain `45` for any chain — and
+press **Go** or <kbd>Enter</kbd>. The residue is selected as if clicked (the label field fills in, and
+a drawing or measurement in progress takes it as a point), the camera zooms to it, and the strip
+marks it.
 
 **Sequence strip.** Under the viewer, each chain of the displayed model is drawn as a row of residues
 coloured by pLDDT (or by chain, when that colouring is on), with residue numbers along the bottom.
@@ -267,6 +279,11 @@ Rendering is one long synchronous WebGL call, so the page stops responding while
 few seconds on a machine with a real GPU and considerably longer without one. A warning appears above
 6 megapixels. If you only need a figure for a slide, 1× scale is four times faster than 2×.
 
+**Copy PNG to clipboard** renders the same publication figure and places it on the clipboard, so a
+figure goes into a slide or a manuscript draft without a file in between. Chrome and Edge support
+image clipboard writes; Firefox and Safari may refuse, in which case the viewer says so and the
+download remains.
+
 **Comparison figure.** With the synchronized multi-view on, **Download comparison PNG** renders every
 panel at the chosen size and stitches them into one lettered figure with each model's name and mean
 pLDDT in a caption strip. The total is capped at roughly 24 megapixels, so six panels at a large
@@ -293,8 +310,10 @@ annotations. Choose whether it carries the models currently shown or every loade
 estimated size is shown before you build it. The report opens with no server and lets a reader show
 one to six synchronized panels (it starts with the panels you had open), pick a model per panel, step
 every panel forward and backward or cycle automatically, spin and fit them together, switch the
-background, follow your guided views, read pLDDT and PAE for the focused panel, and export a stitched
-lettered PNG or a composite video of their own.
+background and the colour scheme (including residue charge, hydrophobicity, residue type, amino acid
+and secondary structure), show ligands as sticks or spheres or hide them, follow your guided views,
+read pLDDT and PAE for the focused panel, and export a stitched lettered PNG or a composite video of
+their own. Chains you hid stay hidden in the report.
 
 Two controls govern size and portability. **PAE in report** keeps the heatmaps at full detail (up to
 400 × 400), compacts them to 200 × 200, or omits them; the size estimate updates as you switch.

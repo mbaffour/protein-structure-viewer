@@ -2,6 +2,26 @@
 
 All notable changes to this project are recorded here.
 
+## 2.8.0
+
+Working on assemblies and answering by number. Scenes from 2.2 onward still load; scene manifests gain
+an optional per-model `hiddenChains` list.
+
+### Added
+
+- **Composition table.** Under the Models list, the current model's chains are listed with residue
+  count, residue range, mean pLDDT and a chain colour swatch, plus a **Shown** switch per chain and
+  *Show all chains*. Hidden chains disappear from the viewer, every panel, every export and the surface,
+  and are dimmed and marked on the sequence strip. A line beneath counts the model's ligands and ions
+  (HEM ×4, ZN ×2 …), water excluded. Hidden chains travel in scene JSON, share links and reports.
+- **Go to residue.** In the Annotate tab, type `B:45`, `45B` or `45` and press Go (or Enter) to select
+  that residue of the current model, fill the label field, zoom to it and mark it on the strip.
+- **Copy PNG to clipboard.** Publish renders the publication figure at the chosen size and puts it on
+  the clipboard for pasting into a slide or document; browsers that cannot do this are told so.
+- **Reports catch up.** The shared report now offers the residue colour themes (charge,
+  hydrophobicity, residue type, amino acid, secondary structure) and a **Ligands** control (sticks,
+  spheres, hidden); it starts from the ligand setting you had, and honours hidden chains.
+
 ## 2.7.0
 
 Reading the sequence, and colouring by what residues are. Scenes from 2.2 onward still load; scene

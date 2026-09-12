@@ -909,6 +909,10 @@ html>body{padding:0}</style>
       <button class="btn btn-ghost" type="button" id="gpv-clear" data-tooltip="Remove all models, annotations, and saved views"><i data-icon="trash-2" aria-hidden="true"></i>Clear all</button>
     </div>
     <div class="gpv-list" id="gpv-list" aria-label="Loaded structures"></div>
+    <details class="gpv-composition" id="gpv-composition" open hidden><summary class="text-small">Composition of the current model</summary>
+      <div class="table-responsive"><table class="table table-sm" aria-label="Chains of the current model"><thead><tr><th>Chain</th><th class="text-end">Residues</th><th>Range</th><th class="text-end">Mean pLDDT</th><th>Shown</th></tr></thead><tbody id="gpv-chain-rows"></tbody></table></div>
+      <div class="viz-controls"><span class="text-small text-muted" id="gpv-hetero-summary"></span><button class="btn btn-ghost" type="button" id="gpv-chains-all" data-tooltip="Show every chain of the current model again">Show all chains</button></div>
+    </details>
     <div class="viz-controls gpv-list-more" id="gpv-list-more" hidden>
       <span class="text-muted text-small" id="gpv-list-more-label"></span>
       <button class="btn btn-ghost" type="button" id="gpv-show-more"><i data-icon="chevron-down" aria-hidden="true"></i>Show more</button>
@@ -933,7 +937,7 @@ html>body{padding:0}</style>
   </section>
 
   <section class="gpv-tool-panel" data-gpv-panel="annotate" hidden>
-    <div class="viz-controls gpv-history"><div class="gpv-selected-state" id="gpv-residue">Click a residue in the viewer or in the sequence strip to inspect it.</div><button class="btn btn-ghost" type="button" id="gpv-undo" disabled data-tooltip="Undo the last label, selection, measurement or annotation change (Ctrl/⌘ + Z)">Undo</button><button class="btn btn-ghost" type="button" id="gpv-redo" disabled data-tooltip="Redo (Ctrl/⌘ + Shift + Z)">Redo</button></div>
+    <div class="viz-controls gpv-history"><div class="gpv-selected-state" id="gpv-residue">Click a residue in the viewer or in the sequence strip to inspect it.</div><label class="form-label gpv-goto">Go to<input class="form-control" id="gpv-goto" type="text" placeholder="B:45 or 45" aria-label="Residue to go to, optionally with its chain"></label><button class="btn" type="button" id="gpv-goto-run" data-tooltip="Select the residue and zoom to it">Go</button><button class="btn btn-ghost" type="button" id="gpv-undo" disabled data-tooltip="Undo the last label, selection, measurement or annotation change (Ctrl/⌘ + Z)">Undo</button><button class="btn btn-ghost" type="button" id="gpv-redo" disabled data-tooltip="Redo (Ctrl/⌘ + Shift + Z)">Redo</button></div>
     <div class="viz-controls">
       <label class="form-label">Residue label<input class="form-control" id="gpv-label-text" type="text" placeholder="Custom label"></label>
       <button class="btn" type="button" id="gpv-add-label" disabled>Add or update</button>
@@ -1021,6 +1025,7 @@ html>body{padding:0}</style>
       <label class="form-label">Image size<select class="form-select" id="gpv-export-size"><option value="1200x1200">Square · 1200 × 1200</option><option value="1800x1200" selected>Landscape · 1800 × 1200</option><option value="1200x1800">Portrait · 1200 × 1800</option><option value="2400x1600">Large landscape · 2400 × 1600</option></select></label>
       <label class="form-label">Scale<select class="form-select" id="gpv-export-scale"><option value="1">1×</option><option value="2" selected>2×</option><option value="4">4×</option></select></label>
       <button class="btn" type="button" id="gpv-image" disabled>Download publication PNG</button>
+      <button class="btn" type="button" id="gpv-copy-image" disabled data-tooltip="Render the publication PNG and put it on the clipboard, ready to paste into slides or a document">Copy PNG to clipboard</button>
       <button class="btn" type="button" id="gpv-svg" disabled data-tooltip="Raster molecule with labels, arrows, callouts and legend as editable vector layers">Download figure SVG</button>
       <button class="btn" type="button" id="gpv-compare-image" disabled data-tooltip="Stitch every synchronized panel into one lettered figure at the chosen size">Download comparison PNG</button>
       <button class="btn" type="button" id="gpv-compare-svg" disabled data-tooltip="The stitched comparison figure with vector captions and annotations">Download comparison SVG</button>
@@ -1210,6 +1215,11 @@ html>body{padding:0}</style>
   #generic-protein-viewer .gpv-share-url { font-family: var(--font-mono); font-size: var(--font-size-small); min-width: min(100%, 320px); }
   #generic-protein-viewer .gpv-history { align-items: center; }
   #generic-protein-viewer .gpv-orient { display: inline-flex; gap: 4px; }
+  #generic-protein-viewer .gpv-composition { margin-top: 10px; }
+  #generic-protein-viewer .gpv-composition summary { cursor: pointer; color: var(--muted-foreground); }
+  #generic-protein-viewer .gpv-composition .gpv-swatch { margin-right: 6px; }
+  #generic-protein-viewer .gpv-goto { max-width: 11em; }
+  #generic-protein-viewer .gpv-goto .form-control { min-width: 7em; }
   #generic-protein-viewer .gpv-sequence-text { margin-top: 8px; }
   #generic-protein-viewer .gpv-sequence-text summary { cursor: pointer; color: var(--muted-foreground); }
   #generic-protein-viewer .gpv-seq-block { margin: 8px 0 4px; }
@@ -1363,7 +1373,7 @@ html>body{padding:0}</style>
   let busyDepth = 0;
   let restoreMotion = null;
   const listPageSize = 60;
-  const viewerVersion = '2.7.0';
+  const viewerVersion = '2.8.0';
   const preferenceKey = 'protein-structure-viewer:preferences';
   const themeKey = 'protein-structure-viewer:theme';
   const labelColors = getComputedStyle(root);
@@ -1878,6 +1888,14 @@ html>body{padding:0}</style>
     ss: () => ({ title: 'Secondary structure', items: Object.values(ssColors).map(([color, label]) => [color, label]) })
   };
 
+  /* Residue colours by three-letter code for every theme, so the report can colour
+     without carrying the scoring tables. */
+  function residueThemeTables() {
+    const names = [...Object.keys(aminoAcids), ...Object.keys(nucleotides)];
+    const table = mode => Object.fromEntries(names.map(name => [name, residueColor(mode, { resn: name })]));
+    return { charge: table('charge'), hydrophobicity: table('hydrophobicity'), restype: table('restype'), amino: table('amino'), ss: Object.fromEntries(Object.entries(ssColors).map(([key, [color]]) => [key, color])), fallback: '#d1d5db' };
+  }
+
   /* The colour part of a style — shared by the representation and the surface. */
   function colorOptions(entry) {
     const mode = root.querySelector('#gpv-color-mode').value;
@@ -1919,13 +1937,15 @@ html>body{padding:0}</style>
     const heteroStyle = hetero === 'hide' ? {} : hetero === 'sphere' ? { sphere: { scale: 0.35, colorscheme: 'default' } } : { stick: { radius: 0.25, colorscheme: 'default' }, sphere: { scale: 0.28, colorscheme: 'default' } };
     model.setStyle({ hetflag: true }, heteroStyle);
     model.setStyle({ resn: waterNames }, {});
+    if (entry.hiddenChains && entry.hiddenChains.length) model.setStyle({ chain: entry.hiddenChains }, {});
     const surface = root.querySelector('#gpv-surface').value;
     if (surface === 'none' || !host || typeof host.addSurface !== 'function') return Promise.resolve();
     if (entry.atoms.length > surfaceAtomLimit) {
       if (!surfaceWarned) { surfaceWarned = true; announce(displayName(entry) + ' has too many atoms for a surface (limit ' + surfaceAtomLimit.toLocaleString() + ')', 'error'); }
       return Promise.resolve();
     }
-    const selection = { model, hetflag: false, predicate: atom => !isWater(atom) && !(threshold && entry.scores.length && Number(atom.b) < threshold) };
+    const hiddenChains = entry.hiddenChains || [];
+    const selection = { model, hetflag: false, predicate: atom => !isWater(atom) && !hiddenChains.includes(atom.chain || '') && !(threshold && entry.scores.length && Number(atom.b) < threshold) };
     const style = { ...colorOptions(entry), opacity: surface === 'translucent' ? 0.6 : 1 };
     try {
       return Promise.resolve(host.addSurface($3Dmol.SurfaceType.MS, style, selection)).then(() => { if (typeof host.render === 'function') host.render(); }).catch(() => {});
@@ -1957,6 +1977,7 @@ html>body{padding:0}</style>
     root.querySelector('#gpv-report').disabled = structures.length === 0;
     root.querySelector('#gpv-share-link').disabled = !structures.some(entry => entry.fetchId);
     root.querySelector('#gpv-fasta').disabled = structures.length === 0;
+    root.querySelector('#gpv-copy-image').disabled = structures.length === 0;
     root.querySelector('#gpv-figure-legend').disabled = structures.length === 0;
     const scored = structures.some(entry => entry.visible && entry.scores.length);
     root.querySelector('#gpv-profile-svg').disabled = !scored;
@@ -2035,6 +2056,7 @@ html>body{padding:0}</style>
     applySelections(shown);
     renderScreenLegend();
     renderSequenceSoon();
+    renderComposition();
     rebuildOverlays(false);
     renderComparePanels();
     viewer.render();
@@ -2187,6 +2209,7 @@ html>body{padding:0}</style>
       confidence: {},
       rank: null,
       label: '',
+      hiddenChains: [],
       scores: [],
       atoms: [],
       originalAtoms: []
@@ -2934,10 +2957,11 @@ html>body{padding:0}</style>
     selectionRecords.filter(record => record.entryId === entry.id && record.action === 'highlight' && (!record.chain || record.chain === row.chain))
       .forEach(record => record.residues.forEach(resi => highlighted.set(resi, record.color)));
     const threshold = entry.scores.length ? hideBelow() : 0;
+    const chainHidden = (entry.hiddenChains || []).includes(row.chain);
     row.residues.forEach((atom, index) => {
       const x = index * cell;
       context.fillStyle = sequenceColor(entry, atom);
-      context.globalAlpha = threshold && Number(atom.b) < threshold ? 0.22 : 1;
+      context.globalAlpha = chainHidden || (threshold && Number(atom.b) < threshold) ? 0.22 : 1;
       context.fillRect(x, 4, Math.max(0.5, cell - gap), 12);
       context.globalAlpha = 1;
       const mark = highlighted.get(atom.resi);
@@ -3074,7 +3098,7 @@ html>body{padding:0}</style>
     const cut = hideBelow();
     const cutNote = cut && entries.some(entry => entry.scores.length) ? ' · pLDDT below ' + cut + ' hidden' : '';
     root.querySelector('#gpv-sequence-title').textContent = (multi ? entries.length + ' models' : displayName(entries[0])) + ' · ' + total + ' residues' + colourNote + cutNote + chainNote;
-    const key = shown.map(item => item.entry.id + ':' + item.row.chain).join(',');
+    const key = shown.map(item => item.entry.id + ':' + item.row.chain + ((item.entry.hiddenChains || []).includes(item.row.chain) ? '!' : '')).join(',');
     rows.classList.toggle('is-multi', multi);
     if (rows.dataset.key !== key) {
       rows.replaceChildren(); rows.dataset.key = key;
@@ -3082,7 +3106,8 @@ html>body{padding:0}</style>
         const line = document.createElement('div'); line.className = 'gpv-sequence-row';
         const name = document.createElement('span'); name.className = 'gpv-sequence-chain';
         const chainName = row.chain ? 'Chain ' + row.chain : 'No chain';
-        name.textContent = multi ? clipText(displayName(entry), 14) + ' · ' + (row.chain || '—') : chainName;
+        const hiddenChain = (entry.hiddenChains || []).includes(row.chain);
+        name.textContent = (multi ? clipText(displayName(entry), 14) + ' · ' + (row.chain || '—') : chainName) + (hiddenChain ? ' · hidden' : '');
         name.title = displayName(entry) + ' · ' + chainName + ' · ' + row.residues.length + ' residues';
         const canvas = document.createElement('canvas'); canvas.dataset.chain = row.chain; canvas.dataset.entryId = String(entry.id);
         canvas.setAttribute('role', 'img'); canvas.setAttribute('aria-label', displayName(entry) + ', ' + chainName + ', ' + row.residues.length + ' residues');
@@ -3145,6 +3170,102 @@ html>body{padding:0}</style>
   function renderSequenceSoon() {
     if (sequenceFrame) return;
     sequenceFrame = requestAnimationFrame(() => { sequenceFrame = 0; renderSequence(); });
+  }
+
+  /* ---------- Composition ---------- */
+
+  function heteroInventory(entry) {
+    const groups = new Map();
+    entry.atoms.forEach(atom => {
+      if (!atom.hetflag || isWater(atom)) return;
+      const name = String(atom.resn || '?').toUpperCase();
+      if (!groups.has(name)) groups.set(name, new Set());
+      groups.get(name).add((atom.chain || '') + '|' + atom.resi);
+    });
+    return [...groups.entries()].map(([name, set]) => [name, set.size]).sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]));
+  }
+
+  function renderComposition() {
+    const entry = activeEntry();
+    const wrap = root.querySelector('#gpv-composition');
+    if (!entry || !entry.model) { wrap.hidden = true; return; }
+    wrap.hidden = false;
+    const body = root.querySelector('#gpv-chain-rows'); body.replaceChildren();
+    const hidden = entry.hiddenChains || [];
+    residueRows(entry).forEach(row => {
+      const tr = document.createElement('tr');
+      const chainCell = document.createElement('th');
+      const swatch = document.createElement('i'); swatch.className = 'gpv-swatch'; swatch.style.background = chainColor(row.chain);
+      chainCell.append(swatch, row.chain || '—'); tr.append(chainCell);
+      const count = document.createElement('td'); count.className = 'text-end'; count.textContent = String(row.residues.length); tr.append(count);
+      const range = document.createElement('td'); range.textContent = row.residues[0].resi + '–' + row.residues[row.residues.length - 1].resi; tr.append(range);
+      const confidence = document.createElement('td'); confidence.className = 'text-end';
+      confidence.textContent = entry.scores.length ? (mean(row.residues.map(atom => Number(atom.b) || 0)) || 0).toFixed(1) : '—'; tr.append(confidence);
+      const toggleCell = document.createElement('td');
+      const toggle = document.createElement('input'); toggle.type = 'checkbox'; toggle.className = 'form-check-input'; toggle.checked = !hidden.includes(row.chain);
+      toggle.setAttribute('aria-label', 'Show chain ' + (row.chain || '—'));
+      toggle.addEventListener('change', () => {
+        entry.hiddenChains = toggle.checked ? (entry.hiddenChains || []).filter(chain => chain !== row.chain) : [...new Set([...(entry.hiddenChains || []), row.chain])];
+        applyStyle();
+        updateStatus((toggle.checked ? 'Showing' : 'Hiding') + ' chain ' + (row.chain || '—') + ' of ' + displayName(entry));
+      });
+      toggleCell.append(toggle); tr.append(toggleCell);
+      body.append(tr);
+    });
+    const inventory = heteroInventory(entry);
+    root.querySelector('#gpv-hetero-summary').textContent = inventory.length
+      ? 'Ligands and ions: ' + inventory.slice(0, 12).map(([name, count]) => name + (count > 1 ? ' ×' + count : '')).join(', ') + (inventory.length > 12 ? ' and ' + (inventory.length - 12) + ' more' : '')
+      : 'No ligands or ions (water is not counted).';
+    root.querySelector('#gpv-chains-all').disabled = hidden.length === 0;
+  }
+
+  /* ---------- Go to residue ---------- */
+
+  function goToResidue(raw) {
+    const text = String(raw || '').trim();
+    const entry = activeEntry();
+    if (!entry || !entry.model) { updateStatus('Load and show a model first'); return; }
+    let chain = ''; let resi = null;
+    let match = text.match(/^([A-Za-z0-9]{1,4})[:/\s]+(-?\d+)$/);
+    if (match) { chain = match[1]; resi = Number(match[2]); }
+    else if ((match = text.match(/^(-?\d+)\s*([A-Za-z]{1,4})$/))) { resi = Number(match[1]); chain = match[2]; }
+    else if ((match = text.match(/^(-?\d+)$/))) resi = Number(match[1]);
+    if (resi === null) { updateStatus('Type a residue number, optionally with its chain: B:45, 45B, or 45'); return; }
+    const candidates = entry.atoms.filter(atom => atom.resi === resi && (!chain || String(atom.chain || '').toUpperCase() === chain.toUpperCase()));
+    const atom = candidates.find(item => item.atom === 'CA') || candidates[0];
+    if (!atom) { announce('No residue ' + text + ' in ' + displayName(entry), 'error'); return; }
+    handleAtomClick(entry, atom);
+    const selection = { model: entry.model.getID(), resi };
+    if (atom.chain) selection.chain = atom.chain;
+    viewer.zoomTo(selection); viewer.render(); syncViewsFrom(viewer);
+    sequenceHover = { entryId: entry.id, chain: atom.chain || '', resi }; renderSequenceSoon();
+    updateStatus(residueText(entry, atom));
+  }
+
+  /* ---------- Clipboard ---------- */
+
+  async function copyPublicationPng() {
+    if (!navigator.clipboard || typeof ClipboardItem === 'undefined' || typeof navigator.clipboard.write !== 'function') {
+      announce('This browser cannot put images on the clipboard — download the PNG instead', 'error');
+      return;
+    }
+    const requested = exportDimensions();
+    const button = root.querySelector('#gpv-copy-image');
+    const done = setBusy('Rendering for the clipboard…');
+    button.disabled = true;
+    await afterPaint();
+    try {
+      const uri = await withLegend(await renderPublicationImage(null, requested), requested.width, requested.height);
+      const blob = await (await fetch(uri)).blob();
+      await navigator.clipboard.write([new ClipboardItem({ 'image/png': blob })]);
+      announce('Figure copied to the clipboard · ' + requested.width + ' × ' + requested.height);
+    } catch (error) {
+      announce('Could not copy the figure to the clipboard: ' + error.message, 'error');
+    } finally {
+      releaseExportViewer();
+      done();
+      button.disabled = structures.length === 0;
+    }
   }
 
   /* ---------- Orientation ---------- */
@@ -4065,6 +4186,7 @@ html>body{padding:0}</style>
       visible: entry.visible,
       color: entry.color,
       label: entry.label || '',
+      hiddenChains: entry.hiddenChains || [],
       ...(entry.fetchId ? { fetch: entry.fetchId } : {})
     })));
     const scene = {
@@ -4105,7 +4227,7 @@ html>body{padding:0}</style>
       createdAt: new Date().toISOString(),
       shared: true,
       provenance: provenanceValues(),
-      models: shared.map(entry => ({ name: entry.name, fetch: entry.fetchId, visible: entry.visible, color: entry.color, label: entry.label || '' })),
+      models: shared.map(entry => ({ name: entry.name, fetch: entry.fetchId, visible: entry.visible, color: entry.color, label: entry.label || '', hiddenChains: entry.hiddenChains || [] })),
       settings,
       ...sceneOverlays(entryId => ids.has(entryId)),
       savedViews: savedViews.filter(view => has(view.activeModel) || (view.visibleModels || []).some(has)).map(view => ({
@@ -4204,6 +4326,7 @@ html>body{padding:0}</style>
       entry.visible = modelRecord.visible !== false;
       if (/^#[0-9a-f]{6}$/i.test(modelRecord.color || '')) entry.color = modelRecord.color;
       if (typeof modelRecord.label === 'string') entry.label = modelRecord.label.trim().slice(0, 120);
+      entry.hiddenChains = Array.isArray(modelRecord.hiddenChains) ? modelRecord.hiddenChains.map(String).slice(0, 200) : [];
       if (modelRecord.sha256) {
         const actual = entry.hash || await sha256(entry.text);
         if (actual && actual !== modelRecord.sha256) hashWarnings += 1;
@@ -5168,6 +5291,7 @@ html>body{padding:0}</style>
       format: entry.format,
       color: entry.color,
       rank: entry.rank,
+      hiddenChains: entry.hiddenChains || [],
       confidence: reportConfidence(entry),
       coords: reportCoordinates(entry),
       shapes: reportShapes(entry),
@@ -5189,6 +5313,8 @@ html>body{padding:0}</style>
     const embed = value => JSON.stringify(value).replace(/</g, '\\u003c');
     const html = reportTemplate({
       chainColors: JSON.stringify(Object.fromEntries([...chainOrder.keys()].map(chain => [chain, chainColor(chain)]))),
+      residueThemes: JSON.stringify(residueThemeTables()),
+      heteroMode: JSON.stringify(root.querySelector('#gpv-hetero').value),
       title: (provenanceValues().title || 'Protein Model Report').replace(/[<>&]/g, ''),
       structures: embed(exported),
       views: embed(savedViews),
@@ -5254,7 +5380,8 @@ kbd{font:inherit;padding:0 5px;border:1px solid currentColor;border-radius:4px;f
 <button id='previous'>Previous</button><button id='next'>Next</button><button id='play'>Play cycle</button>
 <label>Interval (seconds)<input id='interval' type='number' min='0.5' max='20' step='0.5' value='2'></label>
 <label>Representation<select id='style'><option value='cartoon'>Cartoon</option><option value='stick'>Sticks</option><option value='sphere'>Spheres</option><option value='line'>Lines</option></select></label>
-<label>Colors<select id='colors'><option value='plddt'>pLDDT</option><option value='structure'>Model color</option><option value='chain'>Chain</option><option value='spectrum'>Spectrum</option><option value='element'>Element</option></select></label>
+<label>Colors<select id='colors'><option value='plddt'>pLDDT</option><option value='structure'>Model color</option><option value='chain'>Chain</option><option value='charge'>Residue charge</option><option value='hydrophobicity'>Hydrophobicity</option><option value='restype'>Residue type</option><option value='amino'>Amino acid</option><option value='ss'>Secondary structure</option><option value='spectrum'>Spectrum</option><option value='element'>Element</option></select></label>
+<label>Ligands<select id='hetero'><option value='stick'>Sticks</option><option value='sphere'>Spheres</option><option value='hide'>Hidden</option></select></label>
 <label>Background<select id='background'><option value='dark'>Dark</option><option value='light'>Light</option><option value='white'>White</option><option value='transparent'>Transparent</option></select></label>
 <button id='spin'>Spin</button><button id='fit'>Fit</button><button id='fullscreen'>Full screen</button><button id='png'>Download PNG</button><button id='video'>Record video</button>
 </div>
@@ -5271,6 +5398,8 @@ const savedViews=${data.views};
 const metadata=${data.metadata};
 const initial=${data.initial};
 const chainColors=${data.chainColors};
+const residueThemes=${data.residueThemes};
+const initialHetero=${data.heteroMode};
 const el = id => document.getElementById(id);
 const directContexts = typeof OffscreenCanvas !== 'undefined' && !(window.chrome && /Chrom/.test(navigator.userAgent));
 const MAX_PANES = 6;
@@ -5286,7 +5415,8 @@ savedViews.forEach((v, i) => { const o = document.createElement('option'); o.val
 const panelSelect = el('panels');
 for (let n = 1; n <= Math.min(MAX_PANES, Math.max(1, structures.length)); n++) panelSelect.append(new Option(n === 1 ? '1 panel' : n + ' panels', String(n)));
 if (['cartoon', 'stick', 'sphere', 'line'].includes(initial.representation)) el('style').value = initial.representation;
-if (['plddt', 'structure', 'chain', 'spectrum', 'element'].includes(initial.colorMode)) el('colors').value = initial.colorMode;
+if (['plddt', 'structure', 'chain', 'charge', 'hydrophobicity', 'restype', 'amino', 'ss', 'spectrum', 'element'].includes(initial.colorMode)) el('colors').value = initial.colorMode;
+if (['stick', 'sphere', 'hide'].includes(initialHetero)) el('hetero').value = initialHetero;
 el('sync').value = initial.sync === 'full' ? 'full' : 'rotation';
 el('video').textContent = 'Record ' + initial.seconds + 's video';
 function pcolor(v) { return v < 50 ? '#ff7d45' : v < 70 ? '#ffdb13' : v < 90 ? '#65cbf3' : '#0053d6'; }
@@ -5307,6 +5437,8 @@ function styleSpec(s) {
   let options = { color: s.color };
   if (mode === 'plddt') options = { colorfunc: a => pcolor(Number(a.b || 0)) };
   if (mode === 'chain') options = { colorfunc: a => chainColors[a.chain || ''] || '#9ca3af' };
+  if (residueThemes[mode] && mode !== 'ss') options = { colorfunc: a => residueThemes[mode][String(a.resn || '').toUpperCase()] || residueThemes.fallback };
+  if (mode === 'ss') options = { colorfunc: a => residueThemes.ss[a.ss] || residueThemes.ss.c };
   if (mode === 'spectrum') options = { colorscheme: 'spectrum' };
   if (mode === 'element') options = { colorscheme: 'default' };
   if (rep === 'line') options.linewidth = 2;
@@ -5344,6 +5476,10 @@ function show(pane, preserveView) {
   const m = pane.viewer.addModel(s.text, s.format);
   if (Array.isArray(s.coords)) m.selectedAtoms({}).forEach((a, i) => { if (s.coords.length >= i * 3 + 3) { a.x = s.coords[i * 3]; a.y = s.coords[i * 3 + 1]; a.z = s.coords[i * 3 + 2]; } });
   m.setStyle({}, styleSpec(s));
+  const het = el('hetero').value;
+  m.setStyle({ hetflag: true }, het === 'hide' ? {} : het === 'sphere' ? { sphere: { scale: 0.35, colorscheme: 'default' } } : { stick: { radius: 0.25, colorscheme: 'default' }, sphere: { scale: 0.28, colorscheme: 'default' } });
+  m.setStyle({ resn: ['HOH', 'WAT', 'DOD', 'H2O', 'TIP', 'SOL'] }, {});
+  if (Array.isArray(s.hiddenChains) && s.hiddenChains.length) m.setStyle({ chain: s.hiddenChains }, {});
   (s.labels || []).forEach(l => pane.viewer.addLabel(l.text, { position: { x: l.x, y: l.y, z: l.z }, backgroundColor: '#fff', fontColor: l.color || '#111827', borderColor: l.color || '#94a3b8', borderThickness: 1, fontSize: l.size || 12, inFront: true }));
   (s.shapes || []).forEach(sh => {
     if (sh.kind === 'arrow') pane.viewer.addArrow({ start: sh.start, end: sh.end, radius: sh.radius, radiusRatio: 2.2, mid: 0.72, color: sh.color });
@@ -5519,6 +5655,7 @@ el('next').onclick = () => { stop(); shift(1); };
 el('play').onclick = play;
 el('style').onchange = refreshAll;
 el('colors').onchange = () => { refreshAll(); el('legend').hidden = el('colors').value !== 'plddt'; };
+el('hetero').onchange = () => refreshAll();
 el('background').onchange = applyBackground;
 el('spin').onclick = () => { spinning = !spinning; applySpin(); };
 el('fit').onclick = fit;
@@ -6053,7 +6190,10 @@ applyBackground();
     'AlphaFold 3 ligands, ions and glycans are drawn as sticks by default; switch them to spheres or hide them under Appearance → Ligands and ions. Water is never shown.',
     'Models → Download FASTA writes one record per chain of the displayed models, with length and mean pLDDT in the header.',
     'Colour by residue charge, hydrophobicity, residue type, amino acid or secondary structure — and add a translucent surface for an electrostatics-style view of a binding face.',
-    'Open “Sequence letters” under the strip to read the one-letter sequence in blocks of ten, coloured by the current scheme. Click a letter to select that residue; Copy takes the chain to the clipboard.'
+    'Open “Sequence letters” under the strip to read the one-letter sequence in blocks of ten, coloured by the current scheme. Click a letter to select that residue; Copy takes the chain to the clipboard.',
+    'Models → Composition lists every chain of the current model with a show/hide switch and counts its ligands and ions — the quickest way to isolate one subunit of an assembly.',
+    'Annotate → Go to: type B:45 (or just 45) to select that residue and zoom to it. Reviewers ask about residues by number; now you can answer by number.',
+    'Publish → Copy PNG to clipboard renders the publication figure and puts it straight into your paste buffer for a slide or a document.'
   ];
   let tipIndex = Math.floor(Math.random() * tips.length);
   function renderTip() {
@@ -6072,6 +6212,10 @@ applyBackground();
   root.querySelector('#gpv-sequence-text').open = readJson(lettersKey, false) === true;
   root.querySelector('#gpv-sequence-text').addEventListener('toggle', () => { writeJson(lettersKey, root.querySelector('#gpv-sequence-text').open); renderSequence(); });
   root.querySelector('#gpv-fasta').addEventListener('click', downloadFasta);
+  root.querySelector('#gpv-copy-image').addEventListener('click', () => { copyPublicationPng(); });
+  root.querySelector('#gpv-goto-run').addEventListener('click', () => goToResidue(root.querySelector('#gpv-goto').value));
+  root.querySelector('#gpv-goto').addEventListener('keydown', event => { if (event.key === 'Enter') { event.preventDefault(); goToResidue(root.querySelector('#gpv-goto').value); } });
+  root.querySelector('#gpv-chains-all').addEventListener('click', () => { const entry = activeEntry(); if (!entry) return; entry.hiddenChains = []; applyStyle(); updateStatus('All chains of ' + displayName(entry) + ' shown'); });
   root.querySelector('#gpv-figure-legend').addEventListener('click', () => { writeFigureLegend(); });
   root.querySelector('#gpv-redo').addEventListener('click', redo);
   root.querySelector('#gpv-share-link').addEventListener('click', () => { copyShareLink(); });

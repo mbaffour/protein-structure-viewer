@@ -137,6 +137,18 @@ await step('a model can be given a display name', async () => {
   if (!options.some(text => /Reference helix/.test(text))) throw new Error('model picker did not pick up the name');
 });
 
+await step('the composition table lists both chains and hides one on request', async () => {
+  const rows = await page.locator('#gpv-chain-rows tr').count();
+  if (rows !== 2) throw new Error('rows=' + rows);
+  if (!/No ligands or ions/.test((await page.locator('#gpv-hetero-summary').textContent()) || '')) throw new Error('hetero summary missing');
+  const snapshot = () => page.evaluate(() => document.querySelector('#gpv-stage canvas').toDataURL());
+  const before = await snapshot();
+  await page.locator('#gpv-chain-rows tr').nth(1).locator('input[type="checkbox"]').uncheck(); await page.waitForTimeout(600);
+  if ((await snapshot()) === before) throw new Error('hiding chain B did not change the render');
+  if (!/hidden/.test((await page.locator('#gpv-sequence-rows').textContent()) || '')) throw new Error('strip does not mark the hidden chain');
+  await page.click('#gpv-chains-all'); await page.waitForTimeout(500);
+  if (!(await page.locator('#gpv-chain-rows tr').nth(1).locator('input[type="checkbox"]').isChecked())) throw new Error('show all did not restore chain B');
+});
 await step('FASTA has one record per chain of the displayed models', async () => {
   const download = page.waitForEvent('download', { timeout: 20000 });
   await page.click('#gpv-fasta');
@@ -386,6 +398,13 @@ await step('the sequence strip shows both chains and selects a residue on click'
   if (!/^\d+-\d+$/.test(range)) throw new Error('range not filled: ' + range);
   if ((await page.inputValue('#gpv-selection-chain')) !== 'B') throw new Error('chain field not filled');
   console.log('       range ' + range + ' of chain B');
+});
+await step('go to residue selects and zooms by chain and number', async () => {
+  await page.fill('#gpv-goto', 'B:12'); await page.click('#gpv-goto-run'); await page.waitForTimeout(500);
+  const readout = (await page.locator('#gpv-residue').textContent()) || '';
+  if (!/ALA 12 chain B/.test(readout)) throw new Error('readout: ' + readout);
+  await page.fill('#gpv-goto', '999'); await page.press('#gpv-goto', 'Enter'); await page.waitForTimeout(400);
+  await page.keyboard.press('f'); await page.waitForTimeout(400);
 });
 await step('sequence letters list both chains and select a residue on click', async () => {
   await page.click('#gpv-sequence-text summary'); await page.waitForTimeout(500);
@@ -711,6 +730,13 @@ if (reportPath) {
   await step('report element colouring is selectable', async () => {
     await report.selectOption('#colors', 'element'); await report.waitForTimeout(800);
   });
+  await step('the report offers residue themes and a ligand control', async () => {
+    await report.selectOption('#colors', 'charge'); await report.waitForTimeout(600);
+    await report.selectOption('#colors', 'ss'); await report.waitForTimeout(600);
+    await report.selectOption('#hetero', 'hide'); await report.waitForTimeout(400);
+    await report.selectOption('#hetero', 'stick'); await report.waitForTimeout(400);
+    await report.selectOption('#colors', 'plddt'); await report.waitForTimeout(400);
+  });
   await step('the report shows two panels that rotate together', async () => {
     await report.selectOption('#panels', '2'); await report.waitForTimeout(1500);
     if ((await report.locator('#view canvas').count()) !== 2) throw new Error('expected two canvases');
@@ -726,6 +752,15 @@ if (reportPath) {
   });
 }
 
+await step('copying the PNG to the clipboard reports an outcome', async () => {
+  await tab('publish');
+  await page.click('#gpv-copy-image');
+  await page.waitForFunction(() => !document.querySelector('#gpv-copy-image').disabled, null, { timeout: 120000 });
+  await page.waitForTimeout(300);
+  const state = (await page.locator('#gpv-state').textContent()) || '';
+  if (!/clipboard/i.test(state)) throw new Error('no clipboard outcome: ' + state);
+  console.log('       ' + state.trim().slice(0, 80));
+});
 await step('the figure legend names the models and the colouring', async () => {
   await tab('publish');
   await page.click('#gpv-figure-legend'); await page.waitForTimeout(500);

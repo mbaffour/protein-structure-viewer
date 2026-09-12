@@ -46,8 +46,9 @@ predictions as a single overlay. Large archives load models lazily and skip thei
 **Look at models.** Multiple structures at once with independent visibility, colour, and
 ranking-score readout per model. Overlay mode or one-at-a-time mode, with previous/next controls,
 arrow-key navigation, adjustable automatic cycling, and sorting by ranking score or mean pLDDT.
-Source-archive filtering and name/stoichiometry search keep large prediction sets navigable, and
-the displayed models export as FASTA, one record per chain.
+Source-archive filtering and name/stoichiometry search keep large prediction sets navigable, a
+composition table lists each chain of the current model with a show/hide switch and counts its
+ligands and ions, and the displayed models export as FASTA, one record per chain.
 Cartoon, stick, sphere, and line representations, with an optional translucent or opaque molecular
 surface; per-structure, per-chain, pLDDT, Cα-deviation, residue-charge, hydrophobicity, residue-type,
 amino-acid, secondary-structure, sequence-spectrum, and element colouring; a one-step cut that hides residues below pLDDT 50 or 70
@@ -74,13 +75,14 @@ to read it from the status bar. A sequence strip under the viewer draws every ch
 the current scheme: click a residue to select it, drag a range to fill the selection fields,
 double-click to zoom. A sequence-letters panel shows the one-letter sequence with residue numbers,
 clickable and copyable per chain.
-Add or edit custom residue labels, or label every residue in the current model. Highlight or hide chain/residue
+Type a residue number to go straight to it. Add or edit custom residue labels, or label every residue
+in the current model. Highlight or hide chain/residue
 ranges, and add atom-to-atom distance or three-atom angle measurements. Draw figure annotations —
 arrows, lines, residue markers, text callouts, and corner titles — that follow rotation and alignment
 and appear in every export; nudge any label into place and it stays there as the model turns. Give
 models display names for captions. Undo and redo every one of these changes.
 
-**Publish.** Fixed-size, supersampled PNG export, a stitched lettered comparison figure of every
+**Publish.** Fixed-size, supersampled PNG export (downloaded or copied to the clipboard), a stitched lettered comparison figure of every
 synchronized panel, SVG variants of both with labels, arrows, captions, and the colour legend
 (pLDDT bands, chains, or models) as editable vector layers, and 5-, 10-, or 15-second WebM spin-video export. Reusable named views with
 captions, multi-panel contact-sheet export, and caption-text export.
