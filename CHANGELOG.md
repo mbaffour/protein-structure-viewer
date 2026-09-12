@@ -41,6 +41,9 @@ Figure-readiness and analysis. Scenes and reports from 2.2 still load; scene man
   the transfer as soon as a second viewer of a different size exists. They now get a WebGL context of
   their own per canvas (3Dmol's single-cell grid path); Chromium keeps the shared context. The export
   surface also no longer asks for 3Dmol's `upscale` mode, which used the same transfer.
+- **Fit** framed the primary panel far too small while comparing, because it zoomed to every model the
+  viewer held — including ones styled invisible — rather than the one displayed. Annotation rows now
+  wrap on narrow screens instead of crushing their text, and corner titles clear the panel badge.
 
 ## 2.2.0
 

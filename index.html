@@ -1131,6 +1131,8 @@ html>body{padding:0}</style>
   #generic-protein-viewer .gpv-view-label { position: absolute; z-index: 2; top: 8px; left: 8px; pointer-events: none; max-width: calc(100% - 16px); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   #generic-protein-viewer .gpv-panel-row .form-select { flex: 1 1 200px; min-width: 0; }
   #generic-protein-viewer .gpv-entry .form-control:not(.form-control-color) { flex: 1 1 160px; min-width: 0; }
+  #generic-protein-viewer #gpv-annotation-list .gpv-entry { flex-wrap: wrap; }
+  #generic-protein-viewer #gpv-annotation-list .gpv-entry-name { flex: 1 1 220px; }
   #generic-protein-viewer .gpv-nudge { display: inline-flex; gap: 2px; align-items: center; flex: 0 0 auto; }
   #generic-protein-viewer .gpv-nudge .btn { padding: 2px 8px; }
   #generic-protein-viewer .gpv-nudge .form-control { width: 64px; flex: 0 0 auto; padding: 2px 6px; }
@@ -2101,7 +2103,8 @@ html>body{padding:0}</style>
     viewer.removeAllShapes();
     const stage = root.querySelector('#gpv-stage');
     /* The model badge sits in the top-left corner while comparing; keep corner titles clear of it. */
-    const topInset = root.querySelector('#gpv-left-label').hidden ? 0 : 34;
+    const comparing = root.querySelector('#gpv-side-by-side').checked && comparePanels.length > 0 && structures.length > 0;
+    const topInset = comparing ? 44 : 0;
     drawOverlays(viewer, new Set(displayedEntries().map(entry => entry.id)), { width: stage.clientWidth, height: stage.clientHeight, topInset });
     if (shouldRender) viewer.render();
   }
@@ -2848,8 +2851,15 @@ html>body{padding:0}</style>
     setTimeout(() => { panelViewers().forEach(target => target.resize()); seedViews(); }, 0);
   }
 
+  /* zoomTo() with no selection frames every model the viewer holds, including
+     ones styled invisible while comparing; frame only what is displayed. */
+  function fitPrimary() {
+    const shown = displayedEntries().filter(entry => entry.model);
+    if (shown.length) viewer.zoomTo({ model: shown.map(entry => entry.model.getID()) }); else viewer.zoomTo();
+  }
+
   function fitAllViews() {
-    viewer.zoomTo(); viewer.render();
+    fitPrimary(); viewer.render();
     comparePanels.forEach(panel => { if (panel.viewer) { panel.viewer.zoomTo(); panel.viewer.render(); } });
     syncViewsFrom(viewer);
   }
@@ -4906,7 +4916,7 @@ applyBackground();
     setTimeout(() => panelViewers().forEach(target => target.resize()), 0);
     updateStatus(event.target.checked ? 'Synchronized multi-view on · drag any panel' : 'Single view');
   });
-  root.querySelector('#gpv-left-model').addEventListener('change', event => { activeId = Number(event.target.value); root.querySelector('#gpv-current').value = event.target.value; applyStyle(); viewer.zoomTo(); viewer.render(); syncViewsFrom(viewer); });
+  root.querySelector('#gpv-left-model').addEventListener('change', event => { activeId = Number(event.target.value); root.querySelector('#gpv-current').value = event.target.value; applyStyle(); fitPrimary(); viewer.render(); syncViewsFrom(viewer); });
   root.querySelector('#gpv-sync-mode').addEventListener('change', () => { fitAllViews(); updateStatus(root.querySelector('#gpv-sync-mode').value === 'full' ? 'Cameras locked together' : 'Rotation shared · each panel keeps its own framing'); });
   root.querySelector('#gpv-add-panel').addEventListener('click', () => { const panel = addComparePanel(); if (panel) updateStatus('Added panel ' + (comparePanels.length + 1) + ' · ' + ((entryById(panel.entryId) || {}).name || '')); });
   root.querySelector('#gpv-clear-panels').addEventListener('click', () => { clearComparePanels(); applyStyle(); setTimeout(() => viewer.resize(), 0); updateStatus('Comparison panels removed'); });
