@@ -58,6 +58,7 @@ Anything the viewer cannot interpret is skipped and reported in the red notice b
 | <kbd>S</kbd> | Start or stop spinning |
 | <kbd>Shift</kbd> + <kbd>F</kbd> | Toggle full screen |
 | <kbd>1</kbd>–<kbd>6</kbd> | Jump to Models / Appearance / Annotate / Compare / Confidence / Publish |
+| <kbd>Ctrl</kbd>/<kbd>⌘</kbd> + <kbd>Z</kbd> | Undo the last label, selection, measurement or annotation change (add <kbd>Shift</kbd> to redo) |
 | <kbd>?</kbd> | Open in-app help |
 | <kbd>Esc</kbd> | Close help, leave full screen, or stop measuring or drawing |
 
@@ -87,6 +88,10 @@ motion. Two notes:
 
 - **pLDDT** colouring uses the standard AlphaFold bands and reveals the legend under the viewport.
   It reads the B-factor column, so it is only meaningful for files that carry pLDDT there.
+- **Per chain** colouring uses a fixed palette in sorted chain order, so chain A is the same colour in
+  every model, every synchronized panel, the sequence strip, the exported legend, and the report. The
+  legend under the viewport names each chain (up to twelve). In overlay mode with per-structure
+  colouring the legend names the models instead.
 - **Transparent** background is the right choice for figures that will be composited; PNG export
   preserves the alpha channel.
 
@@ -97,6 +102,21 @@ sessions.
 
 **Inspecting.** Click any atom to see its model, residue, chain, atom name, and pLDDT. Clicks pick
 the nearest atom within a few pixels, so a click on a cartoon ribbon lands on the closest Cα.
+Hovering shows the nearest residue in the status bar without clicking.
+
+**Sequence strip.** Under the viewer, each chain of the displayed model is drawn as a row of residues
+coloured by pLDDT (or by chain, when that colouring is on), with residue numbers along the bottom.
+Hover to read a residue, **click** to select it — the label field fills in, ready for *Add or
+update* — **drag** across a range to fill the model, chain, and range fields of *Selections*, and
+**double-click** to zoom the camera to that residue. Labelled residues carry a small marker above
+their cell and highlighted ranges are underlined in the highlight colour, so the strip doubles as an
+index of your annotations. *Hide sequence* collapses it; the choice is remembered. Very large
+assemblies show the first twenty-four chains.
+
+**Undo and redo.** <kbd>Ctrl</kbd>/<kbd>⌘</kbd>+<kbd>Z</kbd> undoes the last change to labels,
+selections, measurements, or figure annotations — additions, removals, text or colour edits, nudges,
+and clears — and <kbd>Shift</kbd> with it redoes. The Undo and Redo buttons beside the residue
+readout do the same. Sixty steps are kept. Loading a scene or *Clear all* starts a fresh history.
 
 **Labels.** With an atom selected, edit the suggested text and press **Add or update**. *Label every
 residue* annotates all Cα atoms of the current model — useful for small structures, unreadable for
@@ -217,6 +237,16 @@ recipient will be online and you want the smallest file.
 
 **Provenance.** Fill in the figure title, model source, method and version, and notes. These travel
 into the report header, the caption export, and the scene manifest.
+
+**Share links.** **Copy share link** builds a URL that reopens the current scene in the viewer:
+the models that were fetched by identifier, plus the camera, representation, colours, projection,
+background, synchronized panels, labels, selections, measurements, figure annotations, and title.
+The scene is compressed into the URL fragment (the part after `#`), so nothing is sent to a server
+and the link works wherever the viewer is hosted. Files you opened from disk cannot travel this way —
+the recipient has no way to fetch them — so they are left out, and the status line says how many.
+Saved views are not included either; use scene JSON or a report for those. Links are typically one
+to three kilobytes; a scene with many annotations may run longer, and every modern browser accepts
+fragments far larger than that.
 
 ## Reproducible scenes
 

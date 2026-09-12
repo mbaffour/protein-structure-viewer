@@ -2,6 +2,45 @@
 
 All notable changes to this project are recorded here.
 
+## 2.4.0
+
+Working faster on residues, and sharing without files. Scenes and reports from 2.2 and 2.3 still load;
+scene manifests gain an optional per-model `fetch` identifier.
+
+### Added
+
+- **Sequence strip.** Under the viewer, every chain of the displayed model is drawn as a row of
+  residues coloured by pLDDT (or by chain, when that colouring is active). Hover reads the residue,
+  click selects it for a label, drag across a range fills the Selections fields, and double-click
+  zooms to it. Labelled residues carry a marker; highlighted ranges are underlined in their colour.
+  The strip hides on request and remembers that choice.
+- **Hover readout.** Moving over the 3D view names the nearest residue and its pLDDT in the status
+  bar and highlights it in the sequence strip.
+- **Undo and redo.** <kbd>Ctrl</kbd>/<kbd>⌘</kbd>+<kbd>Z</kbd> (and Undo / Redo buttons in the
+  Annotate tab) step back through label, selection, measurement and annotation changes, including
+  edits, nudges and clears. Up to sixty steps are kept; loading a scene or clearing everything
+  starts afresh.
+- **Share links.** *Copy share link* in Publish encodes models fetched by identifier (PDB, UniProt,
+  AlphaFold DB) together with the camera, colours, representation, panels, labels, selections,
+  measurements and annotations into a compressed URL fragment. Opening the link fetches the same
+  files and restores the scene. Files opened from disk are never included, and the status line says
+  how many were left out.
+- **Chain legend.** Colour by chain now uses a fixed palette in sorted chain order, so chain A is the
+  same colour in every model, every panel, the sequence strip and the report. The on-screen legend
+  and the export legend (PNG and SVG) name each chain; in overlay mode with model colouring the legend
+  names the models instead. *pLDDT legend on exports* became *Colour legend on exports*.
+
+### Changed
+
+- Fetching by identifier is shared between the Fetch button and share links, and fetched models
+  remember their identifier in scene JSON (`fetch`).
+
+### Fixed
+
+- Structures fetched from RCSB PDB no longer report their crystallographic B-factors as pLDDT; the
+  status bar, confidence table, sequence strip and pLDDT colouring treat them as having no confidence
+  scores.
+
 ## 2.3.0
 
 Figure-readiness and analysis. Scenes and reports from 2.2 still load; scene manifests gain per-model

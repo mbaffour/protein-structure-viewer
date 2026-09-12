@@ -870,15 +870,19 @@ html>body{padding:0}</style>
     <span id="gpv-count">0 structures</span>
     <span id="gpv-confidence">Mean pLDDT —</span>
     <span id="gpv-state" aria-live="polite">Ready</span>
+    <span id="gpv-hover" class="gpv-hover" aria-hidden="true"></span>
+  </div>
+  <div class="gpv-sequence" id="gpv-sequence" hidden>
+    <div class="gpv-sequence-head text-small">
+      <strong id="gpv-sequence-title">Sequence</strong>
+      <span class="text-muted" id="gpv-sequence-hint">Hover to read a residue · click to select it for a label · drag to pick a range · double-click to zoom</span>
+      <button class="btn btn-ghost" type="button" id="gpv-sequence-toggle" aria-expanded="true" aria-controls="gpv-sequence-rows">Hide sequence</button>
+    </div>
+    <div class="gpv-sequence-rows" id="gpv-sequence-rows"></div>
   </div>
   <div class="gpv-tip text-small" id="gpv-tip" hidden><i data-icon="info" aria-hidden="true"></i><span id="gpv-tip-text"></span><button class="btn btn-ghost" type="button" id="gpv-tip-next">Next tip</button><button class="btn btn-ghost gpv-icon-btn" type="button" id="gpv-tip-hide" aria-label="Hide tips"><i data-icon="x" aria-hidden="true"></i></button></div>
 
-  <div class="gpv-legend text-small" id="gpv-plddt-legend" hidden aria-label="pLDDT confidence color legend">
-    <span><i class="gpv-swatch gpv-vlow"></i>Very low &lt;50</span>
-    <span><i class="gpv-swatch gpv-low"></i>Low 50–70</span>
-    <span><i class="gpv-swatch gpv-confident"></i>Confident 70–90</span>
-    <span><i class="gpv-swatch gpv-vhigh"></i>Very high ≥90</span>
-  </div>
+  <div class="gpv-legend text-small" id="gpv-plddt-legend" hidden aria-label="Colour legend"></div>
 
   <div class="viz-controls gpv-tabs" role="tablist" aria-label="Viewer tools">
     <button class="btn" type="button" role="tab" aria-selected="true" data-gpv-tab="models"><i data-icon="layers-3" aria-hidden="true"></i>Models</button>
@@ -922,7 +926,7 @@ html>body{padding:0}</style>
   </section>
 
   <section class="gpv-tool-panel" data-gpv-panel="annotate" hidden>
-    <div class="gpv-selected-state" id="gpv-residue">Click a residue to inspect it.</div>
+    <div class="viz-controls gpv-history"><div class="gpv-selected-state" id="gpv-residue">Click a residue in the viewer or in the sequence strip to inspect it.</div><button class="btn btn-ghost" type="button" id="gpv-undo" disabled data-tooltip="Undo the last label, selection, measurement or annotation change (Ctrl/⌘ + Z)">Undo</button><button class="btn btn-ghost" type="button" id="gpv-redo" disabled data-tooltip="Redo (Ctrl/⌘ + Shift + Z)">Redo</button></div>
     <div class="viz-controls">
       <label class="form-label">Residue label<input class="form-control" id="gpv-label-text" type="text" placeholder="Custom label"></label>
       <button class="btn" type="button" id="gpv-add-label" disabled>Add or update</button>
@@ -1013,7 +1017,7 @@ html>body{padding:0}</style>
       <button class="btn" type="button" id="gpv-svg" disabled data-tooltip="Raster molecule with labels, arrows, callouts and legend as editable vector layers">Download figure SVG</button>
       <button class="btn" type="button" id="gpv-compare-image" disabled data-tooltip="Stitch every synchronized panel into one lettered figure at the chosen size">Download comparison PNG</button>
       <button class="btn" type="button" id="gpv-compare-svg" disabled data-tooltip="The stitched comparison figure with vector captions and annotations">Download comparison SVG</button>
-      <label class="form-check form-switch"><input class="form-check-input" id="gpv-export-legend" type="checkbox" checked><span class="form-check-label">pLDDT legend on exports</span></label>
+      <label class="form-check form-switch"><input class="form-check-input" id="gpv-export-legend" type="checkbox" checked><span class="form-check-label">Colour legend on exports</span></label>
       <label class="form-label">Video length<select class="form-select" id="gpv-video-length"><option value="5">5 seconds</option><option value="10">10 seconds</option><option value="15">15 seconds</option></select></label>
       <button class="btn" type="button" id="gpv-video" disabled data-tooltip="Record the viewport spinning once, as a WebM file">Record spin video</button>
     </div>
@@ -1022,6 +1026,11 @@ html>body{padding:0}</style>
       <label class="form-label">PAE in report<select class="form-select" id="gpv-report-pae"><option value="full">Full detail</option><option value="compact">Compact</option><option value="none">Omit heatmaps</option></select></label>
       <label class="form-check form-switch"><input class="form-check-input" id="gpv-report-offline" type="checkbox"><span class="form-check-label">Embed 3Dmol.js for offline use</span></label>
       <span class="text-muted text-small" id="gpv-report-size">Load models to estimate the report size.</span>
+    </div>
+    <div class="viz-controls">
+      <button class="btn" type="button" id="gpv-share-link" disabled data-tooltip="Copy a link that reopens the models fetched by ID with this camera, colours, labels and annotations">Copy share link</button>
+      <input class="form-control gpv-share-url" id="gpv-share-url" type="text" readonly hidden aria-label="Share link">
+      <span class="text-muted text-small" id="gpv-share-note">Links carry only models fetched by ID (PDB, UniProt, AlphaFold DB). Files opened from your computer stay there.</span>
     </div>
     <div class="viz-controls">
       <label class="form-label">View name<input class="form-control" id="gpv-view-name" type="text" placeholder="Overview, interface, pore…"></label>
@@ -1065,6 +1074,7 @@ html>body{padding:0}</style>
           <tr><th><kbd>S</kbd></th><td>Start or stop spinning</td></tr>
           <tr><th><kbd>Shift</kbd> + <kbd>F</kbd></th><td>Toggle full screen</td></tr>
           <tr><th><kbd>1</kbd> – <kbd>6</kbd></th><td>Jump to a tool tab</td></tr>
+          <tr><th><kbd>Ctrl</kbd>/<kbd>⌘</kbd> + <kbd>Z</kbd></th><td>Undo the last label, selection, measurement or annotation change; add <kbd>Shift</kbd> to redo</td></tr>
           <tr><th><kbd>?</kbd></th><td>Open this help</td></tr>
           <tr><th><kbd>Esc</kbd></th><td>Close help, leave full screen, stop measuring</td></tr>
         </tbody>
@@ -1168,7 +1178,7 @@ html>body{padding:0}</style>
   #generic-protein-viewer .gpv-legend[hidden] { display: none; }
   #generic-protein-viewer .gpv-legend { display: flex; gap: 14px; flex-wrap: wrap; margin: 0 0 10px; color: var(--muted-foreground); }
   #generic-protein-viewer .gpv-legend span { display: inline-flex; align-items: center; gap: 5px; }
-  #generic-protein-viewer .gpv-swatch { width: 12px; height: 12px; display: inline-block; }
+  #generic-protein-viewer .gpv-swatch { width: 12px; height: 12px; display: inline-block; border-radius: 2px; margin-right: 5px; vertical-align: -1px; }
   #generic-protein-viewer .gpv-vlow { background: #ff7d45; }
   #generic-protein-viewer .gpv-low { background: #ffdb13; }
   #generic-protein-viewer .gpv-confident { background: #65cbf3; }
@@ -1176,6 +1186,18 @@ html>body{padding:0}</style>
   #generic-protein-viewer .gpv-stage { position: relative; width: 100%; height: 480px; min-height: 320px; overflow: hidden; }
   #generic-protein-viewer .gpv-stage canvas { display: block; }
   #generic-protein-viewer .gpv-status { display: flex; gap: 16px; flex-wrap: wrap; margin-top: 8px; color: var(--muted-foreground); }
+  #generic-protein-viewer .gpv-hover { margin-left: auto; font-variant-numeric: tabular-nums; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%; }
+  #generic-protein-viewer .gpv-sequence { margin-top: 10px; }
+  #generic-protein-viewer .gpv-sequence-head { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; margin-bottom: 6px; color: var(--muted-foreground); }
+  #generic-protein-viewer .gpv-sequence-head button { margin-left: auto; }
+  #generic-protein-viewer .gpv-sequence-rows { display: grid; gap: 6px; }
+  #generic-protein-viewer .gpv-sequence-row { display: grid; grid-template-columns: 5.5em minmax(0, 1fr); gap: 8px; align-items: center; }
+  #generic-protein-viewer .gpv-sequence-row canvas { display: block; width: 100%; height: 30px; border-radius: 4px; cursor: crosshair; touch-action: none; }
+  #generic-protein-viewer .gpv-sequence-chain { font-family: var(--font-mono); font-size: var(--font-size-small); color: var(--muted-foreground); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  #generic-protein-viewer .gpv-share-url { font-family: var(--font-mono); font-size: var(--font-size-small); min-width: min(100%, 320px); }
+  #generic-protein-viewer .gpv-history { align-items: center; }
+  #generic-protein-viewer .gpv-history .gpv-selected-state { flex: 1; min-width: 200px; }
+  #generic-protein-viewer .gpv-legend strong { color: var(--card-foreground); }
   #generic-protein-viewer .gpv-status > :last-child { margin-left: auto; text-align: right; }
   #generic-protein-viewer .gpv-export-surface { position: absolute; left: -100000px; top: 0; overflow: hidden; }
 
@@ -1268,6 +1290,21 @@ html>body{padding:0}</style>
   }
   const viewer = $3Dmol.createViewer(root.querySelector('#gpv-stage'), viewerOptions());
   const palette = ['#8b5cf6', '#06b6d4', '#f97316', '#22c55e', '#ec4899', '#eab308', '#3b82f6', '#ef4444'];
+  /* Chain colours are assigned in sorted order the first time a chain is seen and
+     never change afterwards, so chain A is the same blue in every model, every
+     panel, the legend, the sequence strip, and the report. */
+  const chainPalette = ['#3b82f6', '#f97316', '#22c55e', '#a855f7', '#ec4899', '#14b8a6', '#eab308', '#ef4444', '#6366f1', '#84cc16', '#0ea5e9', '#d946ef'];
+  const chainOrder = new Map();
+  const compareChains = (a, b) => String(a).localeCompare(String(b), undefined, { numeric: true });
+  function chainColor(chain) {
+    const key = chain || '';
+    if (!chainOrder.has(key)) chainOrder.set(key, chainOrder.size);
+    return chainPalette[chainOrder.get(key) % chainPalette.length];
+  }
+  function seedChainColors(atoms) {
+    [...new Set(atoms.map(atom => atom.chain || ''))].sort(compareChains).forEach(chainColor);
+  }
+  const clipText = (text, limit) => String(text).length > limit ? String(text).slice(0, limit - 1) + '…' : String(text);
   let structures = [];
   let animationFrame = 0;
   let rockPhase = 0;
@@ -1300,7 +1337,7 @@ html>body{padding:0}</style>
   let busyDepth = 0;
   let restoreMotion = null;
   const listPageSize = 60;
-  const viewerVersion = '2.3.0';
+  const viewerVersion = '2.4.0';
   const preferenceKey = 'protein-structure-viewer:preferences';
   const themeKey = 'protein-structure-viewer:theme';
   const labelColors = getComputedStyle(root);
@@ -1706,7 +1743,7 @@ html>body{padding:0}</style>
     const mode = root.querySelector('#gpv-color-mode').value;
     const style = {};
     let options = { color: entry.color };
-    if (mode === 'chain') options = { colorscheme: 'chainHetatm' };
+    if (mode === 'chain') options = { colorfunc: atom => chainColor(atom.chain) };
     if (mode === 'plddt') options = { colorfunc: atom => plddtColor(Number(atom.b || 0)) };
     if (mode === 'spectrum') options = { colorscheme: 'spectrum' };
     if (mode === 'element') options = { colorscheme: 'default' };
@@ -1726,6 +1763,7 @@ html>body{padding:0}</style>
     root.querySelector('#gpv-stage-empty').hidden = structures.length > 0;
     root.querySelector('#gpv-drop').classList.toggle('is-compact', structures.length > 0);
     root.querySelector('#gpv-report').disabled = structures.length === 0;
+    root.querySelector('#gpv-share-link').disabled = !structures.some(entry => entry.fetchId);
     root.querySelector('#gpv-image').disabled = structures.length === 0;
     root.querySelector('#gpv-svg').disabled = structures.length === 0;
     root.querySelector('#gpv-video').disabled = structures.length === 0;
@@ -1755,7 +1793,10 @@ html>body{padding:0}</style>
     }
     entry.model = model;
     entry.atoms = atoms;
-    if (!entry.scores.length) entry.scores = modelScores(model);
+    seedChainColors(atoms);
+    /* Experimental structures carry crystallographic B-factors, not pLDDT, in the same
+       column; do not report them as confidence. */
+    if (!entry.scores.length && entry.collection !== 'RCSB PDB') entry.scores = modelScores(model);
     entry.originalAtoms = atoms.map(atom => ({ x: atom.x, y: atom.y, z: atom.z }));
     return model;
   }
@@ -1794,7 +1835,8 @@ html>body{padding:0}</style>
     }
     releaseHiddenModels(shown);
     applySelections(shown);
-    root.querySelector('#gpv-plddt-legend').hidden = root.querySelector('#gpv-color-mode').value !== 'plddt';
+    renderScreenLegend();
+    renderSequenceSoon();
     rebuildOverlays(false);
     renderComparePanels();
     viewer.render();
@@ -2029,7 +2071,7 @@ html>body{padding:0}</style>
 
   function residueText(entry, atom) {
     const chain = atom.chain ? ' chain ' + atom.chain : '';
-    const confidence = Number.isFinite(Number(atom.b)) ? ' · pLDDT ' + Number(atom.b).toFixed(1) : '';
+    const confidence = entry.scores.length && Number.isFinite(Number(atom.b)) ? ' · pLDDT ' + Number(atom.b).toFixed(1) : '';
     return entry.name + ' · ' + (atom.resn || 'Residue') + ' ' + atom.resi + chain + ' · atom ' + (atom.atom || '—') + confidence;
   }
 
@@ -2057,6 +2099,7 @@ html>body{padding:0}</style>
     const text = root.querySelector('#gpv-label-text').value.trim();
     if (!text) return;
     const key = residueKey(selectedResidue.entryId, selectedResidue.chain, selectedResidue.resi);
+    remember('label change');
     const record = { ...selectedResidue, key, text };
     const index = labelRecords.findIndex(label => label.key === key);
     if (index >= 0) labelRecords[index] = { ...labelRecords[index], ...record };
@@ -2083,6 +2126,7 @@ html>body{padding:0}</style>
   const labelSizes = [[10, 'Small'], [12, 'Normal'], [15, 'Large'], [19, 'Huge']];
 
   function renderLabelList() {
+    renderSequenceSoon();
     const list = root.querySelector('#gpv-label-list'); list.replaceChildren();
     labelRecords.forEach(label => {
       const entry = entryById(label.entryId);
@@ -2090,7 +2134,7 @@ html>body{padding:0}</style>
       const copy = document.createElement('span'); copy.className = 'gpv-edit-copy';
       const text = document.createElement('input'); text.className = 'form-control'; text.type = 'text'; text.value = label.text; text.maxLength = 120;
       text.setAttribute('aria-label', 'Label text for ' + (label.resn || 'residue') + ' ' + label.resi);
-      text.addEventListener('change', () => { const value = text.value.trim(); if (!value) { text.value = label.text; return; } label.text = value; rebuildOverlays(); updateStatus('Label updated'); });
+      text.addEventListener('change', () => { const value = text.value.trim(); if (!value) { text.value = label.text; return; } remember('label text'); label.text = value; rebuildOverlays(); updateStatus('Label updated'); });
       text.addEventListener('keydown', event => { if (event.key === 'Enter') { event.preventDefault(); text.blur(); } });
       const where = document.createElement('span'); where.className = 'gpv-entry-source text-small';
       where.textContent = (entry ? displayName(entry) : 'Missing model') + ' · ' + (label.resn || 'RES') + ' ' + label.resi + (label.chain ? ' · chain ' + label.chain : '');
@@ -2099,16 +2143,17 @@ html>body{padding:0}</style>
       const size = document.createElement('select'); size.className = 'form-select'; size.setAttribute('aria-label', 'Label size');
       labelSizes.forEach(([value, name]) => size.append(new Option(name, String(value))));
       size.value = String(label.size || 12);
-      size.addEventListener('change', () => { label.size = Number(size.value); rebuildOverlays(); });
+      size.addEventListener('change', () => { remember('label size'); label.size = Number(size.value); rebuildOverlays(); });
       const color = document.createElement('input'); color.className = 'form-control form-control-color'; color.type = 'color';
       color.value = label.color || (labelColors.getPropertyValue('--card-foreground').trim() || '#111827');
       color.setAttribute('aria-label', 'Label colour');
-      color.addEventListener('input', () => { label.color = color.value; rebuildOverlays(); });
+      color.addEventListener('input', () => { if (!color.dataset.remembered) { remember('label colour'); color.dataset.remembered = '1'; } label.color = color.value; rebuildOverlays(); });
+      color.addEventListener('change', () => { delete color.dataset.remembered; });
       const show = document.createElement('button'); show.className = 'btn btn-ghost'; show.type = 'button'; show.textContent = 'Show';
       show.title = 'Zoom to this residue';
       show.addEventListener('click', () => { if (!entry || !entry.model) return; const selection = { model: entry.model.getID(), resi: label.resi }; if (label.chain) selection.chain = label.chain; viewer.zoomTo(selection); viewer.render(); syncViewsFrom(viewer); });
       const remove = document.createElement('button'); remove.className = 'btn btn-ghost'; remove.type = 'button'; remove.textContent = 'Remove';
-      remove.addEventListener('click', () => { labelRecords = labelRecords.filter(item => item !== label); renderLabelList(); rebuildOverlays(); updateStatus('Label removed'); });
+      remove.addEventListener('click', () => { remember('label removal'); labelRecords = labelRecords.filter(item => item !== label); renderLabelList(); rebuildOverlays(); updateStatus('Label removed'); });
       tools.append(size, color, show, remove);
       row.append(copy, tools); list.append(row);
     });
@@ -2193,7 +2238,7 @@ html>body{padding:0}</style>
       name.textContent = entry.name + ' · chain ' + (record.chain || '—') + ' · ' + record.residues.join(', ') + ' · ' + record.action;
       const remove = document.createElement('button');
       remove.className = 'btn btn-ghost'; remove.type = 'button'; remove.textContent = 'Remove';
-      remove.addEventListener('click', () => { selectionRecords = selectionRecords.filter(item => item.id !== record.id); renderSelectionList(); applyStyle(); });
+      remove.addEventListener('click', () => { remember('selection removal'); selectionRecords = selectionRecords.filter(item => item.id !== record.id); renderSelectionList(); applyStyle(); });
       row.append(name, remove); list.append(row);
     });
   }
@@ -2203,6 +2248,7 @@ html>body{padding:0}</style>
     const chain = root.querySelector('#gpv-selection-chain').value.trim();
     const residues = parseResidueRange(root.querySelector('#gpv-selection-range').value);
     if (!entryId || !residues.length) { updateStatus('Enter a valid residue number or range'); return; }
+    remember('selection');
     selectionRecords.push({ id: nextAnnotationId++, entryId, chain, residues, action: root.querySelector('#gpv-selection-action').value, color: root.querySelector('#gpv-selection-color').value });
     renderSelectionList(); applyStyle(); updateStatus('Selection added');
   }
@@ -2360,6 +2406,7 @@ html>body{padding:0}</style>
   }
 
   function nudgeAnnotation(record, dxScreen, dyScreen) {
+    remember('label nudge');
     if (record.type === 'screen') {
       record.dx = (record.dx || 0) + dxScreen * 12;
       record.dy = (record.dy || 0) - dyScreen * 12;
@@ -2394,7 +2441,7 @@ html>body{padding:0}</style>
       text.addEventListener('change', () => {
         const value = text.value.trim();
         if (!value && (record.type === 'screen')) { text.value = record.text; return; }
-        record.text = value; renderAnnotationList(); rebuildOverlays(); updateStatus('Annotation text updated');
+        remember('annotation text'); record.text = value; renderAnnotationList(); rebuildOverlays(); updateStatus('Annotation text updated');
       });
       text.addEventListener('keydown', event => { if (event.key === 'Enter') { event.preventDefault(); text.blur(); } });
       const where = document.createElement('span'); where.className = 'gpv-entry-source text-small';
@@ -2402,9 +2449,10 @@ html>body{padding:0}</style>
       copy.append(text, where);
       const tools = document.createElement('span'); tools.className = 'gpv-edit-tools';
       const color = document.createElement('input'); color.className = 'form-control form-control-color'; color.type = 'color'; color.value = record.color; color.setAttribute('aria-label', 'Annotation colour');
-      color.addEventListener('input', () => { record.color = color.value; swatch.style.background = record.color; rebuildOverlays(); });
+      color.addEventListener('input', () => { if (!color.dataset.remembered) { remember('annotation colour'); color.dataset.remembered = '1'; } record.color = color.value; swatch.style.background = record.color; rebuildOverlays(); });
+      color.addEventListener('change', () => { delete color.dataset.remembered; });
       const size = document.createElement('input'); size.className = 'form-control'; size.type = 'number'; size.min = '0.5'; size.max = '3'; size.step = '0.25'; size.value = String(record.size); size.title = 'Size'; size.setAttribute('aria-label', 'Annotation size');
-      size.addEventListener('change', () => { record.size = Math.min(3, Math.max(0.5, Number(size.value) || 1)); size.value = String(record.size); rebuildOverlays(); });
+      size.addEventListener('change', () => { remember('annotation size'); record.size = Math.min(3, Math.max(0.5, Number(size.value) || 1)); size.value = String(record.size); rebuildOverlays(); });
       tools.append(color, size);
       row.append(swatch, copy, tools);
       if (annotationHasLabel(record)) {
@@ -2420,16 +2468,16 @@ html>body{padding:0}</style>
           const distance = document.createElement('input'); distance.className = 'form-control'; distance.type = 'number'; distance.min = '2'; distance.max = '60'; distance.step = '1';
           distance.value = String(Number.isFinite(record.distance) ? record.distance : Math.round(8 * record.size));
           distance.title = 'Leader length in Å'; distance.setAttribute('aria-label', 'Leader length in angstroms');
-          distance.addEventListener('change', () => { record.distance = Math.max(2, Math.min(60, Number(distance.value) || 8)); rebuildOverlays(); });
+          distance.addEventListener('change', () => { remember('leader length'); record.distance = Math.max(2, Math.min(60, Number(distance.value) || 8)); rebuildOverlays(); });
           nudge.append(distance);
         }
         const reset = document.createElement('button'); reset.className = 'btn btn-ghost'; reset.type = 'button'; reset.textContent = 'Reset'; reset.title = 'Put the label back where it started';
-        reset.addEventListener('click', () => { record.offset = { x: 0, y: 0, z: 0 }; record.dx = 0; record.dy = 0; record.distance = null; renderAnnotationList(); rebuildOverlays(); });
+        reset.addEventListener('click', () => { remember('label reset'); record.offset = { x: 0, y: 0, z: 0 }; record.dx = 0; record.dy = 0; record.distance = null; renderAnnotationList(); rebuildOverlays(); });
         nudge.append(reset);
         row.append(nudge);
       }
       const remove = document.createElement('button'); remove.className = 'btn btn-ghost'; remove.type = 'button'; remove.textContent = 'Remove';
-      remove.addEventListener('click', () => { annotationRecords = annotationRecords.filter(item => item.id !== record.id); renderAnnotationList(); rebuildOverlays(); updateStatus('Annotation removed'); });
+      remove.addEventListener('click', () => { remember('annotation removal'); annotationRecords = annotationRecords.filter(item => item.id !== record.id); renderAnnotationList(); rebuildOverlays(); updateStatus('Annotation removed'); });
       row.append(remove); list.append(row);
     });
   }
@@ -2454,6 +2502,7 @@ html>body{padding:0}</style>
     const type = root.querySelector('#gpv-annotation-type').value;
     const needed = annotationTools[type].points;
     if (annotationDraft.length < needed) { root.querySelector('#gpv-annotation-state').textContent = annotationPrompt(); return; }
+    remember('annotation');
     annotationRecords.push({ id: nextAnnotationId++, type, points: annotationDraft.slice(0, needed), ...annotationSettings(), offset: { x: 0, y: 0, z: 0 }, distance: null });
     annotationDraft = [];
     renderAnnotationList(); rebuildOverlays();
@@ -2465,6 +2514,7 @@ html>body{padding:0}</style>
     const text = root.querySelector('#gpv-screen-text').value.trim();
     if (!text) { updateStatus('Type the screen text first'); return; }
     const settings = annotationSettings();
+    remember('corner text');
     annotationRecords.push({ id: nextAnnotationId++, type: 'screen', points: [], text, color: settings.color, size: settings.size, dashed: false, corner: root.querySelector('#gpv-screen-corner').value, dx: 0, dy: 0 });
     root.querySelector('#gpv-screen-text').value = '';
     renderAnnotationList(); rebuildOverlays(); updateStatus('Screen text added');
@@ -2478,7 +2528,7 @@ html>body{padding:0}</style>
       const value = measurementValue(record);
       label.textContent = record.points.map(pointName).join(record.type === 'distance' ? ' ↔ ' : ' → ') + ' · ' + (value === null ? '—' : value.toFixed(2) + (record.type === 'distance' ? ' Å' : '°'));
       const remove = document.createElement('button'); remove.className = 'btn btn-ghost'; remove.type = 'button'; remove.textContent = 'Remove';
-      remove.addEventListener('click', () => { measurementRecords = measurementRecords.filter(item => item.id !== record.id); renderMeasurementList(); rebuildOverlays(); });
+      remove.addEventListener('click', () => { remember('measurement removal'); measurementRecords = measurementRecords.filter(item => item.id !== record.id); renderMeasurementList(); rebuildOverlays(); });
       row.append(label, remove); list.append(row);
     });
   }
@@ -2487,11 +2537,16 @@ html>body{padding:0}</style>
      that is a small sphere per Cα — so clicks on a ribbon mostly miss. Picking
      the nearest projected atom within a few pixels makes labels, measurements,
      and figure annotations land where the user clicked, in any representation. */
-  function pickAtomAt(pageX, pageY) {
+  function coarseAtoms(entry) {
+    if (!entry.coarseCache || entry.coarseCache.atoms !== entry.atoms) entry.coarseCache = { atoms: entry.atoms, list: entry.atoms.filter(atom => atom.atom === 'CA' || atom.atom === 'P' || atom.hetflag) };
+    return entry.coarseCache.list;
+  }
+
+  function pickAtomAt(pageX, pageY, coarse = false) {
     if (typeof viewer.modelToScreen !== 'function') return null;
     let best = null; let bestDistance = 14;
     displayedEntries().filter(entry => entry.model).forEach(entry => {
-      const candidates = entry.atoms.length > 3000 ? entry.atoms.filter(atom => atom.atom === 'CA' || atom.atom === 'P' || atom.hetflag) : entry.atoms;
+      const candidates = coarse || entry.atoms.length > 3000 ? coarseAtoms(entry) : entry.atoms;
       candidates.forEach(atom => {
         const screen = viewer.modelToScreen({ x: atom.x, y: atom.y, z: atom.z });
         if (!screen) return;
@@ -2512,6 +2567,25 @@ html>body{padding:0}</style>
       const hit = pickAtomAt(event.pageX, event.pageY);
       if (hit) handleAtomClick(hit.entry, hit.atom);
     });
+    /* Hover readout: nearest Cα within a few pixels, at most once per frame, and
+       never while a drag is in progress. */
+    const readout = root.querySelector('#gpv-hover');
+    let hoverFrame = 0; let hoverAt = null;
+    stage.addEventListener('pointermove', event => {
+      if (event.pointerType === 'touch' || pointerStart) return;
+      hoverAt = { x: event.pageX, y: event.pageY };
+      if (hoverFrame) return;
+      hoverFrame = requestAnimationFrame(() => {
+        hoverFrame = 0;
+        if (!hoverAt) return;
+        const hit = pickAtomAt(hoverAt.x, hoverAt.y, true);
+        readout.textContent = hit ? describeResidue(hit.entry, hit.atom) + (displayedEntries().length > 1 ? ' · ' + displayName(hit.entry) : '') : '';
+        const next = hit ? { entryId: hit.entry.id, chain: hit.atom.chain || '', resi: hit.atom.resi } : null;
+        const changed = next ? !sequenceHover || sequenceHover.entryId !== next.entryId || sequenceHover.chain !== next.chain || sequenceHover.resi !== next.resi : Boolean(sequenceHover);
+        if (changed) { sequenceHover = next; renderSequenceSoon(); }
+      });
+    });
+    stage.addEventListener('pointerleave', () => { hoverAt = null; readout.textContent = ''; if (sequenceHover) { sequenceHover = null; renderSequenceSoon(); } });
   }
 
   function handleAtomClick(entry, atom) {
@@ -2522,6 +2596,7 @@ html>body{padding:0}</style>
     const required = root.querySelector('#gpv-measure-type').value === 'angle' ? 3 : 2;
     root.querySelector('#gpv-measure-state').textContent = 'Selected ' + measurementDraft.length + ' of ' + required + ' atoms.';
     if (measurementDraft.length >= required) {
+      remember('measurement');
       measurementRecords.push({ id: nextAnnotationId++, type: root.querySelector('#gpv-measure-type').value, points: measurementDraft.slice(0, required) });
       measurementDraft = [];
       renderMeasurementList(); rebuildOverlays();
@@ -2535,6 +2610,256 @@ html>body{padding:0}</style>
     root.querySelector('#gpv-measure').textContent = measurementActive ? 'Stop measuring' : 'Start measuring';
     const required = root.querySelector('#gpv-measure-type').value === 'angle' ? 3 : 2;
     root.querySelector('#gpv-measure-state').textContent = measurementActive ? 'Select ' + required + ' atoms in the viewer.' : 'Measurement mode is off.';
+  }
+
+  /* ---------- Undo history ---------- */
+
+  const historyLimit = 60;
+  let undoStack = [];
+  let redoStack = [];
+
+  function snapshotRecords() {
+    return structuredClone({ labels: labelRecords, selections: selectionRecords, measurements: measurementRecords, annotations: annotationRecords });
+  }
+
+  function renderHistoryButtons() {
+    root.querySelector('#gpv-undo').disabled = !undoStack.length;
+    root.querySelector('#gpv-redo').disabled = !redoStack.length;
+  }
+
+  /* Call before mutating labels, selections, measurements or annotations. */
+  function remember(what) {
+    undoStack.push({ what, state: snapshotRecords() });
+    if (undoStack.length > historyLimit) undoStack.shift();
+    redoStack = [];
+    renderHistoryButtons();
+  }
+
+  function clearHistory() {
+    undoStack = []; redoStack = [];
+    renderHistoryButtons();
+  }
+
+  function restoreRecords(state) {
+    const alive = record => Boolean(entryById(record.entryId));
+    labelRecords = state.labels.filter(alive);
+    selectionRecords = state.selections.filter(alive);
+    measurementRecords = state.measurements.filter(record => record.points.every(alive));
+    annotationRecords = state.annotations.filter(record => record.points.every(alive));
+    renderLabelList(); renderSelectionList(); renderMeasurementList(); renderAnnotationList();
+    applyStyle();
+  }
+
+  function undo() {
+    const item = undoStack.pop();
+    if (!item) { updateStatus('Nothing to undo'); return; }
+    redoStack.push({ what: item.what, state: snapshotRecords() });
+    restoreRecords(item.state); renderHistoryButtons();
+    updateStatus('Undid ' + item.what + (undoStack.length ? ' · ' + undoStack.length + ' more' : ''));
+  }
+
+  function redo() {
+    const item = redoStack.pop();
+    if (!item) { updateStatus('Nothing to redo'); return; }
+    undoStack.push({ what: item.what, state: snapshotRecords() });
+    restoreRecords(item.state); renderHistoryButtons();
+    updateStatus('Redid ' + item.what);
+  }
+
+  /* ---------- Sequence strip ---------- */
+
+  const sequenceKey = 'protein-structure-viewer:sequence-hidden';
+  const sequenceChainLimit = 24;
+  let sequenceHover = null;
+  let sequenceDrag = null;
+  let sequenceRange = null;
+  let sequenceFrame = 0;
+
+  /* One representative atom per residue (Cα, else P, else the first seen), grouped by chain. */
+  function residueRows(entry) {
+    if (entry.sequenceCache && entry.sequenceCache.atoms === entry.atoms) return entry.sequenceCache.rows;
+    const chains = new Map();
+    entry.atoms.forEach(atom => {
+      if (atom.hetflag || !Number.isFinite(Number(atom.resi))) return;
+      const chain = atom.chain || '';
+      if (!chains.has(chain)) chains.set(chain, new Map());
+      const residues = chains.get(chain);
+      const current = residues.get(atom.resi);
+      if (!current || atom.atom === 'CA' || (atom.atom === 'P' && current.atom !== 'CA')) residues.set(atom.resi, atom);
+    });
+    const rows = [...chains.entries()]
+      .map(([chain, residues]) => ({ chain, residues: [...residues.values()].sort((a, b) => a.resi - b.resi) }))
+      .filter(row => row.residues.length > 1)
+      .sort((a, b) => compareChains(a.chain, b.chain));
+    entry.sequenceCache = { atoms: entry.atoms, rows };
+    return rows;
+  }
+
+  function sequenceEntry() {
+    const shown = displayedEntries().filter(entry => entry.model);
+    const active = activeEntry();
+    return shown.includes(active) ? active : shown[0] || null;
+  }
+
+  function sequenceColor(entry, atom) {
+    if (root.querySelector('#gpv-color-mode').value === 'chain') return chainColor(atom.chain);
+    return entry.scores.length ? plddtColor(Number(atom.b || 0)) : entry.color;
+  }
+
+  function describeResidue(entry, atom) {
+    const confidence = entry.scores.length && Number.isFinite(Number(atom.b)) ? ' · pLDDT ' + Number(atom.b).toFixed(1) : '';
+    return (atom.resn || 'RES') + atom.resi + (atom.chain ? ' · chain ' + atom.chain : '') + confidence;
+  }
+
+  function drawSequenceRow(canvas, entry, row) {
+    const width = canvas.clientWidth || 300; const height = 30; const ratio = window.devicePixelRatio || 1;
+    if (canvas.width !== Math.round(width * ratio) || canvas.height !== Math.round(height * ratio)) { canvas.width = Math.round(width * ratio); canvas.height = Math.round(height * ratio); }
+    const context = canvas.getContext('2d');
+    context.setTransform(ratio, 0, 0, ratio, 0, 0); context.clearRect(0, 0, width, height);
+    const count = row.residues.length; const cell = width / count; const gap = cell > 3 ? 1 : 0;
+    const ink = labelColors.getPropertyValue('--card-foreground').trim() || '#111827';
+    const labelled = new Set(labelRecords.filter(label => label.entryId === entry.id && (label.chain || '') === row.chain).map(label => label.resi));
+    const highlighted = new Map();
+    selectionRecords.filter(record => record.entryId === entry.id && record.action === 'highlight' && (!record.chain || record.chain === row.chain))
+      .forEach(record => record.residues.forEach(resi => highlighted.set(resi, record.color)));
+    row.residues.forEach((atom, index) => {
+      const x = index * cell;
+      context.fillStyle = sequenceColor(entry, atom);
+      context.fillRect(x, 4, Math.max(0.5, cell - gap), 12);
+      const mark = highlighted.get(atom.resi);
+      if (mark) { context.fillStyle = mark; context.fillRect(x, 18, Math.max(0.5, cell - gap), 3); }
+      if (labelled.has(atom.resi)) {
+        context.fillStyle = ink; context.beginPath();
+        context.moveTo(x + cell / 2, 3.5); context.lineTo(x + cell / 2 - 3.5, 0); context.lineTo(x + cell / 2 + 3.5, 0); context.fill();
+      }
+    });
+    context.fillStyle = labelColors.getPropertyValue('--muted-foreground').trim() || '#6b7280';
+    context.font = '9px ' + (labelColors.getPropertyValue('--font-mono').trim() || 'monospace'); context.textBaseline = 'alphabetic';
+    const step = [1, 5, 10, 25, 50, 100, 250, 500, 1000].find(value => value * cell >= 44) || 1000;
+    let lastTick = -Infinity;
+    row.residues.forEach((atom, index) => {
+      if (index !== 0 && atom.resi % step !== 0) return;
+      const x = index * cell;
+      if (index !== 0 && x < lastTick + 40) return;
+      context.fillText(String(atom.resi), x, 29); lastTick = x;
+    });
+    if (sequenceRange && sequenceRange.entryId === entry.id && sequenceRange.chain === row.chain) {
+      const from = Math.min(sequenceRange.from, sequenceRange.to); const to = Math.max(sequenceRange.from, sequenceRange.to);
+      context.strokeStyle = ink; context.lineWidth = 1.5;
+      context.strokeRect(from * cell + 0.75, 1.75, (to - from + 1) * cell - 1.5, 20);
+    }
+    if (sequenceHover && sequenceHover.entryId === entry.id && sequenceHover.chain === row.chain) {
+      const index = row.residues.findIndex(atom => atom.resi === sequenceHover.resi);
+      if (index >= 0) { context.strokeStyle = ink; context.lineWidth = 2; context.strokeRect(index * cell, 2, Math.max(3, cell), 16); }
+    }
+  }
+
+  function sequenceRowFor(canvas) {
+    const entry = entryById(Number(root.querySelector('#gpv-sequence-rows').dataset.entryId));
+    if (!entry || !entry.model) return null;
+    const row = residueRows(entry).find(item => item.chain === canvas.dataset.chain);
+    return row ? { entry, row } : null;
+  }
+
+  function sequenceIndexAt(canvas, row, event) {
+    const box = canvas.getBoundingClientRect();
+    const index = Math.floor((event.clientX - box.left) / Math.max(1, box.width) * row.residues.length);
+    return Math.max(0, Math.min(row.residues.length - 1, index));
+  }
+
+  function resetSequenceHint() {
+    root.querySelector('#gpv-sequence-hint').textContent = 'Hover to read a residue · click to select it for a label · drag to pick a range · double-click to zoom';
+  }
+
+  function pickSequenceResidue(entry, atom) {
+    selectResidue(entry, atom);
+    root.querySelector('#gpv-sequence-hint').textContent = describeResidue(entry, atom) + ' selected · add a label in Annotate, or double-click to zoom to it';
+    if (!root.querySelector('[data-gpv-panel="annotate"]').hidden) root.querySelector('#gpv-label-text').focus();
+    updateStatus(residueText(entry, atom));
+  }
+
+  function wireSequenceCanvas(canvas) {
+    canvas.addEventListener('pointermove', event => {
+      const found = sequenceRowFor(canvas); if (!found) return;
+      const index = sequenceIndexAt(canvas, found.row, event); const atom = found.row.residues[index];
+      sequenceHover = { entryId: found.entry.id, chain: found.row.chain, resi: atom.resi };
+      if (sequenceDrag && sequenceDrag.chain === found.row.chain) sequenceRange = { ...sequenceDrag, to: index };
+      root.querySelector('#gpv-sequence-hint').textContent = describeResidue(found.entry, atom) + (sequenceDrag ? ' · release to pick the range' : '');
+      drawSequenceRow(canvas, found.entry, found.row);
+    });
+    canvas.addEventListener('pointerleave', () => {
+      if (sequenceDrag || !sequenceHover || sequenceHover.chain !== canvas.dataset.chain) return;
+      sequenceHover = null; resetSequenceHint();
+      const found = sequenceRowFor(canvas); if (found) drawSequenceRow(canvas, found.entry, found.row);
+    });
+    canvas.addEventListener('pointerdown', event => {
+      if (event.button !== 0) return;
+      const found = sequenceRowFor(canvas); if (!found) return;
+      const index = sequenceIndexAt(canvas, found.row, event);
+      sequenceDrag = { entryId: found.entry.id, chain: found.row.chain, from: index, to: index };
+      try { canvas.setPointerCapture(event.pointerId); } catch (error) { /* not every engine supports capture on canvas */ }
+    });
+    canvas.addEventListener('pointerup', event => {
+      const drag = sequenceDrag; sequenceDrag = null;
+      if (!drag) return;
+      const found = sequenceRowFor(canvas); if (!found) return;
+      const index = sequenceIndexAt(canvas, found.row, event);
+      const from = Math.min(drag.from, index); const to = Math.max(drag.from, index);
+      if (from === to) {
+        sequenceRange = null;
+        pickSequenceResidue(found.entry, found.row.residues[index]);
+      } else {
+        sequenceRange = { ...drag, to: index };
+        const first = found.row.residues[from].resi; const last = found.row.residues[to].resi;
+        root.querySelector('#gpv-selection-model').value = String(found.entry.id);
+        root.querySelector('#gpv-selection-chain').value = found.row.chain;
+        root.querySelector('#gpv-selection-range').value = first + '-' + last;
+        root.querySelector('#gpv-sequence-hint').textContent = 'Residues ' + first + '–' + last + (found.row.chain ? ' of chain ' + found.row.chain : '') + ' are in the Selections range · Highlight or Hide them from the Annotate tab';
+        updateStatus('Range ' + first + '–' + last + ' ready in Annotate → Selections');
+      }
+      drawSequenceRow(canvas, found.entry, found.row);
+    });
+    canvas.addEventListener('dblclick', () => {
+      const found = sequenceRowFor(canvas);
+      if (!found || !sequenceHover || !found.entry.model) return;
+      const selection = { model: found.entry.model.getID(), resi: sequenceHover.resi };
+      if (found.row.chain) selection.chain = found.row.chain;
+      viewer.zoomTo(selection); viewer.render(); syncViewsFrom(viewer);
+    });
+  }
+
+  function renderSequence() {
+    const wrap = root.querySelector('#gpv-sequence'); const rows = root.querySelector('#gpv-sequence-rows'); const toggle = root.querySelector('#gpv-sequence-toggle');
+    const entry = sequenceEntry();
+    const hidden = readJson(sequenceKey, false) === true;
+    wrap.hidden = !entry;
+    toggle.textContent = hidden ? 'Show sequence' : 'Hide sequence'; toggle.setAttribute('aria-expanded', String(!hidden));
+    rows.hidden = hidden;
+    if (!entry || hidden) { rows.replaceChildren(); rows.dataset.entryId = ''; return; }
+    const chains = residueRows(entry);
+    const shownChains = chains.slice(0, sequenceChainLimit);
+    const total = chains.reduce((sum, row) => sum + row.residues.length, 0);
+    const colourNote = root.querySelector('#gpv-color-mode').value === 'chain' ? ' · coloured by chain' : entry.scores.length ? ' · coloured by pLDDT' : '';
+    const chainNote = chains.length > shownChains.length ? ' · first ' + shownChains.length + ' of ' + chains.length + ' chains' : '';
+    root.querySelector('#gpv-sequence-title').textContent = displayName(entry) + ' · ' + total + ' residues' + colourNote + chainNote;
+    if (rows.dataset.entryId !== String(entry.id) || rows.childElementCount !== shownChains.length) {
+      rows.replaceChildren(); rows.dataset.entryId = String(entry.id);
+      shownChains.forEach(row => {
+        const line = document.createElement('div'); line.className = 'gpv-sequence-row';
+        const name = document.createElement('span'); name.className = 'gpv-sequence-chain';
+        name.textContent = row.chain ? 'Chain ' + row.chain : 'No chain'; name.title = row.residues.length + ' residues';
+        const canvas = document.createElement('canvas'); canvas.dataset.chain = row.chain;
+        canvas.setAttribute('role', 'img'); canvas.setAttribute('aria-label', (row.chain ? 'Chain ' + row.chain : 'Chain') + ', ' + row.residues.length + ' residues');
+        wireSequenceCanvas(canvas);
+        line.append(name, canvas); rows.append(line);
+      });
+    }
+    shownChains.forEach((row, index) => drawSequenceRow(rows.children[index].querySelector('canvas'), entry, row));
+  }
+
+  function renderSequenceSoon() {
+    if (sequenceFrame) return;
+    sequenceFrame = requestAnimationFrame(() => { sequenceFrame = 0; renderSequence(); });
   }
 
   /* ---------- Interface geometry ---------- */
@@ -2681,6 +3006,7 @@ html>body{padding:0}</style>
   function highlightInterface(row) {
     const entryId = interfaceResults.entryId; const color = root.querySelector('#gpv-interface-color').value;
     const entry = entryById(entryId); if (!entry) return;
+    remember('interface highlight');
     [[row.chains[0], row.residuesA], [row.chains[1], row.residuesB]].forEach(([chain, residues]) => {
       selectionRecords.push({ id: nextAnnotationId++, entryId, chain, residues: [...residues].sort((a, b) => a - b), action: 'highlight', color });
     });
@@ -3259,6 +3585,48 @@ html>body{padding:0}</style>
     };
   }
 
+  function nameOf(entryId) {
+    return (structures.find(entry => entry.id === entryId) || {}).name;
+  }
+
+  function sceneSettings() {
+    const active = activeEntry();
+    const reference = structures.find(entry => entry.id === Number(root.querySelector('#gpv-reference').value));
+    return {
+      viewMode: root.querySelector('#gpv-view-mode').value,
+      representation: root.querySelector('#gpv-style').value,
+      colorMode: root.querySelector('#gpv-color-mode').value,
+      modelOrder: root.querySelector('#gpv-order').value,
+      alignmentMode: root.querySelector('#gpv-alignment-mode').value,
+      alignmentApplied: alignmentResults.length > 0,
+      activeModel: active ? active.name : null,
+      referenceModel: reference ? reference.name : null,
+      allResidueLabels: root.querySelector('#gpv-all-labels').checked,
+      projection: root.querySelector('#gpv-projection').value,
+      background: root.querySelector('#gpv-background').value,
+      backgroundColor: root.querySelector('#gpv-background-color').value,
+      sideBySide: root.querySelector('#gpv-side-by-side').checked,
+      syncMode: root.querySelector('#gpv-sync-mode').value,
+      leftModel: (structures.find(entry => entry.id === Number(root.querySelector('#gpv-left-model').value)) || {}).name || null,
+      comparePanels: panelNames(),
+      camera: typeof viewer.getView === 'function' ? viewer.getView() : null
+    };
+  }
+
+  /* Labels, selections, measurements and annotations in scene form. keep() decides
+     which models' records are included — share links drop records on local files. */
+  function sceneOverlays(keep = () => true) {
+    const kept = record => keep(record.entryId);
+    const keptPoints = record => record.points.every(point => keep(point.entryId));
+    const point = item => ({ model: nameOf(item.entryId), chain: item.chain, resi: item.resi, atom: item.atom, index: item.index });
+    return {
+      labels: labelRecords.filter(kept).map(label => ({ model: nameOf(label.entryId), chain: label.chain, resi: label.resi, atom: label.atom, text: label.text, color: label.color, size: label.size })),
+      selections: selectionRecords.filter(kept).map(record => ({ model: nameOf(record.entryId), chain: record.chain, residues: record.residues, action: record.action, color: record.color })),
+      measurements: measurementRecords.filter(keptPoints).map(record => ({ type: record.type, points: record.points.map(point) })),
+      annotations: annotationRecords.filter(keptPoints).map(record => ({ type: record.type, text: record.text, color: record.color, size: record.size, dashed: record.dashed, corner: record.corner, offset: record.offset, distance: record.distance, dx: record.dx, dy: record.dy, points: record.points.map(point) }))
+    };
+  }
+
   async function saveScene() {
     const modelRecords = await Promise.all(structures.map(async entry => ({
       name: entry.name,
@@ -3266,10 +3634,9 @@ html>body{padding:0}</style>
       sha256: entry.hash || await sha256(entry.text),
       visible: entry.visible,
       color: entry.color,
-      label: entry.label || ''
+      label: entry.label || '',
+      ...(entry.fetchId ? { fetch: entry.fetchId } : {})
     })));
-    const active = activeEntry();
-    const reference = structures.find(entry => entry.id === Number(root.querySelector('#gpv-reference').value));
     const scene = {
       type: 'protein-viewer-scene',
       schemaVersion: 1,
@@ -3278,45 +3645,119 @@ html>body{padding:0}</style>
       provenance: provenanceValues(),
       confidenceSources: [...new Set(confidenceAssets.map(asset => asset.name))],
       models: modelRecords,
-      settings: {
-        viewMode: root.querySelector('#gpv-view-mode').value,
-        representation: root.querySelector('#gpv-style').value,
-        colorMode: root.querySelector('#gpv-color-mode').value,
-        modelOrder: root.querySelector('#gpv-order').value,
-        alignmentMode: root.querySelector('#gpv-alignment-mode').value,
-        alignmentApplied: alignmentResults.length > 0,
-        activeModel: active ? active.name : null,
-        referenceModel: reference ? reference.name : null,
-        allResidueLabels: root.querySelector('#gpv-all-labels').checked,
-        projection: root.querySelector('#gpv-projection').value,
-        background: root.querySelector('#gpv-background').value,
-        backgroundColor: root.querySelector('#gpv-background-color').value,
-        sideBySide: root.querySelector('#gpv-side-by-side').checked,
-        syncMode: root.querySelector('#gpv-sync-mode').value,
-        leftModel: (structures.find(entry => entry.id === Number(root.querySelector('#gpv-left-model').value)) || {}).name || null,
-        comparePanels: panelNames(),
-        camera: typeof viewer.getView === 'function' ? viewer.getView() : null
-      },
-      labels: labelRecords.map(label => ({
-        model: (structures.find(entry => entry.id === label.entryId) || {}).name,
-        chain: label.chain,
-        resi: label.resi,
-        atom: label.atom,
-        text: label.text,
-        color: label.color,
-        size: label.size
-      })),
-      selections: selectionRecords.map(record => ({ model: (structures.find(entry => entry.id === record.entryId) || {}).name, chain: record.chain, residues: record.residues, action: record.action, color: record.color })),
-      measurements: measurementRecords.map(record => ({ type: record.type, points: record.points.map(point => ({ model: (structures.find(entry => entry.id === point.entryId) || {}).name, chain: point.chain, resi: point.resi, atom: point.atom, index: point.index })) })),
-      annotations: annotationRecords.map(record => ({ type: record.type, text: record.text, color: record.color, size: record.size, dashed: record.dashed, corner: record.corner, offset: record.offset, distance: record.distance, dx: record.dx, dy: record.dy, points: record.points.map(point => ({ model: (structures.find(entry => entry.id === point.entryId) || {}).name, chain: point.chain, resi: point.resi, atom: point.atom, index: point.index })) })),
+      settings: sceneSettings(),
+      ...sceneOverlays(),
       savedViews: savedViews.map(view => ({ ...view }))
     };
     downloadBlob(JSON.stringify(scene, null, 2), 'application/json', 'protein-viewer-scene.json');
     updateStatus('Reproducible scene JSON downloaded');
   }
 
+  /* ---------- Share links ---------- */
+
+  /* A scene restricted to models that were fetched by identifier, so the recipient's
+     viewer can fetch the same files. Local files never enter a link. */
+  function shareableScene() {
+    const shared = structures.filter(entry => entry.fetchId);
+    if (!shared.length) return null;
+    const ids = new Set(shared.map(entry => entry.id));
+    const has = name => shared.some(entry => entry.name === name);
+    const settings = sceneSettings();
+    if (!has(settings.activeModel)) settings.activeModel = shared[0].name;
+    if (!has(settings.referenceModel)) settings.referenceModel = null;
+    if (!has(settings.leftModel)) settings.leftModel = null;
+    settings.comparePanels = settings.comparePanels.filter(has);
+    settings.alignmentApplied = settings.alignmentApplied && settings.referenceModel !== null && shared.length > 1;
+    return {
+      type: 'protein-viewer-scene',
+      schemaVersion: 1,
+      viewerVersion,
+      createdAt: new Date().toISOString(),
+      shared: true,
+      provenance: provenanceValues(),
+      models: shared.map(entry => ({ name: entry.name, fetch: entry.fetchId, visible: entry.visible, color: entry.color, label: entry.label || '' })),
+      settings,
+      ...sceneOverlays(entryId => ids.has(entryId)),
+      savedViews: []
+    };
+  }
+
+  function bytesToBase64Url(bytes) {
+    let binary = '';
+    for (let offset = 0; offset < bytes.length; offset += 0x8000) binary += String.fromCharCode(...bytes.subarray(offset, offset + 0x8000));
+    return btoa(binary).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+  }
+
+  function base64UrlToBytes(text) {
+    const binary = atob(text.replace(/-/g, '+').replace(/_/g, '/'));
+    return Uint8Array.from(binary, char => char.charCodeAt(0));
+  }
+
+  async function packScene(scene) {
+    const bytes = new TextEncoder().encode(JSON.stringify(scene));
+    if (typeof CompressionStream === 'function') {
+      const stream = new Blob([bytes]).stream().pipeThrough(new CompressionStream('deflate-raw'));
+      return 'z.' + bytesToBase64Url(new Uint8Array(await new Response(stream).arrayBuffer()));
+    }
+    return 'j.' + bytesToBase64Url(bytes);
+  }
+
+  async function unpackScene(token) {
+    const bytes = base64UrlToBytes(token.slice(2));
+    if (token.startsWith('z.')) {
+      if (typeof DecompressionStream !== 'function') throw new Error('this browser cannot decompress the link');
+      const stream = new Blob([bytes]).stream().pipeThrough(new DecompressionStream('deflate-raw'));
+      return JSON.parse(await new Response(stream).text());
+    }
+    return JSON.parse(new TextDecoder().decode(bytes));
+  }
+
+  async function copyShareLink() {
+    const scene = shareableScene();
+    const field = root.querySelector('#gpv-share-url');
+    if (!scene) { announce('Fetch a model by ID first — links can only carry models the recipient can fetch too', 'error'); return; }
+    const link = location.href.split('#')[0] + '#scene=' + await packScene(scene);
+    field.value = link; field.hidden = false;
+    const skipped = structures.length - scene.models.length;
+    const note = (skipped ? ' · ' + skipped + ' local model' + (skipped === 1 ? '' : 's') + ' not included' : '') + ' · ' + (link.length / 1024).toFixed(1) + ' KB';
+    try {
+      await navigator.clipboard.writeText(link);
+      announce('Share link copied' + note);
+    } catch (error) {
+      field.focus(); field.select();
+      announce('Link ready — copy it from the field' + note);
+    }
+  }
+
+  async function openSharedScene() {
+    const match = location.hash.match(/^#scene=([A-Za-z0-9._-]+)$/);
+    if (!match) return;
+    let scene;
+    try { scene = await unpackScene(match[1]); }
+    catch (error) { announce('The shared link could not be read: ' + error.message, 'error'); return; }
+    if (!scene || scene.type !== 'protein-viewer-scene' || !Array.isArray(scene.models)) return;
+    const done = setBusy('Opening shared scene…');
+    const missing = [];
+    try {
+      for (const record of scene.models) {
+        if (!record.fetch || structures.some(entry => entry.name === record.name)) continue;
+        try { await fetchIdentifier(String(record.fetch)); }
+        catch (error) { missing.push(String(record.fetch)); }
+      }
+      pendingScene = null;
+      await applyScene(scene);
+      const loaded = scene.models.length - missing.length;
+      announce('Opened a shared scene with ' + loaded + ' model' + (loaded === 1 ? '' : 's') + (missing.length ? ' · could not fetch ' + missing.join(', ') : ''), missing.length ? 'error' : 'info');
+    } catch (error) {
+      announce('Could not open the shared scene: ' + error.message, 'error');
+    } finally {
+      done();
+    }
+  }
+
   async function applyScene(scene) {
     if (!scene || scene.type !== 'protein-viewer-scene') return;
+    clearHistory();
     const byName = new Map(structures.map(entry => [entry.name, entry]));
     let hashWarnings = 0;
     for (const modelRecord of scene.models || []) {
@@ -3728,16 +4169,54 @@ html>body{padding:0}</style>
     return { paper: background.alpha ? background.color : '#ffffff', ink: dark ? '#f8fafc' : '#111827' };
   }
 
-  function legendWanted() {
-    return root.querySelector('#gpv-export-legend').checked && root.querySelector('#gpv-color-mode').value === 'plddt';
+  const legendChainLimit = 12;
+  /* What a colour legend should list for the current colour scheme, or null when
+     the scheme has nothing worth naming. kind is 'figure', 'comparison' (each panel
+     already names its model, so no model legend), or 'screen'. */
+  function legendItems(kind = 'figure') {
+    const mode = root.querySelector('#gpv-color-mode').value;
+    if (mode === 'plddt') return { title: 'pLDDT', items: [['#ff7d45', '<50', 'Very low <50'], ['#ffdb13', '50–70', 'Low 50–70'], ['#65cbf3', '70–90', 'Confident 70–90'], ['#0053d6', '≥90', 'Very high ≥90']] };
+    const shown = displayedEntries().filter(entry => entry.model);
+    const panelEntries = root.querySelector('#gpv-side-by-side').checked ? comparePanels.map(panel => entryById(panel.entryId)).filter(entry => entry && entry.model) : [];
+    if (mode === 'chain') {
+      const chains = [...new Set([...shown, ...panelEntries].flatMap(entry => entry.atoms.map(atom => atom.chain || '')))].sort(compareChains);
+      if (!chains.length || chains.length > legendChainLimit) return null;
+      return { title: 'Chain', items: chains.map(chain => [chainColor(chain), chain || '—']) };
+    }
+    if (mode === 'structure' && kind !== 'comparison') {
+      if (shown.length < 2 || shown.length > 8) return null;
+      return { title: 'Model', items: shown.map(entry => [entry.color, clipText(displayName(entry), 28)]) };
+    }
+    return null;
   }
 
-  function drawPlddtLegend(context, x, y, scale, palette) {
+  function legendWanted(kind = 'figure') {
+    return root.querySelector('#gpv-export-legend').checked && legendItems(kind) !== null;
+  }
+
+  function renderScreenLegend() {
+    const host = root.querySelector('#gpv-plddt-legend');
+    const legend = legendItems('screen');
+    host.hidden = !legend;
+    host.replaceChildren();
+    if (!legend) return;
+    host.setAttribute('aria-label', legend.title + ' colour legend');
+    const title = document.createElement('strong'); title.textContent = legend.title; host.append(title);
+    legend.items.forEach(([color, short, long]) => {
+      const item = document.createElement('span'); const swatch = document.createElement('i');
+      swatch.className = 'gpv-swatch'; swatch.style.background = color;
+      item.append(swatch, long || short); host.append(item);
+    });
+  }
+
+  function drawPlddtLegend(context, x, y, scale, palette, kind = 'figure') {
+    const legend = legendItems(kind);
+    if (!legend) return 0;
     const swatch = Math.round(14 * scale); const gap = Math.round(6 * scale); const font = Math.round(13 * scale);
     context.save();
     context.font = '500 ' + font + 'px system-ui'; context.textBaseline = 'middle';
-    const items = [['#ff7d45', '<50'], ['#ffdb13', '50–70'], ['#65cbf3', '70–90'], ['#0053d6', '≥90']];
-    const title = 'pLDDT'; const titleWidth = context.measureText(title).width + gap * 2;
+    const items = legend.items;
+    const title = legend.title; const titleWidth = context.measureText(title).width + gap * 2;
     const widths = items.map(item => swatch + gap + context.measureText(item[1]).width + gap * 2);
     const total = titleWidth + widths.reduce((sum, width) => sum + width, 0);
     context.fillStyle = palette.paper; context.globalAlpha = 0.88;
@@ -3836,16 +4315,18 @@ html>body{padding:0}</style>
       + '<text x="' + f(x + width / 2) + '" y="' + f(position.y) + '" text-anchor="middle" dominant-baseline="central" font-family="' + svgFont + '" font-size="' + f(fontSize) + '" font-weight="500" fill="' + color + '">' + svgEscape(text) + '</text></g>';
   }
 
-  function svgLegend(x, y, scale, palette) {
+  function svgLegend(x, y, scale, palette, kind = 'figure') {
+    const legend = legendItems(kind);
+    if (!legend) return { markup: '', width: 0 };
     const swatch = 14 * scale; const gap = 6 * scale; const fontSize = 13 * scale;
     svgMeasure.font = '500 ' + fontSize + 'px ' + svgFont;
-    const items = [['#ff7d45', '<50'], ['#ffdb13', '50–70'], ['#65cbf3', '70–90'], ['#0053d6', '≥90']];
-    const titleWidth = svgMeasure.measureText('pLDDT').width + gap * 2;
+    const items = legend.items;
+    const titleWidth = svgMeasure.measureText(legend.title).width + gap * 2;
     const widths = items.map(item => swatch + gap + svgMeasure.measureText(item[1]).width + gap * 2);
     const total = titleWidth + widths.reduce((sum, width) => sum + width, 0);
     const parts = ['<g id="legend"><rect x="' + f(x - gap) + '" y="' + f(y - swatch) + '" width="' + f(total + gap) + '" height="' + f(swatch * 2) + '" fill="' + palette.paper + '" fill-opacity="0.88"/>'];
     const text = (tx, value) => '<text x="' + f(tx) + '" y="' + f(y) + '" dominant-baseline="central" font-family="' + svgFont + '" font-size="' + f(fontSize) + '" font-weight="500" fill="' + palette.ink + '">' + svgEscape(value) + '</text>';
-    let cursor = x; parts.push(text(cursor, 'pLDDT')); cursor += titleWidth;
+    let cursor = x; parts.push(text(cursor, legend.title)); cursor += titleWidth;
     items.forEach((item, index) => {
       parts.push('<rect x="' + f(cursor) + '" y="' + f(y - swatch / 2) + '" width="' + f(swatch) + '" height="' + f(swatch) + '" fill="' + item[0] + '"/>');
       parts.push(text(cursor + swatch + gap, item[1])); cursor += widths[index];
@@ -3947,7 +4428,7 @@ html>body{padding:0}</style>
       cellWidth = Math.floor(cellWidth * correction); cellHeight = Math.floor(cellHeight * correction);
     }
     const captionHeight = Math.round(cellHeight * 0.09); const palette = figurePalette();
-    const footer = legendWanted() || provenanceValues().title ? captionHeight : 0;
+    const footer = legendWanted('comparison') || provenanceValues().title ? captionHeight : 0;
     const width = columns * cellWidth; const height = rows * (cellHeight + captionHeight) + footer;
     const done = setBusy('Rendering comparison SVG…');
     button.disabled = true; button.textContent = 'Rendering…';
@@ -3969,7 +4450,7 @@ html>body{padding:0}</style>
       }
       if (footer) {
         const y = height - footer / 2; const scale = captionHeight / 40; let used = 0;
-        if (legendWanted()) { const legend = svgLegend(cellWidth * 0.025, y, scale, palette); parts.push(legend.markup); used = legend.width + cellWidth * 0.06; }
+        if (legendWanted('comparison')) { const legend = svgLegend(cellWidth * 0.025, y, scale, palette, 'comparison'); parts.push(legend.markup); used = legend.width + cellWidth * 0.06; }
         const title = provenanceValues().title;
         if (title) parts.push(caption(cellWidth * 0.025 + used, y, captionHeight * 0.36, 600, title));
       }
@@ -4005,7 +4486,7 @@ html>body{padding:0}</style>
     }
     const captionHeight = Math.round(cellHeight * 0.09);
     const palette = figurePalette();
-    const footer = legendWanted() || provenanceValues().title ? captionHeight : 0;
+    const footer = legendWanted('comparison') || provenanceValues().title ? captionHeight : 0;
     const done = setBusy('Rendering comparison…');
     button.disabled = true; button.textContent = 'Rendering…';
     await afterPaint();
@@ -4017,7 +4498,7 @@ html>body{padding:0}</style>
       if (footer) {
         const y = canvas.height - footer / 2; const scale = captionHeight / 40;
         let used = 0;
-        if (legendWanted()) used = drawPlddtLegend(context, Math.round(cellWidth * 0.025), y, scale, palette) + Math.round(cellWidth * 0.06);
+        if (legendWanted('comparison')) used = drawPlddtLegend(context, Math.round(cellWidth * 0.025), y, scale, palette, 'comparison') + Math.round(cellWidth * 0.06);
         const title = provenanceValues().title;
         if (title) {
           context.fillStyle = palette.ink; context.textBaseline = 'middle'; context.font = '600 ' + Math.round(captionHeight * 0.36) + 'px system-ui';
@@ -4261,6 +4742,7 @@ html>body{padding:0}</style>
     };
     const embed = value => JSON.stringify(value).replace(/</g, '\\u003c');
     const html = reportTemplate({
+      chainColors: JSON.stringify(Object.fromEntries([...chainOrder.keys()].map(chain => [chain, chainColor(chain)]))),
       title: (provenanceValues().title || 'Protein Model Report').replace(/[<>&]/g, ''),
       structures: embed(exported),
       views: embed(savedViews),
@@ -4342,6 +4824,7 @@ const structures=${data.structures};
 const savedViews=${data.views};
 const metadata=${data.metadata};
 const initial=${data.initial};
+const chainColors=${data.chainColors};
 const el = id => document.getElementById(id);
 const directContexts = typeof OffscreenCanvas !== 'undefined' && !(window.chrome && /Chrom/.test(navigator.userAgent));
 const MAX_PANES = 6;
@@ -4377,7 +4860,7 @@ function styleSpec(s) {
   const rep = el('style').value, mode = el('colors').value;
   let options = { color: s.color };
   if (mode === 'plddt') options = { colorfunc: a => pcolor(Number(a.b || 0)) };
-  if (mode === 'chain') options = { colorscheme: 'chainHetatm' };
+  if (mode === 'chain') options = { colorfunc: a => chainColors[a.chain || ''] || '#9ca3af' };
   if (mode === 'spectrum') options = { colorscheme: 'spectrum' };
   if (mode === 'element') options = { colorscheme: 'default' };
   if (rep === 'line') options.linewidth = 2;
@@ -4710,10 +5193,40 @@ applyBackground();
     };
   }
 
+  /* Fetch one identifier (PDB ID, UniProt accession, or AlphaFold DB name) and add it
+     as a model. Shared by the Fetch button and by share links. */
+  async function fetchIdentifier(raw) {
+    const target = parseIdentifier(raw);
+    if (!target) throw new Error('"' + raw + '" is not a PDB ID, UniProt accession, or AlphaFold DB name');
+    const source = target.kind === 'pdb'
+      ? { url: 'https://files.rcsb.org/download/' + target.code + '.cif', paeUrl: null, name: target.code + '.cif', format: 'cif', collection: 'RCSB PDB' }
+      : await resolveAlphafold(target);
+    const text = await fetchText(source.url, 'structure');
+    const entry = addStructure(uniqueModelName(source.name, source.collection), text, source.format, source.url, source.collection);
+    entry.fetchId = target.kind === 'pdb' ? target.code : 'AF-' + target.accession + '-F' + target.fragment;
+    let note = '';
+    if (source.paeUrl) {
+      /* Best effort: a missing PAE file must not fail the whole fetch.
+         Attach it directly rather than through the filename-matching used for
+         local archives — AlphaFold DB file names carry a model version that
+         those heuristics do not recognise. */
+      try {
+        const confidence = confidenceFromJson(JSON.parse(await fetchText(source.paeUrl, 'PAE')));
+        if (confidence && Array.isArray(confidence.pae) && confidence.pae.length) {
+          entry.confidence = mergeConfidence(entry.confidence, confidence);
+          confidenceAssets.push({ name: source.paeUrl.split('/').pop(), confidence, rank: null, collection: source.collection, modelName: entry.name });
+          note = ' with predicted aligned error';
+        }
+      } catch (error) { note = ' (predicted aligned error unavailable)'; }
+    }
+    renderList();
+    applyStyle();
+    return { entry, source, note };
+  }
+
   async function fetchStructure() {
     const field = root.querySelector('#gpv-fetch-id');
-    const target = parseIdentifier(field.value);
-    if (!target) {
+    if (!parseIdentifier(field.value)) {
       announce('Enter a four-character PDB ID (1ubq), a UniProt accession (P69905), or an AlphaFold DB name (AF-P0DTC2-F1)', 'error');
       field.focus();
       return;
@@ -4722,28 +5235,7 @@ applyBackground();
     const done = setBusy('Fetching ' + field.value.trim() + '…');
     button.disabled = true;
     try {
-      const source = target.kind === 'pdb'
-        ? { url: 'https://files.rcsb.org/download/' + target.code + '.cif', paeUrl: null, name: target.code + '.cif', format: 'cif', collection: 'RCSB PDB' }
-        : await resolveAlphafold(target);
-      const text = await fetchText(source.url, 'structure');
-      const entry = addStructure(uniqueModelName(source.name, source.collection), text, source.format, source.url, source.collection);
-      let note = '';
-      if (source.paeUrl) {
-        /* Best effort: a missing PAE file must not fail the whole fetch.
-           Attach it directly rather than through the filename-matching used for
-           local archives — AlphaFold DB file names carry a model version that
-           those heuristics do not recognise. */
-        try {
-          const confidence = confidenceFromJson(JSON.parse(await fetchText(source.paeUrl, 'PAE')));
-          if (confidence && Array.isArray(confidence.pae) && confidence.pae.length) {
-            entry.confidence = mergeConfidence(entry.confidence, confidence);
-            confidenceAssets.push({ name: source.paeUrl.split('/').pop(), confidence, rank: null, collection: source.collection, modelName: entry.name });
-            note = ' with predicted aligned error';
-          }
-        } catch (error) { note = ' (predicted aligned error unavailable)'; }
-      }
-      renderList();
-      applyStyle();
+      const { entry, source, note } = await fetchIdentifier(field.value);
       selectModel(entry);
       field.value = '';
       announce('Loaded ' + entry.name + ' from ' + source.collection + note);
@@ -4891,6 +5383,7 @@ applyBackground();
     structures = [];
     activeId = null;
     selectedResidue = null;
+    clearHistory();
     labelRecords = [];
     selectionRecords = [];
     measurementRecords = [];
@@ -4954,6 +5447,7 @@ applyBackground();
   root.querySelector('#gpv-label-text').addEventListener('keydown', event => { if (event.key === 'Enter') addOrEditLabel(); });
   root.querySelector('#gpv-all-labels').addEventListener('change', () => rebuildOverlays());
   root.querySelector('#gpv-clear-labels').addEventListener('click', () => {
+    if (labelRecords.length) remember('clearing labels');
     labelRecords = [];
     renderLabelList();
     root.querySelector('#gpv-all-labels').checked = false;
@@ -4963,16 +5457,16 @@ applyBackground();
   });
   root.querySelector('#gpv-add-selection').addEventListener('click', addSelection);
   root.querySelector('#gpv-selection-range').addEventListener('keydown', event => { if (event.key === 'Enter') addSelection(); });
-  root.querySelector('#gpv-clear-selections').addEventListener('click', () => { selectionRecords = []; renderSelectionList(); applyStyle(); updateStatus('Selections cleared'); });
+  root.querySelector('#gpv-clear-selections').addEventListener('click', () => { if (selectionRecords.length) remember('clearing selections'); selectionRecords = []; renderSelectionList(); applyStyle(); updateStatus('Selections cleared'); });
   root.querySelector('#gpv-measure').addEventListener('click', toggleMeasurement);
   root.querySelector('#gpv-annotate').addEventListener('click', () => toggleAnnotating());
   root.querySelector('#gpv-annotation-type').addEventListener('change', () => { annotationDraft = []; if (annotationActive) root.querySelector('#gpv-annotation-state').textContent = annotationPrompt(); });
   root.querySelector('#gpv-annotation-size').addEventListener('input', () => { root.querySelector('#gpv-annotation-size-value').textContent = String(Number(root.querySelector('#gpv-annotation-size').value)) + '×'; });
   root.querySelector('#gpv-add-screen-text').addEventListener('click', addScreenText);
   root.querySelector('#gpv-screen-text').addEventListener('keydown', event => { if (event.key === 'Enter') addScreenText(); });
-  root.querySelector('#gpv-clear-annotations').addEventListener('click', () => { annotationRecords = []; annotationDraft = []; renderAnnotationList(); rebuildOverlays(); updateStatus('Annotations cleared'); });
+  root.querySelector('#gpv-clear-annotations').addEventListener('click', () => { if (annotationRecords.length) remember('clearing annotations'); annotationRecords = []; annotationDraft = []; renderAnnotationList(); rebuildOverlays(); updateStatus('Annotations cleared'); });
   root.querySelector('#gpv-measure-type').addEventListener('change', () => { measurementDraft = []; if (measurementActive) root.querySelector('#gpv-measure-state').textContent = 'Select ' + (root.querySelector('#gpv-measure-type').value === 'angle' ? 3 : 2) + ' atoms in the viewer.'; });
-  root.querySelector('#gpv-clear-measurements').addEventListener('click', () => { measurementRecords = []; measurementDraft = []; renderMeasurementList(); rebuildOverlays(); updateStatus('Measurements cleared'); });
+  root.querySelector('#gpv-clear-measurements').addEventListener('click', () => { if (measurementRecords.length) remember('clearing measurements'); measurementRecords = []; measurementDraft = []; renderMeasurementList(); rebuildOverlays(); updateStatus('Measurements cleared'); });
   root.querySelector('#gpv-side-by-side').addEventListener('change', event => {
     stopCycle();
     const left = structures.find(entry => entry.id === Number(root.querySelector('#gpv-left-model').value));
@@ -5046,6 +5540,7 @@ applyBackground();
     if (target instanceof Element && (target.matches('input, select, textarea, [contenteditable]') || target.closest('dialog[open]'))) {
       if (event.key !== 'Escape') return;
     }
+    if ((event.ctrlKey || event.metaKey) && !event.altKey && event.key.toLowerCase() === 'z') { event.preventDefault(); if (event.shiftKey) redo(); else undo(); return; }
     if (event.ctrlKey || event.metaKey || event.altKey) return;
     if (event.key === '?') { event.preventDefault(); openHelp(); return; }
     if (event.key === 'Escape') {
@@ -5087,7 +5582,11 @@ applyBackground();
     'Rename models in the Models list — captions, badges, and the report pick up the display name while file names stay as identifiers.',
     'Download figure SVG keeps labels, arrows, callouts, and the legend as vector layers you can restyle in Illustrator or Inkscape.',
     'Confidence → Interfaces counts inter-chain contacts and buried surface area, and highlights the interface residues in one click.',
-    'Embed 3Dmol.js before sharing a report that must open on a plane; switch PAE to Compact to keep the file small.'
+    'Embed 3Dmol.js before sharing a report that must open on a plane; switch PAE to Compact to keep the file small.',
+    'The sequence strip under the viewer shows every chain coloured by pLDDT. Click a residue to select it for a label, drag across a range to fill the Selections fields, double-click to zoom to it.',
+    'Ctrl/⌘+Z undoes the last label, selection, measurement or annotation change; add Shift to redo. The Undo and Redo buttons sit in the Annotate tab.',
+    'Publish → Copy share link turns models fetched by ID, plus your camera, colours, labels and annotations, into a URL a reviewer opens directly. Local files are never included.',
+    'Colour by chain uses a fixed palette — chain A is the same blue in every model and panel — and the export legend names each chain.'
   ];
   let tipIndex = Math.floor(Math.random() * tips.length);
   function renderTip() {
@@ -5097,10 +5596,16 @@ applyBackground();
   root.querySelector('#gpv-tip-next').addEventListener('click', () => { tipIndex += 1; renderTip(); });
   root.querySelector('#gpv-tip-hide').addEventListener('click', () => { writeJson(tipsKey, true); renderTip(); updateStatus('Tips hidden · bring them back from the help dialog (?)'); });
   root.querySelector('#gpv-tips-reset').addEventListener('click', () => { writeJson(tipsKey, false); tipIndex += 1; renderTip(); });
+  root.querySelector('#gpv-undo').addEventListener('click', undo);
+  root.querySelector('#gpv-redo').addEventListener('click', redo);
+  root.querySelector('#gpv-share-link').addEventListener('click', () => { copyShareLink(); });
+  root.querySelector('#gpv-sequence-toggle').addEventListener('click', () => { writeJson(sequenceKey, readJson(sequenceKey, false) !== true); renderSequence(); });
+  new ResizeObserver(() => renderSequenceSoon()).observe(root.querySelector('#gpv-sequence-rows'));
   root.querySelector('#gpv-demo').addEventListener('click', () => { root.querySelector('#gpv-fetch-id').value = '1ubq'; root.querySelector('#gpv-fetch').click(); });
   renderTip();
   watchStageClicks();
   restorePreferences();
+  openSharedScene();
   applyTheme(readJson(themeKey, 'system'));
   selectToolTab('models');
   applyAppearance();

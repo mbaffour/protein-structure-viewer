@@ -158,6 +158,14 @@ await step('pLDDT colouring reveals the legend', async () => {
   await page.selectOption('#gpv-color-mode', 'plddt'); await page.waitForTimeout(300);
   if (await page.locator('#gpv-plddt-legend').isHidden()) throw new Error('legend hidden');
 });
+await step('chain colouring lists the chains in the legend', async () => {
+  await page.selectOption('#gpv-color-mode', 'chain'); await page.waitForTimeout(400);
+  const legend = page.locator('#gpv-plddt-legend');
+  if (await legend.isHidden()) throw new Error('legend hidden');
+  const text = (await legend.textContent()) || '';
+  if (!/Chain/.test(text) || !/A/.test(text) || !/B/.test(text)) throw new Error('legend text: ' + text);
+  await page.selectOption('#gpv-color-mode', 'plddt'); await page.waitForTimeout(300);
+});
 await step('motion off', async () => { await page.selectOption('#gpv-motion', 'off'); await page.waitForTimeout(300); });
 await step('theme cycles system → light → dark → system', async () => {
   const seen = [];
@@ -275,6 +283,34 @@ await step('a residue label is added by clicking and edited from its list row', 
   if ((await text.inputValue()) !== 'Site A · catalytic') throw new Error('edit did not stick');
   await page.click('#gpv-label-list .gpv-entry button:has-text("Remove")'); await page.waitForTimeout(300);
   if (await page.locator('#gpv-label-list .gpv-entry').count()) throw new Error('label was not removed');
+});
+await step('the sequence strip shows both chains and selects a residue on click', async () => {
+  const canvases = page.locator('#gpv-sequence-rows canvas');
+  if ((await canvases.count()) !== 2) throw new Error('canvases=' + (await canvases.count()));
+  const box = await canvases.first().boundingBox();
+  await page.mouse.click(box.x + box.width * 0.3, box.y + box.height / 2); await page.waitForTimeout(300);
+  const readout = (await page.locator('#gpv-residue').textContent()) || '';
+  if (!/chain A/.test(readout)) throw new Error('readout: ' + readout);
+  if (await page.locator('#gpv-add-label').isDisabled()) throw new Error('label button still disabled');
+  const second = await canvases.nth(1).boundingBox();
+  await page.mouse.move(second.x + second.width * 0.2, second.y + second.height / 2); await page.mouse.down();
+  await page.mouse.move(second.x + second.width * 0.6, second.y + second.height / 2, { steps: 6 }); await page.mouse.up();
+  await page.waitForTimeout(300);
+  const range = await page.inputValue('#gpv-selection-range');
+  if (!/^\d+-\d+$/.test(range)) throw new Error('range not filled: ' + range);
+  if ((await page.inputValue('#gpv-selection-chain')) !== 'B') throw new Error('chain field not filled');
+  console.log('       range ' + range + ' of chain B');
+});
+await step('undo and redo walk label changes back and forth', async () => {
+  await page.fill('#gpv-label-text', 'Undo me'); await page.click('#gpv-add-label'); await page.waitForTimeout(300);
+  const count = () => page.locator('#gpv-label-list .gpv-entry').count();
+  if ((await count()) !== 1) throw new Error('label not added');
+  await page.keyboard.press('Control+z'); await page.waitForTimeout(400);
+  if ((await count()) !== 0) throw new Error('undo did not remove the label');
+  await page.keyboard.press('Control+Shift+z'); await page.waitForTimeout(400);
+  if ((await count()) !== 1) throw new Error('redo did not restore the label');
+  await page.click('#gpv-undo'); await page.waitForTimeout(300);
+  if ((await count()) !== 0) throw new Error('the Undo button did nothing');
 });
 await step('every residue can be labelled', async () => {
   await page.check('#gpv-all-labels'); await page.waitForTimeout(1200);
@@ -569,6 +605,48 @@ if (reportPath) {
     if (!/panel 1/.test(await report.locator('#position').textContent())) throw new Error('position lost its panel index');
   });
 }
+
+group('share links');
+/* A minimal mmCIF built from the first fixture stands in for files.rcsb.org, so the
+   fetch path and the share link round-trip run without network access. */
+function cifFromPdb(text) {
+  const rows = text.split('\n').filter(line => line.startsWith('ATOM')).map((line, index) => {
+    const atom = line.slice(12, 16).trim(); const resn = line.slice(17, 20).trim(); const chain = line.slice(21, 22); const resi = line.slice(22, 26).trim();
+    const x = line.slice(30, 38).trim(); const y = line.slice(38, 46).trim(); const z = line.slice(46, 54).trim(); const b = line.slice(60, 66).trim();
+    return ['ATOM', index + 1, atom[0], atom, '.', resn, chain, '1', resi, '?', x, y, z, '1.00', b, resi, resn, chain, atom, '1'].join(' ');
+  });
+  const fields = ['group_PDB', 'id', 'type_symbol', 'label_atom_id', 'label_alt_id', 'label_comp_id', 'label_asym_id', 'label_entity_id', 'label_seq_id', 'pdbx_PDB_ins_code', 'Cartn_x', 'Cartn_y', 'Cartn_z', 'occupancy', 'B_iso_or_equiv', 'auth_seq_id', 'auth_comp_id', 'auth_asym_id', 'auth_atom_id', 'pdbx_PDB_model_num'];
+  return 'data_1TST\n#\nloop_\n' + fields.map(field => '_atom_site.' + field).join('\n') + '\n' + rows.join('\n') + '\n#\n';
+}
+const cifText = cifFromPdb(await readFile(models[0], 'utf8'));
+const serveFetch = target => target.route('https://files.rcsb.org/**', route => route.fulfill({ status: 200, contentType: 'chemical/x-mmcif', body: cifText }));
+await serveFetch(page);
+await step('a model fetched by ID enables the share link', async () => {
+  const before = await page.locator('#gpv-list [data-entry-id]').count();
+  await page.fill('#gpv-fetch-id', '1tst'); await page.click('#gpv-fetch'); await page.waitForTimeout(2500);
+  const after = await page.locator('#gpv-list [data-entry-id]').count();
+  if (after !== before + 1) throw new Error('model count ' + before + ' → ' + after + ' · ' + (await page.locator('#gpv-state').textContent()));
+  if (await page.locator('#gpv-share-link').isDisabled()) throw new Error('share link still disabled');
+});
+await step('the share link reopens the fetched model with its annotations', async () => {
+  await tab('annotate');
+  await page.fill('#gpv-screen-text', 'Shared panel'); await page.click('#gpv-add-screen-text'); await page.waitForTimeout(300);
+  await tab('publish');
+  await page.click('#gpv-share-link'); await page.waitForTimeout(1000);
+  const link = await page.inputValue('#gpv-share-url');
+  if (!/#scene=[zj]\./.test(link)) throw new Error('no scene token: ' + link.slice(0, 80));
+  const shared = await browser.newPage({ viewport: { width: 1280, height: 1000 } });
+  shared.on('pageerror', error => noteError('SHARED PAGEERROR: ' + error.message));
+  shared.on('console', message => { if (message.type() === 'error' && !/favicon|404/.test(message.text())) noteError('shared: ' + message.text()); });
+  await serveFetch(shared);
+  await shared.goto(link); await shared.waitForTimeout(4000);
+  const rows = await shared.locator('#gpv-list [data-entry-id]').count();
+  if (rows !== 1) throw new Error('shared page lists ' + rows + ' models · ' + (await shared.locator('#gpv-state').textContent()));
+  const texts = await shared.locator('#gpv-annotation-list input[type="text"]').evaluateAll(inputs => inputs.map(input => input.value));
+  if (!texts.includes('Shared panel')) throw new Error('corner text missing from the shared page: ' + JSON.stringify(texts));
+  console.log('       ' + (link.length / 1024).toFixed(1) + ' KB link · ' + ((await shared.locator('#gpv-state').textContent()) || '').trim());
+  await shared.close();
+});
 
 await browser.close();
 server.close();

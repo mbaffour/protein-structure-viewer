@@ -63,18 +63,21 @@ mapping, and Cα RMSD, plus a CSV export and a one-click coordinate restore. Syn
 multi-view of up to six models whose cameras follow each other — rotation only, so assemblies of
 different size stay framed, or rotation and zoom for superposed models.
 
-**Annotate.** Click any atom to inspect its model, residue, chain, atom name, and pLDDT. Add or edit
-custom residue labels, or label every residue in the current model. Highlight or hide chain/residue
+**Annotate.** Click any atom to inspect its model, residue, chain, atom name, and pLDDT, or hover
+to read it from the status bar. A sequence strip under the viewer draws every chain coloured by
+pLDDT: click a residue to select it, drag a range to fill the selection fields, double-click to zoom.
+Add or edit custom residue labels, or label every residue in the current model. Highlight or hide chain/residue
 ranges, and add atom-to-atom distance or three-atom angle measurements. Draw figure annotations —
 arrows, lines, residue markers, text callouts, and corner titles — that follow rotation and alignment
 and appear in every export; nudge any label into place and it stays there as the model turns. Give
-models display names for captions.
+models display names for captions. Undo and redo every one of these changes.
 
 **Publish.** Fixed-size, supersampled PNG export, a stitched lettered comparison figure of every
-synchronized panel, SVG variants of both with labels, arrows, captions, and the pLDDT legend as
-editable vector layers, and 5-, 10-, or 15-second WebM spin-video export. Reusable named views with
+synchronized panel, SVG variants of both with labels, arrows, captions, and the colour legend
+(pLDDT bands, chains, or models) as editable vector layers, and 5-, 10-, or 15-second WebM spin-video export. Reusable named views with
 captions, multi-panel contact-sheet export, and caption-text export.
-Self-contained interactive HTML reports. Reproducible scene manifests carrying SHA-256 structure-file
+Self-contained interactive HTML reports, and share links that reopen models fetched by identifier
+with the same camera, colours, labels, and annotations. Reproducible scene manifests carrying SHA-256 structure-file
 hashes, camera, model state, colours, labels, selections, measurements, saved views, comparison and
 alignment settings, and your provenance notes.
 

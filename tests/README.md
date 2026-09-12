@@ -40,7 +40,10 @@ PSV_CHROMIUM=/opt/pw-browsers/chromium/chrome-linux/chrome npm test
 - Compare: sequence-aware and identifier alignment, non-zero RMSD against a
   deliberately different model, CSV export, synchronised multi-view with a third panel that
   follows a real drag on the primary, restore
-- Annotate: residue-range highlight, blank chain meaning every chain, rejection of an
+- Appearance: colour by chain lists the chains in the on-screen legend.
+- Annotate: the sequence strip lists both chains, a click selects a residue, a drag fills the
+  selection range; undo and redo (keyboard and buttons) walk a label change back and forth;
+  residue-range highlight, blank chain meaning every chain, rejection of an
   unparseable range, an arrow annotation from two real atom clicks plus a corner title, nudging a
   label right and up, label-every-residue
 - Confidence: metrics table, CSV export, interface geometry on the active model with highlight and
@@ -54,6 +57,8 @@ PSV_CHROMIUM=/opt/pw-browsers/chromium/chrome-linux/chrome npm test
 - Generated report: renders, carries provenance, **keeps its canvas inside `#view`**,
   guided views, navigation by real click, play/pause, element colouring, two panels that
   rotate together under a real drag
+- Share links: a model fetched by ID (served from a stubbed RCSB response) enables *Copy share
+  link*; opening the link in a fresh page refetches the model and restores its corner text.
 
 The two emphasised checks are regressions against bugs that shipped in 2.0.
 

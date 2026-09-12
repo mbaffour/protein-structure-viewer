@@ -4,7 +4,7 @@ This audit evaluates the viewer as a tool for comparing predicted structures, sh
 interactive review artefact, and preparing visual material for papers and theses. It is not a
 validation of any biological hypothesis, and nothing in the tool should be read as one.
 
-Audited against viewer version 2.3.0.
+Audited against viewer version 2.4.0.
 
 ## What is already strong
 
@@ -18,6 +18,12 @@ Audited against viewer version 2.3.0.
 - pLDDT colouring and per-model mean pLDDT help identify locally uncertain regions; PAE heatmaps,
   chain-pair ipTM, and minimum PAE carry the information pLDDT cannot.
 - Click inspection and editable residue labels support annotated figures and reviewer walkthroughs.
+  The sequence strip makes a residue reachable by number rather than by hunting in three dimensions,
+  and undo makes annotation cheap to get wrong.
+- Chain colours are assigned deterministically in sorted chain order and named in the legend, so a
+  figure, its comparison panels, and the report agree on what colour a chain is.
+- Share links carry only identifiers the recipient can fetch themselves; coordinates from local files
+  never enter a URL.
   Clicks pick the nearest projected atom, so ribbons are as selectable as spheres.
 - Atom-anchored figure annotations — arrows, lines, residue markers, text callouts, corner titles —
   follow rotation and re-alignment and are drawn into every export and the report, so a figure's
