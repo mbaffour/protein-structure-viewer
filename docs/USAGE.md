@@ -92,6 +92,15 @@ motion. Two notes:
   every model, every synchronized panel, the sequence strip, the exported legend, and the report. The
   legend under the viewport names each chain (up to twelve). In overlay mode with per-structure
   colouring the legend names the models instead.
+- **Cα deviation after alignment** colours each residue by the distance between its Cα and the
+  matched residue of the reference once you have used *Align visible* (Compare tab): under 1 Å blue,
+  1–2 Å green, 2–4 Å yellow, 4–8 Å orange, 8 Å and above red; residues the alignment did not match
+  are grey. The reference model shows its mean deviation across the aligned models. Before an
+  alignment everything is grey and the status line says so.
+- **Low confidence** hides residues below pLDDT 50 or 70 — in the viewer, in every synchronized
+  panel, and in every PNG and SVG export, so a figure without disordered tails takes one click. The
+  sequence strip dims the hidden residues and its title says what is hidden. The setting is stored in
+  scene JSON. It applies only to models that carry pLDDT.
 - **Transparent** background is the right choice for figures that will be composited; PNG export
   preserves the alpha channel.
 
@@ -110,8 +119,11 @@ Hover to read a residue, **click** to select it — the label field fills in, re
 update* — **drag** across a range to fill the model, chain, and range fields of *Selections*, and
 **double-click** to zoom the camera to that residue. Labelled residues carry a small marker above
 their cell and highlighted ranges are underlined in the highlight colour, so the strip doubles as an
-index of your annotations. *Hide sequence* collapses it; the choice is remembered. Very large
-assemblies show the first twenty-four chains.
+index of your annotations. In **overlay** mode the strip shows one row per displayed model and chain,
+active model first, so the pLDDT of competing predictions lines up residue by residue; one-at-a-time
+and side-by-side views show the active model alone. Hovering the PAE heatmap in the Confidence tab
+marks both residues of the pair on the strip in magenta. *Hide sequence* collapses it; the choice is
+remembered. Very large sets show the first twenty-four rows.
 
 **Undo and redo.** <kbd>Ctrl</kbd>/<kbd>⌘</kbd>+<kbd>Z</kbd> undoes the last change to labels,
 selections, measurements, or figure annotations — additions, removals, text or colour edits, nudges,
@@ -142,6 +154,12 @@ them all. <kbd>Esc</kbd> stops drawing.
 Every annotation with text has arrow buttons in its row: they move the label in screen space — left,
 right, up, down — and the offset is stored in model coordinates, so the label stays where you put it
 when the model rotates. Callouts also take a leader length in Å. **Reset** puts a label back.
+
+**pLDDT profile.** **pLDDT profile SVG** and **pLDDT profile PNG** (Confidence tab) plot per-residue
+confidence for every displayed model that carries pLDDT — one panel per chain, one line per model in
+the model's colour, the four confidence bands shaded behind, residue numbers along the axis, and a
+legend of model names. The figure title comes from *Provenance*. The SVG is fully editable; the PNG is
+rendered at twice the nominal size. Up to eight models and twelve chains are plotted.
 
 ## Compare tab
 
@@ -244,7 +262,8 @@ background, synchronized panels, labels, selections, measurements, figure annota
 The scene is compressed into the URL fragment (the part after `#`), so nothing is sent to a server
 and the link works wherever the viewer is hosted. Files you opened from disk cannot travel this way —
 the recipient has no way to fetch them — so they are left out, and the status line says how many.
-Saved views are not included either; use scene JSON or a report for those. Links are typically one
+Saved views whose models were fetched by identifier travel in the link too, so the recipient can
+follow your guided tour. Links are typically one
 to three kilobytes; a scene with many annotations may run longer, and every modern browser accepts
 fragments far larger than that.
 

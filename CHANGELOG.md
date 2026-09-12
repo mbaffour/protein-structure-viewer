@@ -2,6 +2,32 @@
 
 All notable changes to this project are recorded here.
 
+## 2.5.0
+
+Reading disagreement and confidence. Scenes and reports from 2.2 onward still load; scene manifests
+gain an optional `hideBelow` setting, and share links now carry saved views.
+
+### Added
+
+- **Cα deviation colouring.** After *Align visible*, a new colour scheme paints each residue by how
+  far its Cα sits from the matched residue in the reference (under 1 Å blue, 1–2 green, 2–4 yellow,
+  4–8 orange, 8 Å or more red, unmatched grey). The reference is coloured by its mean deviation
+  across the aligned models. The legend, the sequence strip, comparison panels and every export
+  follow the scheme.
+- **Hide low-confidence residues.** *Appearance → Low confidence* hides residues below pLDDT 50 or
+  70 in the viewer, every synchronized panel and every PNG and SVG export at once; the sequence strip
+  dims them. The setting travels in scene JSON.
+- **pLDDT profile figure.** *Confidence → pLDDT profile SVG / PNG* plots per-residue confidence for
+  every displayed model, one panel per chain with the four confidence bands shaded behind, residue
+  numbers along the axis, and a model legend, using your figure title. The SVG is editable; the PNG is
+  rendered at 2×.
+- **Multi-model sequence strip.** In overlay mode the strip shows one row per model and chain (active
+  model first), so competing predictions line up residue by residue. One-at-a-time and side-by-side
+  views keep the single-model strip.
+- **PAE to sequence.** Hovering the PAE heatmap marks both residues of the pair on the sequence strip.
+- **Saved views in share links.** Views whose models were fetched by identifier now travel in the
+  link, so a recipient gets the guided tour as well as the scene.
+
 ## 2.4.0
 
 Working faster on residues, and sharing without files. Scenes and reports from 2.2 and 2.3 still load;

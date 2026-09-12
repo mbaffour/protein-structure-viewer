@@ -916,7 +916,8 @@ html>body{padding:0}</style>
   <section class="gpv-tool-panel" data-gpv-panel="appearance" hidden>
     <div class="viz-controls">
       <label class="form-label">Representation<select class="form-select" id="gpv-style"><option value="cartoon">Cartoon</option><option value="stick">Sticks</option><option value="sphere">Spheres</option><option value="line">Lines</option></select></label>
-      <label class="form-label">Color scheme<select class="form-select" id="gpv-color-mode"><option value="structure">Per structure</option><option value="chain">Per chain</option><option value="plddt">pLDDT confidence</option><option value="spectrum">Sequence spectrum</option><option value="element">Element</option></select></label>
+      <label class="form-label">Color scheme<select class="form-select" id="gpv-color-mode"><option value="structure">Per structure</option><option value="chain">Per chain</option><option value="plddt">pLDDT confidence</option><option value="deviation">Cα deviation after alignment</option><option value="spectrum">Sequence spectrum</option><option value="element">Element</option></select></label>
+      <label class="form-label">Low confidence<select class="form-select" id="gpv-hide-below" data-tooltip="Hide residues whose pLDDT is below the threshold — in the viewer, every panel and every export"><option value="0">Show every residue</option><option value="50">Hide pLDDT below 50</option><option value="70">Hide pLDDT below 70</option></select></label>
       <label class="form-label">Projection<select class="form-select" id="gpv-projection"><option value="perspective">Perspective</option><option value="orthographic">Orthographic</option></select></label>
       <label class="form-label">Background<select class="form-select" id="gpv-background"><option value="transparent">Transparent</option><option value="white">White</option><option value="dark">Dark</option><option value="custom">Custom</option></select></label>
       <label class="form-label">Custom background<input class="form-control form-control-color" id="gpv-background-color" type="color" value="#ffffff"></label>
@@ -993,7 +994,7 @@ html>body{padding:0}</style>
 
   <section class="gpv-tool-panel" data-gpv-panel="confidence" hidden>
     <div class="gpv-confidence-layout" id="gpv-confidence-panel" hidden>
-      <div><div class="viz-controls"><button class="btn" type="button" id="gpv-confidence-csv">Download confidence CSV</button></div><div class="table-responsive"><table class="table table-sm" aria-label="AlphaFold model confidence metrics"><thead><tr><th>Model</th><th class="text-end">Mean pLDDT</th><th class="text-end">pTM</th><th class="text-end">ipTM</th><th class="text-end">Ranking score</th><th class="text-end">Rank</th><th>Clash</th></tr></thead><tbody id="gpv-metrics"></tbody></table></div></div>
+      <div><div class="viz-controls"><button class="btn" type="button" id="gpv-confidence-csv">Download confidence CSV</button><button class="btn" type="button" id="gpv-profile-svg" disabled data-tooltip="Per-residue pLDDT plot of the displayed models, one panel per chain, as editable SVG">pLDDT profile SVG</button><button class="btn" type="button" id="gpv-profile-png" disabled data-tooltip="The same pLDDT profile rendered at 2× as PNG">pLDDT profile PNG</button></div><div class="table-responsive"><table class="table table-sm" aria-label="AlphaFold model confidence metrics"><thead><tr><th>Model</th><th class="text-end">Mean pLDDT</th><th class="text-end">pTM</th><th class="text-end">ipTM</th><th class="text-end">Ranking score</th><th class="text-end">Rank</th><th>Clash</th></tr></thead><tbody id="gpv-metrics"></tbody></table></div></div>
       <div class="gpv-pae-panel" id="gpv-pae-panel" hidden><div id="gpv-pae-plot" hidden><div class="viz-controls"><button class="btn" type="button" id="gpv-pae-png">Download PAE PNG</button></div><canvas id="gpv-pae" width="420" height="420" role="img" aria-label="Predicted aligned error heatmap"></canvas><div class="gpv-pae-legend text-small"><span>Low error</span><span>PAE (Å)</span><span>High error</span></div><div class="text-small" id="gpv-pae-detail">Move over the heatmap to inspect a residue pair.</div></div><div class="table-responsive" id="gpv-interface-wrap" hidden><table class="table table-sm" aria-label="Chain-pair interface confidence"><thead><tr><th>Chain pair</th><th class="text-end">ipTM</th><th class="text-end">Min PAE (Å)</th></tr></thead><tbody id="gpv-interface-metrics"></tbody></table></div></div>
     </div>
     <h3 class="gpv-subheading">Interfaces</h3>
@@ -1192,6 +1193,7 @@ html>body{padding:0}</style>
   #generic-protein-viewer .gpv-sequence-head button { margin-left: auto; }
   #generic-protein-viewer .gpv-sequence-rows { display: grid; gap: 6px; }
   #generic-protein-viewer .gpv-sequence-row { display: grid; grid-template-columns: 5.5em minmax(0, 1fr); gap: 8px; align-items: center; }
+  #generic-protein-viewer .gpv-sequence-rows.is-multi .gpv-sequence-row { grid-template-columns: 11em minmax(0, 1fr); }
   #generic-protein-viewer .gpv-sequence-row canvas { display: block; width: 100%; height: 30px; border-radius: 4px; cursor: crosshair; touch-action: none; }
   #generic-protein-viewer .gpv-sequence-chain { font-family: var(--font-mono); font-size: var(--font-size-small); color: var(--muted-foreground); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   #generic-protein-viewer .gpv-share-url { font-family: var(--font-mono); font-size: var(--font-size-small); min-width: min(100%, 320px); }
@@ -1337,7 +1339,7 @@ html>body{padding:0}</style>
   let busyDepth = 0;
   let restoreMotion = null;
   const listPageSize = 60;
-  const viewerVersion = '2.4.0';
+  const viewerVersion = '2.5.0';
   const preferenceKey = 'protein-structure-viewer:preferences';
   const themeKey = 'protein-structure-viewer:theme';
   const labelColors = getComputedStyle(root);
@@ -1665,6 +1667,76 @@ html>body{padding:0}</style>
     return sources;
   }
 
+  /* Per-residue pLDDT plot: one panel per chain, one line per displayed model,
+     the four confidence bands shaded behind. */
+  function plddtProfileSvg() {
+    const entries = displayedEntries().filter(entry => entry.model && entry.scores.length).slice(0, 8);
+    const chains = [...new Set(entries.flatMap(entry => residueRows(entry).map(row => row.chain)))].sort(compareChains).slice(0, 12);
+    if (!entries.length || !chains.length) return null;
+    const width = 1200; const left = 72; const right = 30; const top = 64; const rowHeight = 170; const gap = 40; const bottom = 40;
+    const height = top + chains.length * rowHeight + (chains.length - 1) * gap + bottom;
+    const ink = '#111827'; const muted = '#6b7280'; const grid = '#e5e7eb';
+    const parts = [];
+    const text = (x, y, value, size, anchor = 'start', weight = 400, fill = ink, extra = '') => '<text x="' + f(x) + '" y="' + f(y) + '" font-family="' + svgFont + '" font-size="' + size + '" font-weight="' + weight + '" text-anchor="' + anchor + '" fill="' + fill + '"' + extra + '>' + svgEscape(value) + '</text>';
+    parts.push('<g id="title">' + text(left, 32, provenanceValues().title || 'Per-residue pLDDT', 20, 'start', 600) + '</g>');
+    parts.push('<g id="models">');
+    let cursor = width - right;
+    svgMeasure.font = '500 12px ' + svgFont;
+    [...entries].reverse().forEach(entry => {
+      const label = clipText(displayName(entry), 30); const labelWidth = svgMeasure.measureText(label).width;
+      cursor -= labelWidth; parts.push(text(cursor, 34, label, 12, 'start', 500));
+      cursor -= 18; parts.push('<rect x="' + f(cursor) + '" y="24" width="12" height="12" rx="2" fill="' + entry.color + '"/>'); cursor -= 16;
+    });
+    parts.push('</g>');
+    const plotWidth = width - left - right;
+    chains.forEach((chain, index) => {
+      const y0 = top + index * (rowHeight + gap);
+      const rows = entries.map(entry => ({ entry, row: residueRows(entry).find(item => item.chain === chain) })).filter(item => item.row);
+      const minResi = Math.min(...rows.map(item => item.row.residues[0].resi));
+      const maxResi = Math.max(...rows.map(item => item.row.residues[item.row.residues.length - 1].resi));
+      const x = resi => left + (maxResi === minResi ? 0 : (resi - minResi) / (maxResi - minResi) * plotWidth);
+      const y = value => y0 + rowHeight - value / 100 * rowHeight;
+      parts.push('<g id="chain-' + svgEscape(chain || 'none') + '">');
+      [[0, 50, '#ff7d45'], [50, 70, '#ffdb13'], [70, 90, '#65cbf3'], [90, 100, '#0053d6']].forEach(([low, high, color]) => parts.push('<rect x="' + f(left) + '" y="' + f(y(high)) + '" width="' + f(plotWidth) + '" height="' + f(y(low) - y(high)) + '" fill="' + color + '" fill-opacity="0.12"/>'));
+      [0, 50, 70, 90, 100].forEach(value => {
+        parts.push('<line x1="' + f(left) + '" x2="' + f(left + plotWidth) + '" y1="' + f(y(value)) + '" y2="' + f(y(value)) + '" stroke="' + grid + '"/>');
+        parts.push(text(left - 8, y(value) + 4, String(value), 11, 'end', 400, muted));
+      });
+      const step = [10, 20, 25, 50, 100, 200, 250, 500, 1000].find(candidate => (maxResi - minResi) / candidate <= 14) || 1000;
+      for (let resi = Math.ceil(minResi / step) * step; resi <= maxResi; resi += step) {
+        parts.push('<line x1="' + f(x(resi)) + '" x2="' + f(x(resi)) + '" y1="' + f(y0 + rowHeight) + '" y2="' + f(y0 + rowHeight + 4) + '" stroke="' + muted + '"/>');
+        parts.push(text(x(resi), y0 + rowHeight + 17, String(resi), 11, 'middle', 400, muted));
+      }
+      parts.push('<rect x="' + f(left) + '" y="' + f(y0) + '" width="' + f(plotWidth) + '" height="' + f(rowHeight) + '" fill="none" stroke="' + muted + '"/>');
+      parts.push(text(left, y0 - 8, chain ? 'Chain ' + chain : 'Chain —', 13, 'start', 600));
+      parts.push(text(left - 52, y0 + rowHeight / 2, 'pLDDT', 11, 'middle', 400, muted, ' transform="rotate(-90 ' + f(left - 52) + ' ' + f(y0 + rowHeight / 2) + ')"'));
+      rows.forEach(item => {
+        const d = item.row.residues.map((atom, position) => (position ? 'L' : 'M') + f(x(atom.resi)) + ' ' + f(y(Math.max(0, Math.min(100, Number(atom.b) || 0))))).join(' ');
+        parts.push('<path d="' + d + '" fill="none" stroke="' + item.entry.color + '" stroke-width="' + (entries.length > 1 ? 1.6 : 2) + '" stroke-linejoin="round"/>');
+      });
+      parts.push('</g>');
+    });
+    return { svg: svgDocument(width, height, '#ffffff', parts.join('\n')), width, height };
+  }
+
+  function downloadProfileSvg() {
+    const profile = plddtProfileSvg();
+    if (!profile) { announce('No displayed model carries pLDDT scores', 'error'); return; }
+    downloadBlob(profile.svg, 'image/svg+xml', 'plddt-profile.svg');
+    updateStatus('pLDDT profile SVG downloaded');
+  }
+
+  async function downloadProfilePng() {
+    const profile = plddtProfileSvg();
+    if (!profile) { announce('No displayed model carries pLDDT scores', 'error'); return; }
+    const image = await loadImage('data:image/svg+xml;charset=utf-8,' + encodeURIComponent(profile.svg));
+    const scale = 2; const canvas = document.createElement('canvas');
+    canvas.width = profile.width * scale; canvas.height = profile.height * scale;
+    canvas.getContext('2d').drawImage(image, 0, 0, canvas.width, canvas.height);
+    downloadBlob(await new Promise(resolve => canvas.toBlob(resolve, 'image/png')), 'image/png', 'plddt-profile.png');
+    updateStatus('pLDDT profile PNG downloaded');
+  }
+
   function downloadConfidenceCsv() {
     if (!structures.length) { announce('Load a model before exporting confidence metrics', 'error'); return; }
     const sources = confidenceSourcesByEntry();
@@ -1745,11 +1817,32 @@ html>body{padding:0}</style>
     let options = { color: entry.color };
     if (mode === 'chain') options = { colorfunc: atom => chainColor(atom.chain) };
     if (mode === 'plddt') options = { colorfunc: atom => plddtColor(Number(atom.b || 0)) };
+    if (mode === 'deviation') options = { colorfunc: atom => deviationColor(entry, atom) };
     if (mode === 'spectrum') options = { colorscheme: 'spectrum' };
     if (mode === 'element') options = { colorscheme: 'default' };
     if (representation === 'line') options.linewidth = 2;
     style[representation] = options;
     return style;
+  }
+
+  function hideBelow() {
+    return Number(root.querySelector('#gpv-hide-below').value) || 0;
+  }
+
+  /* One place that styles a model the way the viewer shows it, so panels and
+     exports agree with the main view: colour scheme, then the low-confidence cut. */
+  function applyModelStyle(model, entry) {
+    model.setStyle({}, styleFor(entry));
+    const threshold = hideBelow();
+    if (threshold && entry.scores.length) model.setStyle({ predicate: atom => Number(atom.b) < threshold }, {});
+  }
+
+  const residueTag = atom => (atom.chain || '') + '|' + atom.resi;
+  const deviationBands = [[1, '#2563eb', '<1 Å'], [2, '#22c55e', '1–2 Å'], [4, '#eab308', '2–4 Å'], [8, '#f97316', '4–8 Å'], [Infinity, '#dc2626', '≥8 Å']];
+  function deviationColor(entry, atom) {
+    const value = entry.deviations ? entry.deviations.get(residueTag(atom)) : undefined;
+    if (value === undefined) return '#9ca3af';
+    return deviationBands.find(([limit]) => value < limit)[1];
   }
 
   function updateStatus(message = 'Ready') {
@@ -1764,6 +1857,9 @@ html>body{padding:0}</style>
     root.querySelector('#gpv-drop').classList.toggle('is-compact', structures.length > 0);
     root.querySelector('#gpv-report').disabled = structures.length === 0;
     root.querySelector('#gpv-share-link').disabled = !structures.some(entry => entry.fetchId);
+    const scored = structures.some(entry => entry.visible && entry.scores.length);
+    root.querySelector('#gpv-profile-svg').disabled = !scored;
+    root.querySelector('#gpv-profile-png').disabled = !scored;
     root.querySelector('#gpv-image').disabled = structures.length === 0;
     root.querySelector('#gpv-svg').disabled = structures.length === 0;
     root.querySelector('#gpv-video').disabled = structures.length === 0;
@@ -1827,7 +1923,7 @@ html>body{padding:0}</style>
       }
       if (!entry.model) return;
       entry.model.setStyle({}, {});
-      if (shown.has(entry)) entry.model.setStyle({}, styleFor(entry));
+      if (shown.has(entry)) applyModelStyle(entry.model, entry);
     });
     if (broken.length) {
       shown = new Set(displayedEntries());
@@ -2674,6 +2770,7 @@ html>body{padding:0}</style>
   let sequenceDrag = null;
   let sequenceRange = null;
   let sequenceFrame = 0;
+  let sequenceMarks = [];
 
   /* One representative atom per residue (Cα, else P, else the first seen), grouped by chain. */
   function residueRows(entry) {
@@ -2695,14 +2792,25 @@ html>body{padding:0}</style>
     return rows;
   }
 
-  function sequenceEntry() {
+  /* Which models the strip shows: the active one when models are shown one at a
+     time or side by side, otherwise every displayed model (active first). */
+  function sequenceEntries() {
     const shown = displayedEntries().filter(entry => entry.model);
     const active = activeEntry();
-    return shown.includes(active) ? active : shown[0] || null;
+    const first = shown.includes(active) ? active : shown[0];
+    if (!first) return [];
+    if (root.querySelector('#gpv-view-mode').value === 'single' || root.querySelector('#gpv-side-by-side').checked) return [first];
+    return [first, ...shown.filter(entry => entry !== first)].slice(0, 8);
+  }
+
+  function sequenceEntry() {
+    return sequenceEntries()[0] || null;
   }
 
   function sequenceColor(entry, atom) {
-    if (root.querySelector('#gpv-color-mode').value === 'chain') return chainColor(atom.chain);
+    const mode = root.querySelector('#gpv-color-mode').value;
+    if (mode === 'chain') return chainColor(atom.chain);
+    if (mode === 'deviation') return deviationColor(entry, atom);
     return entry.scores.length ? plddtColor(Number(atom.b || 0)) : entry.color;
   }
 
@@ -2722,10 +2830,13 @@ html>body{padding:0}</style>
     const highlighted = new Map();
     selectionRecords.filter(record => record.entryId === entry.id && record.action === 'highlight' && (!record.chain || record.chain === row.chain))
       .forEach(record => record.residues.forEach(resi => highlighted.set(resi, record.color)));
+    const threshold = entry.scores.length ? hideBelow() : 0;
     row.residues.forEach((atom, index) => {
       const x = index * cell;
       context.fillStyle = sequenceColor(entry, atom);
+      context.globalAlpha = threshold && Number(atom.b) < threshold ? 0.22 : 1;
       context.fillRect(x, 4, Math.max(0.5, cell - gap), 12);
+      context.globalAlpha = 1;
       const mark = highlighted.get(atom.resi);
       if (mark) { context.fillStyle = mark; context.fillRect(x, 18, Math.max(0.5, cell - gap), 3); }
       if (labelled.has(atom.resi)) {
@@ -2748,6 +2859,10 @@ html>body{padding:0}</style>
       context.strokeStyle = ink; context.lineWidth = 1.5;
       context.strokeRect(from * cell + 0.75, 1.75, (to - from + 1) * cell - 1.5, 20);
     }
+    sequenceMarks.filter(mark => mark.entryId === entry.id && mark.chain === row.chain).forEach(mark => {
+      const index = row.residues.findIndex(atom => atom.resi === mark.resi);
+      if (index >= 0) { context.strokeStyle = '#d946ef'; context.lineWidth = 2; context.strokeRect(index * cell, 2, Math.max(3, cell), 16); }
+    });
     if (sequenceHover && sequenceHover.entryId === entry.id && sequenceHover.chain === row.chain) {
       const index = row.residues.findIndex(atom => atom.resi === sequenceHover.resi);
       if (index >= 0) { context.strokeStyle = ink; context.lineWidth = 2; context.strokeRect(index * cell, 2, Math.max(3, cell), 16); }
@@ -2755,7 +2870,7 @@ html>body{padding:0}</style>
   }
 
   function sequenceRowFor(canvas) {
-    const entry = entryById(Number(root.querySelector('#gpv-sequence-rows').dataset.entryId));
+    const entry = entryById(Number(canvas.dataset.entryId));
     if (!entry || !entry.model) return null;
     const row = residueRows(entry).find(item => item.chain === canvas.dataset.chain);
     return row ? { entry, row } : null;
@@ -2830,31 +2945,39 @@ html>body{padding:0}</style>
 
   function renderSequence() {
     const wrap = root.querySelector('#gpv-sequence'); const rows = root.querySelector('#gpv-sequence-rows'); const toggle = root.querySelector('#gpv-sequence-toggle');
-    const entry = sequenceEntry();
+    const entries = sequenceEntries();
     const hidden = readJson(sequenceKey, false) === true;
-    wrap.hidden = !entry;
+    wrap.hidden = !entries.length;
     toggle.textContent = hidden ? 'Show sequence' : 'Hide sequence'; toggle.setAttribute('aria-expanded', String(!hidden));
     rows.hidden = hidden;
-    if (!entry || hidden) { rows.replaceChildren(); rows.dataset.entryId = ''; return; }
-    const chains = residueRows(entry);
-    const shownChains = chains.slice(0, sequenceChainLimit);
-    const total = chains.reduce((sum, row) => sum + row.residues.length, 0);
-    const colourNote = root.querySelector('#gpv-color-mode').value === 'chain' ? ' · coloured by chain' : entry.scores.length ? ' · coloured by pLDDT' : '';
-    const chainNote = chains.length > shownChains.length ? ' · first ' + shownChains.length + ' of ' + chains.length + ' chains' : '';
-    root.querySelector('#gpv-sequence-title').textContent = displayName(entry) + ' · ' + total + ' residues' + colourNote + chainNote;
-    if (rows.dataset.entryId !== String(entry.id) || rows.childElementCount !== shownChains.length) {
-      rows.replaceChildren(); rows.dataset.entryId = String(entry.id);
-      shownChains.forEach(row => {
+    if (!entries.length || hidden) { rows.replaceChildren(); rows.dataset.key = ''; return; }
+    const planned = entries.flatMap(entry => residueRows(entry).map(row => ({ entry, row })));
+    const shown = planned.slice(0, sequenceChainLimit);
+    const multi = entries.length > 1;
+    const total = planned.reduce((sum, item) => sum + item.row.residues.length, 0);
+    const mode = root.querySelector('#gpv-color-mode').value;
+    const colourNote = mode === 'chain' ? ' · coloured by chain' : mode === 'deviation' ? ' · coloured by Cα deviation' : entries.some(entry => entry.scores.length) ? ' · coloured by pLDDT' : '';
+    const chainNote = planned.length > shown.length ? ' · first ' + shown.length + ' of ' + planned.length + ' rows' : '';
+    const cut = hideBelow();
+    const cutNote = cut && entries.some(entry => entry.scores.length) ? ' · pLDDT below ' + cut + ' hidden' : '';
+    root.querySelector('#gpv-sequence-title').textContent = (multi ? entries.length + ' models' : displayName(entries[0])) + ' · ' + total + ' residues' + colourNote + cutNote + chainNote;
+    const key = shown.map(item => item.entry.id + ':' + item.row.chain).join(',');
+    rows.classList.toggle('is-multi', multi);
+    if (rows.dataset.key !== key) {
+      rows.replaceChildren(); rows.dataset.key = key;
+      shown.forEach(({ entry, row }) => {
         const line = document.createElement('div'); line.className = 'gpv-sequence-row';
         const name = document.createElement('span'); name.className = 'gpv-sequence-chain';
-        name.textContent = row.chain ? 'Chain ' + row.chain : 'No chain'; name.title = row.residues.length + ' residues';
-        const canvas = document.createElement('canvas'); canvas.dataset.chain = row.chain;
-        canvas.setAttribute('role', 'img'); canvas.setAttribute('aria-label', (row.chain ? 'Chain ' + row.chain : 'Chain') + ', ' + row.residues.length + ' residues');
+        const chainName = row.chain ? 'Chain ' + row.chain : 'No chain';
+        name.textContent = multi ? clipText(displayName(entry), 14) + ' · ' + (row.chain || '—') : chainName;
+        name.title = displayName(entry) + ' · ' + chainName + ' · ' + row.residues.length + ' residues';
+        const canvas = document.createElement('canvas'); canvas.dataset.chain = row.chain; canvas.dataset.entryId = String(entry.id);
+        canvas.setAttribute('role', 'img'); canvas.setAttribute('aria-label', displayName(entry) + ', ' + chainName + ', ' + row.residues.length + ' residues');
         wireSequenceCanvas(canvas);
         line.append(name, canvas); rows.append(line);
       });
     }
-    shownChains.forEach((row, index) => drawSequenceRow(rows.children[index].querySelector('canvas'), entry, row));
+    shown.forEach(({ entry, row }, index) => drawSequenceRow(rows.children[index].querySelector('canvas'), entry, row));
   }
 
   function renderSequenceSoon() {
@@ -3224,7 +3347,7 @@ html>body{padding:0}</style>
         const source = target.atoms[atomIndex];
         if (source) { atom.x = source.x; atom.y = source.y; atom.z = source.z; }
       });
-      panel.model.setStyle({}, styleFor(target));
+      applyModelStyle(panel.model, target);
       drawOverlays(secondary, new Set([target.id]), { width: panel.stage.clientWidth, height: panel.stage.clientHeight }, false);
       const background = backgroundSpec();
       secondary.setBackgroundColor(background.color, background.alpha);
@@ -3253,6 +3376,7 @@ html>body{padding:0}</style>
   }
 
   function restoreCoordinates(shouldRender = true) {
+    structures.forEach(entry => { entry.deviations = null; });
     structures.filter(entry => entry.model).forEach(entry => entry.atoms.forEach((atom, index) => {
       const original = entry.originalAtoms[index];
       /* originalAtoms is cleared when a model is released to reclaim memory. */
@@ -3399,10 +3523,16 @@ html>body{padding:0}</style>
       atom.y = transformed[1] + referenceCenter[1];
       atom.z = transformed[2] + referenceCenter[2];
     });
+    target.deviations = new Map();
+    if (!reference.deviationSamples) reference.deviationSamples = new Map();
     const squaredError = pairs.reduce((sum, pair) => {
       const dx = pair[0].x - pair[1].x;
       const dy = pair[0].y - pair[1].y;
       const dz = pair[0].z - pair[1].z;
+      const distance = Math.sqrt(dx * dx + dy * dy + dz * dz);
+      target.deviations.set(residueTag(pair[1]), distance);
+      const tag = residueTag(pair[0]);
+      reference.deviationSamples.set(tag, [...(reference.deviationSamples.get(tag) || []), distance]);
       return sum + dx * dx + dy * dy + dz * dz;
     }, 0);
     return { count: pairs.length, rmsd: Math.sqrt(squaredError / pairs.length), method: pairing.method, identity: pairing.identity, chainPairs: pairing.chainPairs, name: target.name, reference: reference.name };
@@ -3453,12 +3583,16 @@ html>body{padding:0}</style>
     const targets = visibleEntries().filter(ready);
     restoreCoordinates(false);
     const results = [];
+    reference.deviationSamples = new Map();
     targets.forEach(entry => {
       if (entry !== reference) {
         const result = alignEntry(reference, entry);
         if (result) results.push(result);
       }
     });
+    /* The reference is coloured by its mean deviation across the aligned models. */
+    reference.deviations = new Map([...reference.deviationSamples].map(([tag, list]) => [tag, mean(list)]));
+    reference.deviationSamples = null;
     done();
     showImportErrors(failures);
     alignmentResults = results;
@@ -3605,6 +3739,7 @@ html>body{padding:0}</style>
       projection: root.querySelector('#gpv-projection').value,
       background: root.querySelector('#gpv-background').value,
       backgroundColor: root.querySelector('#gpv-background-color').value,
+      hideBelow: hideBelow(),
       sideBySide: root.querySelector('#gpv-side-by-side').checked,
       syncMode: root.querySelector('#gpv-sync-mode').value,
       leftModel: (structures.find(entry => entry.id === Number(root.querySelector('#gpv-left-model').value)) || {}).name || null,
@@ -3678,7 +3813,15 @@ html>body{padding:0}</style>
       models: shared.map(entry => ({ name: entry.name, fetch: entry.fetchId, visible: entry.visible, color: entry.color, label: entry.label || '' })),
       settings,
       ...sceneOverlays(entryId => ids.has(entryId)),
-      savedViews: []
+      savedViews: savedViews.filter(view => has(view.activeModel) || (view.visibleModels || []).some(has)).map(view => ({
+        ...view,
+        id: undefined,
+        activeModel: has(view.activeModel) ? view.activeModel : shared[0].name,
+        visibleModels: (view.visibleModels || []).filter(has),
+        colors: Object.fromEntries(Object.entries(view.colors || {}).filter(([name]) => has(name))),
+        leftModel: has(view.leftModel) ? view.leftModel : null,
+        comparePanels: (view.comparePanels || []).filter(has)
+      }))
     };
   }
 
@@ -3774,10 +3917,11 @@ html>body{padding:0}</style>
     const settings = scene.settings || {};
     if (['overlay', 'single'].includes(settings.viewMode)) root.querySelector('#gpv-view-mode').value = settings.viewMode;
     if (['cartoon', 'stick', 'sphere', 'line'].includes(settings.representation)) root.querySelector('#gpv-style').value = settings.representation;
-    if (['structure', 'chain', 'plddt', 'spectrum', 'element'].includes(settings.colorMode)) root.querySelector('#gpv-color-mode').value = settings.colorMode;
+    if (['structure', 'chain', 'plddt', 'deviation', 'spectrum', 'element'].includes(settings.colorMode)) root.querySelector('#gpv-color-mode').value = settings.colorMode;
     if (['loaded', 'ranking', 'plddt'].includes(settings.modelOrder)) root.querySelector('#gpv-order').value = settings.modelOrder;
     if (['sequence', 'identifier'].includes(settings.alignmentMode)) root.querySelector('#gpv-alignment-mode').value = settings.alignmentMode;
     if (['perspective', 'orthographic'].includes(settings.projection)) root.querySelector('#gpv-projection').value = settings.projection;
+    if ([0, 50, 70].includes(Number(settings.hideBelow))) root.querySelector('#gpv-hide-below').value = String(Number(settings.hideBelow));
     if (['transparent', 'white', 'dark', 'custom'].includes(settings.background)) root.querySelector('#gpv-background').value = settings.background;
     if (/^#[0-9a-f]{6}$/i.test(settings.backgroundColor || '')) root.querySelector('#gpv-background-color').value = settings.backgroundColor;
     const active = byName.get(settings.activeModel);
@@ -4016,7 +4160,7 @@ html>body{padding:0}</style>
     const active = byName.get(state.activeModel); if (active) activeId = active.id;
     if (['overlay', 'single'].includes(state.viewMode)) root.querySelector('#gpv-view-mode').value = state.viewMode;
     if (['cartoon', 'stick', 'sphere', 'line'].includes(state.representation)) root.querySelector('#gpv-style').value = state.representation;
-    if (['structure', 'chain', 'plddt', 'spectrum', 'element'].includes(state.colorMode)) root.querySelector('#gpv-color-mode').value = state.colorMode;
+    if (['structure', 'chain', 'plddt', 'deviation', 'spectrum', 'element'].includes(state.colorMode)) root.querySelector('#gpv-color-mode').value = state.colorMode;
     if (['perspective', 'orthographic'].includes(state.projection)) root.querySelector('#gpv-projection').value = state.projection;
     if (['transparent', 'white', 'dark', 'custom'].includes(state.background)) root.querySelector('#gpv-background').value = state.background;
     if (/^#[0-9a-f]{6}$/i.test(state.backgroundColor || '')) root.querySelector('#gpv-background-color').value = state.backgroundColor;
@@ -4121,7 +4265,7 @@ html>body{padding:0}</style>
       const model = target.addModel(entry.text, entry.format);
       const atoms = model.selectedAtoms({});
       atoms.forEach((atom, index) => { if (entry.atoms[index]) { atom.x = entry.atoms[index].x; atom.y = entry.atoms[index].y; atom.z = entry.atoms[index].z; } });
-      model.setStyle({}, styleFor(entry));
+      applyModelStyle(model, entry);
     });
     if (overlays) drawOverlays(target, new Set(displayedEntries().map(entry => entry.id)), dimensions);
     target.zoomTo();
@@ -4175,6 +4319,7 @@ html>body{padding:0}</style>
      already names its model, so no model legend), or 'screen'. */
   function legendItems(kind = 'figure') {
     const mode = root.querySelector('#gpv-color-mode').value;
+    if (mode === 'deviation') return { title: 'Cα deviation', items: [...deviationBands.map(([, color, label]) => [color, label]), ['#9ca3af', 'unmatched']] };
     if (mode === 'plddt') return { title: 'pLDDT', items: [['#ff7d45', '<50', 'Very low <50'], ['#ffdb13', '50–70', 'Low 50–70'], ['#65cbf3', '70–90', 'Confident 70–90'], ['#0053d6', '≥90', 'Very high ≥90']] };
     const shown = displayedEntries().filter(entry => entry.model);
     const panelEntries = root.querySelector('#gpv-side-by-side').checked ? comparePanels.map(panel => entryById(panel.entryId)).filter(entry => entry && entry.model) : [];
@@ -4258,7 +4403,7 @@ html>body{padding:0}</style>
     if (!entry.model) materializeEntry(entry);
     const model = target.addModel(entry.text, entry.format);
     model.selectedAtoms({}).forEach((atom, index) => { const source = entry.atoms[index]; if (source) { atom.x = source.x; atom.y = source.y; atom.z = source.z; } });
-    model.setStyle({}, styleFor(entry));
+    applyModelStyle(model, entry);
     if (overlays) drawOverlays(target, new Set([entry.id]), dimensions, false);
     target.zoomTo();
     if (camera && typeof target.setView === 'function') target.setView(camera);
@@ -5492,6 +5637,10 @@ applyBackground();
   root.querySelector('#gpv-report-pae').addEventListener('change', updateReportEstimate);
   root.querySelector('#gpv-report-offline').addEventListener('change', updateReportEstimate);
   root.querySelector('#gpv-confidence-csv').addEventListener('click', downloadConfidenceCsv);
+  root.querySelector('#gpv-profile-svg').addEventListener('click', downloadProfileSvg);
+  root.querySelector('#gpv-profile-png').addEventListener('click', () => { downloadProfilePng().catch(error => announce('Could not render the profile: ' + error.message, 'error')); });
+  root.querySelector('#gpv-hide-below').addEventListener('change', () => { applyStyle(); updateStatus(hideBelow() ? 'Residues with pLDDT below ' + hideBelow() + ' hidden in the viewer, panels and exports' : 'Every residue shown'); });
+  root.querySelector('#gpv-color-mode').addEventListener('change', () => { if (root.querySelector('#gpv-color-mode').value === 'deviation' && !alignmentResults.length) announce('Deviation colouring stays grey until you align: Compare → Align visible'); });
   root.querySelector('#gpv-interface-run').addEventListener('click', analyseInterfaces);
   root.querySelector('#gpv-interface-csv').addEventListener('click', downloadInterfaceCsv);
   root.querySelector('#gpv-interface-cutoff').addEventListener('input', () => { root.querySelector('#gpv-interface-cutoff-value').textContent = Number(root.querySelector('#gpv-interface-cutoff').value).toFixed(1) + ' Å'; });
@@ -5530,7 +5679,11 @@ applyBackground();
     const residues = entry.confidence.tokenResidueIds || [];
     const describe = index => 'token ' + (index + 1) + (chains[index] !== undefined ? ', chain ' + chains[index] : '') + (residues[index] !== undefined ? ', residue ' + residues[index] : '');
     root.querySelector('#gpv-pae-detail').textContent = describe(row) + ' → ' + describe(column) + ' · PAE ' + (value === null ? '—' : value.toFixed(2) + ' Å');
+    const mark = index => chains[index] !== undefined && residues[index] !== undefined ? { entryId: entry.id, chain: String(chains[index]), resi: Number(residues[index]) } : null;
+    sequenceMarks = [mark(row), mark(column)].filter(Boolean);
+    renderSequenceSoon();
   });
+  root.querySelector('#gpv-pae').addEventListener('pointerleave', () => { if (sequenceMarks.length) { sequenceMarks = []; renderSequenceSoon(); } });
   const tabOrder = ['models', 'appearance', 'annotate', 'compare', 'confidence', 'publish'];
   window.addEventListener('keydown', event => {
     const target = event.target;
@@ -5586,7 +5739,11 @@ applyBackground();
     'The sequence strip under the viewer shows every chain coloured by pLDDT. Click a residue to select it for a label, drag across a range to fill the Selections fields, double-click to zoom to it.',
     'Ctrl/⌘+Z undoes the last label, selection, measurement or annotation change; add Shift to redo. The Undo and Redo buttons sit in the Annotate tab.',
     'Publish → Copy share link turns models fetched by ID, plus your camera, colours, labels and annotations, into a URL a reviewer opens directly. Local files are never included.',
-    'Colour by chain uses a fixed palette — chain A is the same blue in every model and panel — and the export legend names each chain.'
+    'Colour by chain uses a fixed palette — chain A is the same blue in every model and panel — and the export legend names each chain.',
+    'Appearance → Low confidence hides residues below pLDDT 50 or 70 everywhere at once: viewer, synchronized panels, PNG and SVG exports.',
+    'After Align visible, colour by Cα deviation to see where the models disagree. Blue is under 1 Å, red is 8 Å or more, grey was not matched.',
+    'Confidence → pLDDT profile SVG plots per-residue confidence for every displayed model, one panel per chain, ready for a supplementary figure.',
+    'In overlay mode the sequence strip shows one row per model and chain, so pLDDT of competing predictions lines up residue by residue. Hovering the PAE heatmap marks both residues on the strip.'
   ];
   let tipIndex = Math.floor(Math.random() * tips.length);
   function renderTip() {

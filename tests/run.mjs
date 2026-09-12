@@ -158,6 +158,14 @@ await step('pLDDT colouring reveals the legend', async () => {
   await page.selectOption('#gpv-color-mode', 'plddt'); await page.waitForTimeout(300);
   if (await page.locator('#gpv-plddt-legend').isHidden()) throw new Error('legend hidden');
 });
+await step('hiding low-confidence residues changes the render', async () => {
+  const before = await page.evaluate(() => document.querySelector('#gpv-stage canvas').toDataURL());
+  await page.selectOption('#gpv-hide-below', '70'); await page.waitForTimeout(600);
+  const after = await page.evaluate(() => document.querySelector('#gpv-stage canvas').toDataURL());
+  if (before === after) throw new Error('the render did not change');
+  if (!/below 70 hidden/.test((await page.locator('#gpv-sequence-title').textContent()) || '')) throw new Error('strip title does not mention the cut');
+  await page.selectOption('#gpv-hide-below', '0'); await page.waitForTimeout(400);
+});
 await step('chain colouring lists the chains in the legend', async () => {
   await page.selectOption('#gpv-color-mode', 'chain'); await page.waitForTimeout(400);
   const legend = page.locator('#gpv-plddt-legend');
@@ -186,6 +194,14 @@ await step('preferences survive a reload', async () => {
 });
 
 group('compare');
+await step('deviation colouring lists its bands after alignment', async () => {
+  await page.selectOption('#gpv-color-mode', 'deviation'); await page.waitForTimeout(500);
+  const text = (await page.locator('#gpv-plddt-legend').textContent()) || '';
+  if (!/Cα deviation/.test(text) || !/<1 Å/.test(text) || !/unmatched/.test(text)) throw new Error('legend text: ' + text);
+  const colours = await page.evaluate(() => { const legend = document.querySelector('#gpv-plddt-legend'); return legend.hidden ? 'hidden' : 'shown'; });
+  if (colours !== 'shown') throw new Error('legend hidden');
+  await page.selectOption('#gpv-color-mode', 'plddt'); await page.waitForTimeout(300);
+});
 await step('sequence-aware alignment reports a non-zero RMSD', async () => {
   await tab('models'); await page.click('#gpv-show-all'); await page.waitForTimeout(500);
   await tab('compare');
@@ -285,6 +301,7 @@ await step('a residue label is added by clicking and edited from its list row', 
   if (await page.locator('#gpv-label-list .gpv-entry').count()) throw new Error('label was not removed');
 });
 await step('the sequence strip shows both chains and selects a residue on click', async () => {
+  await tab('models'); await page.selectOption('#gpv-view-mode', 'single'); await tab('annotate'); await page.waitForTimeout(500);
   const canvases = page.locator('#gpv-sequence-rows canvas');
   if ((await canvases.count()) !== 2) throw new Error('canvases=' + (await canvases.count()));
   const box = await canvases.first().boundingBox();
@@ -300,6 +317,16 @@ await step('the sequence strip shows both chains and selects a residue on click'
   if (!/^\d+-\d+$/.test(range)) throw new Error('range not filled: ' + range);
   if ((await page.inputValue('#gpv-selection-chain')) !== 'B') throw new Error('chain field not filled');
   console.log('       range ' + range + ' of chain B');
+});
+await step('overlay mode gives the strip one row per model and chain', async () => {
+  await tab('models');
+  const previous = await page.inputValue('#gpv-view-mode');
+  await page.selectOption('#gpv-view-mode', 'overlay'); await page.waitForTimeout(700);
+  const rows = await page.locator('#gpv-sequence-rows canvas').count();
+  if (rows !== 6) throw new Error('rows=' + rows);
+  if (!(await page.locator('#gpv-sequence-rows.is-multi').count())) throw new Error('multi-model layout class missing');
+  await page.selectOption('#gpv-view-mode', previous); await tab('annotate'); await page.waitForTimeout(500);
+  if ((await page.locator('#gpv-sequence-rows canvas').count()) !== 2) throw new Error('did not return to a single model');
 });
 await step('undo and redo walk label changes back and forth', async () => {
   await page.fill('#gpv-label-text', 'Undo me'); await page.click('#gpv-add-label'); await page.waitForTimeout(300);
@@ -322,6 +349,18 @@ await tab('confidence');
 await step('the metrics table has a row per model', async () => {
   const rows = await page.locator('#gpv-metrics tr').count();
   if (rows !== 3) throw new Error('rows=' + rows);
+});
+await step('the pLDDT profile SVG has a panel per chain and a path per model', async () => {
+  const download = page.waitForEvent('download', { timeout: 20000 });
+  await page.click('#gpv-profile-svg');
+  const file = join(work, 'plddt-profile.svg'); await (await download).saveAs(file);
+  const svg = await readFile(file, 'utf8');
+  const chains = (svg.match(/<g id="chain-/g) || []).length; const paths = (svg.match(/<path /g) || []).length;
+  console.log('       ' + chains + ' chain panels · ' + paths + ' pLDDT traces');
+  if (chains !== 2) throw new Error('chain panels=' + chains);
+  if (paths < 2) throw new Error('paths=' + paths);
+  const png = page.waitForEvent('download', { timeout: 30000 });
+  await page.click('#gpv-profile-png'); await png;
 });
 await step('confidence CSV downloads', async () => {
   const download = page.waitForEvent('download', { timeout: 20000 });

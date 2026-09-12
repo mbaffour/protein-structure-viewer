@@ -47,19 +47,21 @@ predictions as a single overlay. Large archives load models lazily and skip thei
 ranking-score readout per model. Overlay mode or one-at-a-time mode, with previous/next controls,
 arrow-key navigation, adjustable automatic cycling, and sorting by ranking score or mean pLDDT.
 Source-archive filtering and name/stoichiometry search keep large prediction sets navigable.
-Cartoon, stick, sphere, and line representations; per-structure, per-chain, pLDDT, sequence-spectrum,
-and element colouring; perspective or orthographic projection; transparent, white, dark, or custom
-backgrounds.
+Cartoon, stick, sphere, and line representations; per-structure, per-chain, pLDDT, Cα-deviation,
+sequence-spectrum, and element colouring; a one-step cut that hides residues below pLDDT 50 or 70
+everywhere; perspective or orthographic projection; transparent, white, dark, or custom backgrounds.
 
 **Read the confidence.** Mean pLDDT from Cα B-factors with the standard AlphaFold legend.
 Model-level pTM, ipTM, ranking score, rank, and clash flag, plus chain-pair ipTM and minimum PAE
-when the data is there. Interactive PAE heatmaps with per-token inspection and PNG export, and a
-downloadable confidence-metrics CSV. Interface geometry per model: inter-chain heavy-atom contacts,
+when the data is there. Interactive PAE heatmaps with per-token inspection that marks the residue pair on the sequence
+strip, PNG export, a downloadable confidence-metrics CSV, and a per-residue pLDDT profile figure
+(SVG or PNG, one panel per chain, every displayed model overlaid). Interface geometry per model: inter-chain heavy-atom contacts,
 interface residues, and Shrake–Rupley buried surface area, with one-click highlighting and CSV export.
 
 **Compare.** Sequence-aware Cα alignment (global Needleman–Wunsch per chain pair, greedily matched)
 or strict chain/residue-ID alignment, with per-model aligned-residue count, sequence identity, chain
-mapping, and Cα RMSD, plus a CSV export and a one-click coordinate restore. Synchronized
+mapping, and Cα RMSD, plus a CSV export, a one-click coordinate restore, and a colour scheme that
+paints each residue by its Cα deviation from the reference. Synchronized
 multi-view of up to six models whose cameras follow each other — rotation only, so assemblies of
 different size stay framed, or rotation and zoom for superposed models.
 

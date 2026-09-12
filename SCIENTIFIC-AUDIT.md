@@ -4,7 +4,7 @@ This audit evaluates the viewer as a tool for comparing predicted structures, sh
 interactive review artefact, and preparing visual material for papers and theses. It is not a
 validation of any biological hypothesis, and nothing in the tool should be read as one.
 
-Audited against viewer version 2.4.0.
+Audited against viewer version 2.5.0.
 
 ## What is already strong
 
@@ -24,6 +24,12 @@ Audited against viewer version 2.4.0.
   figure, its comparison panels, and the report agree on what colour a chain is.
 - Share links carry only identifiers the recipient can fetch themselves; coordinates from local files
   never enter a URL.
+- Deviation colouring shows where aligned predictions disagree residue by residue, which is the
+  question a reviewer asks after seeing a single RMSD; unmatched residues are shown as such rather
+  than coloured as agreement. Hiding low-pLDDT residues is a display choice that the sequence strip
+  and the scene manifest both record, so a figure without disordered tails is still reproducible.
+- The pLDDT profile is drawn from the same per-residue values the viewer colours by, with the
+  standard band boundaries, so a profile figure and a coloured structure agree by construction.
   Clicks pick the nearest projected atom, so ribbons are as selectable as spheres.
 - Atom-anchored figure annotations — arrows, lines, residue markers, text callouts, corner titles —
   follow rotation and re-alignment and are drawn into every export and the report, so a figure's

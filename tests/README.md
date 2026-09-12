@@ -40,9 +40,12 @@ PSV_CHROMIUM=/opt/pw-browsers/chromium/chrome-linux/chrome npm test
 - Compare: sequence-aware and identifier alignment, non-zero RMSD against a
   deliberately different model, CSV export, synchronised multi-view with a third panel that
   follows a real drag on the primary, restore
-- Appearance: colour by chain lists the chains in the on-screen legend.
+- Appearance: hiding residues below pLDDT 70 changes the render and is named in the strip title;
+  colour by chain lists the chains in the on-screen legend.
+- Compare: the Cα-deviation colour scheme shows its band legend.
+- Confidence: the pLDDT profile SVG has one panel per chain and a trace per model; the PNG variant downloads.
 - Annotate: the sequence strip lists both chains, a click selects a residue, a drag fills the
-  selection range; undo and redo (keyboard and buttons) walk a label change back and forth;
+  selection range, overlay mode gives one row per model and chain; undo and redo (keyboard and buttons) walk a label change back and forth;
   residue-range highlight, blank chain meaning every chain, rejection of an
   unparseable range, an arrow annotation from two real atom clicks plus a corner title, nudging a
   label right and up, label-every-residue
