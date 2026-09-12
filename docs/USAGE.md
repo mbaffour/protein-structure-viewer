@@ -75,6 +75,11 @@ Shortcuts are suppressed while you are typing in a field.
   Changing a row's colour switches the colour scheme to *Per structure* so the change is visible.
 - Long lists are paged: **Show more** adds another 60 rows.
 
+**Display names.** **Rename** on a model row sets the name that badges, captions, the confidence
+table, annotation names, and the report show. The file name stays underneath as the identifier that
+scene manifests and saved views match on, so renaming never breaks a restore. Clear the field to go
+back to the file name.
+
 ## Appearance tab
 
 Representation (cartoon / sticks / spheres / lines), colour scheme, projection, background, and
@@ -114,6 +119,10 @@ anchored to atoms, so they follow rotation and alignment, and they are drawn int
 comparison PNGs, comparison panels, and the shared report. Remove any one from the list, or clear
 them all. <kbd>Esc</kbd> stops drawing.
 
+Every annotation with text has arrow buttons in its row: they move the label in screen space — left,
+right, up, down — and the offset is stored in model coordinates, so the label stays where you put it
+when the model rotates. Callouts also take a leader length in Å. **Reset** puts a label back.
+
 ## Compare tab
 
 **Alignment.** Choose a reference model and a residue-mapping strategy:
@@ -152,6 +161,15 @@ file provides them. Both export to PNG.
 Read these together with pLDDT rather than instead of it: pLDDT is local and per-residue, PAE and
 ipTM are what speak to domain and chain placement.
 
+**Interfaces.** Pick a model and a contact cutoff (3–6 Å, default 4) and press **Analyse
+interfaces**. For every pair of chains in contact the table lists heavy-atom contacts, residue pairs,
+interface residues on each chain, and buried surface area — the solvent-accessible area each chain
+loses on forming the pair, by Shrake–Rupley with a 1.4 Å probe and 92 points per atom. **Highlight**
+adds the interface residues of a pair as a coloured selection you can manage in the Annotate tab;
+**Download interface CSV** exports the table with the residue lists. This is geometry of the model as
+loaded — it says how the prediction is packed, not whether the interaction exists — so read it next
+to the chain-pair ipTM and PAE above it.
+
 ## Publish tab
 
 **Images.** Choose a size and supersampling factor and export a PNG rendered off-screen at full
@@ -165,7 +183,15 @@ few seconds on a machine with a real GPU and considerably longer without one. A 
 **Comparison figure.** With the synchronized multi-view on, **Download comparison PNG** renders every
 panel at the chosen size and stitches them into one lettered figure with each model's name and mean
 pLDDT in a caption strip. The total is capped at roughly 24 megapixels, so six panels at a large
-size come out smaller per panel than one.
+size come out smaller per panel than one. With *pLDDT legend on exports* ticked and confidence
+colouring active, the four-band legend is drawn onto both kinds of PNG, and the comparison figure gets
+a footer with the legend and your project title.
+
+**Vector figures.** **Download figure SVG** and **Download comparison SVG** write the same figures with
+the molecule as a raster image and everything drawn over it — residue labels, measurements, arrows,
+callouts, markers, corner titles, panel letters, captions, legend — as SVG elements. Open the file in
+Illustrator, Inkscape, or Affinity to restyle type, recolour arrows, or move a label without
+re-rendering.
 
 **Video.** Record a 5, 10, or 15 second WebM of the structure spinning. Chrome and Firefox support
 this; Safari does not, and the viewer will say so.
@@ -182,6 +208,12 @@ one to six synchronized panels (it starts with the panels you had open), pick a 
 every panel forward and backward or cycle automatically, spin and fit them together, switch the
 background, follow your guided views, read pLDDT and PAE for the focused panel, and export a stitched
 lettered PNG or a composite video of their own.
+
+Two controls govern size and portability. **PAE in report** keeps the heatmaps at full detail (up to
+400 × 400), compacts them to 200 × 200, or omits them; the size estimate updates as you switch.
+**Embed 3Dmol.js for offline use** inlines the rendering library — about 1.5 MB — after re-checking it
+against the page's integrity hash, so the report opens with no network at all. Leave it off when the
+recipient will be online and you want the smallest file.
 
 **Provenance.** Fill in the figure title, model source, method and version, and notes. These travel
 into the report header, the caption export, and the scene manifest.

@@ -4,7 +4,7 @@
 
    Usage:  npm install && npm test
    Set PSV_HEADED=1 to watch it run. */
-import { chromium } from 'playwright';
+import { chromium, firefox, webkit } from 'playwright';
 import { createServer } from 'node:http';
 import { mkdtemp, readFile, writeFile } from 'node:fs/promises';
 import { createReadStream, existsSync } from 'node:fs';
@@ -45,22 +45,30 @@ const base = `http://127.0.0.1:${server.address().port}`;
 
 /* ---------- harness ---------- */
 
-const browser = await chromium.launch({
+/* PSV_BROWSER=firefox or webkit runs the same suite in another engine (Playwright's
+   WebKit is the closest headless stand-in for Safari). */
+const engineName = ['chromium', 'firefox', 'webkit'].includes(process.env.PSV_BROWSER) ? process.env.PSV_BROWSER : 'chromium';
+const engine = { chromium, firefox, webkit }[engineName];
+console.log('engine: ' + engineName);
+const browser = await engine.launch({
   headless: process.env.PSV_HEADED !== '1',
   /* PSV_CHROMIUM lets CI or a sandbox point at a Chromium it already has,
      instead of Playwright downloading its own. */
-  ...(process.env.PSV_CHROMIUM ? { executablePath: process.env.PSV_CHROMIUM } : {}),
+  ...(engineName === 'chromium' && process.env.PSV_CHROMIUM ? { executablePath: process.env.PSV_CHROMIUM } : {}),
   /* The viewer needs WebGL; most CI runners have no GPU. */
-  args: ['--use-gl=swiftshader', '--enable-unsafe-swiftshader', '--no-sandbox', '--disable-dev-shm-usage']
+  ...(engineName === 'chromium' ? { args: ['--use-gl=swiftshader', '--enable-unsafe-swiftshader', '--no-sandbox', '--disable-dev-shm-usage'] } : {})
 });
 const page = await browser.newPage({ viewport: { width: 1280, height: 1000 } });
-page.on('pageerror', error => consoleErrors.push('PAGEERROR: ' + error.message));
+let currentStep = 'startup';
+const noteError = text => { consoleErrors.push(text); console.log('       ! [' + currentStep + '] ' + text.split('\n')[0]); };
+page.on('pageerror', error => noteError('PAGEERROR: ' + error.message));
 page.on('console', message => {
   /* The static server has no favicon; that 404 is the harness, not the page. */
-  if (message.type() === 'error' && !/favicon|404/.test(message.text())) consoleErrors.push(message.text());
+  if (message.type() === 'error' && !/favicon|404/.test(message.text())) noteError(message.text());
 });
 
 const step = async (name, body) => {
+  currentStep = name;
   try { await body(); console.log('  ok   ' + name); }
   catch (error) { console.log('  FAIL ' + name + ' :: ' + String(error.message).split('\n')[0]); failures.push(name); }
 };
@@ -107,6 +115,16 @@ await step('search filters the model list', async () => {
   const rows = await page.locator('#gpv-list .gpv-entry').count();
   if (rows !== 1) throw new Error('rows=' + rows);
   await page.fill('#gpv-model-search', ''); await page.waitForTimeout(400);
+});
+
+await step('a model can be given a display name', async () => {
+  await page.click('#gpv-list .gpv-entry button[aria-label^="Rename"]');
+  const input = page.locator('#gpv-list .gpv-entry input[type="text"]');
+  await input.fill('Reference helix'); await input.press('Enter'); await page.waitForTimeout(500);
+  const shown = await page.locator('#gpv-list .gpv-entry .gpv-entry-name').first().textContent();
+  if (shown !== 'Reference helix') throw new Error('row shows ' + shown);
+  const options = await page.locator('#gpv-current option').allTextContents();
+  if (!options.some(text => /Reference helix/.test(text))) throw new Error('model picker did not pick up the name');
 });
 
 group('navigation');
@@ -230,11 +248,18 @@ await step('figure annotations: an arrow from two real atom clicks and a corner 
   if (!(await page.locator('#gpv-stage.is-drawing').count())) throw new Error('drawing mode did not start');
   const box = await page.locator('#gpv-stage').boundingBox();
   await page.mouse.click(box.x + box.width / 2, box.y + box.height / 2); await page.waitForTimeout(500);
-  await page.mouse.click(box.x + box.width / 2 + 25, box.y + box.height / 2 - 20); await page.waitForTimeout(700);
+  /* The second atom must be a different one; probe outward until a click lands. */
+  for (const [dx, dy] of [[25, -20], [40, 0], [0, 35], [-40, 0], [0, -45], [60, 25], [-60, -25]]) {
+    await page.mouse.click(box.x + box.width / 2 + dx, box.y + box.height / 2 + dy); await page.waitForTimeout(500);
+    if (await page.locator('#gpv-annotation-list .gpv-entry').count()) break;
+  }
   const rows = await page.locator('#gpv-annotation-list .gpv-entry').count();
   if (rows !== 1) throw new Error('expected one annotation, found ' + rows + ' · ' + await page.locator('#gpv-annotation-state').textContent());
   await page.fill('#gpv-screen-text', 'A · Test'); await page.click('#gpv-add-screen-text'); await page.waitForTimeout(400);
   if ((await page.locator('#gpv-annotation-list .gpv-entry').count()) !== 2) throw new Error('screen text row missing');
+  if ((await page.locator('#gpv-annotation-list .gpv-nudge').count()) !== 2) throw new Error('nudge controls missing');
+  await page.click('#gpv-annotation-list .gpv-nudge button[aria-label="Move label right"]'); await page.waitForTimeout(300);
+  await page.click('#gpv-annotation-list .gpv-nudge button[aria-label="Move label up"]'); await page.waitForTimeout(300);
   await page.click('#gpv-annotate'); await page.waitForTimeout(200);
   if (await page.locator('#gpv-stage.is-drawing').count()) throw new Error('drawing mode did not stop');
 });
@@ -252,6 +277,23 @@ await step('the metrics table has a row per model', async () => {
 await step('confidence CSV downloads', async () => {
   const download = page.waitForEvent('download', { timeout: 20000 });
   await page.click('#gpv-confidence-csv'); await download;
+});
+
+await step('interface geometry runs on the active model', async () => {
+  await tab('confidence');
+  await page.click('#gpv-interface-run');
+  await page.waitForFunction(() => !document.querySelector('#gpv-interface-run').disabled, null, { timeout: 120000 });
+  const rows = await page.locator('#gpv-contacts-rows tr').count();
+  const state = await page.locator('#gpv-interface-state').textContent();
+  console.log('       ' + state.trim());
+  if (!rows && !/No inter-chain contacts|single chain/.test(state)) throw new Error('no rows and no explanation: ' + state);
+  if (rows) {
+    const before = await page.locator('#gpv-selection-list .gpv-entry').count();
+    await page.click('#gpv-contacts-rows button'); await page.waitForTimeout(600);
+    if ((await page.locator('#gpv-selection-list .gpv-entry').count()) !== before + 2) throw new Error('highlight did not add two selections');
+    const download = page.waitForEvent('download', { timeout: 20000 });
+    await page.click('#gpv-interface-csv'); await download;
+  }
 });
 
 group('publish and export');
@@ -300,6 +342,15 @@ await step('the export button re-enables afterwards', async () => {
   const label = await page.locator('#gpv-image').textContent();
   if (!/Download publication PNG/.test(label)) throw new Error('label not restored: ' + label);
 });
+await step('the publication PNG is not blank', async () => {
+  await page.selectOption('#gpv-export-size', '1200x1200'); await page.selectOption('#gpv-export-scale', '1');
+  const download = page.waitForEvent('download', { timeout: 120000 });
+  await page.click('#gpv-image');
+  const file = join(work, 'publication.png'); await (await download).saveAs(file);
+  const bytes = (await readFile(file)).length;
+  console.log('       ' + (bytes / 1024).toFixed(0) + ' KB');
+  if (bytes < 30000) throw new Error('export is only ' + bytes + ' bytes — likely blank');
+});
 await step('six saved views render a contact sheet', async () => {
   for (let i = 1; i <= 6; i += 1) {
     await page.fill('#gpv-view-name', 'View ' + i);
@@ -332,12 +383,25 @@ await step('the main viewport survived seven off-screen renders', async () => {
   if (!state.payloads.length) throw new Error('no canvas');
   if (state.payloads.every(size => size > 0 && size < 5000)) throw new Error('viewport rendered blank');
 });
+await step('a figure SVG downloads with vector labels', async () => {
+  await tab('publish');
+  await page.selectOption('#gpv-export-size', '1200x1200'); await page.selectOption('#gpv-export-scale', '1');
+  const download = page.waitForEvent('download', { timeout: 120000 });
+  await page.click('#gpv-svg');
+  const file = join(work, 'figure.svg'); await (await download).saveAs(file);
+  const svg = await readFile(file, 'utf8');
+  if (!/^<\?xml/.test(svg) || !/<image /.test(svg) || !/<text /.test(svg)) throw new Error('SVG lacks image or text layers');
+});
 await step('a comparison figure downloads with the multi-view on', async () => {
   await tab('compare'); await page.check('#gpv-side-by-side'); await page.waitForTimeout(1200);
   await tab('publish');
   await page.selectOption('#gpv-export-size', '1200x1200'); await page.selectOption('#gpv-export-scale', '1');
   const download = page.waitForEvent('download', { timeout: 120000 });
   await page.click('#gpv-compare-image'); await download;
+  const vector = page.waitForEvent('download', { timeout: 120000 });
+  await page.click('#gpv-compare-svg');
+  const file = join(work, 'comparison.svg'); await (await vector).saveAs(file);
+  if (!/<image [^>]*x="1200"/.test(await readFile(file, 'utf8'))) throw new Error('comparison SVG lacks a second panel image');
   await tab('compare'); await page.uncheck('#gpv-side-by-side'); await page.waitForTimeout(600);
   await tab('publish');
 });
@@ -362,6 +426,18 @@ await step('a scene manifest round-trips without a hash mismatch', async () => {
   const status = await page.locator('#gpv-state').textContent();
   if (!/Scene restored/.test(status)) throw new Error('status: ' + status);
   if (/hash mismatch/.test(status)) throw new Error('unexpected hash mismatch: ' + status);
+});
+
+await step('an offline report embeds the rendering library', async () => {
+  await page.check('#gpv-report-offline');
+  const download = page.waitForEvent('download', { timeout: 120000 });
+  await page.click('#gpv-report');
+  const file = join(work, 'report-offline.html'); await (await download).saveAs(file);
+  const html = await readFile(file, 'utf8');
+  if (/cdnjs\.cloudflare\.com\/ajax\/libs\/3Dmol/.test(html)) throw new Error('offline report still references the CDN');
+  if (!/\$3Dmol/.test(html)) throw new Error('offline report has no embedded library');
+  console.log('       offline report ' + (html.length / 1048576).toFixed(1) + ' MB');
+  await page.uncheck('#gpv-report-offline');
 });
 
 let reportPath = null;

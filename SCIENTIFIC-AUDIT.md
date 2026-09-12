@@ -4,7 +4,7 @@ This audit evaluates the viewer as a tool for comparing predicted structures, sh
 interactive review artefact, and preparing visual material for papers and theses. It is not a
 validation of any biological hypothesis, and nothing in the tool should be read as one.
 
-Audited against viewer version 2.2.0.
+Audited against viewer version 2.3.0.
 
 ## What is already strong
 
@@ -24,7 +24,14 @@ Audited against viewer version 2.2.0.
   argument does not drift out of register when the view changes.
 - Synchronized multi-view places up to six models in linked viewports. Rotation-only sync keeps
   differently sized models framed; full sync is available for superposed models. A stitched, lettered
-  comparison figure exports the panel set at publication size.
+  comparison figure exports the panel set at publication size, with the pLDDT legend and title.
+- Figures export as SVG with the molecule rasterised and every overlay — labels, arrows, callouts,
+  captions, legend — as editable vector elements, so typography and colour can be finished in a figure
+  editor without re-rendering.
+- Interface geometry — inter-chain heavy-atom contacts, interface residues, Shrake–Rupley buried
+  surface area — is computed from the model as loaded, reported per chain pair with the cutoff used,
+  exportable with residue lists, and framed in the interface as packing of a prediction rather than
+  evidence of an interaction.
 - Cα alignment makes conformational and prediction-to-prediction comparison possible without a desktop
   molecular-graphics package, and reports the chain mapping, aligned count, and identity it used
   rather than only an RMSD number.
@@ -82,7 +89,7 @@ Audited against viewer version 2.2.0.
 
 ## Supply-chain and integrity posture
 
-Reviewers and institutional IT increasingly ask what a browser tool loads and from where. As of 2.2.0:
+Reviewers and institutional IT increasingly ask what a browser tool loads and from where. As of 2.3.0:
 
 - All three runtime libraries (3Dmol.js, JSZip, numeric.js) are pinned by exact version *and*
   Subresource Integrity hash, so a substituted CDN file will refuse to execute.
@@ -92,14 +99,16 @@ Reviewers and institutional IT increasingly ask what a browser tool loads and fr
   `files.rcsb.org` and `alphafold.ebi.ac.uk`, with `object-src`, `frame-src`, `base-uri`, and
   `form-action` all disabled.
 - A library that fails to load is reported to the user rather than leaving a blank page.
+- Offline reports embed 3Dmol.js only after fetching it from the same pinned URL and re-verifying the
+  bytes against the page's SRI hash; a mismatch falls back to the CDN tag and says so.
 
 ## Remaining roadmap
 
 ### P1 — remaining publication refinements
 
-1. **Vector overlays.** Export labels, legends, titles, and scale bars as SVG layered over a
-   high-resolution molecular render. 2.2.0 draws annotations into the raster export; an editable
-   vector layer remains open.
+1. **Vector overlays.** Done in 2.3.0 for labels, measurements, annotations, captions, and the pLDDT
+   legend. A scale bar is not offered: perspective projection makes a single bar misleading, and in
+   orthographic projection the honest equivalent is a measured distance, which the tool already draws.
 2. **Editable measurement labels.** Allow authors to override automatically generated distance and
    angle text.
 3. **Batch style locking.** Explicitly lock molecular scale and orientation across exported panel sets
@@ -107,8 +116,9 @@ Reviewers and institutional IT increasingly ask what a browser tool loads and fr
 
 ### P2 — deeper structural analysis
 
-4. **Interface analysis.** Contact maps, inter-chain contact counts, buried-surface estimates,
-   interface-residue tables, and exportable selections.
+4. **Interface analysis.** Contact counts, interface-residue tables, buried-surface estimates, and
+   highlightable/exportable interface selections landed in 2.3.0. Still open: per-residue contact maps,
+   and comparing interface tables across models of the same complex.
 5. **Membrane context.** Adjustable membrane planes and hydrophobic slab guides — particularly useful
    for holins and other membrane proteins.
 6. **Ensemble summaries.** Cluster models by structural similarity, show representative conformations,
@@ -132,10 +142,11 @@ Reviewers and institutional IT increasingly ask what a browser tool loads and fr
 
 ## Recommended next milestone
 
-The most valuable next release remains **membrane-aware interface analysis**: membrane planes, contact
-maps, interface-residue tables, contact counts, and ensemble clustering. Those additions would be
-especially useful for evaluating holin oligomer models — without implying that a prediction proves
-pore formation.
+With contact counts, interface residues, and buried surface in place, the most valuable next release is
+**membrane context and ensemble summaries**: membrane planes and hydrophobic slab guides for holins and
+other membrane proteins, per-residue contact maps, and clustering of models by structural similarity so
+an interface table can be compared across an ensemble — without implying that a prediction proves pore
+formation.
 
 Wiring the suite into CI (P3.9) should land first or alongside, because interface analysis will touch
 the alignment and selection code, and a suite nobody runs automatically protects nothing.

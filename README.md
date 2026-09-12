@@ -54,7 +54,8 @@ backgrounds.
 **Read the confidence.** Mean pLDDT from Cα B-factors with the standard AlphaFold legend.
 Model-level pTM, ipTM, ranking score, rank, and clash flag, plus chain-pair ipTM and minimum PAE
 when the data is there. Interactive PAE heatmaps with per-token inspection and PNG export, and a
-downloadable confidence-metrics CSV.
+downloadable confidence-metrics CSV. Interface geometry per model: inter-chain heavy-atom contacts,
+interface residues, and Shrake–Rupley buried surface area, with one-click highlighting and CSV export.
 
 **Compare.** Sequence-aware Cα alignment (global Needleman–Wunsch per chain pair, greedily matched)
 or strict chain/residue-ID alignment, with per-model aligned-residue count, sequence identity, chain
@@ -66,10 +67,12 @@ different size stay framed, or rotation and zoom for superposed models.
 custom residue labels, or label every residue in the current model. Highlight or hide chain/residue
 ranges, and add atom-to-atom distance or three-atom angle measurements. Draw figure annotations —
 arrows, lines, residue markers, text callouts, and corner titles — that follow rotation and alignment
-and appear in every export.
+and appear in every export; nudge any label into place and it stays there as the model turns. Give
+models display names for captions.
 
 **Publish.** Fixed-size, supersampled PNG export, a stitched lettered comparison figure of every
-synchronized panel, and 5-, 10-, or 15-second WebM spin-video export. Reusable named views with
+synchronized panel, SVG variants of both with labels, arrows, captions, and the pLDDT legend as
+editable vector layers, and 5-, 10-, or 15-second WebM spin-video export. Reusable named views with
 captions, multi-panel contact-sheet export, and caption-text export.
 Self-contained interactive HTML reports. Reproducible scene manifests carrying SHA-256 structure-file
 hashes, camera, model state, colours, labels, selections, measurements, saved views, comparison and
@@ -87,8 +90,10 @@ The report *is* the figure: it embeds the coordinate data — aligned positions 
 reader show one to six synchronized panels, pick a model per panel, step every panel forward and
 backward, cycle automatically, spin and fit them together, switch the background, follow your saved
 guided views and captions, inspect pLDDT and PAE, and export a stitched PNG or composite video of
-their own. Labels, measurements, and figure annotations travel with it. Like the main viewer it
-loads 3Dmol.js from a CDN when opened.
+their own. Labels, measurements, and figure annotations travel with it. It loads 3Dmol.js from a CDN
+when opened unless you tick *Embed 3Dmol.js for offline use*, which inlines the integrity-verified
+library so the file works with no network. Choose full, compact, or omitted PAE heatmaps to control
+the size.
 
 The Publish tab shows the estimated report size before you build it — embedding a few hundred models
 produces a file that is slow to open, so narrow the selection when the report is for a reviewer.

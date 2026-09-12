@@ -2,6 +2,46 @@
 
 All notable changes to this project are recorded here.
 
+## 2.3.0
+
+Figure-readiness and analysis. Scenes and reports from 2.2 still load; scene manifests gain per-model
+`label` and per-annotation `offset`, `distance`, `dx`, `dy`.
+
+### Added
+
+- **Display names.** Rename any model from the Models list. Badges, comparison captions, the confidence
+  table, annotation names, and the report use the display name; the file name stays as the identifier
+  that scenes and saved views match on.
+- **pLDDT legend on exports.** Publication and comparison PNGs (and their SVG variants) carry the
+  standard four-band legend when colouring by confidence; the comparison figure also prints the project
+  title in a footer strip.
+- **Adjustable annotation placement.** Every label — callout text, arrow and line captions, marker
+  text, corner titles — has arrow buttons that nudge it in screen space; the offset is stored in model
+  space so it stays put when the view rotates. Callouts take an explicit leader length. Offsets round-trip
+  through scene JSON and the report.
+- **Vector figure export.** *Download figure SVG* and *Download comparison SVG* write the rendered
+  molecule as a raster and everything on top of it — residue labels, measurements, arrows, callouts,
+  markers, corner titles, panel letters, captions, legend — as editable SVG elements.
+- **Offline reports.** *Embed 3Dmol.js for offline use* inlines the pinned library into the report after
+  re-verifying it against the page's Subresource Integrity hash, so the file opens with no network.
+- **PAE detail in reports.** Choose full, compact (200 × 200), or omitted heatmaps; the size estimate
+  now accounts for PAE data and the embedded library instead of counting coordinates alone.
+- **Interface geometry.** In the Confidence tab, analyse a model for inter-chain heavy-atom contacts at a
+  chosen cutoff, residue pairs, interface residues per chain, and buried surface area by Shrake–Rupley
+  (1.4 Å probe, 92 points). Highlight a pair's interface residues in one click and export the table
+  with residue lists as CSV.
+- The regression suite runs in Firefox and WebKit as well as Chromium (`PSV_BROWSER=firefox|webkit`),
+  attributes console errors to the step that produced them, checks that exports are not blank, and
+  covers display names, nudging, SVG export, offline reports, and interface analysis.
+
+### Fixed
+
+- **Firefox and WebKit rendered multi-view panels and exports with page errors.** 3Dmol draws every
+  viewer through one shared OffscreenCanvas and transfers a bitmap into each canvas; those engines fail
+  the transfer as soon as a second viewer of a different size exists. They now get a WebGL context of
+  their own per canvas (3Dmol's single-cell grid path); Chromium keeps the shared context. The export
+  surface also no longer asks for 3Dmol's `upscale` mode, which used the same transfer.
+
 ## 2.2.0
 
 A capability release for comparing many predictions at once and for making figures. Scenes and

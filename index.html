@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="referrer" content="no-referrer">
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self' 'unsafe-inline' 'unsafe-eval' 'wasm-unsafe-eval' blob: https://cdnjs.cloudflare.com; style-src 'self' 'unsafe-inline'; img-src 'self' blob: data:; font-src 'self' data:; media-src 'self' blob: data:; connect-src 'self' blob: data: https://files.rcsb.org https://alphafold.ebi.ac.uk; worker-src blob:; frame-src 'none'; object-src 'none'; base-uri 'none'; form-action 'none'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self' 'unsafe-inline' 'unsafe-eval' 'wasm-unsafe-eval' blob: https://cdnjs.cloudflare.com; style-src 'self' 'unsafe-inline'; img-src 'self' blob: data:; font-src 'self' data:; media-src 'self' blob: data:; connect-src 'self' blob: data: https://files.rcsb.org https://alphafold.ebi.ac.uk https://cdnjs.cloudflare.com; worker-src blob:; frame-src 'none'; object-src 'none'; base-uri 'none'; form-action 'none'">
 <title>Protein Structure Viewer</title>
 <meta name="description" content="A single-file, offline-capable browser viewer for AlphaFold and experimental protein structures: overlay, align, measure, inspect confidence, and export publication figures without uploading anything.">
 <meta name="color-scheme" content="light dark">
@@ -991,6 +991,17 @@ html>body{padding:0}</style>
       <div><div class="viz-controls"><button class="btn" type="button" id="gpv-confidence-csv">Download confidence CSV</button></div><div class="table-responsive"><table class="table table-sm" aria-label="AlphaFold model confidence metrics"><thead><tr><th>Model</th><th class="text-end">Mean pLDDT</th><th class="text-end">pTM</th><th class="text-end">ipTM</th><th class="text-end">Ranking score</th><th class="text-end">Rank</th><th>Clash</th></tr></thead><tbody id="gpv-metrics"></tbody></table></div></div>
       <div class="gpv-pae-panel" id="gpv-pae-panel" hidden><div id="gpv-pae-plot" hidden><div class="viz-controls"><button class="btn" type="button" id="gpv-pae-png">Download PAE PNG</button></div><canvas id="gpv-pae" width="420" height="420" role="img" aria-label="Predicted aligned error heatmap"></canvas><div class="gpv-pae-legend text-small"><span>Low error</span><span>PAE (Å)</span><span>High error</span></div><div class="text-small" id="gpv-pae-detail">Move over the heatmap to inspect a residue pair.</div></div><div class="table-responsive" id="gpv-interface-wrap" hidden><table class="table table-sm" aria-label="Chain-pair interface confidence"><thead><tr><th>Chain pair</th><th class="text-end">ipTM</th><th class="text-end">Min PAE (Å)</th></tr></thead><tbody id="gpv-interface-metrics"></tbody></table></div></div>
     </div>
+    <h3 class="gpv-subheading">Interfaces</h3>
+    <p class="text-muted text-small gpv-hint">Geometry of the model as loaded: inter-chain heavy-atom contacts and buried surface area (Shrake–Rupley, 1.4 Å probe, 92 points per atom). A predicted interface is a hypothesis about an interaction, not evidence of one — read it next to the chain-pair ipTM and PAE above.</p>
+    <div class="viz-controls">
+      <label class="form-label gpv-current-label">Model<select class="form-select" id="gpv-interface-model" disabled><option>No models loaded</option></select></label>
+      <label class="form-label gpv-slider-label">Contact cutoff <span id="gpv-interface-cutoff-value">4.0 Å</span><input class="form-range" id="gpv-interface-cutoff" type="range" min="3" max="6" step="0.5" value="4"></label>
+      <button class="btn" type="button" id="gpv-interface-run" disabled><i data-icon="crosshair" aria-hidden="true"></i>Analyse interfaces</button>
+      <button class="btn" type="button" id="gpv-interface-csv" disabled>Download interface CSV</button>
+      <label class="form-label">Highlight colour<input class="form-control form-control-color" id="gpv-interface-color" type="color" value="#e11d48"></label>
+      <span class="text-muted text-small" id="gpv-interface-state"></span>
+    </div>
+    <div class="table-responsive" id="gpv-contacts-wrap" hidden><table class="table table-sm" aria-label="Inter-chain interface geometry"><thead><tr><th>Chain pair</th><th class="text-end">Atom contacts</th><th class="text-end">Residue pairs</th><th class="text-end">Interface residues</th><th class="text-end">Buried surface (Å²)</th><th></th></tr></thead><tbody id="gpv-contacts-rows"></tbody></table></div>
   </section>
 
   <section class="gpv-tool-panel" data-gpv-panel="publish" hidden>
@@ -998,12 +1009,17 @@ html>body{padding:0}</style>
       <label class="form-label">Image size<select class="form-select" id="gpv-export-size"><option value="1200x1200">Square · 1200 × 1200</option><option value="1800x1200" selected>Landscape · 1800 × 1200</option><option value="1200x1800">Portrait · 1200 × 1800</option><option value="2400x1600">Large landscape · 2400 × 1600</option></select></label>
       <label class="form-label">Scale<select class="form-select" id="gpv-export-scale"><option value="1">1×</option><option value="2" selected>2×</option><option value="4">4×</option></select></label>
       <button class="btn" type="button" id="gpv-image" disabled>Download publication PNG</button>
+      <button class="btn" type="button" id="gpv-svg" disabled data-tooltip="Raster molecule with labels, arrows, callouts and legend as editable vector layers">Download figure SVG</button>
       <button class="btn" type="button" id="gpv-compare-image" disabled data-tooltip="Stitch every synchronized panel into one lettered figure at the chosen size">Download comparison PNG</button>
+      <button class="btn" type="button" id="gpv-compare-svg" disabled data-tooltip="The stitched comparison figure with vector captions and annotations">Download comparison SVG</button>
+      <label class="form-check form-switch"><input class="form-check-input" id="gpv-export-legend" type="checkbox" checked><span class="form-check-label">pLDDT legend on exports</span></label>
       <label class="form-label">Video length<select class="form-select" id="gpv-video-length"><option value="5">5 seconds</option><option value="10">10 seconds</option><option value="15">15 seconds</option></select></label>
       <button class="btn" type="button" id="gpv-video" disabled data-tooltip="Record the viewport spinning once, as a WebM file">Record spin video</button>
     </div>
     <div class="viz-controls">
       <label class="form-label gpv-current-label">Report contents<select class="form-select" id="gpv-report-scope"><option value="visible">Models currently shown</option><option value="all">Every loaded model</option></select></label>
+      <label class="form-label">PAE in report<select class="form-select" id="gpv-report-pae"><option value="full">Full detail</option><option value="compact">Compact</option><option value="none">Omit heatmaps</option></select></label>
+      <label class="form-check form-switch"><input class="form-check-input" id="gpv-report-offline" type="checkbox"><span class="form-check-label">Embed 3Dmol.js for offline use</span></label>
       <span class="text-muted text-small" id="gpv-report-size">Load models to estimate the report size.</span>
     </div>
     <div class="viz-controls">
@@ -1063,7 +1079,11 @@ html>body{padding:0}</style>
         <li>Colour by <strong>pLDDT confidence</strong> and switch to <strong>orthographic</strong> projection for publication panels; perspective exaggerates whatever is closest to the camera.</li>
         <li>Run <strong>Align visible</strong>, then enable multi-view with <em>Rotation and zoom</em> to inspect a superposition panel by panel. The shared report carries the aligned coordinates.</li>
         <li>Save named views with captions in <strong>Publish</strong>: they become lettered figure panels, a caption file, and a guided tour inside the report.</li>
-        <li><strong>Download comparison PNG</strong> stitches the current panels into one lettered figure at the export size you chose.</li>
+        <li><strong>Rename</strong> a model in the Models list to give it the name a caption should carry; file names stay as identifiers underneath.</li>
+        <li><strong>Download comparison PNG</strong> stitches the current panels into one lettered figure at the export size you chose; the <strong>SVG</strong> variants keep labels, arrows, captions, and the legend as editable vector layers over the rendered molecule.</li>
+        <li>Nudge any label with the arrow buttons in the annotation list — it moves in screen space and stays put when the model turns. Callouts also take a leader length.</li>
+        <li><strong>Interfaces</strong> in the Confidence tab counts inter-chain contacts and buried surface area for a model, and can highlight the interface residues. Read it next to ipTM and PAE; a predicted contact is not an observed one.</li>
+        <li>Tick <em>Embed 3Dmol.js for offline use</em> before sharing a report that must open without internet; drop the PAE detail to <em>Compact</em> or <em>Omit</em> to keep it small.</li>
         <li>Keep <em>Report contents</em> on <em>Models currently shown</em> for a small file reviewers can open on a laptop; switch to <em>Every loaded model</em> for an archive.</li>
       </ul>
       <div class="viz-controls"><button class="btn btn-ghost" type="button" id="gpv-tips-reset"><i data-icon="info" aria-hidden="true"></i>Show the tips bar again</button></div>
@@ -1110,6 +1130,10 @@ html>body{padding:0}</style>
   #generic-protein-viewer .gpv-view-pane { position: relative; min-width: 0; min-height: 0; }
   #generic-protein-viewer .gpv-view-label { position: absolute; z-index: 2; top: 8px; left: 8px; pointer-events: none; max-width: calc(100% - 16px); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   #generic-protein-viewer .gpv-panel-row .form-select { flex: 1 1 200px; min-width: 0; }
+  #generic-protein-viewer .gpv-entry .form-control:not(.form-control-color) { flex: 1 1 160px; min-width: 0; }
+  #generic-protein-viewer .gpv-nudge { display: inline-flex; gap: 2px; align-items: center; flex: 0 0 auto; }
+  #generic-protein-viewer .gpv-nudge .btn { padding: 2px 8px; }
+  #generic-protein-viewer .gpv-nudge .form-control { width: 64px; flex: 0 0 auto; padding: 2px 6px; }
   #generic-protein-viewer .gpv-hint { margin: -2px 0 10px; }
   #generic-protein-viewer .gpv-subheading { font-size: 0.95rem; margin: 14px 0 4px; }
   #generic-protein-viewer .gpv-stage.is-drawing { outline: 2px dashed var(--primary); outline-offset: -2px; cursor: crosshair; }
@@ -1126,7 +1150,7 @@ html>body{padding:0}</style>
   #generic-protein-viewer .gpv-tool-panel[hidden] { display: none; }
   #generic-protein-viewer .gpv-selected-state { padding: 10px 0; margin-bottom: 8px; border-bottom: 1px solid var(--border); }
   #generic-protein-viewer .gpv-confidence-layout { display: grid; grid-template-columns: minmax(0, 1fr) minmax(240px, 420px); gap: 16px; align-items: start; margin: 0 0 12px; }
-  #generic-protein-viewer .gpv-confidence-layout[hidden], #generic-protein-viewer .gpv-pae-panel[hidden], #generic-protein-viewer #gpv-pae-plot[hidden], #generic-protein-viewer #gpv-interface-wrap[hidden], #generic-protein-viewer #gpv-alignment-wrap[hidden] { display: none; }
+  #generic-protein-viewer .gpv-confidence-layout[hidden], #generic-protein-viewer .gpv-pae-panel[hidden], #generic-protein-viewer #gpv-pae-plot[hidden], #generic-protein-viewer #gpv-interface-wrap[hidden], #generic-protein-viewer #gpv-contacts-wrap[hidden], #generic-protein-viewer #gpv-alignment-wrap[hidden] { display: none; }
   #generic-protein-viewer .gpv-pae-panel { min-width: 0; }
   #generic-protein-viewer .gpv-pae-panel canvas { display: block; width: 100%; height: auto; max-width: 420px; background: var(--muted); }
   #generic-protein-viewer .gpv-pae-legend { display: flex; justify-content: space-between; gap: 8px; margin-top: 4px; color: var(--muted-foreground); }
@@ -1224,11 +1248,16 @@ html>body{padding:0}</style>
     return;
   }
 
-  const viewer = $3Dmol.createViewer(root.querySelector('#gpv-stage'), {
-    backgroundColor: '#ffffff',
-    backgroundAlpha: 0,
-    antialias: true
-  });
+  /* 3Dmol draws every viewer through one shared OffscreenCanvas when the browser has
+     one, transferring a bitmap into each canvas. Firefox and WebKit fail that transfer
+     as soon as a second viewer of a different size exists — the multi-view and export
+     cases — so those engines get a WebGL context of their own per canvas, which is
+     3Dmol's grid path with a single cell. */
+  const directContexts = typeof OffscreenCanvas !== 'undefined' && !(window.chrome && /Chrom/.test(navigator.userAgent));
+  function viewerOptions(extra = {}) {
+    return { backgroundColor: '#ffffff', backgroundAlpha: 0, antialias: true, ...(directContexts ? { row: 0, col: 0, rows: 1, cols: 1 } : {}), ...extra };
+  }
+  const viewer = $3Dmol.createViewer(root.querySelector('#gpv-stage'), viewerOptions());
   const palette = ['#8b5cf6', '#06b6d4', '#f97316', '#22c55e', '#ec4899', '#eab308', '#3b82f6', '#ef4444'];
   let structures = [];
   let animationFrame = 0;
@@ -1246,6 +1275,7 @@ html>body{padding:0}</style>
   let measurementDraft = [];
   let measurementActive = false;
   let annotationRecords = [];
+  let interfaceResults = null;
   let annotationDraft = [];
   let annotationActive = false;
   let savedViews = [];
@@ -1261,7 +1291,7 @@ html>body{padding:0}</style>
   let busyDepth = 0;
   let restoreMotion = null;
   const listPageSize = 60;
-  const viewerVersion = '2.2.0';
+  const viewerVersion = '2.3.0';
   const preferenceKey = 'protein-structure-viewer:preferences';
   const themeKey = 'protein-structure-viewer:theme';
   const labelColors = getComputedStyle(root);
@@ -1452,7 +1482,7 @@ html>body{padding:0}</style>
     structures.forEach(entry => {
       const row = document.createElement('tr');
       const values = [
-        entry.name,
+        displayName(entry),
         formatMetric(mean(entry.scores), 1),
         formatMetric(entry.confidence && entry.confidence.ptm),
         formatMetric(entry.confidence && entry.confidence.iptm),
@@ -1605,6 +1635,10 @@ html>body{padding:0}</style>
     return new Map(structures.map(entry => [entry.id, entry]));
   }
 
+  function displayName(entry) {
+    return entry.label || entry.name;
+  }
+
   function entryById(id) {
     return structures.find(entry => entry.id === id) || null;
   }
@@ -1684,19 +1718,21 @@ html>body{padding:0}</style>
     root.querySelector('#gpv-drop').classList.toggle('is-compact', structures.length > 0);
     root.querySelector('#gpv-report').disabled = structures.length === 0;
     root.querySelector('#gpv-image').disabled = structures.length === 0;
+    root.querySelector('#gpv-svg').disabled = structures.length === 0;
     root.querySelector('#gpv-video').disabled = structures.length === 0;
     root.querySelector('#gpv-save-scene').disabled = structures.length === 0;
     root.querySelector('#gpv-save-view').disabled = structures.length === 0;
     root.querySelector('#gpv-contact-sheet').disabled = savedViews.length === 0;
     root.querySelector('#gpv-captions').disabled = savedViews.length === 0;
     updateReportEstimate();
-    ['#gpv-current', '#gpv-reference', '#gpv-selection-model', '#gpv-left-model', '#gpv-previous', '#gpv-next', '#gpv-cycle', '#gpv-align', '#gpv-restore', '#gpv-add-selection', '#gpv-annotate', '#gpv-add-screen-text'].forEach(selector => {
+    ['#gpv-current', '#gpv-reference', '#gpv-selection-model', '#gpv-left-model', '#gpv-previous', '#gpv-next', '#gpv-cycle', '#gpv-align', '#gpv-restore', '#gpv-add-selection', '#gpv-annotate', '#gpv-add-screen-text', '#gpv-interface-model', '#gpv-interface-run'].forEach(selector => {
       root.querySelector(selector).disabled = structures.length === 0;
     });
     const comparing = root.querySelector('#gpv-side-by-side').checked && comparePanels.length > 0 && structures.length > 0;
     root.querySelector('#gpv-add-panel').disabled = structures.length === 0 || comparePanels.length >= maxComparePanels;
     root.querySelector('#gpv-clear-panels').disabled = comparePanels.length === 0;
     root.querySelector('#gpv-compare-image').disabled = !comparing;
+    root.querySelector('#gpv-compare-svg').disabled = !comparing;
     if (comparing) root.querySelector('#gpv-count').textContent += ' · ' + (comparePanels.length + 1) + ' panels';
   }
 
@@ -1760,14 +1796,14 @@ html>body{padding:0}</style>
   function syncModelControls() {
     if (!structures.length) activeId = null;
     if (structures.length && !structures.some(entry => entry.id === activeId)) activeId = structures[0].id;
-    ['#gpv-current', '#gpv-reference', '#gpv-selection-model', '#gpv-left-model'].forEach(selector => {
+    ['#gpv-current', '#gpv-reference', '#gpv-selection-model', '#gpv-left-model', '#gpv-interface-model'].forEach(selector => {
       const select = root.querySelector(selector);
       const previous = selector === '#gpv-current' ? activeId : (select.value || (selector === '#gpv-left-model' ? activeId : ''));
       select.replaceChildren();
       structures.forEach(entry => {
         const option = document.createElement('option');
         option.value = String(entry.id);
-        option.textContent = (entry.collection ? entry.collection + ' › ' : '') + entry.name;
+        option.textContent = (entry.collection ? entry.collection + ' › ' : '') + displayName(entry);
         select.append(option);
       });
       if (structures.some(entry => String(entry.id) === String(previous))) select.value = String(previous);
@@ -1784,7 +1820,7 @@ html>body{padding:0}</style>
   function filteredStructures() {
     const source = root.querySelector('#gpv-source-filter').value;
     const query = root.querySelector('#gpv-model-search').value.trim().toLowerCase();
-    return structures.filter(entry => (source === 'all' || entry.collection === source) && (!query || (entry.name + ' ' + entry.sourcePath + ' ' + entry.collection).toLowerCase().includes(query)));
+    return structures.filter(entry => (source === 'all' || entry.collection === source) && (!query || (entry.name + ' ' + (entry.label || '') + ' ' + entry.sourcePath + ' ' + entry.collection).toLowerCase().includes(query)));
   }
 
   function renderList() {
@@ -1819,11 +1855,37 @@ html>body{padding:0}</style>
       copy.className = 'gpv-entry-copy';
       const name = document.createElement('span');
       name.className = 'gpv-entry-name';
-      name.textContent = entry.name;
+      name.textContent = displayName(entry);
       const source = document.createElement('span');
       source.className = 'gpv-entry-source text-small';
-      source.textContent = entry.collection || 'Individual files';
+      source.textContent = (entry.label ? entry.name + ' · ' : '') + (entry.collection || 'Individual files');
       copy.append(name, source);
+
+      const rename = document.createElement('button');
+      rename.className = 'btn btn-ghost';
+      rename.type = 'button';
+      rename.textContent = 'Rename';
+      rename.setAttribute('aria-label', 'Rename ' + entry.name);
+      rename.addEventListener('click', () => {
+        const input = document.createElement('input');
+        input.className = 'form-control'; input.type = 'text'; input.maxLength = 120;
+        input.value = displayName(entry); input.placeholder = entry.name;
+        input.setAttribute('aria-label', 'Display name for ' + entry.name);
+        let done = false;
+        const commit = () => {
+          if (done) return; done = true;
+          const value = input.value.trim();
+          entry.label = value && value !== entry.name ? value : '';
+          renderList(); applyStyle();
+          updateStatus(entry.label ? 'Renamed to ' + entry.label : 'Display name reset to the file name');
+        };
+        input.addEventListener('keydown', event => {
+          if (event.key === 'Enter') { event.preventDefault(); commit(); }
+          if (event.key === 'Escape') { event.preventDefault(); done = true; renderList(); }
+        });
+        input.addEventListener('blur', commit);
+        copy.replaceChildren(input); input.focus(); input.select();
+      });
 
       const score = document.createElement('span');
       score.className = 'gpv-entry-score text-small';
@@ -1855,7 +1917,7 @@ html>body{padding:0}</style>
         applyStyle();
       });
 
-      row.append(visibleLabel, copy, score, color, remove);
+      row.append(visibleLabel, copy, score, color, rename, remove);
       list.append(row);
     });
   }
@@ -1874,6 +1936,7 @@ html>body{padding:0}</style>
       sourcePath,
       confidence: {},
       rank: null,
+      label: '',
       scores: [],
       atoms: [],
       originalAtoms: []
@@ -1922,7 +1985,7 @@ html>body{padding:0}</style>
     const average = mean(entry.scores);
     if (activeRow) activeRow.textContent = average === null ? 'pLDDT —' : average.toFixed(1);
     if (fit && entry.model) { viewer.zoomTo({ model: entry.model.getID() }); viewer.render(); }
-    updateStatus('Showing ' + entry.name);
+    updateStatus('Showing ' + displayName(entry));
   }
 
   function selectRelative(delta, fit = true) {
@@ -2110,7 +2173,7 @@ html>body{padding:0}</style>
 
   function pointName(reference) {
     const entry = structures.find(item => item.id === reference.entryId);
-    return (entry ? entry.name : 'Missing model') + ' · ' + (reference.chain || '—') + ':' + reference.resi + ' ' + (reference.atom || 'atom');
+    return (entry ? displayName(entry) : 'Missing model') + ' · ' + (reference.chain || '—') + ':' + reference.resi + ' ' + (reference.atom || 'atom');
   }
 
   function measurementValue(record) {
@@ -2176,14 +2239,31 @@ html>body{padding:0}</style>
     return { x: sum.x / source.length, y: sum.y / source.length, z: sum.z / source.length };
   }
 
+  function shiftBy(position, offset) {
+    if (!offset) return position;
+    return { x: position.x + (offset.x || 0), y: position.y + (offset.y || 0), z: position.z + (offset.z || 0) };
+  }
+
+  /* view[4..7] is the quaternion that turns model space into camera space; rotating a
+     camera axis by its conjugate gives the model-space direction that reads as
+     "screen right" or "screen up" at the current orientation. */
+  function screenAxisInModelSpace(view, axis) {
+    const x = -view[4], y = -view[5], z = -view[6], w = view[7];
+    const ix = w * axis.x + y * axis.z - z * axis.y;
+    const iy = w * axis.y + z * axis.x - x * axis.z;
+    const iz = w * axis.z + x * axis.y - y * axis.x;
+    const iw = -x * axis.x - y * axis.y - z * axis.z;
+    return { x: ix * w - iw * x - iy * z + iz * y, y: iy * w - iw * y - iz * x + ix * z, z: iz * w - iw * z - ix * y + iy * x };
+  }
+
   /* A callout floats outward from the model centre so its leader line clears the structure. */
   function calloutAnchor(point, record) {
     const entry = entryById(record.points[0].entryId);
     const centre = entry ? modelCentroid(entry) : { x: 0, y: 0, z: 0 };
     const direction = { x: point.x - centre.x, y: point.y - centre.y, z: point.z - centre.z };
     const length = Math.hypot(direction.x, direction.y, direction.z) || 1;
-    const distance = 8 * record.size;
-    return { x: point.x + direction.x / length * distance, y: point.y + direction.y / length * distance, z: point.z + direction.z / length * distance };
+    const distance = Number.isFinite(record.distance) ? record.distance : 8 * record.size;
+    return shiftBy({ x: point.x + direction.x / length * distance, y: point.y + direction.y / length * distance, z: point.z + direction.z / length * distance }, record.offset);
   }
 
   function screenTextSpec(record, dimensions, scale) {
@@ -2192,8 +2272,10 @@ html>body{padding:0}</style>
     const height = dimensions && dimensions.height ? dimensions.height : 480;
     const right = record.corner.endsWith('right'); const bottom = record.corner.startsWith('bottom');
     const top = margin + (dimensions && dimensions.topInset ? dimensions.topInset : 0);
+    const x = Math.max(0, Math.min(width, (right ? width - margin : margin) + (record.dx || 0) * scale));
+    const y = Math.max(0, Math.min(height, (bottom ? height - margin : top) + (record.dy || 0) * scale));
     return {
-      ...annotationLabelStyle({ x: right ? width - margin : margin, y: bottom ? height - margin : top, z: 0 }, record, scale),
+      ...annotationLabelStyle({ x, y, z: 0 }, record, scale),
       useScreen: true,
       alignment: (bottom ? 'bottom' : 'top') + (right ? 'Right' : 'Left'),
       fontSize: Math.round(16 * record.size * scale)
@@ -2221,7 +2303,7 @@ html>body{padding:0}</style>
         target.addLabel(record.text || pointName(record.points[0]), annotationLabelStyle(anchor, record, scale));
         return;
       }
-      if (record.text) target.addLabel(record.text, annotationLabelStyle(points.length > 1 ? midpoint(points[0], points[1]) : points[0], record, scale));
+      if (record.text) target.addLabel(record.text, annotationLabelStyle(shiftBy(points.length > 1 ? midpoint(points[0], points[1]) : points[0], record.offset), record, scale));
     });
   }
 
@@ -2230,15 +2312,60 @@ html>body{padding:0}</style>
     return annotationTools[record.type].label + ' · ' + record.points.map(pointName).join(' → ') + (record.text ? ' · "' + record.text + '"' : '');
   }
 
+  function nudgeAnnotation(record, dxScreen, dyScreen) {
+    if (record.type === 'screen') {
+      record.dx = (record.dx || 0) + dxScreen * 12;
+      record.dy = (record.dy || 0) - dyScreen * 12;
+    } else {
+      const view = typeof viewer.getView === 'function' ? viewer.getView() : [0, 0, 0, 0, 0, 0, 0, 1];
+      const step = 1.5 * record.size;
+      const right = screenAxisInModelSpace(view, { x: 1, y: 0, z: 0 });
+      const up = screenAxisInModelSpace(view, { x: 0, y: 1, z: 0 });
+      const offset = record.offset || { x: 0, y: 0, z: 0 };
+      record.offset = {
+        x: offset.x + (right.x * dxScreen + up.x * dyScreen) * step,
+        y: offset.y + (right.y * dxScreen + up.y * dyScreen) * step,
+        z: offset.z + (right.z * dxScreen + up.z * dyScreen) * step
+      };
+    }
+    rebuildOverlays();
+  }
+
+  function annotationHasLabel(record) {
+    return record.type === 'screen' || record.type === 'callout' || Boolean(record.text);
+  }
+
   function renderAnnotationList() {
     const list = root.querySelector('#gpv-annotation-list'); list.replaceChildren();
     annotationRecords.forEach(record => {
       const row = document.createElement('div'); row.className = 'gpv-entry';
       const swatch = document.createElement('i'); swatch.className = 'gpv-swatch'; swatch.style.background = record.color;
       const label = document.createElement('span'); label.className = 'gpv-entry-name'; label.textContent = annotationSummary(record);
+      row.append(swatch, label);
+      if (annotationHasLabel(record)) {
+        const nudge = document.createElement('span'); nudge.className = 'gpv-nudge';
+        nudge.setAttribute('role', 'group'); nudge.setAttribute('aria-label', 'Move the label');
+        [['←', 'Move label left', -1, 0], ['→', 'Move label right', 1, 0], ['↑', 'Move label up', 0, 1], ['↓', 'Move label down', 0, -1]].forEach(([glyph, title, dx, dy]) => {
+          const button = document.createElement('button'); button.className = 'btn btn-ghost'; button.type = 'button'; button.textContent = glyph;
+          button.setAttribute('aria-label', title); button.title = title;
+          button.addEventListener('click', () => nudgeAnnotation(record, dx, dy));
+          nudge.append(button);
+        });
+        if (record.type === 'callout') {
+          const distance = document.createElement('input'); distance.className = 'form-control'; distance.type = 'number'; distance.min = '2'; distance.max = '60'; distance.step = '1';
+          distance.value = String(Number.isFinite(record.distance) ? record.distance : Math.round(8 * record.size));
+          distance.title = 'Leader length in Å'; distance.setAttribute('aria-label', 'Leader length in angstroms');
+          distance.addEventListener('change', () => { record.distance = Math.max(2, Math.min(60, Number(distance.value) || 8)); rebuildOverlays(); });
+          nudge.append(distance);
+        }
+        const reset = document.createElement('button'); reset.className = 'btn btn-ghost'; reset.type = 'button'; reset.textContent = 'Reset'; reset.title = 'Put the label back where it started';
+        reset.addEventListener('click', () => { record.offset = { x: 0, y: 0, z: 0 }; record.dx = 0; record.dy = 0; record.distance = null; renderAnnotationList(); rebuildOverlays(); });
+        nudge.append(reset);
+        row.append(nudge);
+      }
       const remove = document.createElement('button'); remove.className = 'btn btn-ghost'; remove.type = 'button'; remove.textContent = 'Remove';
       remove.addEventListener('click', () => { annotationRecords = annotationRecords.filter(item => item.id !== record.id); renderAnnotationList(); rebuildOverlays(); updateStatus('Annotation removed'); });
-      row.append(swatch, label, remove); list.append(row);
+      row.append(remove); list.append(row);
     });
   }
 
@@ -2262,7 +2389,7 @@ html>body{padding:0}</style>
     const type = root.querySelector('#gpv-annotation-type').value;
     const needed = annotationTools[type].points;
     if (annotationDraft.length < needed) { root.querySelector('#gpv-annotation-state').textContent = annotationPrompt(); return; }
-    annotationRecords.push({ id: nextAnnotationId++, type, points: annotationDraft.slice(0, needed), ...annotationSettings() });
+    annotationRecords.push({ id: nextAnnotationId++, type, points: annotationDraft.slice(0, needed), ...annotationSettings(), offset: { x: 0, y: 0, z: 0 }, distance: null });
     annotationDraft = [];
     renderAnnotationList(); rebuildOverlays();
     root.querySelector('#gpv-annotation-state').textContent = annotationTools[type].label + ' added. ' + annotationPrompt();
@@ -2273,7 +2400,7 @@ html>body{padding:0}</style>
     const text = root.querySelector('#gpv-screen-text').value.trim();
     if (!text) { updateStatus('Type the screen text first'); return; }
     const settings = annotationSettings();
-    annotationRecords.push({ id: nextAnnotationId++, type: 'screen', points: [], text, color: settings.color, size: settings.size, dashed: false, corner: root.querySelector('#gpv-screen-corner').value });
+    annotationRecords.push({ id: nextAnnotationId++, type: 'screen', points: [], text, color: settings.color, size: settings.size, dashed: false, corner: root.querySelector('#gpv-screen-corner').value, dx: 0, dy: 0 });
     root.querySelector('#gpv-screen-text').value = '';
     renderAnnotationList(); rebuildOverlays(); updateStatus('Screen text added');
   }
@@ -2343,6 +2470,168 @@ html>body{padding:0}</style>
     root.querySelector('#gpv-measure').textContent = measurementActive ? 'Stop measuring' : 'Start measuring';
     const required = root.querySelector('#gpv-measure-type').value === 'angle' ? 3 : 2;
     root.querySelector('#gpv-measure-state').textContent = measurementActive ? 'Select ' + required + ' atoms in the viewer.' : 'Measurement mode is off.';
+  }
+
+  /* ---------- Interface geometry ---------- */
+
+  const vdwRadii = { C: 1.7, N: 1.55, O: 1.52, S: 1.8, P: 1.8, SE: 1.9, F: 1.47, CL: 1.75, BR: 1.85, I: 1.98 };
+  const probeRadius = 1.4;
+  /* 92 points on a unit sphere by golden-angle spiral — the classic Shrake–Rupley count. */
+  const spherePoints = Array.from({ length: 92 }, (_, index) => {
+    const y = 1 - (index / 91) * 2; const r = Math.sqrt(Math.max(0, 1 - y * y)); const theta = Math.PI * (3 - Math.sqrt(5)) * index;
+    return [Math.cos(theta) * r, y, Math.sin(theta) * r];
+  });
+
+  function atomElement(atom) {
+    return String(atom.elem || (atom.atom || '').replace(/[^A-Za-z]/g, '').slice(0, 1)).toUpperCase();
+  }
+
+  function atomRadius(atom) {
+    return vdwRadii[atomElement(atom)] || 1.7;
+  }
+
+  function heavyAtoms(entry) {
+    return entry.atoms.filter(atom => atomElement(atom) !== 'H' && atomElement(atom) !== 'D');
+  }
+
+  function spatialGrid(atoms, cell) {
+    const cells = new Map();
+    const keyOf = (x, y, z) => x + ',' + y + ',' + z;
+    atoms.forEach((atom, index) => {
+      const key = keyOf(Math.floor(atom.x / cell), Math.floor(atom.y / cell), Math.floor(atom.z / cell));
+      if (!cells.has(key)) cells.set(key, []);
+      cells.get(key).push(index);
+    });
+    return {
+      near(atom) {
+        const cx = Math.floor(atom.x / cell); const cy = Math.floor(atom.y / cell); const cz = Math.floor(atom.z / cell);
+        const out = [];
+        for (let dx = -1; dx <= 1; dx += 1) for (let dy = -1; dy <= 1; dy += 1) for (let dz = -1; dz <= 1; dz += 1) {
+          const bucket = cells.get(keyOf(cx + dx, cy + dy, cz + dz)); if (bucket) out.push(...bucket);
+        }
+        return out;
+      }
+    };
+  }
+
+  function squaredDistance(a, b) {
+    return (a.x - b.x) ** 2 + (a.y - b.y) ** 2 + (a.z - b.z) ** 2;
+  }
+
+  function solventAccessibleArea(atoms) {
+    const radii = atoms.map(atom => atomRadius(atom) + probeRadius);
+    const grid = spatialGrid(atoms, 2 * Math.max(...radii, 1));
+    let total = 0;
+    atoms.forEach((atom, index) => {
+      const radius = radii[index];
+      const neighbours = grid.near(atom).filter(other => other !== index && squaredDistance(atom, atoms[other]) < (radius + radii[other]) ** 2);
+      let exposed = 0;
+      for (const point of spherePoints) {
+        const x = atom.x + point[0] * radius; const y = atom.y + point[1] * radius; const z = atom.z + point[2] * radius;
+        let buried = false;
+        for (const other of neighbours) {
+          const candidate = atoms[other]; const limit = radii[other] * radii[other];
+          if ((x - candidate.x) ** 2 + (y - candidate.y) ** 2 + (z - candidate.z) ** 2 < limit) { buried = true; break; }
+        }
+        if (!buried) exposed += 1;
+      }
+      total += 4 * Math.PI * radius * radius * exposed / spherePoints.length;
+    });
+    return total;
+  }
+
+  function contactSummary(atoms, cutoff) {
+    const grid = spatialGrid(atoms, cutoff);
+    const limit = cutoff * cutoff;
+    const pairs = new Map();
+    atoms.forEach((atom, index) => {
+      const chain = atom.chain || '';
+      grid.near(atom).forEach(other => {
+        if (other <= index) return;
+        const partner = atoms[other]; const partnerChain = partner.chain || '';
+        if (partnerChain === chain || squaredDistance(atom, partner) > limit) return;
+        const [first, second] = chain < partnerChain ? [atom, partner] : [partner, atom];
+        const key = (first.chain || '') + '|' + (second.chain || '');
+        if (!pairs.has(key)) pairs.set(key, { chains: [first.chain || '', second.chain || ''], contacts: 0, residuePairs: new Set(), residuesA: new Set(), residuesB: new Set() });
+        const record = pairs.get(key);
+        record.contacts += 1;
+        record.residuePairs.add(first.resi + '|' + second.resi);
+        record.residuesA.add(first.resi); record.residuesB.add(second.resi);
+      });
+    });
+    return [...pairs.values()].sort((a, b) => b.contacts - a.contacts);
+  }
+
+  async function analyseInterfaces() {
+    const entry = entryById(Number(root.querySelector('#gpv-interface-model').value)) || activeEntry();
+    if (!entry) return;
+    const cutoff = Number(root.querySelector('#gpv-interface-cutoff').value) || 4;
+    const button = root.querySelector('#gpv-interface-run'); const state = root.querySelector('#gpv-interface-state');
+    const done = setBusy('Analysing interfaces…');
+    button.disabled = true; state.textContent = 'Finding contacts…';
+    await afterPaint();
+    try {
+      if (!entry.model) materializeEntry(entry);
+      const atoms = heavyAtoms(entry);
+      const chains = [...new Set(atoms.map(atom => atom.chain || ''))];
+      if (chains.length < 2) { interfaceResults = { entryId: entry.id, cutoff, rows: [] }; renderInterfaceResults(); state.textContent = displayName(entry) + ' has a single chain — no inter-chain interface to measure.'; return; }
+      const rows = contactSummary(atoms, cutoff);
+      const byChain = new Map(chains.map(chain => [chain, atoms.filter(atom => (atom.chain || '') === chain)]));
+      const soloArea = new Map();
+      for (let index = 0; index < rows.length; index += 1) {
+        const row = rows[index];
+        state.textContent = 'Buried surface for ' + row.chains.join('–') + ' (' + (index + 1) + ' / ' + rows.length + ')…';
+        await afterPaint();
+        row.chains.forEach(chain => { if (!soloArea.has(chain)) soloArea.set(chain, solventAccessibleArea(byChain.get(chain))); });
+        const together = solventAccessibleArea(byChain.get(row.chains[0]).concat(byChain.get(row.chains[1])));
+        row.bsa = Math.max(0, soloArea.get(row.chains[0]) + soloArea.get(row.chains[1]) - together);
+      }
+      interfaceResults = { entryId: entry.id, cutoff, rows };
+      renderInterfaceResults();
+      state.textContent = rows.length ? rows.length + ' chain pair' + (rows.length === 1 ? '' : 's') + ' in contact at ' + cutoff.toFixed(1) + ' Å · ' + displayName(entry) : 'No inter-chain contacts within ' + cutoff.toFixed(1) + ' Å.';
+      announce('Interface analysis finished · ' + rows.length + ' chain pair' + (rows.length === 1 ? '' : 's'));
+    } catch (error) {
+      announce('Interface analysis failed: ' + error.message, 'error');
+    } finally {
+      done(); button.disabled = structures.length === 0;
+    }
+  }
+
+  function renderInterfaceResults() {
+    const wrap = root.querySelector('#gpv-contacts-wrap'); const body = root.querySelector('#gpv-contacts-rows'); body.replaceChildren();
+    const rows = interfaceResults ? interfaceResults.rows : [];
+    wrap.hidden = rows.length === 0;
+    root.querySelector('#gpv-interface-csv').disabled = rows.length === 0;
+    rows.forEach(row => {
+      const tr = document.createElement('tr');
+      const cells = [row.chains.join(' – '), String(row.contacts), String(row.residuePairs.size), row.residuesA.size + ' + ' + row.residuesB.size, Number.isFinite(row.bsa) ? row.bsa.toFixed(0) : '—'];
+      cells.forEach((value, index) => { const cell = document.createElement(index === 0 ? 'th' : 'td'); cell.textContent = value; if (index > 0) cell.className = 'text-end'; tr.append(cell); });
+      const action = document.createElement('td');
+      const highlight = document.createElement('button'); highlight.className = 'btn btn-ghost'; highlight.type = 'button'; highlight.textContent = 'Highlight';
+      highlight.addEventListener('click', () => highlightInterface(row));
+      action.append(highlight); tr.append(action); body.append(tr);
+    });
+  }
+
+  function highlightInterface(row) {
+    const entryId = interfaceResults.entryId; const color = root.querySelector('#gpv-interface-color').value;
+    const entry = entryById(entryId); if (!entry) return;
+    [[row.chains[0], row.residuesA], [row.chains[1], row.residuesB]].forEach(([chain, residues]) => {
+      selectionRecords.push({ id: nextAnnotationId++, entryId, chain, residues: [...residues].sort((a, b) => a - b), action: 'highlight', color });
+    });
+    if (!entry.visible) entry.visible = true;
+    renderSelectionList(); renderList(); applyStyle();
+    updateStatus('Interface ' + row.chains.join('–') + ' highlighted on ' + displayName(entry) + ' · manage it in the Annotate tab');
+  }
+
+  function downloadInterfaceCsv() {
+    if (!interfaceResults || !interfaceResults.rows.length) return;
+    const entry = entryById(interfaceResults.entryId);
+    const quote = value => '"' + String(value).replace(/"/g, '""') + '"';
+    const lines = [['model', 'chain_a', 'chain_b', 'cutoff_angstrom', 'atom_contacts', 'residue_pairs', 'interface_residues_a', 'interface_residues_b', 'buried_surface_area_A2', 'residues_a', 'residues_b'].join(',')];
+    interfaceResults.rows.forEach(row => lines.push([entry ? entry.name : '', row.chains[0], row.chains[1], interfaceResults.cutoff, row.contacts, row.residuePairs.size, row.residuesA.size, row.residuesB.size, Number.isFinite(row.bsa) ? row.bsa.toFixed(1) : '', [...row.residuesA].sort((a, b) => a - b).join(' '), [...row.residuesB].sort((a, b) => a - b).join(' ')].map(quote).join(',')));
+    downloadBlob(lines.join('\n'), 'text/csv', 'interface-geometry.csv');
+    announce('Interface CSV downloaded');
   }
 
   /* ---------- Synchronized multi-view ---------- */
@@ -2475,7 +2764,7 @@ html>body{padding:0}</style>
       const row = document.createElement('div'); row.className = 'gpv-entry gpv-panel-row';
       const name = document.createElement('span'); name.className = 'gpv-entry-score'; name.textContent = 'Panel ' + (index + 2);
       const select = document.createElement('select'); select.className = 'form-select'; select.setAttribute('aria-label', 'Model shown in panel ' + (index + 2));
-      structures.forEach(entry => select.append(new Option((entry.collection ? entry.collection + ' › ' : '') + entry.name, String(entry.id))));
+      structures.forEach(entry => select.append(new Option((entry.collection ? entry.collection + ' › ' : '') + displayName(entry), String(entry.id))));
       select.value = String(panel.entryId);
       select.disabled = !structures.length;
       select.addEventListener('change', () => {
@@ -2506,7 +2795,7 @@ html>body{padding:0}</style>
     pane.append(label, stage);
     root.querySelector('#gpv-view-grid').append(pane);
     panel.element = pane; panel.stage = stage; panel.label = label;
-    panel.viewer = $3Dmol.createViewer(stage, { backgroundColor: '#ffffff', backgroundAlpha: 0, antialias: true });
+    panel.viewer = $3Dmol.createViewer(stage, viewerOptions());
     panel.observer = new ResizeObserver(() => { if (panel.viewer) panel.viewer.resize(); });
     panel.observer.observe(stage);
     return panel.viewer;
@@ -2522,7 +2811,7 @@ html>body{padding:0}</style>
     grid.dataset.panes = String(enabled ? 1 + comparePanels.length : 1);
     if (!enabled) { comparePanels.forEach(destroyPanelViewer); return; }
     const primary = activeEntry();
-    label.textContent = primary ? primary.name : 'Primary';
+    label.textContent = primary ? displayName(primary) : 'Primary';
     label.title = primary ? primary.name : '';
     const shown = new Set(displayedEntries());
     const broken = [];
@@ -2530,7 +2819,7 @@ html>body{padding:0}</style>
       const target = entryById(panel.entryId);
       const secondary = ensurePanelViewer(panel, index);
       secondary.removeAllModels(); secondary.removeAllLabels(); secondary.removeAllShapes();
-      panel.label.textContent = target ? target.name : 'Empty panel';
+      panel.label.textContent = target ? displayName(target) : 'Empty panel';
       panel.label.title = target ? target.name : '';
       if (!target) return;
       /* Without this, a lazily-loaded model has no atoms of its own and the clone
@@ -2904,7 +3193,8 @@ html>body{padding:0}</style>
       sourcePath: entry.sourcePath,
       sha256: entry.hash || await sha256(entry.text),
       visible: entry.visible,
-      color: entry.color
+      color: entry.color,
+      label: entry.label || ''
     })));
     const active = activeEntry();
     const reference = structures.find(entry => entry.id === Number(root.querySelector('#gpv-reference').value));
@@ -2944,7 +3234,7 @@ html>body{padding:0}</style>
       })),
       selections: selectionRecords.map(record => ({ model: (structures.find(entry => entry.id === record.entryId) || {}).name, chain: record.chain, residues: record.residues, action: record.action, color: record.color })),
       measurements: measurementRecords.map(record => ({ type: record.type, points: record.points.map(point => ({ model: (structures.find(entry => entry.id === point.entryId) || {}).name, chain: point.chain, resi: point.resi, atom: point.atom, index: point.index })) })),
-      annotations: annotationRecords.map(record => ({ type: record.type, text: record.text, color: record.color, size: record.size, dashed: record.dashed, corner: record.corner, points: record.points.map(point => ({ model: (structures.find(entry => entry.id === point.entryId) || {}).name, chain: point.chain, resi: point.resi, atom: point.atom, index: point.index })) })),
+      annotations: annotationRecords.map(record => ({ type: record.type, text: record.text, color: record.color, size: record.size, dashed: record.dashed, corner: record.corner, offset: record.offset, distance: record.distance, dx: record.dx, dy: record.dy, points: record.points.map(point => ({ model: (structures.find(entry => entry.id === point.entryId) || {}).name, chain: point.chain, resi: point.resi, atom: point.atom, index: point.index })) })),
       savedViews: savedViews.map(view => ({ ...view }))
     };
     downloadBlob(JSON.stringify(scene, null, 2), 'application/json', 'protein-viewer-scene.json');
@@ -2960,6 +3250,7 @@ html>body{padding:0}</style>
       if (!entry) continue;
       entry.visible = modelRecord.visible !== false;
       if (/^#[0-9a-f]{6}$/i.test(modelRecord.color || '')) entry.color = modelRecord.color;
+      if (typeof modelRecord.label === 'string') entry.label = modelRecord.label.trim().slice(0, 120);
       if (modelRecord.sha256) {
         const actual = entry.hash || await sha256(entry.text);
         if (actual && actual !== modelRecord.sha256) hashWarnings += 1;
@@ -2997,7 +3288,8 @@ html>body{padding:0}</style>
       if (!type) return null;
       const points = (record.points || []).map(point => { const entry = byName.get(point.model); return entry ? { entryId: entry.id, chain: point.chain || '', resi: point.resi, atom: point.atom || '', index: point.index } : null; }).filter(Boolean);
       if (type !== 'screen' && points.length < annotationTools[type].points) return null;
-      return { id: nextAnnotationId++, type, points, text: String(record.text || ''), color: /^#[0-9a-f]{6}$/i.test(record.color || '') ? record.color : '#f97316', size: Math.min(3, Math.max(0.5, Number(record.size) || 1)), dashed: record.dashed === true, corner: screenCorners.includes(record.corner) ? record.corner : 'top-left' };
+      const offset = record.offset && ['x', 'y', 'z'].every(axis => Number.isFinite(Number(record.offset[axis]))) ? { x: Number(record.offset.x), y: Number(record.offset.y), z: Number(record.offset.z) } : { x: 0, y: 0, z: 0 };
+      return { id: nextAnnotationId++, type, points, text: String(record.text || ''), color: /^#[0-9a-f]{6}$/i.test(record.color || '') ? record.color : '#f97316', size: Math.min(3, Math.max(0.5, Number(record.size) || 1)), dashed: record.dashed === true, corner: screenCorners.includes(record.corner) ? record.corner : 'top-left', offset, distance: Number.isFinite(Number(record.distance)) ? Number(record.distance) : null, dx: Number(record.dx) || 0, dy: Number(record.dy) || 0 };
     }).filter(Boolean);
     savedViews = (scene.savedViews || []).map(view => ({ ...view, id: nextAnnotationId++ }));
     root.querySelector('#gpv-all-labels').checked = settings.allResidueLabels === true;
@@ -3278,7 +3570,10 @@ html>body{padding:0}</style>
     exportSurface.style.width = width + 'px';
     exportSurface.style.height = height + 'px';
     if (!exportViewer) {
-      exportViewer = $3Dmol.createViewer(exportSurface, { backgroundColor: '#ffffff', backgroundAlpha: 0, antialias: true, upscale: true });
+      /* No `upscale`: 3Dmol implements it through an OffscreenCanvas bitmap transfer that
+         fails in Firefox and WebKit, leaving a blank export. The surface is already
+         created at the requested output size, so nothing is lost. */
+      exportViewer = $3Dmol.createViewer(exportSurface, viewerOptions());
     } else {
       exportViewer.removeAllModels();
       exportViewer.removeAllLabels();
@@ -3299,7 +3594,7 @@ html>body{padding:0}</style>
     exportViewer = null;
   }
 
-  async function renderPublicationImage(state = null, dimensions = exportDimensions()) {
+  async function renderPublicationImage(state = null, dimensions = exportDimensions(), overlays = true) {
     const restore = state ? captureViewState() : null;
     if (state) applyViewState(state);
     const target = acquireExportViewer(dimensions.width, dimensions.height);
@@ -3313,7 +3608,7 @@ html>body{padding:0}</style>
       atoms.forEach((atom, index) => { if (entry.atoms[index]) { atom.x = entry.atoms[index].x; atom.y = entry.atoms[index].y; atom.z = entry.atoms[index].z; } });
       model.setStyle({}, styleFor(entry));
     });
-    drawOverlays(target, new Set(displayedEntries().map(entry => entry.id)), dimensions);
+    if (overlays) drawOverlays(target, new Set(displayedEntries().map(entry => entry.id)), dimensions);
     target.zoomTo();
     if (typeof viewer.getView === 'function' && typeof target.setView === 'function') target.setView(viewer.getView());
     target.render();
@@ -3333,7 +3628,7 @@ html>body{padding:0}</style>
     button.disabled = true; button.textContent = 'Rendering…';
     await afterPaint();
     try {
-      const uri = await renderPublicationImage(null, requested);
+      const uri = await withLegend(await renderPublicationImage(null, requested), requested.width, requested.height);
       const link = document.createElement('a'); link.href = uri; link.download = 'protein-publication-' + requested.width + 'x' + requested.height + '.png'; link.click();
       announce('Publication PNG downloaded' + (requested.capped ? ' · size capped for browser stability' : ''));
     } catch (error) {
@@ -3359,6 +3654,42 @@ html>body{padding:0}</style>
     return { paper: background.alpha ? background.color : '#ffffff', ink: dark ? '#f8fafc' : '#111827' };
   }
 
+  function legendWanted() {
+    return root.querySelector('#gpv-export-legend').checked && root.querySelector('#gpv-color-mode').value === 'plddt';
+  }
+
+  function drawPlddtLegend(context, x, y, scale, palette) {
+    const swatch = Math.round(14 * scale); const gap = Math.round(6 * scale); const font = Math.round(13 * scale);
+    context.save();
+    context.font = '500 ' + font + 'px system-ui'; context.textBaseline = 'middle';
+    const items = [['#ff7d45', '<50'], ['#ffdb13', '50–70'], ['#65cbf3', '70–90'], ['#0053d6', '≥90']];
+    const title = 'pLDDT'; const titleWidth = context.measureText(title).width + gap * 2;
+    const widths = items.map(item => swatch + gap + context.measureText(item[1]).width + gap * 2);
+    const total = titleWidth + widths.reduce((sum, width) => sum + width, 0);
+    context.fillStyle = palette.paper; context.globalAlpha = 0.88;
+    context.fillRect(x - gap, y - swatch, total + gap, swatch * 2); context.globalAlpha = 1;
+    let cursor = x;
+    context.fillStyle = palette.ink; context.fillText(title, cursor, y); cursor += titleWidth;
+    items.forEach((item, index) => {
+      context.fillStyle = item[0]; context.fillRect(cursor, y - swatch / 2, swatch, swatch);
+      context.fillStyle = palette.ink; context.fillText(item[1], cursor + swatch + gap, y);
+      cursor += widths[index];
+    });
+    context.restore();
+    return total;
+  }
+
+  async function withLegend(uri, width, height) {
+    if (!legendWanted()) return uri;
+    const imageValue = await loadImage(uri);
+    const canvas = document.createElement('canvas'); canvas.width = width; canvas.height = height;
+    const context = canvas.getContext('2d');
+    context.drawImage(imageValue, 0, 0, width, height);
+    const scale = Math.max(1, width / 900);
+    drawPlddtLegend(context, Math.round(24 * scale), height - Math.round(26 * scale), scale, figurePalette());
+    return canvas.toDataURL('image/png');
+  }
+
   function truncateToWidth(context, text, maxWidth) {
     let value = String(text || '');
     if (context.measureText(value).width <= maxWidth) return value;
@@ -3366,7 +3697,7 @@ html>body{padding:0}</style>
     return value + '…';
   }
 
-  async function renderEntryImage(entry, camera, dimensions) {
+  async function renderEntryImage(entry, camera, dimensions, overlays = true) {
     const target = acquireExportViewer(dimensions.width, dimensions.height);
     const background = backgroundSpec();
     target.setBackgroundColor(background.color, background.alpha);
@@ -3375,12 +3706,209 @@ html>body{padding:0}</style>
     const model = target.addModel(entry.text, entry.format);
     model.selectedAtoms({}).forEach((atom, index) => { const source = entry.atoms[index]; if (source) { atom.x = source.x; atom.y = source.y; atom.z = source.z; } });
     model.setStyle({}, styleFor(entry));
-    drawOverlays(target, new Set([entry.id]), dimensions, false);
+    if (overlays) drawOverlays(target, new Set([entry.id]), dimensions, false);
     target.zoomTo();
     if (camera && typeof target.setView === 'function') target.setView(camera);
     target.render();
     await afterPaint();
     return target.pngURI();
+  }
+
+  /* ---------- Vector overlay export ----------
+     The molecule is a raster (WebGL has no vector path), but everything drawn on
+     top of it — labels, measurements, arrows, callouts, captions, legend — is
+     written as SVG elements so it can be restyled in Illustrator or Inkscape. */
+
+  const svgMeasure = document.createElement('canvas').getContext('2d');
+  const svgFont = 'system-ui, -apple-system, Segoe UI, Roboto, sans-serif';
+  const f = value => String(Math.round(value * 100) / 100);
+
+  function svgEscape(value) {
+    return String(value).replace(/[&<>"']/g, ch => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[ch]));
+  }
+
+  function projectorFor(target) {
+    const canvas = target.container ? target.container.querySelector('canvas') : null;
+    const rect = canvas ? canvas.getBoundingClientRect() : { left: 0, top: 0 };
+    return point => {
+      const screen = target.modelToScreen(point);
+      return { x: screen.x - rect.left - window.scrollX, y: screen.y - rect.top - window.scrollY };
+    };
+  }
+
+  function pixelRadius(target, project, point, radius) {
+    const right = screenAxisInModelSpace(target.getView(), { x: 1, y: 0, z: 0 });
+    const a = project(point); const b = project({ x: point.x + right.x * radius, y: point.y + right.y * radius, z: point.z + right.z * radius });
+    return Math.max(1, Math.hypot(b.x - a.x, b.y - a.y));
+  }
+
+  function svgLine(a, b, color, width, dashed) {
+    return '<line x1="' + f(a.x) + '" y1="' + f(a.y) + '" x2="' + f(b.x) + '" y2="' + f(b.y) + '" stroke="' + color + '" stroke-width="' + f(width) + '" stroke-linecap="round"' + (dashed ? ' stroke-dasharray="' + f(width * 3) + ' ' + f(width * 2) + '"' : '') + '/>';
+  }
+
+  function svgArrow(a, b, color, width) {
+    const dx = b.x - a.x; const dy = b.y - a.y; const length = Math.hypot(dx, dy) || 1; const ux = dx / length; const uy = dy / length;
+    const head = Math.max(9, width * 4); const base = { x: b.x - ux * head, y: b.y - uy * head }; const half = head * 0.55;
+    const points = [b, { x: base.x - uy * half, y: base.y + ux * half }, { x: base.x + uy * half, y: base.y - ux * half }].map(point => f(point.x) + ',' + f(point.y)).join(' ');
+    return svgLine(a, base, color, width, false) + '<polygon points="' + points + '" fill="' + color + '"/>';
+  }
+
+  function svgLabel(position, text, fontSize, color, palette, anchor = 'middle') {
+    svgMeasure.font = '500 ' + fontSize + 'px ' + svgFont;
+    const width = svgMeasure.measureText(text).width + fontSize * 0.9; const height = fontSize * 1.6;
+    const x = anchor === 'start' ? position.x : anchor === 'end' ? position.x - width : position.x - width / 2;
+    const y = position.y - height / 2;
+    return '<g><rect x="' + f(x) + '" y="' + f(y) + '" width="' + f(width) + '" height="' + f(height) + '" rx="' + f(fontSize * 0.3) + '" fill="' + palette.paper + '" fill-opacity="0.88" stroke="' + color + '" stroke-width="1"/>'
+      + '<text x="' + f(x + width / 2) + '" y="' + f(position.y) + '" text-anchor="middle" dominant-baseline="central" font-family="' + svgFont + '" font-size="' + f(fontSize) + '" font-weight="500" fill="' + color + '">' + svgEscape(text) + '</text></g>';
+  }
+
+  function svgLegend(x, y, scale, palette) {
+    const swatch = 14 * scale; const gap = 6 * scale; const fontSize = 13 * scale;
+    svgMeasure.font = '500 ' + fontSize + 'px ' + svgFont;
+    const items = [['#ff7d45', '<50'], ['#ffdb13', '50–70'], ['#65cbf3', '70–90'], ['#0053d6', '≥90']];
+    const titleWidth = svgMeasure.measureText('pLDDT').width + gap * 2;
+    const widths = items.map(item => swatch + gap + svgMeasure.measureText(item[1]).width + gap * 2);
+    const total = titleWidth + widths.reduce((sum, width) => sum + width, 0);
+    const parts = ['<g id="legend"><rect x="' + f(x - gap) + '" y="' + f(y - swatch) + '" width="' + f(total + gap) + '" height="' + f(swatch * 2) + '" fill="' + palette.paper + '" fill-opacity="0.88"/>'];
+    const text = (tx, value) => '<text x="' + f(tx) + '" y="' + f(y) + '" dominant-baseline="central" font-family="' + svgFont + '" font-size="' + f(fontSize) + '" font-weight="500" fill="' + palette.ink + '">' + svgEscape(value) + '</text>';
+    let cursor = x; parts.push(text(cursor, 'pLDDT')); cursor += titleWidth;
+    items.forEach((item, index) => {
+      parts.push('<rect x="' + f(cursor) + '" y="' + f(y - swatch / 2) + '" width="' + f(swatch) + '" height="' + f(swatch) + '" fill="' + item[0] + '"/>');
+      parts.push(text(cursor + swatch + gap, item[1])); cursor += widths[index];
+    });
+    parts.push('</g>');
+    return { markup: parts.join(''), width: total };
+  }
+
+  function svgScreenText(record, dimensions, scale, palette) {
+    const fontSize = 16 * record.size * scale; const margin = 16 * scale;
+    const right = record.corner.endsWith('right'); const bottom = record.corner.startsWith('bottom');
+    const x = Math.max(0, Math.min(dimensions.width, (right ? dimensions.width - margin : margin) + (record.dx || 0) * scale));
+    const y = Math.max(0, Math.min(dimensions.height, (bottom ? dimensions.height - margin : margin) + (record.dy || 0) * scale)) + (bottom ? -fontSize * 0.8 : fontSize * 0.8);
+    return svgLabel({ x, y }, record.text, fontSize, record.color, palette, right ? 'end' : 'start');
+  }
+
+  function overlaySvg(target, shownIds, dimensions, includeScreenText) {
+    const project = projectorFor(target);
+    const scale = Math.max(1, dimensions.width / 600);
+    const palette = figurePalette(); const byId = entriesById(); const parts = [];
+    const ink = labelColors.getPropertyValue('--card-foreground').trim() || '#111827';
+    labelRecords.filter(label => shownIds.has(label.entryId)).forEach(label => {
+      const entry = byId.get(label.entryId);
+      const atom = entry && entry.atoms.find(item => (item.chain || '') === label.chain && item.resi === label.resi && (item.atom === 'CA' || item.atom === label.atom));
+      parts.push(svgLabel(project(atom || label), label.text, 12 * scale, ink, palette));
+    });
+    measurementRecords.forEach(record => {
+      if (!record.points.every(point => shownIds.has(point.entryId))) return;
+      const points = record.points.map(resolvePoint); if (points.some(point => !point)) return;
+      const screen = points.map(project);
+      parts.push(svgLine(screen[0], screen[1], '#e11d48', 2 * scale, true));
+      if (record.type === 'angle') parts.push(svgLine(screen[1], screen[2], '#e11d48', 2 * scale, true));
+      const at = record.type === 'angle' ? screen[1] : { x: (screen[0].x + screen[1].x) / 2, y: (screen[0].y + screen[1].y) / 2 };
+      parts.push(svgLabel(at, measurementText(record), 12 * scale, ink, palette));
+    });
+    annotationRecords.forEach(record => {
+      if (record.type === 'screen') { if (includeScreenText) parts.push(svgScreenText(record, dimensions, scale, palette)); return; }
+      if (!record.points.every(point => shownIds.has(point.entryId))) return;
+      const points = record.points.map(resolvePoint); if (points.some(point => !point)) return;
+      const screen = points.map(project); const fontSize = 13 * record.size * scale; const stroke = Math.max(1.5, 2 * record.size * scale);
+      if (record.type === 'arrow') parts.push(svgArrow(screen[0], screen[1], record.color, stroke));
+      if (record.type === 'line') parts.push(svgLine(screen[0], screen[1], record.color, stroke, record.dashed));
+      if (record.type === 'marker') parts.push('<circle cx="' + f(screen[0].x) + '" cy="' + f(screen[0].y) + '" r="' + f(pixelRadius(target, project, points[0], 1.4 * record.size)) + '" fill="' + record.color + '" fill-opacity="0.55"/>');
+      if (record.type === 'callout') {
+        const anchor = project(calloutAnchor(points[0], record));
+        parts.push(svgLine(screen[0], anchor, record.color, Math.max(1, stroke / 2), record.dashed));
+        parts.push('<circle cx="' + f(screen[0].x) + '" cy="' + f(screen[0].y) + '" r="' + f(pixelRadius(target, project, points[0], 0.45 * record.size)) + '" fill="' + record.color + '"/>');
+        parts.push(svgLabel(anchor, record.text || pointName(record.points[0]), fontSize, record.color, palette));
+        return;
+      }
+      if (record.text) parts.push(svgLabel(project(shiftBy(points.length > 1 ? midpoint(points[0], points[1]) : points[0], record.offset)), record.text, fontSize, record.color, palette));
+    });
+    return parts.join('\n');
+  }
+
+  function svgDocument(width, height, background, body) {
+    return '<?xml version="1.0" encoding="UTF-8"?>\n<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="' + width + '" height="' + height + '" viewBox="0 0 ' + width + ' ' + height + '">\n'
+      + (background ? '<rect width="100%" height="100%" fill="' + background + '"/>\n' : '') + body + '\n</svg>\n';
+  }
+
+  function svgImage(uri, x, y, width, height) {
+    return '<image href="' + uri + '" x="' + f(x) + '" y="' + f(y) + '" width="' + f(width) + '" height="' + f(height) + '"/>';
+  }
+
+  async function downloadPublicationSvg() {
+    const button = root.querySelector('#gpv-svg');
+    const requested = exportDimensions();
+    const done = setBusy('Rendering SVG…');
+    button.disabled = true; button.textContent = 'Rendering…';
+    await afterPaint();
+    try {
+      const uri = await renderPublicationImage(null, requested, false);
+      const target = exportViewer;
+      const overlay = overlaySvg(target, new Set(displayedEntries().map(entry => entry.id)), requested, true);
+      const scale = Math.max(1, requested.width / 900);
+      const legend = legendWanted() ? svgLegend(24 * scale, requested.height - 26 * scale, scale, figurePalette()).markup : '';
+      const background = backgroundSpec();
+      const svg = svgDocument(requested.width, requested.height, background.alpha ? background.color : null, svgImage(uri, 0, 0, requested.width, requested.height) + '\n<g id="overlay">\n' + overlay + '\n' + legend + '</g>');
+      downloadBlob(svg, 'image/svg+xml', 'protein-figure-' + requested.width + 'x' + requested.height + '.svg');
+      announce('Figure SVG downloaded · raster molecule, vector labels');
+    } catch (error) {
+      announce('Could not build the SVG: ' + error.message, 'error');
+    } finally {
+      releaseExportViewer(); done();
+      button.textContent = 'Download figure SVG'; button.disabled = structures.length === 0;
+    }
+  }
+
+  async function downloadComparisonSvg() {
+    const panes = comparisonPanes();
+    if (panes.length < 2) { announce('Turn on the synchronized multi-view with at least one panel first', 'error'); return; }
+    const button = root.querySelector('#gpv-compare-svg');
+    const requested = exportDimensions();
+    const columns = panelColumns(panes.length); const rows = Math.ceil(panes.length / columns);
+    let cellWidth = requested.width; let cellHeight = requested.height;
+    const maxPixels = 24000000;
+    if (cellWidth * cellHeight * panes.length > maxPixels) {
+      const correction = Math.sqrt(maxPixels / (cellWidth * cellHeight * panes.length));
+      cellWidth = Math.floor(cellWidth * correction); cellHeight = Math.floor(cellHeight * correction);
+    }
+    const captionHeight = Math.round(cellHeight * 0.09); const palette = figurePalette();
+    const footer = legendWanted() || provenanceValues().title ? captionHeight : 0;
+    const width = columns * cellWidth; const height = rows * (cellHeight + captionHeight) + footer;
+    const done = setBusy('Rendering comparison SVG…');
+    button.disabled = true; button.textContent = 'Rendering…';
+    await afterPaint();
+    try {
+      const parts = [];
+      const caption = (x, y, size, weight, value, anchor = 'start') => '<text x="' + f(x) + '" y="' + f(y) + '" dominant-baseline="central" text-anchor="' + anchor + '" font-family="' + svgFont + '" font-size="' + f(size) + '" font-weight="' + weight + '" fill="' + palette.ink + '">' + svgEscape(value) + '</text>';
+      for (let index = 0; index < panes.length; index += 1) {
+        button.textContent = 'Rendering ' + (index + 1) + ' / ' + panes.length + '…';
+        await afterPaint();
+        const uri = await renderEntryImage(panes[index].entry, panes[index].camera, { width: cellWidth, height: cellHeight }, false);
+        const overlay = overlaySvg(exportViewer, new Set([panes[index].entry.id]), { width: cellWidth, height: cellHeight }, false);
+        const x = (index % columns) * cellWidth; const y = Math.floor(index / columns) * (cellHeight + captionHeight);
+        parts.push(svgImage(uri, x, y, cellWidth, cellHeight));
+        parts.push('<g transform="translate(' + f(x) + ' ' + f(y) + ')">' + overlay + '</g>');
+        const score = mean(panes[index].entry.scores);
+        parts.push(caption(x + cellWidth * 0.025, y + cellHeight + captionHeight / 2, captionHeight * 0.46, 700, String.fromCharCode(65 + index)));
+        parts.push(caption(x + cellWidth * 0.08, y + cellHeight + captionHeight / 2, captionHeight * 0.34, 500, displayName(panes[index].entry) + (score === null ? '' : ' · mean pLDDT ' + score.toFixed(1))));
+      }
+      if (footer) {
+        const y = height - footer / 2; const scale = captionHeight / 40; let used = 0;
+        if (legendWanted()) { const legend = svgLegend(cellWidth * 0.025, y, scale, palette); parts.push(legend.markup); used = legend.width + cellWidth * 0.06; }
+        const title = provenanceValues().title;
+        if (title) parts.push(caption(cellWidth * 0.025 + used, y, captionHeight * 0.36, 600, title));
+      }
+      const svg = svgDocument(width, height, palette.paper, parts.join('\n'));
+      downloadBlob(svg, 'image/svg+xml', 'protein-comparison-' + panes.length + '-panels.svg');
+      announce('Comparison SVG downloaded · ' + panes.length + ' panels · vector captions');
+    } catch (error) {
+      announce('Could not build the comparison SVG: ' + error.message, 'error');
+    } finally {
+      releaseExportViewer(); done();
+      button.textContent = 'Download comparison SVG';
+      button.disabled = !(root.querySelector('#gpv-side-by-side').checked && comparePanels.length);
+    }
   }
 
   function comparisonPanes() {
@@ -3403,14 +3931,25 @@ html>body{padding:0}</style>
     }
     const captionHeight = Math.round(cellHeight * 0.09);
     const palette = figurePalette();
+    const footer = legendWanted() || provenanceValues().title ? captionHeight : 0;
     const done = setBusy('Rendering comparison…');
     button.disabled = true; button.textContent = 'Rendering…';
     await afterPaint();
     try {
       const canvas = document.createElement('canvas');
-      canvas.width = columns * cellWidth; canvas.height = rows * (cellHeight + captionHeight);
+      canvas.width = columns * cellWidth; canvas.height = rows * (cellHeight + captionHeight) + footer;
       const context = canvas.getContext('2d');
       context.fillStyle = palette.paper; context.fillRect(0, 0, canvas.width, canvas.height);
+      if (footer) {
+        const y = canvas.height - footer / 2; const scale = captionHeight / 40;
+        let used = 0;
+        if (legendWanted()) used = drawPlddtLegend(context, Math.round(cellWidth * 0.025), y, scale, palette) + Math.round(cellWidth * 0.06);
+        const title = provenanceValues().title;
+        if (title) {
+          context.fillStyle = palette.ink; context.textBaseline = 'middle'; context.font = '600 ' + Math.round(captionHeight * 0.36) + 'px system-ui';
+          context.fillText(truncateToWidth(context, title, canvas.width - used - Math.round(cellWidth * 0.05)), Math.round(cellWidth * 0.025) + used, y);
+        }
+      }
       for (let index = 0; index < panes.length; index += 1) {
         button.textContent = 'Rendering ' + (index + 1) + ' / ' + panes.length + '…';
         await afterPaint();
@@ -3423,7 +3962,7 @@ html>body{padding:0}</style>
         context.fillText(String.fromCharCode(65 + index), x + Math.round(cellWidth * 0.025), y + cellHeight + captionHeight / 2);
         const score = mean(panes[index].entry.scores);
         context.font = '500 ' + Math.round(captionHeight * 0.34) + 'px system-ui';
-        const caption = panes[index].entry.name + (score === null ? '' : ' · mean pLDDT ' + score.toFixed(1));
+        const caption = displayName(panes[index].entry) + (score === null ? '' : ' · mean pLDDT ' + score.toFixed(1));
         context.fillText(truncateToWidth(context, caption, cellWidth * 0.9), x + Math.round(cellWidth * 0.08), y + cellHeight + captionHeight / 2);
       }
       const link = document.createElement('a'); link.href = canvas.toDataURL('image/png'); link.download = 'protein-comparison-' + panes.length + '-panels.png'; link.click();
@@ -3505,20 +4044,36 @@ html>body{padding:0}</style>
     return (bytes / (1024 * 1024)).toFixed(1) + ' MB';
   }
 
+  function paeLimit() {
+    const mode = root.querySelector('#gpv-report-pae').value;
+    return mode === 'none' ? 0 : mode === 'compact' ? 200 : 400;
+  }
+
   function updateReportEstimate() {
     const label = root.querySelector('#gpv-report-size');
     if (!structures.length) { label.textContent = 'Load models to estimate the report size.'; return; }
     const chosen = reportEntries();
-    const bytes = chosen.reduce((sum, entry) => sum + entry.text.length, 0);
+    const limit = paeLimit();
+    /* A PAE cell serialises to roughly five characters ("12.3,"). */
+    const paeBytes = chosen.reduce((sum, entry) => {
+      const matrix = entry.confidence && entry.confidence.pae;
+      if (!Array.isArray(matrix) || !limit) return sum;
+      const side = Math.min(matrix.length, limit); return sum + side * side * 5;
+    }, 0);
+    const libraryBytes = root.querySelector('#gpv-report-offline').checked ? 1500000 : 0;
+    const bytes = chosen.reduce((sum, entry) => sum + entry.text.length, 0) + paeBytes + libraryBytes;
     label.textContent = chosen.length + ' model' + (chosen.length === 1 ? '' : 's') + ' · roughly ' + formatBytes(bytes)
-      + (bytes > 40 * 1024 * 1024 ? ' — large enough to be slow to open; consider narrowing the selection.' : '');
+      + (paeBytes ? ' (PAE ' + formatBytes(paeBytes) + ')' : '')
+      + (bytes > 40 * 1024 * 1024 ? ' — large enough to be slow to open; narrow the selection or compact the PAE.' : '');
   }
 
   function reportConfidence(entry) {
     const confidence = { ...(entry.confidence || {}) };
     const matrix = confidence.pae;
-    if (!Array.isArray(matrix) || matrix.length <= 400) return confidence;
-    const indices = Array.from({ length: 400 }, (_, index) => Math.min(matrix.length - 1, Math.floor(index * matrix.length / 400)));
+    const limit = paeLimit();
+    if (!limit) { delete confidence.pae; delete confidence.tokenChainIds; delete confidence.tokenResidueIds; confidence.paeOmitted = true; return confidence; }
+    if (!Array.isArray(matrix) || matrix.length <= limit) return confidence;
+    const indices = Array.from({ length: limit }, (_, index) => Math.min(matrix.length - 1, Math.floor(index * matrix.length / limit)));
     confidence.pae = indices.map(row => indices.map(column => matrix[row][column]));
     if (Array.isArray(confidence.tokenChainIds)) confidence.tokenChainIds = indices.map(index => confidence.tokenChainIds[index]);
     if (Array.isArray(confidence.tokenResidueIds)) confidence.tokenResidueIds = indices.map(index => confidence.tokenResidueIds[index]);
@@ -3564,7 +4119,7 @@ html>body{padding:0}</style>
         shapes.push({ kind: 'label', position: xyz(anchor), text: record.text || pointName(record.points[0]), color: record.color, size: record.size });
         return;
       }
-      if (record.text) shapes.push({ kind: 'label', position: xyz(points.length > 1 ? midpoint(points[0], points[1]) : points[0]), text: record.text, color: record.color, size: record.size });
+      if (record.text) shapes.push({ kind: 'label', position: xyz(shiftBy(points.length > 1 ? midpoint(points[0], points[1]) : points[0], record.offset)), text: record.text, color: record.color, size: record.size });
     });
     return shapes;
   }
@@ -3575,11 +4130,39 @@ html>body{padding:0}</style>
     return [primary ? primary.name : null, ...panelNames()].filter(Boolean);
   }
 
-  function downloadReport() {
+  /* Offline reports inline the pinned 3Dmol build. The bytes are fetched from the
+     same URL the page loaded, and re-checked against the tag's SRI hash so a
+     substituted file cannot end up embedded in a report. */
+  async function embeddedLibraryTag() {
+    const tag = document.querySelector('script[src*="3Dmol"]');
+    if (!tag) throw new Error('3Dmol script tag not found');
+    const response = await fetch(tag.getAttribute('src'), { mode: 'cors' });
+    if (!response.ok) throw new Error('HTTP ' + response.status);
+    const buffer = await response.arrayBuffer();
+    const integrity = tag.getAttribute('integrity');
+    if (integrity && window.crypto && crypto.subtle) {
+      const [algorithm, expected] = integrity.split('-');
+      const digest = await crypto.subtle.digest(algorithm.replace('sha', 'SHA-'), buffer);
+      const actual = btoa(String.fromCharCode(...new Uint8Array(digest)));
+      if (actual !== expected) throw new Error('integrity hash mismatch');
+    }
+    const text = new TextDecoder().decode(buffer).replace(/<\/script/gi, '<\\/script');
+    return '<script>' + text + '<\/script>';
+  }
+
+  async function downloadReport() {
     const chosen = reportEntries();
     if (!chosen.length) { announce('Load a model before building a report', 'error'); return; }
+    let library = "<script src='https://cdnjs.cloudflare.com/ajax/libs/3Dmol/2.4.2/3Dmol-min.js'><\/script>";
+    if (root.querySelector('#gpv-report-offline').checked) {
+      const done = setBusy('Embedding 3Dmol.js…');
+      try { library = await embeddedLibraryTag(); }
+      catch (error) { announce('Could not embed 3Dmol.js (' + error.message + '); the report will load it from the CDN instead.', 'error'); }
+      finally { done(); }
+    }
     const exported = chosen.map(entry => ({
       name: entry.name,
+      label: displayName(entry),
       text: entry.text,
       format: entry.format,
       color: entry.color,
@@ -3597,7 +4180,7 @@ html>body{padding:0}</style>
       representation: root.querySelector('#gpv-style').value,
       colorMode: root.querySelector('#gpv-color-mode').value,
       aligned: exported.some(entry => Array.isArray(entry.coords)),
-      screenText: annotationRecords.filter(record => record.type === 'screen').map(record => ({ text: record.text, color: record.color, size: record.size, corner: record.corner })),
+      screenText: annotationRecords.filter(record => record.type === 'screen').map(record => ({ text: record.text, color: record.color, size: record.size, corner: record.corner, dx: record.dx || 0, dy: record.dy || 0 })),
       seconds: Number(root.querySelector('#gpv-video-length').value) || 5,
       generated: new Date().toISOString().slice(0, 10),
       version: viewerVersion
@@ -3608,7 +4191,8 @@ html>body{padding:0}</style>
       structures: embed(exported),
       views: embed(savedViews),
       metadata: embed(provenanceValues()),
-      initial: embed(initial)
+      initial: embed(initial),
+      library
     });
     const blob = new Blob([html], { type: 'text/html' });
     const link = document.createElement('a');
@@ -3678,13 +4262,14 @@ kbd{font:inherit;padding:0 5px;border:1px solid currentColor;border-radius:4px;f
 <div id='status'><span id='name'></span><span id='score'></span><span id='model-confidence'></span><span id='position'></span></div>
 <div id='pae-wrap' hidden><canvas id='pae' width='360' height='360' aria-label='Predicted aligned error heatmap'></canvas><div id='pae-detail'>Predicted aligned error (Å)</div></div>
 <p class='tips'>Drag any panel to rotate them all · scroll to zoom · click a panel to focus it for the readout and PAE · <kbd>←</kbd> <kbd>→</kbd> step every panel · <kbd>Space</kbd> plays · <kbd>F</kbd> fits · <kbd>S</kbd> spins</p>
-<script src='https://cdnjs.cloudflare.com/ajax/libs/3Dmol/2.4.2/3Dmol-min.js'><\/script>
+${data.library}
 <script>
 const structures=${data.structures};
 const savedViews=${data.views};
 const metadata=${data.metadata};
 const initial=${data.initial};
 const el = id => document.getElementById(id);
+const directContexts = typeof OffscreenCanvas !== 'undefined' && !(window.chrome && /Chrom/.test(navigator.userAgent));
 const MAX_PANES = 6;
 const panes = [];
 let timer = 0, spinning = false, syncing = false, syncFrame = 0, focused = 0, recording = false;
@@ -3766,7 +4351,7 @@ function show(pane, preserveView) {
   });
   if (panes.indexOf(pane) === 0) (initial.screenText || []).forEach(t => {
     const w = pane.stage.clientWidth || 800, h = pane.stage.clientHeight || 480, margin = 16, right = t.corner.endsWith('right'), bottom = t.corner.startsWith('bottom');
-    pane.viewer.addLabel(t.text, { position: { x: right ? w - margin : margin, y: bottom ? h - margin : margin, z: 0 }, useScreen: true, alignment: (bottom ? 'bottom' : 'top') + (right ? 'Right' : 'Left'), backgroundColor: '#fff', fontColor: t.color, borderColor: t.color, borderThickness: 1, fontSize: Math.round(16 * (t.size || 1)), inFront: true, backgroundOpacity: 0.85 });
+    pane.viewer.addLabel(t.text, { position: { x: Math.max(0, Math.min(w, (right ? w - margin : margin) + (t.dx || 0))), y: Math.max(0, Math.min(h, (bottom ? h - margin : margin) + (t.dy || 0))), z: 0 }, useScreen: true, alignment: (bottom ? 'bottom' : 'top') + (right ? 'Right' : 'Left'), backgroundColor: '#fff', fontColor: t.color, borderColor: t.color, borderThickness: 1, fontSize: Math.round(16 * (t.size || 1)), inFront: true, backgroundOpacity: 0.85 });
   });
   if (oldView) pane.viewer.setView(oldView); else pane.viewer.zoomTo();
   pane.viewer.render();
@@ -3778,7 +4363,7 @@ function show(pane, preserveView) {
 }
 function describe(pane) {
   const s = structures[pane.index], c = s.confidence || {};
-  el('name').textContent = s.name;
+  el('name').textContent = s.label || s.name;
   el('score').textContent = pane.plddt === null ? 'Mean pLDDT —' : 'Mean pLDDT ' + pane.plddt.toFixed(1);
   el('model-confidence').textContent = 'pTM ' + metric(c.ptm) + ' · ipTM ' + metric(c.iptm) + ' · ranking ' + metric(c.rankingScore) + (c.hasClash ? ' · clash warning' : '');
   el('position').textContent = (pane.index + 1) + ' / ' + structures.length + (panes.length > 1 ? ' · panel ' + (panes.indexOf(pane) + 1) : '');
@@ -3792,8 +4377,8 @@ function focusPane(pane) {
 }
 function drawPae(s) {
   const wrap = el('pae-wrap'), c = s.confidence || {}, matrix = c.pae;
-  if (!Array.isArray(matrix) || !matrix.length) { wrap.hidden = true; return; }
-  wrap.hidden = false;
+  if (!Array.isArray(matrix) || !matrix.length) { wrap.hidden = !c.paeOmitted; if (c.paeOmitted) { el('pae').hidden = true; el('pae-detail').textContent = 'PAE heatmaps were omitted from this report to keep it small.'; } return; }
+  wrap.hidden = false; el('pae').hidden = false;
   const canvas = el('pae'), ctx = canvas.getContext('2d'), image = ctx.createImageData(canvas.width, canvas.height);
   let max = 1;
   matrix.forEach(r => r.forEach(v => { if (Number.isFinite(Number(v))) max = Math.max(max, Number(v)); }));
@@ -3811,12 +4396,12 @@ function addPane(index) {
   const element = document.createElement('div'); element.className = 'pane';
   const head = document.createElement('div'); head.className = 'pane-head';
   const select = document.createElement('select'); select.className = 'pane-model'; select.setAttribute('aria-label', 'Model shown in this panel');
-  structures.forEach((s, i) => select.append(new Option(s.name, String(i))));
+  structures.forEach((s, i) => select.append(new Option(s.label || s.name, String(i))));
   const stats = document.createElement('span'); stats.className = 'pane-stats';
   head.append(select, stats);
   const stage = document.createElement('div'); stage.className = 'stage';
   element.append(head, stage); el('view').append(element);
-  const viewer = $3Dmol.createViewer(stage, { backgroundColor: '#ffffff', backgroundAlpha: 0, antialias: true });
+  const viewer = $3Dmol.createViewer(stage, Object.assign({ backgroundColor: '#ffffff', backgroundAlpha: 0, antialias: true }, directContexts ? { row: 0, col: 0, rows: 1, cols: 1 } : {}));
   const pane = { element, stage, select, stats, viewer, index, plddt: null };
   const bg = backgroundFor(el('background').value); viewer.setBackgroundColor(bg.color, bg.alpha);
   select.addEventListener('change', () => { stop(); pane.index = Number(select.value); show(pane, true); focusPane(pane); });
@@ -3891,7 +4476,7 @@ async function downloadPng() {
     ctx.fillText(String.fromCharCode(65 + i), x + Math.round(w * 0.025), y + h + cap / 2);
     ctx.font = '500 ' + Math.round(cap * 0.34) + 'px system-ui';
     const s = structures[panes[i].index];
-    ctx.fillText(s.name + (panes[i].plddt === null ? '' : ' · mean pLDDT ' + panes[i].plddt.toFixed(1)), x + Math.round(w * 0.08), y + h + cap / 2);
+    ctx.fillText((s.label || s.name) + (panes[i].plddt === null ? '' : ' · mean pLDDT ' + panes[i].plddt.toFixed(1)), x + Math.round(w * 0.08), y + h + cap / 2);
   });
   const a = document.createElement('a'); a.href = canvas.toDataURL('image/png'); a.download = 'protein-comparison-' + panes.length + '-panels.png'; a.click();
 }
@@ -4240,6 +4825,9 @@ applyBackground();
     annotationRecords = [];
     annotationDraft = [];
     annotationActive = false;
+    interfaceResults = null;
+    renderInterfaceResults();
+    root.querySelector('#gpv-interface-state').textContent = '';
     setButtonText(root.querySelector('#gpv-annotate'), 'Start drawing');
     root.querySelector('#gpv-stage').classList.remove('is-drawing');
     root.querySelector('#gpv-annotation-state').textContent = 'Pick a tool, start drawing, then click atoms in the main viewer.';
@@ -4323,13 +4911,20 @@ applyBackground();
   root.querySelector('#gpv-add-panel').addEventListener('click', () => { const panel = addComparePanel(); if (panel) updateStatus('Added panel ' + (comparePanels.length + 1) + ' · ' + ((entryById(panel.entryId) || {}).name || '')); });
   root.querySelector('#gpv-clear-panels').addEventListener('click', () => { clearComparePanels(); applyStyle(); setTimeout(() => viewer.resize(), 0); updateStatus('Comparison panels removed'); });
   root.querySelector('#gpv-compare-image').addEventListener('click', downloadComparisonPng);
+  root.querySelector('#gpv-svg').addEventListener('click', downloadPublicationSvg);
+  root.querySelector('#gpv-compare-svg').addEventListener('click', downloadComparisonSvg);
   root.querySelector('#gpv-image').addEventListener('click', downloadPublicationPng);
   root.querySelector('#gpv-save-view').addEventListener('click', saveCurrentView);
   root.querySelector('#gpv-contact-sheet').addEventListener('click', downloadContactSheet);
   root.querySelector('#gpv-captions').addEventListener('click', downloadCaptions);
   root.querySelector('#gpv-video').addEventListener('click', recordSpinVideo);
   root.querySelector('#gpv-report').addEventListener('click', downloadReport);
+  root.querySelector('#gpv-report-pae').addEventListener('change', updateReportEstimate);
+  root.querySelector('#gpv-report-offline').addEventListener('change', updateReportEstimate);
   root.querySelector('#gpv-confidence-csv').addEventListener('click', downloadConfidenceCsv);
+  root.querySelector('#gpv-interface-run').addEventListener('click', analyseInterfaces);
+  root.querySelector('#gpv-interface-csv').addEventListener('click', downloadInterfaceCsv);
+  root.querySelector('#gpv-interface-cutoff').addEventListener('input', () => { root.querySelector('#gpv-interface-cutoff-value').textContent = Number(root.querySelector('#gpv-interface-cutoff').value).toFixed(1) + ' Å'; });
   root.querySelector('#gpv-pae-png').addEventListener('click', () => {
     const link = document.createElement('a');
     link.href = root.querySelector('#gpv-pae').toDataURL('image/png');
@@ -4412,7 +5007,11 @@ applyBackground();
     'Download comparison PNG stitches the current panels into one lettered figure at the export size you chose.',
     'Annotate → Figure annotations: start drawing, then click two atoms for an arrow or line, or one atom for a marker or callout.',
     'Scene JSON records everything except coordinates. Archive it next to the structure files to rebuild a figure later.',
-    'Full screen (Shift+F) keeps every synchronized panel on screen, which works well for a live walkthrough with reviewers.'
+    'Full screen (Shift+F) keeps every synchronized panel on screen, which works well for a live walkthrough with reviewers.',
+    'Rename models in the Models list — captions, badges, and the report pick up the display name while file names stay as identifiers.',
+    'Download figure SVG keeps labels, arrows, callouts, and the legend as vector layers you can restyle in Illustrator or Inkscape.',
+    'Confidence → Interfaces counts inter-chain contacts and buried surface area, and highlights the interface residues in one click.',
+    'Embed 3Dmol.js before sharing a report that must open on a plane; switch PAE to Compact to keep the file small.'
   ];
   let tipIndex = Math.floor(Math.random() * tips.length);
   function renderTip() {

@@ -20,7 +20,9 @@ The suite then serves a copy of the viewer with the CDN tags rewritten to those 
 copies, so the tests do not depend on CDN reachability and cannot silently run against
 a substituted library.
 
-Set `PSV_HEADED=1` to watch the run in a visible browser. Set `PSV_CHROMIUM` to an existing
+Set `PSV_BROWSER=firefox` or `PSV_BROWSER=webkit` to run the same suite in another engine (Playwright's
+WebKit is the closest headless stand-in for Safari; install them once with `npx playwright install
+firefox webkit`). Set `PSV_HEADED=1` to watch the run in a visible browser. Set `PSV_CHROMIUM` to an existing
 Chromium binary to skip Playwright's own download — useful in CI images that already ship one:
 
 ```
@@ -30,7 +32,8 @@ PSV_CHROMIUM=/opt/pw-browsers/chromium/chrome-linux/chrome npm test
 ## What it covers
 
 - Boot: 3Dmol present, no error banner, inline icons rendered
-- Import: three models load, mean pLDDT computed from Cα B-factors, search filters
+- Import: three models load, mean pLDDT computed from Cα B-factors, search filters, a model takes a
+  display name that the model picker adopts
 - Navigation: previous/next, arrow keys, digit shortcuts for all six tabs
 - Appearance: every representation, colour scheme, projection, background, motion;
   pLDDT legend; theme cycling; preference persistence across a reload
@@ -38,12 +41,14 @@ PSV_CHROMIUM=/opt/pw-browsers/chromium/chrome-linux/chrome npm test
   deliberately different model, CSV export, synchronised multi-view with a third panel that
   follows a real drag on the primary, restore
 - Annotate: residue-range highlight, blank chain meaning every chain, rejection of an
-  unparseable range, an arrow annotation from two real atom clicks plus a corner title,
-  label-every-residue
-- Confidence: metrics table, CSV export
+  unparseable range, an arrow annotation from two real atom clicks plus a corner title, nudging a
+  label right and up, label-every-residue
+- Confidence: metrics table, CSV export, interface geometry on the active model with highlight and
+  CSV export
 - Publish: export reachability, the busy state painting before the render blocks,
   button re-enabling, contact sheet, **the main viewport surviving seven off-screen
-  renders**, captions, size estimate, scene manifest round-trip with hash check
+  renders**, captions, size estimate, scene manifest round-trip with hash check, figure and
+  comparison SVG exports, an offline report that embeds the library
 - Interface: help via `?`, `?` not hijacked while typing, full screen, cycle button
   keeping its icon, invalid fetch identifier
 - Generated report: renders, carries provenance, **keeps its canvas inside `#view`**,
