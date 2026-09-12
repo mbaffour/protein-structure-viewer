@@ -73,9 +73,19 @@ const step = async (name, body) => {
   catch (error) { console.log('  FAIL ' + name + ' :: ' + String(error.message).split('\n')[0]); failures.push(name); }
 };
 const tab = async name => { await page.click(`[data-gpv-tab="${name}"]`); await page.waitForTimeout(150); };
+/* A human click is a short press and release; WebKit does not reliably turn an instantaneous
+   mouse.click into a pointerdown/pointerup pair on a canvas. */
+const tap = async (x, y) => { await page.mouse.move(x, y); await page.mouse.down(); await page.waitForTimeout(60); await page.mouse.up(); };
+/* Clicking a control lower on the page can scroll the stage out of the viewport (WebKit scrolls
+   further than the others), and a tap at an off-screen coordinate reaches nothing. */
+const tapStageCentre = async () => {
+  await page.locator('#gpv-stage').scrollIntoViewIfNeeded(); await page.waitForTimeout(200);
+  const box = await page.locator('#gpv-stage').boundingBox();
+  await tap(box.x + box.width / 2, box.y + box.height / 2); await page.waitForTimeout(500);
+};
 const group = name => console.log('\n' + name);
 
-await page.goto(base + '/index.html');
+await page.goto(base + '/index.html?debug=1');
 await page.waitForTimeout(2500);
 
 group('boot');
@@ -194,6 +204,20 @@ await step('hiding low-confidence residues changes the render', async () => {
   if (!/below 70 hidden/.test((await page.locator('#gpv-sequence-title').textContent()) || '')) throw new Error('strip title does not mention the cut');
   await page.selectOption('#gpv-hide-below', '0'); await page.waitForTimeout(400);
 });
+await step('residue colour themes apply and the charge legend names its classes', async () => {
+  for (const mode of ['charge', 'hydrophobicity', 'restype', 'amino', 'ss']) { await page.selectOption('#gpv-color-mode', mode); await page.waitForTimeout(250); }
+  await page.selectOption('#gpv-color-mode', 'charge'); await page.waitForTimeout(300);
+  const text = (await page.locator('#gpv-plddt-legend').textContent()) || '';
+  if (!/Charge/.test(text) || !/Positive/.test(text) || !/Negative/.test(text)) throw new Error('legend: ' + text);
+  await page.selectOption('#gpv-color-mode', 'plddt'); await page.waitForTimeout(300);
+});
+await step('a translucent surface renders and clears', async () => {
+  const snapshot = () => page.evaluate(() => document.querySelector('#gpv-stage canvas').toDataURL());
+  const before = await snapshot();
+  await page.selectOption('#gpv-surface', 'translucent'); await page.waitForTimeout(2500);
+  if ((await snapshot()) === before) throw new Error('the surface did not change the render');
+  await page.selectOption('#gpv-surface', 'none'); await page.waitForTimeout(600);
+});
 await step('chain colouring lists the chains in the legend', async () => {
   await page.selectOption('#gpv-color-mode', 'chain'); await page.waitForTimeout(400);
   const legend = page.locator('#gpv-plddt-legend');
@@ -274,6 +298,25 @@ await step('coordinates restore', async () => { await page.click('#gpv-restore')
 
 group('annotate');
 await tab('annotate');
+/* The compare group leaves the camera dragged; refit so centre clicks land on the model. */
+await page.keyboard.press('f'); await page.waitForTimeout(600);
+if (process.env.PSV_DIAG) {
+  await page.screenshot({ path: process.env.PSV_DIAG });
+  console.log('       PROJ ' + JSON.stringify(await page.evaluate(() => {
+    const debug = window.__viewerDebug; if (!debug) return 'no debug hook';
+    const stage = document.querySelector('#gpv-stage').getBoundingClientRect();
+    const centre = { x: stage.x + stage.width / 2 + window.scrollX, y: stage.y + stage.height / 2 + window.scrollY };
+    const shown = debug.displayedEntries();
+    const hit = debug.pickAtomAt(centre.x, centre.y);
+    const projected = shown.map(entry => ({ name: entry.name, model: Boolean(entry.model), atoms: entry.atoms.length, ca: entry.atoms.filter(atom => atom.atom === 'CA').slice(0, 3).map(atom => { const p = debug.viewer.modelToScreen({ x: atom.x, y: atom.y, z: atom.z }); return p ? [Math.round(p.x), Math.round(p.y)] : null; }) }));
+    return { centre: [Math.round(centre.x), Math.round(centre.y)], hit: hit ? hit.atom.resn + hit.atom.resi : null, projected, view: debug.viewer.getView().map(v => Math.round(v * 100) / 100), width: debug.viewer.getWidth ? debug.viewer.getWidth() : null };
+  })));
+  console.log('       DIAG ' + JSON.stringify(await page.evaluate(() => {
+    const stage = document.querySelector('#gpv-stage').getBoundingClientRect();
+    const canvas = document.querySelector('#gpv-stage canvas');
+    return { stage: [Math.round(stage.x), Math.round(stage.y), Math.round(stage.width), Math.round(stage.height)], canvas: canvas ? [canvas.width, canvas.height, canvas.getBoundingClientRect().width] : null, count: document.querySelector('#gpv-count').textContent, scroll: [window.scrollX, window.scrollY], dpr: window.devicePixelRatio, atCentre: (() => { const r = document.querySelector('#gpv-stage').getBoundingClientRect(); const el = document.elementFromPoint(r.x + r.width / 2, r.y + r.height / 2); return el ? el.tagName + '.' + el.className + '#' + el.id : null; })(), current: document.querySelector('#gpv-current').selectedOptions[0]?.textContent, mode: document.querySelector('#gpv-view-mode').value, side: document.querySelector('#gpv-side-by-side').checked, panels: document.querySelectorAll('.gpv-stage-compare').length, state: document.querySelector('#gpv-state').textContent };
+  })));
+}
 await step('a residue range can be highlighted', async () => {
   await page.fill('#gpv-selection-chain', 'A'); await page.fill('#gpv-selection-range', '5-12');
   await page.click('#gpv-add-selection'); await page.waitForTimeout(600);
@@ -298,13 +341,12 @@ await step('figure annotations: an arrow from two real atom clicks and a corner 
   await page.fill('#gpv-annotation-text', 'helix');
   await page.click('#gpv-annotate'); await page.waitForTimeout(300);
   if (!(await page.locator('#gpv-stage.is-drawing').count())) throw new Error('drawing mode did not start');
-  const box = await page.locator('#gpv-stage').boundingBox();
-  await page.mouse.click(box.x + box.width / 2, box.y + box.height / 2); await page.waitForTimeout(500);
-  /* The second atom must be a different one; probe outward until a click lands. */
-  for (const [dx, dy] of [[25, -20], [40, 0], [0, 35], [-40, 0], [0, -45], [60, 25], [-60, -25]]) {
-    await page.mouse.click(box.x + box.width / 2 + dx, box.y + box.height / 2 + dy); await page.waitForTimeout(500);
-    if (await page.locator('#gpv-annotation-list .gpv-entry').count()) break;
-  }
+  await tapStageCentre();
+  if (!/Click 1 atom/.test((await page.locator('#gpv-annotation-state').textContent()) || '')) throw new Error('the centre click did not start the arrow: ' + await page.locator('#gpv-annotation-state').textContent());
+  /* The second atom comes from the sequence strip — a residue picked by number is a
+     click too — which keeps the step deterministic across engines. */
+  const strip = await page.locator('#gpv-sequence-rows canvas').nth(1).boundingBox();
+  await page.mouse.click(strip.x + strip.width * 0.9, strip.y + strip.height / 2); await page.waitForTimeout(500);
   const rows = await page.locator('#gpv-annotation-list .gpv-entry').count();
   if (rows !== 1) throw new Error('expected one annotation, found ' + rows + ' · ' + await page.locator('#gpv-annotation-state').textContent());
   await page.fill('#gpv-screen-text', 'A · Test'); await page.click('#gpv-add-screen-text'); await page.waitForTimeout(400);
@@ -316,8 +358,7 @@ await step('figure annotations: an arrow from two real atom clicks and a corner 
   if (await page.locator('#gpv-stage.is-drawing').count()) throw new Error('drawing mode did not stop');
 });
 await step('a residue label is added by clicking and edited from its list row', async () => {
-  const box = await page.locator('#gpv-stage').boundingBox();
-  await page.mouse.click(box.x + box.width / 2, box.y + box.height / 2); await page.waitForTimeout(500);
+  await tapStageCentre();
   if (await page.locator('#gpv-add-label').isDisabled()) throw new Error('the centre click did not select a residue');
   await page.fill('#gpv-label-text', 'Site A'); await page.click('#gpv-add-label'); await page.waitForTimeout(400);
   if ((await page.locator('#gpv-label-list .gpv-entry').count()) !== 1) throw new Error('label row missing');
@@ -345,6 +386,18 @@ await step('the sequence strip shows both chains and selects a residue on click'
   if (!/^\d+-\d+$/.test(range)) throw new Error('range not filled: ' + range);
   if ((await page.inputValue('#gpv-selection-chain')) !== 'B') throw new Error('chain field not filled');
   console.log('       range ' + range + ' of chain B');
+});
+await step('sequence letters list both chains and select a residue on click', async () => {
+  await page.click('#gpv-sequence-text summary'); await page.waitForTimeout(500);
+  const blocks = await page.locator('#gpv-sequence-letters .gpv-seq-block').count();
+  if (blocks !== 2) throw new Error('blocks=' + blocks);
+  const spans = page.locator('#gpv-sequence-letters .gpv-aa');
+  if ((await spans.count()) !== 60) throw new Error('letters=' + (await spans.count()));
+  await spans.nth(40).click(); await page.waitForTimeout(300);
+  const readout = (await page.locator('#gpv-residue').textContent()) || '';
+  if (!/ALA 11 chain B/.test(readout)) throw new Error('readout: ' + readout);
+  if (!(await page.locator('#gpv-sequence-letters button:has-text("Copy")').count())) throw new Error('no Copy button');
+  await page.click('#gpv-sequence-text summary'); await page.waitForTimeout(300);
 });
 await step('overlay mode gives the strip one row per model and chain', async () => {
   await tab('models');

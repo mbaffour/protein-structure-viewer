@@ -41,13 +41,15 @@ PSV_CHROMIUM=/opt/pw-browsers/chromium/chrome-linux/chrome npm test
   deliberately different model, CSV export, synchronised multi-view with a third panel that
   follows a real drag on the primary, restore
 - Import: FASTA export has one record per chain with length and mean pLDDT in the header.
-- Appearance: 90° rotation changes the render and Shift+R resets it; the ligand control and the
+- Appearance: the five residue colour themes apply and the charge legend names its classes; a
+  translucent surface changes the render and clears; 90° rotation changes the render and Shift+R resets it; the ligand control and the
   Thesis preset apply; hiding residues below pLDDT 70 changes the render and is named in the strip title;
   colour by chain lists the chains in the on-screen legend.
 - Compare: the Cα-deviation colour scheme shows its band legend.
 - Confidence: the pLDDT profile SVG has one panel per chain and a trace per model; the PNG variant downloads.
 - Annotate: the sequence strip lists both chains, a click selects a residue, a drag fills the
-  selection range, overlay mode gives one row per model and chain; undo and redo (keyboard and buttons) walk a label change back and forth;
+  selection range, the sequence-letters panel lists both chains with sixty clickable letters and a
+  Copy button, overlay mode gives one row per model and chain; undo and redo (keyboard and buttons) walk a label change back and forth;
   residue-range highlight, blank chain meaning every chain, rejection of an
   unparseable range, an arrow annotation from two real atom clicks plus a corner title, nudging a
   label right and up, label-every-residue
@@ -77,3 +79,7 @@ The two emphasised checks are regressions against bugs that shipped in 2.0.
   under SwiftShader and under a second on a real GPU, so the render-blocking assertion
   is skipped when nothing blocks for more than 300 ms.
 - `vendor/` and `node_modules/` are generated; both are git-ignored.
+
+The suite opens the page with `?debug=1`, which exposes `window.__viewerDebug` (the 3Dmol viewer, the
+atom picker and the displayed entries). Setting `PSV_DIAG=/path/to/screenshot.png` makes the suite save a
+screenshot and print picking diagnostics at the start of the Annotate group.

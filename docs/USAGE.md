@@ -109,6 +109,13 @@ shown, ligands as sticks). Nothing is locked; adjust any control afterwards.
 glycans, or the ligands in an experimental structure: sticks with small spheres (default), spheres
 only, or hidden. Water is never drawn. Cartoon mode alone would hide all of them.
 
+**Surface** adds a molecular surface — translucent or opaque — coloured by the current scheme, on top
+of the representation. Combined with *Residue charge* or *Hydrophobicity* it gives the familiar
+electrostatics-style view of a binding face without any external calculation (it is a property map,
+not a Poisson–Boltzmann potential; say so in the legend). Hidden low-confidence residues and hetero
+groups are left out of the surface. Panels and exports build the same surface. Models above forty
+thousand atoms are skipped with a message, because the surface calculation would stall the page.
+
 Notes on the colour schemes:
 
 - **pLDDT** colouring uses the standard AlphaFold bands and reveals the legend under the viewport.
@@ -122,6 +129,13 @@ Notes on the colour schemes:
   1–2 Å green, 2–4 Å yellow, 4–8 Å orange, 8 Å and above red; residues the alignment did not match
   are grey. The reference model shows its mean deviation across the aligned models. Before an
   alignment everything is grey and the status line says so.
+- **Residue charge**, **Hydrophobicity (Kyte–Doolittle)**, **Residue type**, **Amino acid** and
+  **Secondary structure** colour by what the residue is rather than by model or confidence. Charge:
+  Lys and Arg blue, His light blue (partial), Asp, Glu and nucleotides red, everything else grey.
+  Hydrophobicity runs from hydrophilic blue through white to hydrophobic orange on the Kyte–Doolittle
+  scale. Residue type groups hydrophobic, aromatic, polar, positive, negative, Gly/Pro/Cys and
+  nucleotides. Amino acid uses the RasMol colours. Secondary structure shows helix, strand and loop
+  as assigned in the file or by the renderer. Each has a legend and colours the sequence strip too.
 - **Low confidence** hides residues below pLDDT 50 or 70 — in the viewer, in every synchronized
   panel, and in every PNG and SVG export, so a figure without disordered tails takes one click. The
   sequence strip dims the hidden residues and its title says what is hidden. The setting is stored in
@@ -150,6 +164,14 @@ and side-by-side views show the active model alone. Hovering the PAE heatmap in 
 marks both residues of the pair on the strip in magenta. *Hide sequence* collapses it; the choice is
 remembered. Very large sets show the first twenty-four rows.
 
+**Sequence letters.** Open *Sequence letters* under the strip to read each chain's one-letter
+sequence, fifty residues a line in blocks of ten with the first residue number of each line in the
+gutter. Every letter is a chip in the current colour scheme, so charge, hydrophobicity or pLDDT can be
+read residue by residue; hidden low-confidence residues are faded. Click a letter to select that
+residue (the label field fills in), and **Copy** puts the chain's sequence on the clipboard. The strip
+cells also print their letters when the window is wide enough for them. *Download FASTA* in the Models
+tab writes the same sequences to a file.
+
 **Undo and redo.** <kbd>Ctrl</kbd>/<kbd>⌘</kbd>+<kbd>Z</kbd> undoes the last change to labels,
 selections, measurements, or figure annotations — additions, removals, text or colour edits, nudges,
 and clears — and <kbd>Shift</kbd> with it redoes. The Undo and Redo buttons beside the residue
@@ -170,7 +192,9 @@ the distances between them. <kbd>Esc</kbd> leaves measurement mode.
 **Figure annotations.** Pick a tool, press **Start drawing**, and click atoms in the main viewer:
 an **arrow** or **line** joins two clicked atoms, a **residue marker** drops a translucent sphere on
 one atom, and a **text callout** places your text on a leader line pointing away from the model.
-Choose colour, size, dashed style, and optional label text before you click. **Screen text** adds a
+Choose colour, size, dashed style, and optional label text before you click. A residue clicked on the
+sequence strip or in the sequence letters counts as an atom click while drawing or measuring, so an
+arrow between residue 16 and residue 112 needs no hunting in three dimensions. **Screen text** adds a
 corner title (for panel letters or captions) that stays put while the model rotates. Annotations are
 anchored to atoms, so they follow rotation and alignment, and they are drawn into publication and
 comparison PNGs, comparison panels, and the shared report. Remove any one from the list, or clear

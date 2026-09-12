@@ -880,6 +880,7 @@ html>body{padding:0}</style>
       <button class="btn btn-ghost" type="button" id="gpv-sequence-toggle" aria-expanded="true" aria-controls="gpv-sequence-rows">Hide sequence</button>
     </div>
     <div class="gpv-sequence-rows" id="gpv-sequence-rows"></div>
+    <details class="gpv-sequence-text" id="gpv-sequence-text"><summary class="text-small">Sequence letters</summary><div id="gpv-sequence-letters"></div></details>
   </div>
   <div class="gpv-tip text-small" id="gpv-tip" hidden><i data-icon="info" aria-hidden="true"></i><span id="gpv-tip-text"></span><button class="btn btn-ghost" type="button" id="gpv-tip-next">Next tip</button><button class="btn btn-ghost gpv-icon-btn" type="button" id="gpv-tip-hide" aria-label="Hide tips"><i data-icon="x" aria-hidden="true"></i></button></div>
 
@@ -919,9 +920,10 @@ html>body{padding:0}</style>
     <div class="viz-controls gpv-presets"><span class="text-small text-muted">Presets</span><button class="btn" type="button" id="gpv-preset-thesis" data-tooltip="White background, orthographic cartoon, legend on exports, 1800 × 1200 at 2×">Thesis figure</button><button class="btn" type="button" id="gpv-preset-slide" data-tooltip="Dark background, perspective cartoon, colour by chain">Dark slide</button><button class="btn" type="button" id="gpv-preset-review" data-tooltip="pLDDT colouring with the legend, every residue shown, ligands as sticks">Confidence review</button></div>
     <div class="viz-controls">
       <label class="form-label">Representation<select class="form-select" id="gpv-style"><option value="cartoon">Cartoon</option><option value="stick">Sticks</option><option value="sphere">Spheres</option><option value="line">Lines</option></select></label>
-      <label class="form-label">Color scheme<select class="form-select" id="gpv-color-mode"><option value="structure">Per structure</option><option value="chain">Per chain</option><option value="plddt">pLDDT confidence</option><option value="deviation">Cα deviation after alignment</option><option value="spectrum">Sequence spectrum</option><option value="element">Element</option></select></label>
+      <label class="form-label">Color scheme<select class="form-select" id="gpv-color-mode"><option value="structure">Per structure</option><option value="chain">Per chain</option><option value="plddt">pLDDT confidence</option><option value="deviation">Cα deviation after alignment</option><option value="charge">Residue charge</option><option value="hydrophobicity">Hydrophobicity (Kyte–Doolittle)</option><option value="restype">Residue type</option><option value="amino">Amino acid</option><option value="ss">Secondary structure</option><option value="spectrum">Sequence spectrum</option><option value="element">Element</option></select></label>
       <label class="form-label">Low confidence<select class="form-select" id="gpv-hide-below" data-tooltip="Hide residues whose pLDDT is below the threshold — in the viewer, every panel and every export"><option value="0">Show every residue</option><option value="50">Hide pLDDT below 50</option><option value="70">Hide pLDDT below 70</option></select></label>
       <label class="form-label">Ligands and ions<select class="form-select" id="gpv-hetero" data-tooltip="How hetero groups — ligands, cofactors, ions, glycans — are drawn; water is never shown"><option value="stick">Sticks and spheres</option><option value="sphere">Spheres</option><option value="hide">Hidden</option></select></label>
+      <label class="form-label">Surface<select class="form-select" id="gpv-surface" data-tooltip="Molecular surface coloured by the current scheme — charge or hydrophobicity on a surface reads like an electrostatics view"><option value="none">None</option><option value="translucent">Translucent surface</option><option value="opaque">Opaque surface</option></select></label>
       <label class="form-label">Projection<select class="form-select" id="gpv-projection"><option value="perspective">Perspective</option><option value="orthographic">Orthographic</option></select></label>
       <label class="form-label">Background<select class="form-select" id="gpv-background"><option value="transparent">Transparent</option><option value="white">White</option><option value="dark">Dark</option><option value="custom">Custom</option></select></label>
       <label class="form-label">Custom background<input class="form-control form-control-color" id="gpv-background-color" type="color" value="#ffffff"></label>
@@ -1208,6 +1210,16 @@ html>body{padding:0}</style>
   #generic-protein-viewer .gpv-share-url { font-family: var(--font-mono); font-size: var(--font-size-small); min-width: min(100%, 320px); }
   #generic-protein-viewer .gpv-history { align-items: center; }
   #generic-protein-viewer .gpv-orient { display: inline-flex; gap: 4px; }
+  #generic-protein-viewer .gpv-sequence-text { margin-top: 8px; }
+  #generic-protein-viewer .gpv-sequence-text summary { cursor: pointer; color: var(--muted-foreground); }
+  #generic-protein-viewer .gpv-seq-block { margin: 8px 0 4px; }
+  #generic-protein-viewer .gpv-seq-head { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; margin-bottom: 4px; }
+  #generic-protein-viewer .gpv-seq-head button { margin-left: auto; }
+  #generic-protein-viewer .gpv-seq-lines { margin: 0; font-family: var(--font-mono); font-size: 12px; line-height: 1.9; overflow-x: auto; white-space: pre; }
+  #generic-protein-viewer .gpv-seq-gutter { display: inline-block; width: 5ch; margin-right: 1ch; color: var(--muted-foreground); text-align: right; }
+  #generic-protein-viewer .gpv-aa { display: inline-block; width: 1.05ch; text-align: center; border-radius: 2px; cursor: pointer; }
+  #generic-protein-viewer .gpv-aa:hover { outline: 2px solid var(--card-foreground); outline-offset: -1px; }
+  #generic-protein-viewer .gpv-aa.is-hidden { opacity: 0.3; }
   #generic-protein-viewer .gpv-presets { align-items: center; }
   #generic-protein-viewer .gpv-legend-text { flex: 1 1 100%; font-size: var(--font-size-small); line-height: 1.5; }
   #generic-protein-viewer .gpv-history .gpv-selected-state { flex: 1; min-width: 200px; }
@@ -1351,7 +1363,7 @@ html>body{padding:0}</style>
   let busyDepth = 0;
   let restoreMotion = null;
   const listPageSize = 60;
-  const viewerVersion = '2.6.0';
+  const viewerVersion = '2.7.0';
   const preferenceKey = 'protein-structure-viewer:preferences';
   const themeKey = 'protein-structure-viewer:theme';
   const labelColors = getComputedStyle(root);
@@ -1822,17 +1834,67 @@ html>body{padding:0}</style>
     viewer.render();
   }
 
+  /* ---------- Residue colour themes ---------- */
+
+  const residueModes = ['charge', 'hydrophobicity', 'restype', 'amino', 'ss'];
+  const kyteDoolittle = { I: 4.5, V: 4.2, L: 3.8, F: 2.8, C: 2.5, M: 1.9, A: 1.8, G: -0.4, T: -0.7, S: -0.8, W: -0.9, Y: -1.3, P: -1.6, H: -3.2, E: -3.5, Q: -3.5, D: -3.5, N: -3.5, K: -3.9, R: -4.5 };
+  const residueTypeOf = { A: 'aliphatic', V: 'aliphatic', L: 'aliphatic', I: 'aliphatic', M: 'aliphatic', F: 'aromatic', W: 'aromatic', Y: 'aromatic', S: 'polar', T: 'polar', N: 'polar', Q: 'polar', K: 'positive', R: 'positive', H: 'positive', D: 'negative', E: 'negative', G: 'special', P: 'special', C: 'special' };
+  const residueTypeColors = { aliphatic: ['#f59e0b', 'Hydrophobic (A V L I M)'], aromatic: ['#a855f7', 'Aromatic (F W Y)'], polar: ['#22c55e', 'Polar (S T N Q)'], positive: ['#3b82f6', 'Positive (K R H)'], negative: ['#ef4444', 'Negative (D E)'], special: ['#94a3b8', 'Gly · Pro · Cys'], nucleic: ['#0ea5e9', 'Nucleotide'], other: ['#d1d5db', 'Other'] };
+  const chargeColors = { positive: ['#2563eb', 'Positive (Lys, Arg)'], partial: ['#7dd3fc', 'His (partial +)'], negative: ['#dc2626', 'Negative (Asp, Glu, nucleotide)'], neutral: ['#d1d5db', 'Neutral'] };
+  /* RasMol amino-acid colours. */
+  const aminoColors = { A: '#c8c8c8', R: '#145aff', N: '#00dcdc', D: '#e60a0a', C: '#e6e600', Q: '#00dcdc', E: '#e60a0a', G: '#ebebeb', H: '#8282d2', I: '#0f820f', L: '#0f820f', K: '#145aff', M: '#e6e600', F: '#3232aa', P: '#dc9682', S: '#fa9600', T: '#fa9600', W: '#b45ab4', Y: '#3232aa', V: '#0f820f' };
+  const ssColors = { h: ['#d946ef', 'Helix'], s: ['#facc15', 'Strand'], c: ['#9ca3af', 'Coil / loop'] };
+
+  function hydrophobicityColor(value) {
+    const t = Math.max(-1, Math.min(1, value / 4.5));
+    const mix = (a, b, k) => a.map((channel, index) => Math.round(channel + (b[index] - channel) * k));
+    const rgb = t < 0 ? mix([241, 245, 249], [37, 99, 235], -t) : mix([241, 245, 249], [234, 88, 12], t);
+    return '#' + rgb.map(channel => channel.toString(16).padStart(2, '0')).join('');
+  }
+
+  function isNucleotide(atom) {
+    const code = String(atom.resn || '').toUpperCase().trim();
+    return !aminoAcids[code] && Boolean(nucleotides[code]);
+  }
+
+  function residueColor(mode, atom) {
+    const letter = residueLetter(atom.resn);
+    if (mode === 'charge') {
+      const key = isNucleotide(atom) ? 'negative' : letter === 'K' || letter === 'R' ? 'positive' : letter === 'H' ? 'partial' : letter === 'D' || letter === 'E' ? 'negative' : 'neutral';
+      return chargeColors[key][0];
+    }
+    if (mode === 'hydrophobicity') return letter in kyteDoolittle ? hydrophobicityColor(kyteDoolittle[letter]) : '#d1d5db';
+    if (mode === 'restype') return residueTypeColors[isNucleotide(atom) ? 'nucleic' : residueTypeOf[letter] || 'other'][0];
+    if (mode === 'amino') return aminoColors[letter] || '#d1d5db';
+    if (mode === 'ss') return (ssColors[atom.ss] || ssColors.c)[0];
+    return '#d1d5db';
+  }
+
+  const residueLegends = {
+    charge: () => ({ title: 'Charge', items: Object.values(chargeColors).map(([color, label]) => [color, label]) }),
+    hydrophobicity: () => ({ title: 'Kyte–Doolittle', items: [[hydrophobicityColor(-4.5), '−4.5 hydrophilic'], [hydrophobicityColor(-2), '−2'], [hydrophobicityColor(0), '0'], [hydrophobicityColor(2), '+2'], [hydrophobicityColor(4.5), '+4.5 hydrophobic']] }),
+    restype: () => ({ title: 'Residue type', items: Object.values(residueTypeColors).slice(0, 7).map(([color, label]) => [color, label]) }),
+    amino: kind => kind === 'screen' ? { title: 'Amino acid', items: Object.entries(aminoColors).map(([letter, color]) => [color, letter]) } : null,
+    ss: () => ({ title: 'Secondary structure', items: Object.values(ssColors).map(([color, label]) => [color, label]) })
+  };
+
+  /* The colour part of a style — shared by the representation and the surface. */
+  function colorOptions(entry) {
+    const mode = root.querySelector('#gpv-color-mode').value;
+    if (mode === 'chain') return { colorfunc: atom => chainColor(atom.chain) };
+    if (mode === 'plddt') return { colorfunc: atom => plddtColor(Number(atom.b || 0)) };
+    if (mode === 'deviation') return { colorfunc: atom => deviationColor(entry, atom) };
+    if (residueModes.includes(mode)) return { colorfunc: atom => residueColor(mode, atom) };
+    if (mode === 'spectrum') return { colorscheme: 'spectrum' };
+    if (mode === 'element') return { colorscheme: 'default' };
+    return { color: entry.color };
+  }
+
   function styleFor(entry) {
     const representation = root.querySelector('#gpv-style').value;
-    const mode = root.querySelector('#gpv-color-mode').value;
-    const style = {};
-    let options = { color: entry.color };
-    if (mode === 'chain') options = { colorfunc: atom => chainColor(atom.chain) };
-    if (mode === 'plddt') options = { colorfunc: atom => plddtColor(Number(atom.b || 0)) };
-    if (mode === 'deviation') options = { colorfunc: atom => deviationColor(entry, atom) };
-    if (mode === 'spectrum') options = { colorscheme: 'spectrum' };
-    if (mode === 'element') options = { colorscheme: 'default' };
+    const options = { ...colorOptions(entry) };
     if (representation === 'line') options.linewidth = 2;
+    const style = {};
     style[representation] = options;
     return style;
   }
@@ -1842,8 +1904,12 @@ html>body{padding:0}</style>
   }
 
   /* One place that styles a model the way the viewer shows it, so panels and
-     exports agree with the main view: colour scheme, then the low-confidence cut. */
-  function applyModelStyle(model, entry) {
+     exports agree with the main view: colour scheme, the low-confidence cut,
+     hetero groups, and the optional surface. Returns a promise that resolves when
+     any surface has been built, so exports can wait for it. */
+  const surfaceAtomLimit = 40000;
+  let surfaceWarned = false;
+  function applyModelStyle(model, entry, host = null) {
     model.setStyle({}, styleFor(entry));
     const threshold = hideBelow();
     if (threshold && entry.scores.length) model.setStyle({ predicate: atom => Number(atom.b) < threshold }, {});
@@ -1853,6 +1919,19 @@ html>body{padding:0}</style>
     const heteroStyle = hetero === 'hide' ? {} : hetero === 'sphere' ? { sphere: { scale: 0.35, colorscheme: 'default' } } : { stick: { radius: 0.25, colorscheme: 'default' }, sphere: { scale: 0.28, colorscheme: 'default' } };
     model.setStyle({ hetflag: true }, heteroStyle);
     model.setStyle({ resn: waterNames }, {});
+    const surface = root.querySelector('#gpv-surface').value;
+    if (surface === 'none' || !host || typeof host.addSurface !== 'function') return Promise.resolve();
+    if (entry.atoms.length > surfaceAtomLimit) {
+      if (!surfaceWarned) { surfaceWarned = true; announce(displayName(entry) + ' has too many atoms for a surface (limit ' + surfaceAtomLimit.toLocaleString() + ')', 'error'); }
+      return Promise.resolve();
+    }
+    const selection = { model, hetflag: false, predicate: atom => !isWater(atom) && !(threshold && entry.scores.length && Number(atom.b) < threshold) };
+    const style = { ...colorOptions(entry), opacity: surface === 'translucent' ? 0.6 : 1 };
+    try {
+      return Promise.resolve(host.addSurface($3Dmol.SurfaceType.MS, style, selection)).then(() => { if (typeof host.render === 'function') host.render(); }).catch(() => {});
+    } catch (error) {
+      return Promise.resolve();
+    }
   }
   const waterNames = ['HOH', 'WAT', 'DOD', 'H2O', 'TIP', 'SOL'];
   const isWater = atom => waterNames.includes(String(atom.resn || '').toUpperCase());
@@ -1936,6 +2015,7 @@ html>body{padding:0}</style>
   }
 
   function applyStyle() {
+    if (typeof viewer.removeAllSurfaces === 'function') viewer.removeAllSurfaces();
     let shown = new Set(displayedEntries());
     const broken = [];
     structures.forEach(entry => {
@@ -1945,7 +2025,7 @@ html>body{padding:0}</style>
       }
       if (!entry.model) return;
       entry.model.setStyle({}, {});
-      if (shown.has(entry)) applyModelStyle(entry.model, entry);
+      if (shown.has(entry)) applyModelStyle(entry.model, entry, viewer);
     });
     if (broken.length) {
       shown = new Set(displayedEntries());
@@ -2833,6 +2913,7 @@ html>body{padding:0}</style>
     const mode = root.querySelector('#gpv-color-mode').value;
     if (mode === 'chain') return chainColor(atom.chain);
     if (mode === 'deviation') return deviationColor(entry, atom);
+    if (residueModes.includes(mode)) return residueColor(mode, atom);
     return entry.scores.length ? plddtColor(Number(atom.b || 0)) : entry.color;
   }
 
@@ -2861,6 +2942,13 @@ html>body{padding:0}</style>
       context.globalAlpha = 1;
       const mark = highlighted.get(atom.resi);
       if (mark) { context.fillStyle = mark; context.fillRect(x, 18, Math.max(0.5, cell - gap), 3); }
+      if (cell >= 9) {
+        const fill = sequenceColor(entry, atom);
+        context.fillStyle = /^#[0-9a-f]{6}$/i.test(fill) && hexLuminance(fill) > 0.5 ? '#111827' : '#ffffff';
+        context.font = '600 9px ' + (labelColors.getPropertyValue('--font-mono').trim() || 'monospace'); context.textAlign = 'center'; context.textBaseline = 'middle';
+        context.fillText(residueLetter(atom.resn), x + cell / 2, 10.5);
+        context.textAlign = 'start';
+      }
       if (labelled.has(atom.resi)) {
         context.fillStyle = ink; context.beginPath();
         context.moveTo(x + cell / 2, 3.5); context.lineTo(x + cell / 2 - 3.5, 0); context.lineTo(x + cell / 2 + 3.5, 0); context.fill();
@@ -2908,9 +2996,12 @@ html>body{padding:0}</style>
     root.querySelector('#gpv-sequence-hint').textContent = 'Hover to read a residue · click to select it for a label · drag to pick a range · double-click to zoom';
   }
 
+  /* A residue picked from the strip or the letters counts as an atom click, so
+     arrows, callouts and measurements can be drawn between residues chosen by
+     number rather than by hunting for them in three dimensions. */
   function pickSequenceResidue(entry, atom) {
-    selectResidue(entry, atom);
-    root.querySelector('#gpv-sequence-hint').textContent = describeResidue(entry, atom) + ' selected · add a label in Annotate, or double-click to zoom to it';
+    handleAtomClick(entry, atom);
+    root.querySelector('#gpv-sequence-hint').textContent = describeResidue(entry, atom) + (annotationActive ? ' added to the drawing' : measurementActive ? ' added to the measurement' : ' selected · add a label in Annotate, or double-click to zoom to it');
     if (!root.querySelector('[data-gpv-panel="annotate"]').hidden) root.querySelector('#gpv-label-text').focus();
     updateStatus(residueText(entry, atom));
   }
@@ -2972,7 +3063,7 @@ html>body{padding:0}</style>
     wrap.hidden = !entries.length;
     toggle.textContent = hidden ? 'Show sequence' : 'Hide sequence'; toggle.setAttribute('aria-expanded', String(!hidden));
     rows.hidden = hidden;
-    if (!entries.length || hidden) { rows.replaceChildren(); rows.dataset.key = ''; return; }
+    if (!entries.length || hidden) { rows.replaceChildren(); rows.dataset.key = ''; root.querySelector('#gpv-sequence-letters').replaceChildren(); root.querySelector('#gpv-sequence-letters').dataset.key = ''; return; }
     const planned = entries.flatMap(entry => residueRows(entry).map(row => ({ entry, row })));
     const shown = planned.slice(0, sequenceChainLimit);
     const multi = entries.length > 1;
@@ -3000,6 +3091,55 @@ html>body{padding:0}</style>
       });
     }
     shown.forEach(({ entry, row }, index) => drawSequenceRow(rows.children[index].querySelector('canvas'), entry, row));
+    renderSequenceLetters(shown, multi);
+  }
+
+  const lettersKey = 'protein-structure-viewer:sequence-letters-open';
+
+  /* The one-letter sequence, fifty residues a line in blocks of ten, each letter a
+     chip in the current colour scheme; click a letter to select that residue. */
+  function renderSequenceLetters(shown, multi) {
+    const details = root.querySelector('#gpv-sequence-text'); const host = root.querySelector('#gpv-sequence-letters');
+    if (!details.open) { host.replaceChildren(); host.dataset.key = ''; return; }
+    const key = shown.map(item => item.entry.id + ':' + item.row.chain).join(',') + '|' + root.querySelector('#gpv-color-mode').value + '|' + hideBelow() + '|' + alignmentResults.length;
+    if (host.dataset.key === key) return;
+    host.dataset.key = key; host.replaceChildren();
+    shown.forEach(({ entry, row }) => {
+      const block = document.createElement('div'); block.className = 'gpv-seq-block';
+      const head = document.createElement('div'); head.className = 'gpv-seq-head text-small';
+      const title = document.createElement('strong'); title.textContent = (multi ? displayName(entry) + ' · ' : '') + (row.chain ? 'Chain ' + row.chain : 'No chain');
+      const meta = document.createElement('span'); meta.className = 'text-muted';
+      meta.textContent = row.residues.length + ' residues · ' + row.residues[0].resi + '–' + row.residues[row.residues.length - 1].resi;
+      const letters = row.residues.map(atom => residueLetter(atom.resn)).join('');
+      const copy = document.createElement('button'); copy.className = 'btn btn-ghost'; copy.type = 'button'; copy.textContent = 'Copy';
+      copy.title = 'Copy the one-letter sequence';
+      copy.addEventListener('click', async () => {
+        try { await navigator.clipboard.writeText(letters); updateStatus('Sequence copied · ' + letters.length + ' residues'); }
+        catch (error) { updateStatus('Clipboard unavailable — select the letters and copy them'); }
+      });
+      head.append(title, meta, copy);
+      const pre = document.createElement('pre'); pre.className = 'gpv-seq-lines';
+      const threshold = entry.scores.length ? hideBelow() : 0;
+      for (let start = 0; start < row.residues.length; start += 50) {
+        const line = document.createElement('div'); line.className = 'gpv-seq-line';
+        const gutter = document.createElement('span'); gutter.className = 'gpv-seq-gutter'; gutter.textContent = String(row.residues[start].resi);
+        line.append(gutter);
+        row.residues.slice(start, start + 50).forEach((atom, offset) => {
+          if (offset && offset % 10 === 0) line.append(' ');
+          const span = document.createElement('span'); span.className = 'gpv-aa'; span.textContent = residueLetter(atom.resn);
+          const fill = sequenceColor(entry, atom);
+          span.style.background = fill;
+          span.style.color = /^#[0-9a-f]{6}$/i.test(fill) && hexLuminance(fill) > 0.5 ? '#111827' : '#ffffff';
+          if (threshold && Number(atom.b) < threshold) span.classList.add('is-hidden');
+          span.title = describeResidue(entry, atom);
+          span.dataset.resi = String(atom.resi);
+          span.addEventListener('click', () => pickSequenceResidue(entry, atom));
+          line.append(span);
+        });
+        pre.append(line);
+      }
+      block.append(head, pre); host.append(block);
+    });
   }
 
   function renderSequenceSoon() {
@@ -3097,8 +3237,15 @@ html>body{padding:0}</style>
       plddt: 'coloured by per-residue pLDDT (very low <50 orange, low 50–70 yellow, confident 70–90 light blue, very high ≥90 dark blue)',
       deviation: 'coloured by Cα deviation from the reference after superposition (<1 Å blue, 1–2 Å green, 2–4 Å yellow, 4–8 Å orange, ≥8 Å red; unmatched residues grey)',
       spectrum: 'coloured as a sequence spectrum from the N- to the C-terminus',
-      element: 'coloured by element'
+      element: 'coloured by element',
+      charge: 'coloured by residue charge at neutral pH (Lys and Arg blue, His light blue, Asp and Glu red, others grey)',
+      hydrophobicity: 'coloured by Kyte–Doolittle hydrophobicity (hydrophilic blue through white to hydrophobic orange)',
+      restype: 'coloured by residue type (hydrophobic amber, aromatic purple, polar green, positive blue, negative red, Gly/Pro/Cys grey)',
+      amino: 'coloured by amino acid identity (RasMol colours)',
+      ss: 'coloured by secondary structure (helix magenta, strand yellow, loop grey)'
     }[mode] || 'coloured per model';
+    const surfaceChoice = root.querySelector('#gpv-surface').value;
+    if (surfaceChoice !== 'none') colourText += ', with a ' + (surfaceChoice === 'translucent' ? 'translucent' : 'solid') + ' molecular surface in the same colours';
     if (mode === 'deviation' && !alignmentResults.length) colourText = 'shown in grey (Cα deviation colouring is selected but no alignment has been made)';
     const representation = { cartoon: 'Cartoon representation', stick: 'Stick representation', sphere: 'Space-filling representation', line: 'Line representation' }[root.querySelector('#gpv-style').value] || 'Representation';
     const sentences = [];
@@ -3487,12 +3634,13 @@ html>body{padding:0}</style>
         try { materializeEntry(target); if (!shown.has(target)) target.model.setStyle({}, {}); }
         catch (error) { broken.push(error.message); return; }
       }
+      if (typeof secondary.removeAllSurfaces === 'function') secondary.removeAllSurfaces();
       panel.model = secondary.addModel(target.text, target.format);
       panel.model.selectedAtoms({}).forEach((atom, atomIndex) => {
         const source = target.atoms[atomIndex];
         if (source) { atom.x = source.x; atom.y = source.y; atom.z = source.z; }
       });
-      applyModelStyle(panel.model, target);
+      applyModelStyle(panel.model, target, secondary);
       drawOverlays(secondary, new Set([target.id]), { width: panel.stage.clientWidth, height: panel.stage.clientHeight }, false);
       const background = backgroundSpec();
       secondary.setBackgroundColor(background.color, background.alpha);
@@ -3886,6 +4034,7 @@ html>body{padding:0}</style>
       backgroundColor: root.querySelector('#gpv-background-color').value,
       hideBelow: hideBelow(),
       hetero: root.querySelector('#gpv-hetero').value,
+      surface: root.querySelector('#gpv-surface').value,
       sideBySide: root.querySelector('#gpv-side-by-side').checked,
       syncMode: root.querySelector('#gpv-sync-mode').value,
       leftModel: (structures.find(entry => entry.id === Number(root.querySelector('#gpv-left-model').value)) || {}).name || null,
@@ -4063,12 +4212,13 @@ html>body{padding:0}</style>
     const settings = scene.settings || {};
     if (['overlay', 'single'].includes(settings.viewMode)) root.querySelector('#gpv-view-mode').value = settings.viewMode;
     if (['cartoon', 'stick', 'sphere', 'line'].includes(settings.representation)) root.querySelector('#gpv-style').value = settings.representation;
-    if (['structure', 'chain', 'plddt', 'deviation', 'spectrum', 'element'].includes(settings.colorMode)) root.querySelector('#gpv-color-mode').value = settings.colorMode;
+    if (['structure', 'chain', 'plddt', 'deviation', 'charge', 'hydrophobicity', 'restype', 'amino', 'ss', 'spectrum', 'element'].includes(settings.colorMode)) root.querySelector('#gpv-color-mode').value = settings.colorMode;
     if (['loaded', 'ranking', 'plddt'].includes(settings.modelOrder)) root.querySelector('#gpv-order').value = settings.modelOrder;
     if (['sequence', 'identifier'].includes(settings.alignmentMode)) root.querySelector('#gpv-alignment-mode').value = settings.alignmentMode;
     if (['perspective', 'orthographic'].includes(settings.projection)) root.querySelector('#gpv-projection').value = settings.projection;
     if ([0, 50, 70].includes(Number(settings.hideBelow))) root.querySelector('#gpv-hide-below').value = String(Number(settings.hideBelow));
     if (['stick', 'sphere', 'hide'].includes(settings.hetero)) root.querySelector('#gpv-hetero').value = settings.hetero;
+    if (['none', 'translucent', 'opaque'].includes(settings.surface)) root.querySelector('#gpv-surface').value = settings.surface;
     if (['transparent', 'white', 'dark', 'custom'].includes(settings.background)) root.querySelector('#gpv-background').value = settings.background;
     if (/^#[0-9a-f]{6}$/i.test(settings.backgroundColor || '')) root.querySelector('#gpv-background-color').value = settings.backgroundColor;
     const active = byName.get(settings.activeModel);
@@ -4307,7 +4457,7 @@ html>body{padding:0}</style>
     const active = byName.get(state.activeModel); if (active) activeId = active.id;
     if (['overlay', 'single'].includes(state.viewMode)) root.querySelector('#gpv-view-mode').value = state.viewMode;
     if (['cartoon', 'stick', 'sphere', 'line'].includes(state.representation)) root.querySelector('#gpv-style').value = state.representation;
-    if (['structure', 'chain', 'plddt', 'deviation', 'spectrum', 'element'].includes(state.colorMode)) root.querySelector('#gpv-color-mode').value = state.colorMode;
+    if (['structure', 'chain', 'plddt', 'deviation', 'charge', 'hydrophobicity', 'restype', 'amino', 'ss', 'spectrum', 'element'].includes(state.colorMode)) root.querySelector('#gpv-color-mode').value = state.colorMode;
     if (['perspective', 'orthographic'].includes(state.projection)) root.querySelector('#gpv-projection').value = state.projection;
     if (['transparent', 'white', 'dark', 'custom'].includes(state.background)) root.querySelector('#gpv-background').value = state.background;
     if (/^#[0-9a-f]{6}$/i.test(state.backgroundColor || '')) root.querySelector('#gpv-background-color').value = state.backgroundColor;
@@ -4384,6 +4534,7 @@ html>body{padding:0}</style>
       exportViewer.removeAllModels();
       exportViewer.removeAllLabels();
       exportViewer.removeAllShapes();
+      if (typeof exportViewer.removeAllSurfaces === 'function') exportViewer.removeAllSurfaces();
       exportViewer.resize();
     }
     return exportViewer;
@@ -4407,13 +4558,15 @@ html>body{padding:0}</style>
     const background = backgroundSpec();
     target.setBackgroundColor(background.color, background.alpha);
     if (typeof target.setProjection === 'function') target.setProjection(root.querySelector('#gpv-projection').value);
+    const pending = [];
     displayedEntries().forEach(entry => {
       if (!entry.model) return;
       const model = target.addModel(entry.text, entry.format);
       const atoms = model.selectedAtoms({});
       atoms.forEach((atom, index) => { if (entry.atoms[index]) { atom.x = entry.atoms[index].x; atom.y = entry.atoms[index].y; atom.z = entry.atoms[index].z; } });
-      applyModelStyle(model, entry);
+      pending.push(applyModelStyle(model, entry, target));
     });
+    await Promise.all(pending);
     if (overlays) drawOverlays(target, new Set(displayedEntries().map(entry => entry.id)), dimensions);
     target.zoomTo();
     if (typeof viewer.getView === 'function' && typeof target.setView === 'function') target.setView(viewer.getView());
@@ -4466,6 +4619,7 @@ html>body{padding:0}</style>
      already names its model, so no model legend), or 'screen'. */
   function legendItems(kind = 'figure') {
     const mode = root.querySelector('#gpv-color-mode').value;
+    if (residueLegends[mode]) return residueLegends[mode](kind);
     if (mode === 'deviation') return { title: 'Cα deviation', items: [...deviationBands.map(([, color, label]) => [color, label]), ['#9ca3af', 'unmatched']] };
     if (mode === 'plddt') return { title: 'pLDDT', items: [['#ff7d45', '<50', 'Very low <50'], ['#ffdb13', '50–70', 'Low 50–70'], ['#65cbf3', '70–90', 'Confident 70–90'], ['#0053d6', '≥90', 'Very high ≥90']] };
     const shown = displayedEntries().filter(entry => entry.model);
@@ -4550,7 +4704,7 @@ html>body{padding:0}</style>
     if (!entry.model) materializeEntry(entry);
     const model = target.addModel(entry.text, entry.format);
     model.selectedAtoms({}).forEach((atom, index) => { const source = entry.atoms[index]; if (source) { atom.x = source.x; atom.y = source.y; atom.z = source.z; } });
-    applyModelStyle(model, entry);
+    await applyModelStyle(model, entry, target);
     if (overlays) drawOverlays(target, new Set([entry.id]), dimensions, false);
     target.zoomTo();
     if (camera && typeof target.setView === 'function') target.setView(camera);
@@ -5897,7 +6051,9 @@ applyBackground();
     'Appearance → Presets sets up a thesis figure, a dark slide, or a confidence review in one click; every control stays editable afterwards.',
     'Publish → Write figure legend drafts the legend from what is on screen — models, colouring, cut-offs, alignment RMSD, labels and measurements — ready to paste and edit.',
     'AlphaFold 3 ligands, ions and glycans are drawn as sticks by default; switch them to spheres or hide them under Appearance → Ligands and ions. Water is never shown.',
-    'Models → Download FASTA writes one record per chain of the displayed models, with length and mean pLDDT in the header.'
+    'Models → Download FASTA writes one record per chain of the displayed models, with length and mean pLDDT in the header.',
+    'Colour by residue charge, hydrophobicity, residue type, amino acid or secondary structure — and add a translucent surface for an electrostatics-style view of a binding face.',
+    'Open “Sequence letters” under the strip to read the one-letter sequence in blocks of ten, coloured by the current scheme. Click a letter to select that residue; Copy takes the chain to the clipboard.'
   ];
   let tipIndex = Math.floor(Math.random() * tips.length);
   function renderTip() {
@@ -5912,6 +6068,9 @@ applyBackground();
   root.querySelector('#gpv-orient-reset').addEventListener('click', resetOrientation);
   Object.keys(presets).forEach(name => root.querySelector('#gpv-preset-' + name).addEventListener('click', () => applyPreset(name)));
   root.querySelector('#gpv-hetero').addEventListener('change', applyStyle);
+  root.querySelector('#gpv-surface').addEventListener('change', () => { applyStyle(); updateStatus(root.querySelector('#gpv-surface').value === 'none' ? 'Surface removed' : 'Building the molecular surface…'); });
+  root.querySelector('#gpv-sequence-text').open = readJson(lettersKey, false) === true;
+  root.querySelector('#gpv-sequence-text').addEventListener('toggle', () => { writeJson(lettersKey, root.querySelector('#gpv-sequence-text').open); renderSequence(); });
   root.querySelector('#gpv-fasta').addEventListener('click', downloadFasta);
   root.querySelector('#gpv-figure-legend').addEventListener('click', () => { writeFigureLegend(); });
   root.querySelector('#gpv-redo').addEventListener('click', redo);
@@ -5923,6 +6082,9 @@ applyBackground();
   watchStageClicks();
   restorePreferences();
   openSharedScene();
+  /* ?debug=1 exposes a few internals for the regression suite and for bug reports;
+     it has no effect otherwise. */
+  if (new URLSearchParams(location.search).has('debug')) window.__viewerDebug = { viewer, pickAtomAt, displayedEntries, entries: () => structures };
   applyTheme(readJson(themeKey, 'system'));
   selectToolTab('models');
   applyAppearance();

@@ -48,8 +48,9 @@ ranking-score readout per model. Overlay mode or one-at-a-time mode, with previo
 arrow-key navigation, adjustable automatic cycling, and sorting by ranking score or mean pLDDT.
 Source-archive filtering and name/stoichiometry search keep large prediction sets navigable, and
 the displayed models export as FASTA, one record per chain.
-Cartoon, stick, sphere, and line representations; per-structure, per-chain, pLDDT, Cα-deviation,
-sequence-spectrum, and element colouring; a one-step cut that hides residues below pLDDT 50 or 70
+Cartoon, stick, sphere, and line representations, with an optional translucent or opaque molecular
+surface; per-structure, per-chain, pLDDT, Cα-deviation, residue-charge, hydrophobicity, residue-type,
+amino-acid, secondary-structure, sequence-spectrum, and element colouring; a one-step cut that hides residues below pLDDT 50 or 70
 everywhere; ligands and ions as sticks, spheres, or hidden; perspective or orthographic projection;
 transparent, white, dark, or custom backgrounds; one-click presets for a thesis figure, a dark slide,
 or a confidence review; and exact 90° rotations so panels of the same model line up.
@@ -70,7 +71,9 @@ different size stay framed, or rotation and zoom for superposed models.
 
 **Annotate.** Click any atom to inspect its model, residue, chain, atom name, and pLDDT, or hover
 to read it from the status bar. A sequence strip under the viewer draws every chain coloured by
-pLDDT: click a residue to select it, drag a range to fill the selection fields, double-click to zoom.
+the current scheme: click a residue to select it, drag a range to fill the selection fields,
+double-click to zoom. A sequence-letters panel shows the one-letter sequence with residue numbers,
+clickable and copyable per chain.
 Add or edit custom residue labels, or label every residue in the current model. Highlight or hide chain/residue
 ranges, and add atom-to-atom distance or three-atom angle measurements. Draw figure annotations —
 arrows, lines, residue markers, text callouts, and corner titles — that follow rotation and alignment

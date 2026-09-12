@@ -2,6 +2,39 @@
 
 All notable changes to this project are recorded here.
 
+## 2.7.0
+
+Reading the sequence, and colouring by what residues are. Scenes from 2.2 onward still load; scene
+manifests gain an optional `surface` setting.
+
+### Added
+
+- **Residue colour themes.** Five new colour schemes: **residue charge** (Lys and Arg blue, His light
+  blue, Asp, Glu and nucleotides red, others grey), **hydrophobicity** on the Kyte–Doolittle scale
+  (hydrophilic blue through white to hydrophobic orange), **residue type** (hydrophobic, aromatic,
+  polar, positive, negative, Gly/Pro/Cys, nucleotide), **amino acid** identity in RasMol colours, and
+  **secondary structure** (helix, strand, loop). Each has a legend on screen and on exports (the
+  twenty-colour amino-acid legend stays on screen only), colours the sequence strip and letters, and
+  is spelled out by the figure-legend writer.
+- **Molecular surface.** *Appearance → Surface* adds a translucent or opaque molecular surface
+  coloured by the current scheme — charge or hydrophobicity on a surface reads like an electrostatics
+  view of a binding face. Hidden low-confidence residues and hetero groups are excluded. Panels and
+  exports build the same surface and wait for it before capturing. Models above forty thousand atoms
+  are skipped with a message.
+- **Sequence letters.** *Sequence letters* under the strip shows each chain's one-letter sequence,
+  fifty residues a line in blocks of ten with residue numbers in the gutter, every letter a chip in
+  the current colour scheme. Click a letter to select that residue for labelling; **Copy** puts the
+  chain's sequence on the clipboard. The strip itself now prints letters in its cells when they are
+  wide enough. The panel's open state is remembered.
+- **Draw from the sequence.** While drawing annotations or measuring, a residue clicked on the strip or
+  in the letters counts as an atom click, so arrows, callouts and distances can join residues chosen by
+  number.
+
+### Fixed
+
+- Opening the viewer with `?debug=1` exposes a small `window.__viewerDebug` object (viewer, atom
+  picking, displayed entries) for the regression suite and for bug reports; it has no effect otherwise.
+
 ## 2.6.0
 
 Getting a figure out faster. Scenes from 2.2 onward still load; scene manifests gain an optional
