@@ -1218,6 +1218,7 @@ html>body{padding:0}</style>
   #generic-protein-viewer .gpv-composition { margin-top: 10px; }
   #generic-protein-viewer .gpv-composition summary { cursor: pointer; color: var(--muted-foreground); }
   #generic-protein-viewer .gpv-composition .gpv-swatch { margin-right: 6px; }
+  #generic-protein-viewer .gpv-chain-switch { margin: 0; min-height: 0; }
   #generic-protein-viewer .gpv-goto { max-width: 11em; }
   #generic-protein-viewer .gpv-goto .form-control { min-width: 7em; }
   #generic-protein-viewer .gpv-sequence-text { margin-top: 8px; }
@@ -3209,7 +3210,8 @@ html>body{padding:0}</style>
         applyStyle();
         updateStatus((toggle.checked ? 'Showing' : 'Hiding') + ' chain ' + (row.chain || '—') + ' of ' + displayName(entry));
       });
-      toggleCell.append(toggle); tr.append(toggleCell);
+      const wrapper = document.createElement('label'); wrapper.className = 'form-check form-switch gpv-chain-switch'; wrapper.append(toggle);
+      toggleCell.append(wrapper); tr.append(toggleCell);
       body.append(tr);
     });
     const inventory = heteroInventory(entry);

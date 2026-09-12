@@ -22,6 +22,11 @@ an optional per-model `hiddenChains` list.
   hydrophobicity, residue type, amino acid, secondary structure) and a **Ligands** control (sticks,
   spheres, hidden); it starts from the ligand setting you had, and honours hidden chains.
 
+### Fixed
+
+- The **Shown** controls in the composition table are drawn as switches; as bare checkboxes the
+  design system rendered them as empty squares whether on or off.
+
 ## 2.7.0
 
 Reading the sequence, and colouring by what residues are. Scenes from 2.2 onward still load; scene
