@@ -263,6 +263,19 @@ await step('figure annotations: an arrow from two real atom clicks and a corner 
   await page.click('#gpv-annotate'); await page.waitForTimeout(200);
   if (await page.locator('#gpv-stage.is-drawing').count()) throw new Error('drawing mode did not stop');
 });
+await step('a residue label is added by clicking and edited from its list row', async () => {
+  const box = await page.locator('#gpv-stage').boundingBox();
+  await page.mouse.click(box.x + box.width / 2, box.y + box.height / 2); await page.waitForTimeout(500);
+  if (await page.locator('#gpv-add-label').isDisabled()) throw new Error('the centre click did not select a residue');
+  await page.fill('#gpv-label-text', 'Site A'); await page.click('#gpv-add-label'); await page.waitForTimeout(400);
+  if ((await page.locator('#gpv-label-list .gpv-entry').count()) !== 1) throw new Error('label row missing');
+  const text = page.locator('#gpv-label-list .gpv-entry input[type="text"]');
+  await text.fill('Site A · catalytic'); await text.press('Enter'); await page.waitForTimeout(400);
+  await page.selectOption('#gpv-label-list .gpv-entry select', '15'); await page.waitForTimeout(300);
+  if ((await text.inputValue()) !== 'Site A · catalytic') throw new Error('edit did not stick');
+  await page.click('#gpv-label-list .gpv-entry button:has-text("Remove")'); await page.waitForTimeout(300);
+  if (await page.locator('#gpv-label-list .gpv-entry').count()) throw new Error('label was not removed');
+});
 await step('every residue can be labelled', async () => {
   await page.check('#gpv-all-labels'); await page.waitForTimeout(1200);
   await page.uncheck('#gpv-all-labels'); await page.waitForTimeout(600);

@@ -30,6 +30,10 @@ Figure-readiness and analysis. Scenes and reports from 2.2 still load; scene man
   chosen cutoff, residue pairs, interface residues per chain, and buried surface area by Shrake–Rupley
   (1.4 Å probe, 92 points). Highlight a pair's interface residues in one click and export the table
   with residue lists as CSV.
+- **Editable labels.** Residue labels are listed under the label controls; each row edits the text in
+  place, sets Small/Normal/Large/Huge and a colour, zooms to its residue, or removes it. Annotation
+  rows edit their text, colour, and size inline as well. All of it carries into scenes, exports, and
+  the report.
 - The regression suite runs in Firefox and WebKit as well as Chromium (`PSV_BROWSER=firefox|webkit`),
   attributes console errors to the step that produced them, checks that exports are not blank, and
   covers display names, nudging, SVG export, offline reports, and interface analysis.

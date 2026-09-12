@@ -929,6 +929,7 @@ html>body{padding:0}</style>
       <label class="form-check form-switch"><input class="form-check-input" id="gpv-all-labels" type="checkbox"><span class="form-check-label">Label every residue</span></label>
       <button class="btn btn-ghost" type="button" id="gpv-clear-labels">Clear labels</button>
     </div>
+    <div class="gpv-list" id="gpv-label-list" aria-label="Residue labels"></div>
     <div class="viz-controls">
       <label class="form-label gpv-current-label">Selection model<select class="form-select" id="gpv-selection-model" disabled><option>No models loaded</option></select></label>
       <label class="form-label">Chain<input class="form-control" id="gpv-selection-chain" type="text" placeholder="A"></label>
@@ -1081,7 +1082,7 @@ html>body{padding:0}</style>
         <li>Save named views with captions in <strong>Publish</strong>: they become lettered figure panels, a caption file, and a guided tour inside the report.</li>
         <li><strong>Rename</strong> a model in the Models list to give it the name a caption should carry; file names stay as identifiers underneath.</li>
         <li><strong>Download comparison PNG</strong> stitches the current panels into one lettered figure at the export size you chose; the <strong>SVG</strong> variants keep labels, arrows, captions, and the legend as editable vector layers over the rendered molecule.</li>
-        <li>Nudge any label with the arrow buttons in the annotation list — it moves in screen space and stays put when the model turns. Callouts also take a leader length.</li>
+        <li>Every residue label and annotation is editable in its list row — text, colour, and size — and can be nudged with the arrow buttons; it moves in screen space and stays put when the model turns. Callouts also take a leader length.</li>
         <li><strong>Interfaces</strong> in the Confidence tab counts inter-chain contacts and buried surface area for a model, and can highlight the interface residues. Read it next to ipTM and PAE; a predicted contact is not an observed one.</li>
         <li>Tick <em>Embed 3Dmol.js for offline use</em> before sharing a report that must open without internet; drop the PAE detail to <em>Compact</em> or <em>Omit</em> to keep it small.</li>
         <li>Keep <em>Report contents</em> on <em>Models currently shown</em> for a small file reviewers can open on a laptop; switch to <em>Every loaded model</em> for an archive.</li>
@@ -1131,7 +1132,13 @@ html>body{padding:0}</style>
   #generic-protein-viewer .gpv-view-label { position: absolute; z-index: 2; top: 8px; left: 8px; pointer-events: none; max-width: calc(100% - 16px); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   #generic-protein-viewer .gpv-panel-row .form-select { flex: 1 1 200px; min-width: 0; }
   #generic-protein-viewer .gpv-entry .form-control:not(.form-control-color) { flex: 1 1 160px; min-width: 0; }
-  #generic-protein-viewer #gpv-annotation-list .gpv-entry { flex-wrap: wrap; }
+  #generic-protein-viewer #gpv-annotation-list .gpv-entry, #generic-protein-viewer #gpv-label-list .gpv-entry { flex-wrap: wrap; }
+  #generic-protein-viewer .gpv-edit-copy { display: grid; flex: 1 1 220px; min-width: 0; gap: 4px; }
+  #generic-protein-viewer .gpv-edit-copy .form-control { width: 100%; }
+  #generic-protein-viewer .gpv-edit-tools { display: inline-flex; gap: 6px; align-items: center; flex: 0 0 auto; }
+  #generic-protein-viewer .gpv-edit-tools .form-select { width: auto; padding-right: 26px; }
+  #generic-protein-viewer .gpv-edit-tools .form-control-color { width: 34px; padding: 2px; }
+  #generic-protein-viewer .gpv-edit-tools input[type=number] { width: 68px; padding: 2px 6px; }
   #generic-protein-viewer #gpv-annotation-list .gpv-entry-name { flex: 1 1 220px; }
   #generic-protein-viewer .gpv-nudge { display: inline-flex; gap: 2px; align-items: center; flex: 0 0 auto; }
   #generic-protein-viewer .gpv-nudge .btn { padding: 2px 8px; }
@@ -1909,6 +1916,7 @@ html>body{padding:0}</style>
         if (entry.model) viewer.removeModel(entry.model);
         structures = structures.filter(item => item !== entry);
         labelRecords = labelRecords.filter(label => label.entryId !== entry.id);
+        renderLabelList();
         selectionRecords = selectionRecords.filter(selection => selection.entryId !== entry.id);
         measurementRecords = measurementRecords.filter(measurement => measurement.points.every(point => point.entryId !== entry.id));
         alignmentResults = [];
@@ -2051,23 +2059,59 @@ html>body{padding:0}</style>
     const key = residueKey(selectedResidue.entryId, selectedResidue.chain, selectedResidue.resi);
     const record = { ...selectedResidue, key, text };
     const index = labelRecords.findIndex(label => label.key === key);
-    if (index >= 0) labelRecords[index] = record;
+    if (index >= 0) labelRecords[index] = { ...labelRecords[index], ...record };
     else labelRecords.push(record);
+    renderLabelList();
     rebuildOverlays();
     updateStatus(index >= 0 ? 'Residue label updated' : 'Residue label added');
   }
 
-  function labelStyle(position) {
+  function labelStyle(position, options = {}) {
+    const color = /^#[0-9a-f]{6}$/i.test(options.color || '') ? options.color : null;
     return {
       position,
       backgroundColor: labelColors.getPropertyValue('--card').trim() || '#ffffff',
-      fontColor: labelColors.getPropertyValue('--card-foreground').trim() || '#111827',
-      borderColor: labelColors.getPropertyValue('--border').trim() || '#cbd5e1',
+      fontColor: color || labelColors.getPropertyValue('--card-foreground').trim() || '#111827',
+      borderColor: color || labelColors.getPropertyValue('--border').trim() || '#cbd5e1',
       borderThickness: 1,
-      fontSize: 12,
+      fontSize: Math.round((options.size || 12) * (options.scale || 1)),
       inFront: true,
       showBackground: true
     };
+  }
+
+  const labelSizes = [[10, 'Small'], [12, 'Normal'], [15, 'Large'], [19, 'Huge']];
+
+  function renderLabelList() {
+    const list = root.querySelector('#gpv-label-list'); list.replaceChildren();
+    labelRecords.forEach(label => {
+      const entry = entryById(label.entryId);
+      const row = document.createElement('div'); row.className = 'gpv-entry';
+      const copy = document.createElement('span'); copy.className = 'gpv-edit-copy';
+      const text = document.createElement('input'); text.className = 'form-control'; text.type = 'text'; text.value = label.text; text.maxLength = 120;
+      text.setAttribute('aria-label', 'Label text for ' + (label.resn || 'residue') + ' ' + label.resi);
+      text.addEventListener('change', () => { const value = text.value.trim(); if (!value) { text.value = label.text; return; } label.text = value; rebuildOverlays(); updateStatus('Label updated'); });
+      text.addEventListener('keydown', event => { if (event.key === 'Enter') { event.preventDefault(); text.blur(); } });
+      const where = document.createElement('span'); where.className = 'gpv-entry-source text-small';
+      where.textContent = (entry ? displayName(entry) : 'Missing model') + ' · ' + (label.resn || 'RES') + ' ' + label.resi + (label.chain ? ' · chain ' + label.chain : '');
+      copy.append(text, where);
+      const tools = document.createElement('span'); tools.className = 'gpv-edit-tools';
+      const size = document.createElement('select'); size.className = 'form-select'; size.setAttribute('aria-label', 'Label size');
+      labelSizes.forEach(([value, name]) => size.append(new Option(name, String(value))));
+      size.value = String(label.size || 12);
+      size.addEventListener('change', () => { label.size = Number(size.value); rebuildOverlays(); });
+      const color = document.createElement('input'); color.className = 'form-control form-control-color'; color.type = 'color';
+      color.value = label.color || (labelColors.getPropertyValue('--card-foreground').trim() || '#111827');
+      color.setAttribute('aria-label', 'Label colour');
+      color.addEventListener('input', () => { label.color = color.value; rebuildOverlays(); });
+      const show = document.createElement('button'); show.className = 'btn btn-ghost'; show.type = 'button'; show.textContent = 'Show';
+      show.title = 'Zoom to this residue';
+      show.addEventListener('click', () => { if (!entry || !entry.model) return; const selection = { model: entry.model.getID(), resi: label.resi }; if (label.chain) selection.chain = label.chain; viewer.zoomTo(selection); viewer.render(); syncViewsFrom(viewer); });
+      const remove = document.createElement('button'); remove.className = 'btn btn-ghost'; remove.type = 'button'; remove.textContent = 'Remove';
+      remove.addEventListener('click', () => { labelRecords = labelRecords.filter(item => item !== label); renderLabelList(); rebuildOverlays(); updateStatus('Label removed'); });
+      tools.append(size, color, show, remove);
+      row.append(copy, tools); list.append(row);
+    });
   }
 
   function drawLabels(target, shownIds) {
@@ -2076,7 +2120,7 @@ html>body{padding:0}</style>
       const entry = byId.get(label.entryId);
       const atom = entry && entry.atoms.find(item => (item.chain || '') === label.chain && item.resi === label.resi && (item.atom === 'CA' || item.atom === label.atom));
       const position = atom ? { x: atom.x, y: atom.y, z: atom.z } : { x: label.x, y: label.y, z: label.z };
-      target.addLabel(label.text, labelStyle(position));
+      target.addLabel(label.text, labelStyle(position, { color: label.color, size: label.size }));
     });
     if (root.querySelector('#gpv-all-labels').checked) {
       const entry = activeEntry();
@@ -2343,8 +2387,26 @@ html>body{padding:0}</style>
     annotationRecords.forEach(record => {
       const row = document.createElement('div'); row.className = 'gpv-entry';
       const swatch = document.createElement('i'); swatch.className = 'gpv-swatch'; swatch.style.background = record.color;
-      const label = document.createElement('span'); label.className = 'gpv-entry-name'; label.textContent = annotationSummary(record);
-      row.append(swatch, label);
+      const copy = document.createElement('span'); copy.className = 'gpv-edit-copy';
+      const text = document.createElement('input'); text.className = 'form-control'; text.type = 'text'; text.maxLength = 160;
+      text.value = record.text || ''; text.placeholder = record.type === 'screen' ? 'Title text' : record.type === 'callout' ? 'Callout text' : 'Optional label';
+      text.setAttribute('aria-label', 'Text for this ' + (record.type === 'screen' ? 'screen text' : annotationTools[record.type].label.toLowerCase()));
+      text.addEventListener('change', () => {
+        const value = text.value.trim();
+        if (!value && (record.type === 'screen')) { text.value = record.text; return; }
+        record.text = value; renderAnnotationList(); rebuildOverlays(); updateStatus('Annotation text updated');
+      });
+      text.addEventListener('keydown', event => { if (event.key === 'Enter') { event.preventDefault(); text.blur(); } });
+      const where = document.createElement('span'); where.className = 'gpv-entry-source text-small';
+      where.textContent = record.type === 'screen' ? 'Screen text · ' + record.corner.replace('-', ' ') : annotationTools[record.type].label + ' · ' + record.points.map(pointName).join(' → ');
+      copy.append(text, where);
+      const tools = document.createElement('span'); tools.className = 'gpv-edit-tools';
+      const color = document.createElement('input'); color.className = 'form-control form-control-color'; color.type = 'color'; color.value = record.color; color.setAttribute('aria-label', 'Annotation colour');
+      color.addEventListener('input', () => { record.color = color.value; swatch.style.background = record.color; rebuildOverlays(); });
+      const size = document.createElement('input'); size.className = 'form-control'; size.type = 'number'; size.min = '0.5'; size.max = '3'; size.step = '0.25'; size.value = String(record.size); size.title = 'Size'; size.setAttribute('aria-label', 'Annotation size');
+      size.addEventListener('change', () => { record.size = Math.min(3, Math.max(0.5, Number(size.value) || 1)); size.value = String(record.size); rebuildOverlays(); });
+      tools.append(color, size);
+      row.append(swatch, copy, tools);
       if (annotationHasLabel(record)) {
         const nudge = document.createElement('span'); nudge.className = 'gpv-nudge';
         nudge.setAttribute('role', 'group'); nudge.setAttribute('aria-label', 'Move the label');
@@ -2877,7 +2939,7 @@ html>body{padding:0}</style>
       alignmentResults = [];
       renderAlignmentResults();
       applyStyle();
-      viewer.zoomTo();
+      fitPrimary();
       viewer.render();
       updateStatus('Original coordinates restored');
     }
@@ -3076,7 +3138,7 @@ html>body{padding:0}</style>
     alignmentResults = results;
     renderAlignmentResults();
     applyStyle();
-    viewer.zoomTo();
+    fitPrimary();
     viewer.render();
     if (results.length) {
       const averageRmsd = mean(results.map(result => result.rmsd));
@@ -3240,7 +3302,9 @@ html>body{padding:0}</style>
         chain: label.chain,
         resi: label.resi,
         atom: label.atom,
-        text: label.text
+        text: label.text,
+        color: label.color,
+        size: label.size
       })),
       selections: selectionRecords.map(record => ({ model: (structures.find(entry => entry.id === record.entryId) || {}).name, chain: record.chain, residues: record.residues, action: record.action, color: record.color })),
       measurements: measurementRecords.map(record => ({ type: record.type, points: record.points.map(point => ({ model: (structures.find(entry => entry.id === point.entryId) || {}).name, chain: point.chain, resi: point.resi, atom: point.atom, index: point.index })) })),
@@ -3283,7 +3347,7 @@ html>body{padding:0}</style>
       if (!entry) return null;
       const atom = entry.atoms.find(item => (item.chain || '') === (label.chain || '') && item.resi === label.resi && (item.atom === label.atom || item.atom === 'CA'));
       if (!atom) return null;
-      return { entryId: entry.id, chain: label.chain || '', resi: label.resi, atom: label.atom || 'CA', resn: atom.resn, x: atom.x, y: atom.y, z: atom.z, key: residueKey(entry.id, label.chain, label.resi), text: label.text };
+      return { entryId: entry.id, chain: label.chain || '', resi: label.resi, atom: label.atom || 'CA', resn: atom.resn, x: atom.x, y: atom.y, z: atom.z, key: residueKey(entry.id, label.chain, label.resi), text: label.text, color: /^#[0-9a-f]{6}$/i.test(label.color || '') ? label.color : undefined, size: labelSizes.some(([value]) => value === Number(label.size)) ? Number(label.size) : undefined };
     }).filter(Boolean);
     selectionRecords = (scene.selections || []).map(record => {
       const entry = byName.get(record.model); if (!entry) return null;
@@ -3316,7 +3380,7 @@ html>body{padding:0}</style>
     if (['rotation', 'full'].includes(settings.syncMode)) root.querySelector('#gpv-sync-mode').value = settings.syncMode;
     setComparePanels(legacyPanelNames(settings).map(name => byName.get(name)).filter(Boolean));
     root.querySelector('#gpv-side-by-side').checked = settings.sideBySide === true;
-    renderSelectionList(); renderMeasurementList(); renderAnnotationList(); renderSavedViews(); applyAppearance();
+    renderLabelList(); renderSelectionList(); renderMeasurementList(); renderAnnotationList(); renderSavedViews(); applyAppearance();
     applyStyle();
     if (settings.alignmentApplied && reference) alignVisible();
     if (settings.camera && typeof viewer.setView === 'function') viewer.setView(settings.camera);
@@ -3806,7 +3870,7 @@ html>body{padding:0}</style>
     labelRecords.filter(label => shownIds.has(label.entryId)).forEach(label => {
       const entry = byId.get(label.entryId);
       const atom = entry && entry.atoms.find(item => (item.chain || '') === label.chain && item.resi === label.resi && (item.atom === 'CA' || item.atom === label.atom));
-      parts.push(svgLabel(project(atom || label), label.text, 12 * scale, ink, palette));
+      parts.push(svgLabel(project(atom || label), label.text, (label.size || 12) * scale, label.color || ink, palette));
     });
     measurementRecords.forEach(record => {
       if (!record.points.every(point => shownIds.has(point.entryId))) return;
@@ -4180,7 +4244,7 @@ html>body{padding:0}</style>
       confidence: reportConfidence(entry),
       coords: reportCoordinates(entry),
       shapes: reportShapes(entry),
-      labels: labelRecords.filter(label => label.entryId === entry.id).map(label => ({ text: label.text, chain: label.chain, resi: label.resi, atom: label.atom, x: label.x, y: label.y, z: label.z }))
+      labels: labelRecords.filter(label => label.entryId === entry.id).map(label => ({ text: label.text, chain: label.chain, resi: label.resi, atom: label.atom, x: label.x, y: label.y, z: label.z, color: label.color || null, size: label.size || 12 }))
     }));
     const chosenNames = new Set(chosen.map(entry => entry.name));
     const initial = {
@@ -4351,7 +4415,7 @@ function show(pane, preserveView) {
   const m = pane.viewer.addModel(s.text, s.format);
   if (Array.isArray(s.coords)) m.selectedAtoms({}).forEach((a, i) => { if (s.coords.length >= i * 3 + 3) { a.x = s.coords[i * 3]; a.y = s.coords[i * 3 + 1]; a.z = s.coords[i * 3 + 2]; } });
   m.setStyle({}, styleSpec(s));
-  (s.labels || []).forEach(l => pane.viewer.addLabel(l.text, { position: { x: l.x, y: l.y, z: l.z }, backgroundColor: '#fff', fontColor: '#111827', borderColor: '#94a3b8', borderThickness: 1, fontSize: 12, inFront: true }));
+  (s.labels || []).forEach(l => pane.viewer.addLabel(l.text, { position: { x: l.x, y: l.y, z: l.z }, backgroundColor: '#fff', fontColor: l.color || '#111827', borderColor: l.color || '#94a3b8', borderThickness: 1, fontSize: l.size || 12, inFront: true }));
   (s.shapes || []).forEach(sh => {
     if (sh.kind === 'arrow') pane.viewer.addArrow({ start: sh.start, end: sh.end, radius: sh.radius, radiusRatio: 2.2, mid: 0.72, color: sh.color });
     else if (sh.kind === 'cylinder') pane.viewer.addCylinder({ start: sh.start, end: sh.end, radius: sh.radius, color: sh.color, dashed: !!sh.dashed, fromCap: 1, toCap: 1 });
@@ -4779,7 +4843,7 @@ applyBackground();
   root.querySelector('#gpv-view-mode').addEventListener('change', () => {
     stopCycle();
     applyStyle();
-    viewer.zoomTo();
+    fitPrimary();
     viewer.render();
   });
   root.querySelector('#gpv-current').addEventListener('change', event => {
@@ -4865,6 +4929,7 @@ applyBackground();
     renderSelectionList();
     renderMeasurementList();
     renderAnnotationList();
+    renderLabelList();
     renderSavedViews();
     renderList();
     applyStyle();
@@ -4890,6 +4955,7 @@ applyBackground();
   root.querySelector('#gpv-all-labels').addEventListener('change', () => rebuildOverlays());
   root.querySelector('#gpv-clear-labels').addEventListener('click', () => {
     labelRecords = [];
+    renderLabelList();
     root.querySelector('#gpv-all-labels').checked = false;
     root.querySelector('#gpv-label-text').value = '';
     rebuildOverlays();
