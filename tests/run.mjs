@@ -127,6 +127,18 @@ await step('a model can be given a display name', async () => {
   if (!options.some(text => /Reference helix/.test(text))) throw new Error('model picker did not pick up the name');
 });
 
+await step('FASTA has one record per chain of the displayed models', async () => {
+  const download = page.waitForEvent('download', { timeout: 20000 });
+  await page.click('#gpv-fasta');
+  const file = join(work, 'sequences.fasta'); await (await download).saveAs(file);
+  const fasta = await readFile(file, 'utf8');
+  const records = (fasta.match(/^>/gm) || []).length;
+  if (records < 2 || records % 2) throw new Error('records=' + records);
+  if (!/chain_A length=30 mean_pLDDT=/.test(fasta)) throw new Error('header missing fields: ' + fasta.split('\n')[0]);
+  if (!/^A{30}$/m.test(fasta)) throw new Error('poly-alanine sequence not found');
+  console.log('       ' + records + ' FASTA records');
+});
+
 group('navigation');
 await step('previous and next', async () => {
   await page.click('#gpv-next'); await page.waitForTimeout(400);
@@ -144,6 +156,22 @@ for (const [index, name] of ['models', 'appearance', 'annotate', 'compare', 'con
 
 group('appearance');
 await tab('appearance');
+await step('90° rotation buttons turn the view and reset restores it', async () => {
+  const snapshot = () => page.evaluate(() => document.querySelector('#gpv-stage canvas').toDataURL());
+  const before = await snapshot();
+  await page.click('#gpv-rotate-y'); await page.waitForTimeout(500);
+  if ((await snapshot()) === before) throw new Error('rotation did not change the render');
+  await page.keyboard.press('Shift+R'); await page.waitForTimeout(500);
+  if (!/Orientation reset/.test((await page.locator('#gpv-state').textContent()) || '')) throw new Error('reset status missing');
+});
+await step('presets and the ligand control apply without errors', async () => {
+  await page.selectOption('#gpv-hetero', 'sphere'); await page.waitForTimeout(300);
+  await page.selectOption('#gpv-hetero', 'stick'); await page.waitForTimeout(300);
+  await page.click('#gpv-preset-thesis'); await page.waitForTimeout(600);
+  if ((await page.inputValue('#gpv-background')) !== 'white') throw new Error('background not white');
+  if ((await page.inputValue('#gpv-projection')) !== 'orthographic') throw new Error('projection not orthographic');
+  if (!/Preset applied/.test((await page.locator('#gpv-state').textContent()) || '')) throw new Error('status missing');
+});
 for (const [selector, value] of [
   ['#gpv-style', 'stick'], ['#gpv-style', 'sphere'], ['#gpv-style', 'line'],
   ['#gpv-color-mode', 'plddt'], ['#gpv-color-mode', 'spectrum'], ['#gpv-color-mode', 'element'],
@@ -644,6 +672,15 @@ if (reportPath) {
     if (!/panel 1/.test(await report.locator('#position').textContent())) throw new Error('position lost its panel index');
   });
 }
+
+await step('the figure legend names the models and the colouring', async () => {
+  await tab('publish');
+  await page.click('#gpv-figure-legend'); await page.waitForTimeout(500);
+  const text = await page.inputValue('#gpv-legend-text');
+  if (!/representation of /.test(text) || !/coloured/.test(text)) throw new Error('legend text: ' + text.slice(0, 120));
+  if (!/model_/.test(text)) throw new Error('no model name in: ' + text.slice(0, 120));
+  console.log('       ' + text.slice(0, 110).replace(/\s+/g, ' ') + '…');
+});
 
 group('share links');
 /* A minimal mmCIF built from the first fixture stands in for files.rcsb.org, so the

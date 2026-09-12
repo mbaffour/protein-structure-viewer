@@ -2,6 +2,34 @@
 
 All notable changes to this project are recorded here.
 
+## 2.6.0
+
+Getting a figure out faster. Scenes from 2.2 onward still load; scene manifests gain an optional
+`hetero` setting.
+
+### Added
+
+- **Ligands and ions.** Hetero groups — AlphaFold 3 ligands, cofactors, ions, glycans, and the ligands
+  of experimental structures — are drawn as sticks with small spheres by default, or as spheres, or
+  hidden (*Appearance → Ligands and ions*). Cartoon mode used to hide them entirely. Water is never
+  drawn. The choice applies to panels and exports and is stored in scene JSON and preferences.
+- **90° rotations.** Toolbar buttons and the <kbd>X</kbd>, <kbd>Y</kbd>, <kbd>Z</kbd> keys rotate the
+  view by exactly 90° about that axis (<kbd>Shift</kbd> reverses), and <kbd>Shift</kbd>+<kbd>R</kbd>
+  returns to the file's own orientation. Synchronized panels follow. Front, side and top panels of the
+  same model now line up exactly.
+- **Presets.** *Thesis figure* (white background, orthographic cartoon, legend on exports, 1800 × 1200
+  at 2×), *Dark slide* (dark background, perspective, colour by chain) and *Confidence review* (pLDDT
+  colouring with the legend, every residue shown, ligands as sticks). Every control stays editable
+  afterwards.
+- **FASTA export.** *Models → Download FASTA* writes the sequences of the displayed models, one record
+  per chain, with length and mean pLDDT in the header. Nucleic acids use single-letter codes; unknown
+  residues are X.
+- **Figure legend writer.** *Publish → Write figure legend* drafts a legend from the scene: the
+  models shown, representation, colour scheme with its bands spelled out, the low-confidence cut,
+  ligand handling, the alignment reference, method and per-model RMSD, synchronized panels, labelled
+  residues, highlighted ranges, measurements with values, and annotation text, followed by your
+  provenance notes. It is copied to the clipboard and shown in an editable field.
+
 ## 2.5.0
 
 Reading disagreement and confidence. Scenes and reports from 2.2 onward still load; scene manifests

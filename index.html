@@ -854,6 +854,7 @@ html>body{padding:0}</style>
     <button class="btn" type="button" id="gpv-previous" disabled data-tooltip="Previous model (left arrow)"><i data-icon="chevron-left" aria-hidden="true"></i>Previous</button>
     <button class="btn" type="button" id="gpv-next" disabled data-tooltip="Next model (right arrow)">Next<i data-icon="chevron-right" aria-hidden="true"></i></button>
     <button class="btn" type="button" id="gpv-fit" data-tooltip="Recentre and zoom to everything on screen (F)"><i data-icon="scan" aria-hidden="true"></i>Fit</button>
+    <span class="gpv-orient" role="group" aria-label="Rotate the view in 90 degree steps"><button class="btn" type="button" id="gpv-rotate-x" data-tooltip="Rotate 90° about the horizontal axis (X; Shift reverses)">↻ X</button><button class="btn" type="button" id="gpv-rotate-y" data-tooltip="Rotate 90° about the vertical axis (Y; Shift reverses)">↻ Y</button><button class="btn" type="button" id="gpv-rotate-z" data-tooltip="Rotate 90° in the screen plane (Z; Shift reverses)">↻ Z</button><button class="btn btn-ghost" type="button" id="gpv-orient-reset" data-tooltip="Back to the orientation of the file itself (Shift + R)">Reset</button></span>
     <button class="btn" type="button" id="gpv-fullscreen" data-tooltip="Expand the 3D view to fill the screen (Shift + F)"><i data-icon="maximize" aria-hidden="true"></i>Full screen</button>
     <button class="btn btn-primary" type="button" id="gpv-report" disabled data-tooltip="Download a self-contained interactive HTML report"><i data-icon="share-2" aria-hidden="true"></i>Share report</button>
   </div>
@@ -903,6 +904,7 @@ html>body{padding:0}</style>
       <label class="form-label gpv-slider-label">Interval <span id="gpv-cycle-value">2.0 s</span><input class="form-range" id="gpv-cycle-speed" type="range" min="0.5" max="10" value="2" step="0.5"></label>
       <button class="btn" type="button" id="gpv-show-all" data-tooltip="Show every model that matches the current filter"><i data-icon="eye" aria-hidden="true"></i>Show all</button>
       <button class="btn" type="button" id="gpv-hide-all" data-tooltip="Hide every model that matches the current filter"><i data-icon="eye-off" aria-hidden="true"></i>Hide all</button>
+      <button class="btn" type="button" id="gpv-fasta" disabled data-tooltip="Download the sequences of the displayed models as FASTA, one record per chain"><i data-icon="download" aria-hidden="true"></i>Download FASTA</button>
       <button class="btn btn-ghost" type="button" id="gpv-clear" data-tooltip="Remove all models, annotations, and saved views"><i data-icon="trash-2" aria-hidden="true"></i>Clear all</button>
     </div>
     <div class="gpv-list" id="gpv-list" aria-label="Loaded structures"></div>
@@ -914,10 +916,12 @@ html>body{padding:0}</style>
   </section>
 
   <section class="gpv-tool-panel" data-gpv-panel="appearance" hidden>
+    <div class="viz-controls gpv-presets"><span class="text-small text-muted">Presets</span><button class="btn" type="button" id="gpv-preset-thesis" data-tooltip="White background, orthographic cartoon, legend on exports, 1800 × 1200 at 2×">Thesis figure</button><button class="btn" type="button" id="gpv-preset-slide" data-tooltip="Dark background, perspective cartoon, colour by chain">Dark slide</button><button class="btn" type="button" id="gpv-preset-review" data-tooltip="pLDDT colouring with the legend, every residue shown, ligands as sticks">Confidence review</button></div>
     <div class="viz-controls">
       <label class="form-label">Representation<select class="form-select" id="gpv-style"><option value="cartoon">Cartoon</option><option value="stick">Sticks</option><option value="sphere">Spheres</option><option value="line">Lines</option></select></label>
       <label class="form-label">Color scheme<select class="form-select" id="gpv-color-mode"><option value="structure">Per structure</option><option value="chain">Per chain</option><option value="plddt">pLDDT confidence</option><option value="deviation">Cα deviation after alignment</option><option value="spectrum">Sequence spectrum</option><option value="element">Element</option></select></label>
       <label class="form-label">Low confidence<select class="form-select" id="gpv-hide-below" data-tooltip="Hide residues whose pLDDT is below the threshold — in the viewer, every panel and every export"><option value="0">Show every residue</option><option value="50">Hide pLDDT below 50</option><option value="70">Hide pLDDT below 70</option></select></label>
+      <label class="form-label">Ligands and ions<select class="form-select" id="gpv-hetero" data-tooltip="How hetero groups — ligands, cofactors, ions, glycans — are drawn; water is never shown"><option value="stick">Sticks and spheres</option><option value="sphere">Spheres</option><option value="hide">Hidden</option></select></label>
       <label class="form-label">Projection<select class="form-select" id="gpv-projection"><option value="perspective">Perspective</option><option value="orthographic">Orthographic</option></select></label>
       <label class="form-label">Background<select class="form-select" id="gpv-background"><option value="transparent">Transparent</option><option value="white">White</option><option value="dark">Dark</option><option value="custom">Custom</option></select></label>
       <label class="form-label">Custom background<input class="form-control form-control-color" id="gpv-background-color" type="color" value="#ffffff"></label>
@@ -1034,6 +1038,10 @@ html>body{padding:0}</style>
       <span class="text-muted text-small" id="gpv-share-note">Links carry only models fetched by ID (PDB, UniProt, AlphaFold DB). Files opened from your computer stay there.</span>
     </div>
     <div class="viz-controls">
+      <button class="btn" type="button" id="gpv-figure-legend" disabled data-tooltip="Write a figure legend from the scene: models, colouring, alignment, labels, measurements and annotations">Write figure legend</button>
+      <textarea class="form-control gpv-legend-text" id="gpv-legend-text" rows="5" hidden aria-label="Generated figure legend"></textarea>
+    </div>
+    <div class="viz-controls">
       <label class="form-label">View name<input class="form-control" id="gpv-view-name" type="text" placeholder="Overview, interface, pore…"></label>
       <label class="form-label gpv-current-label">Caption<input class="form-control" id="gpv-view-caption" type="text" placeholder="Short panel caption"></label>
       <button class="btn" type="button" id="gpv-save-view" disabled>Save current view</button>
@@ -1073,6 +1081,7 @@ html>body{padding:0}</style>
           <tr><th><kbd>C</kbd></th><td>Start or pause automatic cycling</td></tr>
           <tr><th><kbd>F</kbd></th><td>Fit every panel to what it displays</td></tr>
           <tr><th><kbd>S</kbd></th><td>Start or stop spinning</td></tr>
+          <tr><th><kbd>X</kbd> <kbd>Y</kbd> <kbd>Z</kbd></th><td>Rotate 90° about that axis (<kbd>Shift</kbd> reverses); <kbd>Shift</kbd> + <kbd>R</kbd> resets orientation</td></tr>
           <tr><th><kbd>Shift</kbd> + <kbd>F</kbd></th><td>Toggle full screen</td></tr>
           <tr><th><kbd>1</kbd> – <kbd>6</kbd></th><td>Jump to a tool tab</td></tr>
           <tr><th><kbd>Ctrl</kbd>/<kbd>⌘</kbd> + <kbd>Z</kbd></th><td>Undo the last label, selection, measurement or annotation change; add <kbd>Shift</kbd> to redo</td></tr>
@@ -1198,6 +1207,9 @@ html>body{padding:0}</style>
   #generic-protein-viewer .gpv-sequence-chain { font-family: var(--font-mono); font-size: var(--font-size-small); color: var(--muted-foreground); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   #generic-protein-viewer .gpv-share-url { font-family: var(--font-mono); font-size: var(--font-size-small); min-width: min(100%, 320px); }
   #generic-protein-viewer .gpv-history { align-items: center; }
+  #generic-protein-viewer .gpv-orient { display: inline-flex; gap: 4px; }
+  #generic-protein-viewer .gpv-presets { align-items: center; }
+  #generic-protein-viewer .gpv-legend-text { flex: 1 1 100%; font-size: var(--font-size-small); line-height: 1.5; }
   #generic-protein-viewer .gpv-history .gpv-selected-state { flex: 1; min-width: 200px; }
   #generic-protein-viewer .gpv-legend strong { color: var(--card-foreground); }
   #generic-protein-viewer .gpv-status > :last-child { margin-left: auto; text-align: right; }
@@ -1339,7 +1351,7 @@ html>body{padding:0}</style>
   let busyDepth = 0;
   let restoreMotion = null;
   const listPageSize = 60;
-  const viewerVersion = '2.5.0';
+  const viewerVersion = '2.6.0';
   const preferenceKey = 'protein-structure-viewer:preferences';
   const themeKey = 'protein-structure-viewer:theme';
   const labelColors = getComputedStyle(root);
@@ -1835,7 +1847,15 @@ html>body{padding:0}</style>
     model.setStyle({}, styleFor(entry));
     const threshold = hideBelow();
     if (threshold && entry.scores.length) model.setStyle({ predicate: atom => Number(atom.b) < threshold }, {});
+    /* Hetero groups are invisible in cartoon mode unless styled on their own.
+       Water is never drawn. */
+    const hetero = root.querySelector('#gpv-hetero').value;
+    const heteroStyle = hetero === 'hide' ? {} : hetero === 'sphere' ? { sphere: { scale: 0.35, colorscheme: 'default' } } : { stick: { radius: 0.25, colorscheme: 'default' }, sphere: { scale: 0.28, colorscheme: 'default' } };
+    model.setStyle({ hetflag: true }, heteroStyle);
+    model.setStyle({ resn: waterNames }, {});
   }
+  const waterNames = ['HOH', 'WAT', 'DOD', 'H2O', 'TIP', 'SOL'];
+  const isWater = atom => waterNames.includes(String(atom.resn || '').toUpperCase());
 
   const residueTag = atom => (atom.chain || '') + '|' + atom.resi;
   const deviationBands = [[1, '#2563eb', '<1 Å'], [2, '#22c55e', '1–2 Å'], [4, '#eab308', '2–4 Å'], [8, '#f97316', '4–8 Å'], [Infinity, '#dc2626', '≥8 Å']];
@@ -1857,6 +1877,8 @@ html>body{padding:0}</style>
     root.querySelector('#gpv-drop').classList.toggle('is-compact', structures.length > 0);
     root.querySelector('#gpv-report').disabled = structures.length === 0;
     root.querySelector('#gpv-share-link').disabled = !structures.some(entry => entry.fetchId);
+    root.querySelector('#gpv-fasta').disabled = structures.length === 0;
+    root.querySelector('#gpv-figure-legend').disabled = structures.length === 0;
     const scored = structures.some(entry => entry.visible && entry.scores.length);
     root.querySelector('#gpv-profile-svg').disabled = !scored;
     root.querySelector('#gpv-profile-png').disabled = !scored;
@@ -2985,6 +3007,129 @@ html>body{padding:0}</style>
     sequenceFrame = requestAnimationFrame(() => { sequenceFrame = 0; renderSequence(); });
   }
 
+  /* ---------- Orientation ---------- */
+
+  function rotateView(axis, degrees) {
+    if (typeof viewer.rotate !== 'function') return;
+    viewer.rotate(degrees, axis);
+    viewer.render();
+    syncViewsFrom(viewer);
+    updateStatus('Rotated ' + (degrees > 0 ? '+' : '') + degrees + '° about ' + axis.toUpperCase());
+  }
+
+  function resetOrientation() {
+    if (typeof viewer.getView !== 'function') return;
+    const view = viewer.getView();
+    viewer.setView([view[0], view[1], view[2], view[3], 0, 0, 0, 1]);
+    viewer.render();
+    syncViewsFrom(viewer);
+    updateStatus('Orientation reset to the coordinate frame of the file');
+  }
+
+  /* ---------- Presets ---------- */
+
+  const presets = {
+    thesis: { '#gpv-style': 'cartoon', '#gpv-background': 'white', '#gpv-projection': 'orthographic', '#gpv-export-size': '1800x1200', '#gpv-export-scale': '2', '#gpv-hetero': 'stick' },
+    slide: { '#gpv-style': 'cartoon', '#gpv-background': 'dark', '#gpv-projection': 'perspective', '#gpv-color-mode': 'chain', '#gpv-hetero': 'stick' },
+    review: { '#gpv-style': 'cartoon', '#gpv-color-mode': 'plddt', '#gpv-hide-below': '0', '#gpv-hetero': 'stick', '#gpv-background': 'white' }
+  };
+  const presetNames = { thesis: 'Thesis figure', slide: 'Dark slide', review: 'Confidence review' };
+
+  function applyPreset(name) {
+    Object.entries(presets[name] || {}).forEach(([selector, value]) => {
+      const control = root.querySelector(selector);
+      if (!control || ![...control.options].some(option => option.value === value)) return;
+      control.value = value;
+      control.dispatchEvent(new Event('change', { bubbles: true }));
+    });
+    if (name !== 'slide') root.querySelector('#gpv-export-legend').checked = true;
+    updateStatus('Preset applied: ' + presetNames[name]);
+  }
+
+  /* ---------- Sequences ---------- */
+
+  const nucleotides = { DA: 'A', DC: 'C', DG: 'G', DT: 'T', DU: 'U', A: 'A', C: 'C', G: 'G', U: 'U', I: 'I' };
+  function residueLetter(resn) {
+    const code = String(resn || '').toUpperCase().trim();
+    return aminoAcids[code] || nucleotides[code] || 'X';
+  }
+
+  function fastaText(entries) {
+    const records = [];
+    entries.forEach(entry => residueRows(entry).forEach(row => {
+      const sequence = row.residues.map(atom => residueLetter(atom.resn)).join('');
+      const confidence = entry.scores.length ? mean(row.residues.map(atom => Number(atom.b) || 0)) : null;
+      const header = '>' + displayName(entry).replace(/\s+/g, '_') + (row.chain ? '|chain_' + row.chain : '') + ' length=' + sequence.length + (confidence === null ? '' : ' mean_pLDDT=' + confidence.toFixed(1));
+      records.push(header + '\n' + (sequence.match(/.{1,60}/g) || ['']).join('\n'));
+    }));
+    return records.join('\n') + '\n';
+  }
+
+  function downloadFasta() {
+    const entries = displayedEntries().filter(entry => entry.model);
+    if (!entries.length) { announce('Show at least one model first', 'error'); return; }
+    downloadBlob(fastaText(entries), 'text/plain', 'sequences.fasta');
+    updateStatus('FASTA for ' + entries.length + ' model' + (entries.length === 1 ? '' : 's') + ' downloaded');
+  }
+
+  /* ---------- Figure legend ---------- */
+
+  function compactRange(values) {
+    const sorted = [...new Set(values.map(Number))].sort((a, b) => a - b);
+    if (!sorted.length) return '';
+    const parts = []; let start = sorted[0]; let previous = sorted[0];
+    for (let index = 1; index <= sorted.length; index += 1) {
+      const value = sorted[index];
+      if (value === previous + 1) { previous = value; continue; }
+      parts.push(start === previous ? String(start) : start + '–' + previous);
+      start = value; previous = value;
+    }
+    return parts.join(', ');
+  }
+
+  function figureLegendText() {
+    const shown = displayedEntries().filter(entry => entry.model);
+    const provenance = provenanceValues();
+    const mode = root.querySelector('#gpv-color-mode').value;
+    let colourText = {
+      structure: 'coloured per model' + (shown.length > 1 ? ' (' + shown.map(entry => displayName(entry) + ' ' + entry.color).join('; ') + ')' : ''),
+      chain: 'coloured by chain',
+      plddt: 'coloured by per-residue pLDDT (very low <50 orange, low 50–70 yellow, confident 70–90 light blue, very high ≥90 dark blue)',
+      deviation: 'coloured by Cα deviation from the reference after superposition (<1 Å blue, 1–2 Å green, 2–4 Å yellow, 4–8 Å orange, ≥8 Å red; unmatched residues grey)',
+      spectrum: 'coloured as a sequence spectrum from the N- to the C-terminus',
+      element: 'coloured by element'
+    }[mode] || 'coloured per model';
+    if (mode === 'deviation' && !alignmentResults.length) colourText = 'shown in grey (Cα deviation colouring is selected but no alignment has been made)';
+    const representation = { cartoon: 'Cartoon representation', stick: 'Stick representation', sphere: 'Space-filling representation', line: 'Line representation' }[root.querySelector('#gpv-style').value] || 'Representation';
+    const sentences = [];
+    sentences.push((provenance.title ? provenance.title + '. ' : '') + representation + ' of ' + (shown.length ? shown.map(displayName).join(', ') : 'the model') + (provenance.method ? ' predicted with ' + provenance.method : '') + (provenance.source ? ' (' + provenance.source + ')' : '') + ', ' + colourText + '.');
+    const cut = hideBelow();
+    if (cut && shown.some(entry => entry.scores.length)) sentences.push('Residues with pLDDT below ' + cut + ' are not shown.');
+    const hetero = root.querySelector('#gpv-hetero').value;
+    if (hetero !== 'hide' && shown.some(entry => entry.atoms.some(atom => atom.hetflag && !isWater(atom)))) sentences.push('Ligands and ions are drawn as ' + (hetero === 'sphere' ? 'spheres' : 'sticks') + '; water is omitted.');
+    if (alignmentResults.length) sentences.push('Models were superposed on ' + alignmentResults[0].reference + ' by ' + alignmentResults[0].method + ' (' + alignmentResults.map(result => result.name + ': ' + result.count + ' Cα pairs, RMSD ' + result.rmsd.toFixed(2) + ' Å').join('; ') + ').');
+    if (root.querySelector('#gpv-side-by-side').checked && comparePanels.length) sentences.push('Panels share one orientation' + (root.querySelector('#gpv-sync-mode').value === 'full' ? ' and zoom' : '') + '.');
+    const shownIds = new Set(shown.map(entry => entry.id));
+    const labels = labelRecords.filter(label => shownIds.has(label.entryId));
+    if (labels.length) sentences.push('Labelled residues: ' + labels.map(label => label.text).join(', ') + '.');
+    const highlights = selectionRecords.filter(record => record.action === 'highlight' && shownIds.has(record.entryId));
+    if (highlights.length) sentences.push('Highlighted residues: ' + highlights.map(record => (record.chain ? 'chain ' + record.chain + ' ' : '') + compactRange(record.residues)).join('; ') + '.');
+    const measurements = measurementRecords.filter(record => record.points.every(point => shownIds.has(point.entryId)));
+    if (measurements.length) sentences.push('Measurements: ' + measurements.map(record => record.points.map(point => (point.chain ? point.chain + ':' : '') + point.resi).join('–') + ' ' + measurementText(record)).join('; ') + '.');
+    const annotations = annotationRecords.filter(record => record.text && record.points.every(point => shownIds.has(point.entryId)));
+    if (annotations.length) sentences.push('Annotations: ' + annotations.map(record => record.text).join('; ') + '.');
+    if (provenance.notes) sentences.push(provenance.notes);
+    return sentences.join(' ');
+  }
+
+  async function writeFigureLegend() {
+    const text = figureLegendText();
+    const field = root.querySelector('#gpv-legend-text');
+    field.value = text; field.hidden = false;
+    try { await navigator.clipboard.writeText(text); announce('Figure legend written and copied to the clipboard'); }
+    catch (error) { field.focus(); field.select(); announce('Figure legend written — copy it from the field'); }
+  }
+
   /* ---------- Interface geometry ---------- */
 
   const vdwRadii = { C: 1.7, N: 1.55, O: 1.52, S: 1.8, P: 1.8, SE: 1.9, F: 1.47, CL: 1.75, BR: 1.85, I: 1.98 };
@@ -3740,6 +3885,7 @@ html>body{padding:0}</style>
       background: root.querySelector('#gpv-background').value,
       backgroundColor: root.querySelector('#gpv-background-color').value,
       hideBelow: hideBelow(),
+      hetero: root.querySelector('#gpv-hetero').value,
       sideBySide: root.querySelector('#gpv-side-by-side').checked,
       syncMode: root.querySelector('#gpv-sync-mode').value,
       leftModel: (structures.find(entry => entry.id === Number(root.querySelector('#gpv-left-model').value)) || {}).name || null,
@@ -3922,6 +4068,7 @@ html>body{padding:0}</style>
     if (['sequence', 'identifier'].includes(settings.alignmentMode)) root.querySelector('#gpv-alignment-mode').value = settings.alignmentMode;
     if (['perspective', 'orthographic'].includes(settings.projection)) root.querySelector('#gpv-projection').value = settings.projection;
     if ([0, 50, 70].includes(Number(settings.hideBelow))) root.querySelector('#gpv-hide-below').value = String(Number(settings.hideBelow));
+    if (['stick', 'sphere', 'hide'].includes(settings.hetero)) root.querySelector('#gpv-hetero').value = settings.hetero;
     if (['transparent', 'white', 'dark', 'custom'].includes(settings.background)) root.querySelector('#gpv-background').value = settings.background;
     if (/^#[0-9a-f]{6}$/i.test(settings.backgroundColor || '')) root.querySelector('#gpv-background-color').value = settings.backgroundColor;
     const active = byName.get(settings.activeModel);
@@ -5395,7 +5542,7 @@ applyBackground();
   /* ---------- Preference persistence ---------- */
 
   const persistedControls = [
-    '#gpv-style', '#gpv-color-mode', '#gpv-projection', '#gpv-background', '#gpv-background-color',
+    '#gpv-style', '#gpv-color-mode', '#gpv-projection', '#gpv-background', '#gpv-background-color', '#gpv-hetero',
     '#gpv-view-mode', '#gpv-order', '#gpv-alignment-mode', '#gpv-export-size', '#gpv-export-scale',
     '#gpv-panel-columns', '#gpv-video-length', '#gpv-cycle-speed', '#gpv-speed', '#gpv-report-scope'
   ];
@@ -5708,6 +5855,8 @@ applyBackground();
     if (key === 'f') { event.preventDefault(); if (event.shiftKey) setFullscreen(!fullscreen); else fitAllViews(); return; }
     if (key === 'c' && !event.shiftKey) { event.preventDefault(); toggleCycle(); return; }
     if (key === 's' && !event.shiftKey) { event.preventDefault(); toggleSpin(); return; }
+    if (['x', 'y', 'z'].includes(key)) { event.preventDefault(); rotateView(key, event.shiftKey ? -90 : 90); return; }
+    if (key === 'r' && event.shiftKey) { event.preventDefault(); resetOrientation(); return; }
     const tabIndex = Number(event.key) - 1;
     if (Number.isInteger(tabIndex) && tabIndex >= 0 && tabIndex < tabOrder.length) {
       event.preventDefault();
@@ -5743,7 +5892,12 @@ applyBackground();
     'Appearance → Low confidence hides residues below pLDDT 50 or 70 everywhere at once: viewer, synchronized panels, PNG and SVG exports.',
     'After Align visible, colour by Cα deviation to see where the models disagree. Blue is under 1 Å, red is 8 Å or more, grey was not matched.',
     'Confidence → pLDDT profile SVG plots per-residue confidence for every displayed model, one panel per chain, ready for a supplementary figure.',
-    'In overlay mode the sequence strip shows one row per model and chain, so pLDDT of competing predictions lines up residue by residue. Hovering the PAE heatmap marks both residues on the strip.'
+    'In overlay mode the sequence strip shows one row per model and chain, so pLDDT of competing predictions lines up residue by residue. Hovering the PAE heatmap marks both residues on the strip.',
+    'X, Y and Z rotate the view by exactly 90° (Shift reverses), so a front, side and top panel of the same model line up in a figure. Shift+R returns to the file frame.',
+    'Appearance → Presets sets up a thesis figure, a dark slide, or a confidence review in one click; every control stays editable afterwards.',
+    'Publish → Write figure legend drafts the legend from what is on screen — models, colouring, cut-offs, alignment RMSD, labels and measurements — ready to paste and edit.',
+    'AlphaFold 3 ligands, ions and glycans are drawn as sticks by default; switch them to spheres or hide them under Appearance → Ligands and ions. Water is never shown.',
+    'Models → Download FASTA writes one record per chain of the displayed models, with length and mean pLDDT in the header.'
   ];
   let tipIndex = Math.floor(Math.random() * tips.length);
   function renderTip() {
@@ -5754,6 +5908,12 @@ applyBackground();
   root.querySelector('#gpv-tip-hide').addEventListener('click', () => { writeJson(tipsKey, true); renderTip(); updateStatus('Tips hidden · bring them back from the help dialog (?)'); });
   root.querySelector('#gpv-tips-reset').addEventListener('click', () => { writeJson(tipsKey, false); tipIndex += 1; renderTip(); });
   root.querySelector('#gpv-undo').addEventListener('click', undo);
+  ['x', 'y', 'z'].forEach(axis => root.querySelector('#gpv-rotate-' + axis).addEventListener('click', event => rotateView(axis, event.shiftKey ? -90 : 90)));
+  root.querySelector('#gpv-orient-reset').addEventListener('click', resetOrientation);
+  Object.keys(presets).forEach(name => root.querySelector('#gpv-preset-' + name).addEventListener('click', () => applyPreset(name)));
+  root.querySelector('#gpv-hetero').addEventListener('change', applyStyle);
+  root.querySelector('#gpv-fasta').addEventListener('click', downloadFasta);
+  root.querySelector('#gpv-figure-legend').addEventListener('click', () => { writeFigureLegend(); });
   root.querySelector('#gpv-redo').addEventListener('click', redo);
   root.querySelector('#gpv-share-link').addEventListener('click', () => { copyShareLink(); });
   root.querySelector('#gpv-sequence-toggle').addEventListener('click', () => { writeJson(sequenceKey, readJson(sequenceKey, false) !== true); renderSequence(); });

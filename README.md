@@ -46,10 +46,13 @@ predictions as a single overlay. Large archives load models lazily and skip thei
 **Look at models.** Multiple structures at once with independent visibility, colour, and
 ranking-score readout per model. Overlay mode or one-at-a-time mode, with previous/next controls,
 arrow-key navigation, adjustable automatic cycling, and sorting by ranking score or mean pLDDT.
-Source-archive filtering and name/stoichiometry search keep large prediction sets navigable.
+Source-archive filtering and name/stoichiometry search keep large prediction sets navigable, and
+the displayed models export as FASTA, one record per chain.
 Cartoon, stick, sphere, and line representations; per-structure, per-chain, pLDDT, Cα-deviation,
 sequence-spectrum, and element colouring; a one-step cut that hides residues below pLDDT 50 or 70
-everywhere; perspective or orthographic projection; transparent, white, dark, or custom backgrounds.
+everywhere; ligands and ions as sticks, spheres, or hidden; perspective or orthographic projection;
+transparent, white, dark, or custom backgrounds; one-click presets for a thesis figure, a dark slide,
+or a confidence review; and exact 90° rotations so panels of the same model line up.
 
 **Read the confidence.** Mean pLDDT from Cα B-factors with the standard AlphaFold legend.
 Model-level pTM, ipTM, ranking score, rank, and clash flag, plus chain-pair ipTM and minimum PAE
@@ -78,8 +81,9 @@ models display names for captions. Undo and redo every one of these changes.
 synchronized panel, SVG variants of both with labels, arrows, captions, and the colour legend
 (pLDDT bands, chains, or models) as editable vector layers, and 5-, 10-, or 15-second WebM spin-video export. Reusable named views with
 captions, multi-panel contact-sheet export, and caption-text export.
-Self-contained interactive HTML reports, and share links that reopen models fetched by identifier
-with the same camera, colours, labels, and annotations. Reproducible scene manifests carrying SHA-256 structure-file
+Self-contained interactive HTML reports, share links that reopen models fetched by identifier
+with the same camera, colours, labels, and annotations, and a figure-legend writer that drafts the
+legend from what is on screen. Reproducible scene manifests carrying SHA-256 structure-file
 hashes, camera, model state, colours, labels, selections, measurements, saved views, comparison and
 alignment settings, and your provenance notes.
 

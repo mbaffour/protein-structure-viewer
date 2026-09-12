@@ -40,7 +40,9 @@ PSV_CHROMIUM=/opt/pw-browsers/chromium/chrome-linux/chrome npm test
 - Compare: sequence-aware and identifier alignment, non-zero RMSD against a
   deliberately different model, CSV export, synchronised multi-view with a third panel that
   follows a real drag on the primary, restore
-- Appearance: hiding residues below pLDDT 70 changes the render and is named in the strip title;
+- Import: FASTA export has one record per chain with length and mean pLDDT in the header.
+- Appearance: 90° rotation changes the render and Shift+R resets it; the ligand control and the
+  Thesis preset apply; hiding residues below pLDDT 70 changes the render and is named in the strip title;
   colour by chain lists the chains in the on-screen legend.
 - Compare: the Cα-deviation colour scheme shows its band legend.
 - Confidence: the pLDDT profile SVG has one panel per chain and a trace per model; the PNG variant downloads.
@@ -60,6 +62,7 @@ PSV_CHROMIUM=/opt/pw-browsers/chromium/chrome-linux/chrome npm test
 - Generated report: renders, carries provenance, **keeps its canvas inside `#view`**,
   guided views, navigation by real click, play/pause, element colouring, two panels that
   rotate together under a real drag
+- Publish: the figure legend names the models, representation and colouring.
 - Share links: a model fetched by ID (served from a stubbed RCSB response) enables *Copy share
   link*; opening the link in a fresh page refetches the model and restores its corner text.
 

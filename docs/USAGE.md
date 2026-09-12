@@ -57,12 +57,22 @@ Anything the viewer cannot interpret is skipped and reported in the red notice b
 | <kbd>F</kbd> | Fit every panel to what it displays |
 | <kbd>S</kbd> | Start or stop spinning |
 | <kbd>Shift</kbd> + <kbd>F</kbd> | Toggle full screen |
+| <kbd>X</kbd> / <kbd>Y</kbd> / <kbd>Z</kbd> | Rotate 90° about that axis (<kbd>Shift</kbd> reverses) |
+| <kbd>Shift</kbd> + <kbd>R</kbd> | Reset orientation to the file's coordinate frame |
 | <kbd>1</kbd>–<kbd>6</kbd> | Jump to Models / Appearance / Annotate / Compare / Confidence / Publish |
 | <kbd>Ctrl</kbd>/<kbd>⌘</kbd> + <kbd>Z</kbd> | Undo the last label, selection, measurement or annotation change (add <kbd>Shift</kbd> to redo) |
 | <kbd>?</kbd> | Open in-app help |
 | <kbd>Esc</kbd> | Close help, leave full screen, or stop measuring or drawing |
 
 Shortcuts are suppressed while you are typing in a field.
+
+## Orientation
+
+The toolbar's **↻ X**, **↻ Y** and **↻ Z** buttons (and the <kbd>X</kbd>, <kbd>Y</kbd>, <kbd>Z</kbd>
+keys) rotate the view by exactly 90° about that axis; hold <kbd>Shift</kbd> to go the other way.
+**Reset** (<kbd>Shift</kbd>+<kbd>R</kbd>) returns to the orientation of the coordinate file. With the
+synchronized multi-view on, every panel turns together. This is how to make a front, side and top
+panel of the same model that line up exactly.
 
 ## Models tab
 
@@ -81,10 +91,25 @@ table, annotation names, and the report show. The file name stays underneath as 
 scene manifests and saved views match on, so renaming never breaks a restore. Clear the field to go
 back to the file name.
 
+**Download FASTA** writes the sequences of the displayed models, one record per chain. Headers carry
+the model's display name, chain, length and — for models with pLDDT — the chain's mean pLDDT.
+Standard amino acids and nucleotides get their single-letter codes; anything else is X.
+
 ## Appearance tab
 
 Representation (cartoon / sticks / spheres / lines), colour scheme, projection, background, and
-motion. Two notes:
+motion.
+
+**Presets** at the top set several controls at once: **Thesis figure** (white background,
+orthographic cartoon, legend on exports, 1800 × 1200 at 2×), **Dark slide** (dark background,
+perspective, colour by chain) and **Confidence review** (pLDDT colouring with the legend, every residue
+shown, ligands as sticks). Nothing is locked; adjust any control afterwards.
+
+**Ligands and ions** decides how hetero groups are drawn — AlphaFold 3 ligands, cofactors, ions and
+glycans, or the ligands in an experimental structure: sticks with small spheres (default), spheres
+only, or hidden. Water is never drawn. Cartoon mode alone would hide all of them.
+
+Notes on the colour schemes:
 
 - **pLDDT** colouring uses the standard AlphaFold bands and reveals the legend under the viewport.
   It reads the B-factor column, so it is only meaningful for files that carry pLDDT there.
@@ -255,6 +280,13 @@ recipient will be online and you want the smallest file.
 
 **Provenance.** Fill in the figure title, model source, method and version, and notes. These travel
 into the report header, the caption export, and the scene manifest.
+
+**Figure legend.** **Write figure legend** drafts a legend from the scene: models shown,
+representation, colour scheme with its bands written out, any low-confidence cut, ligand handling,
+the alignment reference, method and per-model Cα RMSD, whether panels are synchronized, labelled
+residues, highlighted ranges, measurements with their values, annotation text, and your provenance
+notes. The text is copied to the clipboard and appears in an editable field. It is a draft in the
+tool's words; edit it into yours.
 
 **Share links.** **Copy share link** builds a URL that reopens the current scene in the viewer:
 the models that were fetched by identifier, plus the camera, representation, colours, projection,

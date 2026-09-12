@@ -4,7 +4,7 @@ This audit evaluates the viewer as a tool for comparing predicted structures, sh
 interactive review artefact, and preparing visual material for papers and theses. It is not a
 validation of any biological hypothesis, and nothing in the tool should be read as one.
 
-Audited against viewer version 2.5.0.
+Audited against viewer version 2.6.0.
 
 ## What is already strong
 
@@ -30,6 +30,10 @@ Audited against viewer version 2.5.0.
   and the scene manifest both record, so a figure without disordered tails is still reproducible.
 - The pLDDT profile is drawn from the same per-residue values the viewer colours by, with the
   standard band boundaries, so a profile figure and a coloured structure agree by construction.
+- The generated figure legend states what the figure actually encodes — colour bands, cut-offs,
+  alignment method and RMSD, ligand handling — which is the information reviewers most often find
+  missing from structure figures. It is explicitly a draft.
+- Hetero groups are visible by default; a figure that silently drops a bound ligand or ion misleads.
   Clicks pick the nearest projected atom, so ribbons are as selectable as spheres.
 - Atom-anchored figure annotations — arrows, lines, residue markers, text callouts, corner titles —
   follow rotation and re-alignment and are drawn into every export and the report, so a figure's
