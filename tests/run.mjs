@@ -230,6 +230,14 @@ await step('a translucent surface renders and clears', async () => {
   if ((await snapshot()) === before) throw new Error('the surface did not change the render');
   await page.selectOption('#gpv-surface', 'none'); await page.waitForTimeout(600);
 });
+await step('the colour-blind-safe palette recolours chain A to Okabe–Ito blue', async () => {
+  await page.selectOption('#gpv-color-mode', 'chain'); await page.check('#gpv-safe-palette'); await page.waitForTimeout(500);
+  const swatch = await page.locator('#gpv-plddt-legend .gpv-swatch').first().evaluate(el => getComputedStyle(el).backgroundColor);
+  if (swatch !== 'rgb(0, 114, 178)') throw new Error('chain A swatch: ' + swatch);
+  await page.uncheck('#gpv-safe-palette'); await page.waitForTimeout(400);
+  const restored = await page.locator('#gpv-plddt-legend .gpv-swatch').first().evaluate(el => getComputedStyle(el).backgroundColor);
+  if (restored !== 'rgb(59, 130, 246)') throw new Error('default chain A swatch: ' + restored);
+});
 await step('chain colouring lists the chains in the legend', async () => {
   await page.selectOption('#gpv-color-mode', 'chain'); await page.waitForTimeout(400);
   const legend = page.locator('#gpv-plddt-legend');
@@ -530,6 +538,8 @@ await step('interface geometry runs on the active model', async () => {
 
 group('publish and export');
 await tab('publish');
+/* Pixel mode keeps the size and scale selects visible for the steps below; the print-size step switches modes itself. */
+await page.selectOption('#gpv-export-mode', 'pixels'); await page.waitForTimeout(200);
 await step('the export button is reachable, not covered', async () => {
   const state = await page.evaluate(() => {
     const button = document.querySelector('#gpv-image');
@@ -627,6 +637,7 @@ await step('a figure SVG downloads with vector labels', async () => {
 await step('a comparison figure downloads with the multi-view on', async () => {
   await tab('compare'); await page.check('#gpv-side-by-side'); await page.waitForTimeout(1200);
   await tab('publish');
+  await page.selectOption('#gpv-export-mode', 'pixels');
   await page.selectOption('#gpv-export-size', '1200x1200'); await page.selectOption('#gpv-export-scale', '1');
   const download = page.waitForEvent('download', { timeout: 120000 });
   await page.click('#gpv-compare-image'); await download;
@@ -816,6 +827,48 @@ if (reportPath) {
   });
 }
 
+await step('print-size export writes 300 dpi into a PNG of the stated width', async () => {
+  await tab('publish');
+  await page.selectOption('#gpv-export-mode', 'print'); await page.selectOption('#gpv-print-width', '85');
+  await page.selectOption('#gpv-print-dpi', '300'); await page.selectOption('#gpv-print-text', '8'); await page.waitForTimeout(200);
+  const estimate = (await page.locator('#gpv-export-estimate').textContent()) || '';
+  if (!/1004 × 669 px · 85 × 57 mm at 300 dpi · text 8 pt/.test(estimate)) throw new Error('estimate: ' + estimate);
+  const download = page.waitForEvent('download', { timeout: 120000 });
+  await page.click('#gpv-image');
+  const file = join(work, 'print.png'); await (await download).saveAs(file);
+  const png = await readFile(file);
+  if (png.readUInt32BE(16) !== 1004 || png.readUInt32BE(20) !== 669) throw new Error('png size ' + png.readUInt32BE(16) + 'x' + png.readUInt32BE(20));
+  const at = png.indexOf('pHYs');
+  if (at < 0) throw new Error('no pHYs chunk');
+  const perMetre = png.readUInt32BE(at + 4);
+  if (Math.abs(perMetre - 11811) > 1 || png[at + 12] !== 1) throw new Error('pHYs ' + perMetre + ' unit ' + png[at + 12]);
+  console.log('       ' + estimate.trim() + ' · pHYs ' + perMetre + ' px/m');
+});
+await step('the TIFF export is a baseline RGB TIFF with the resolution set', async () => {
+  const download = page.waitForEvent('download', { timeout: 120000 });
+  await page.click('#gpv-tiff');
+  const file = join(work, 'print.tiff'); await (await download).saveAs(file);
+  const tiff = await readFile(file);
+  if (tiff.toString('latin1', 0, 4) !== 'II*\u0000') throw new Error('not a little-endian TIFF');
+  const ifd = tiff.readUInt32LE(4); const count = tiff.readUInt16LE(ifd);
+  const tags = {}; for (let i = 0; i < count; i += 1) { const at = ifd + 2 + i * 12; tags[tiff.readUInt16LE(at)] = { type: tiff.readUInt16LE(at + 2), value: tiff.readUInt32LE(at + 8) }; }
+  if (tags[256].value !== 1004 || tags[257].value !== 669) throw new Error('tiff size ' + tags[256].value + 'x' + tags[257].value);
+  const dpi = tiff.readUInt32LE(tags[282].value) / tiff.readUInt32LE(tags[282].value + 4);
+  if (dpi !== 300 || tags[296].value !== 2) throw new Error('resolution ' + dpi + ' unit ' + tags[296].value);
+  console.log('       TIFF ' + tags[256].value + ' × ' + tags[257].value + ' at ' + dpi + ' dpi · ' + (tiff.length / 1048576).toFixed(1) + ' MB');
+});
+await step('a scale bar of known length appears in the figure SVG', async () => {
+  await page.selectOption('#gpv-scale-bar', '20'); await page.waitForTimeout(400);
+  if (await page.locator('#gpv-scalebar').isHidden()) throw new Error('on-screen scale bar hidden');
+  const download = page.waitForEvent('download', { timeout: 120000 });
+  await page.click('#gpv-svg');
+  const file = join(work, 'scale.svg'); await (await download).saveAs(file);
+  const svg = await readFile(file, 'utf8');
+  if (!/id="scale-bar"/.test(svg) || !/20 Å/.test(svg)) throw new Error('scale bar missing from SVG');
+  if (!/font-family="Arial, Helvetica, sans-serif"/.test(svg)) throw new Error('figure font not applied in SVG');
+  await page.selectOption('#gpv-scale-bar', '0'); await page.waitForTimeout(300);
+  await page.selectOption('#gpv-export-mode', 'pixels'); await page.waitForTimeout(200);
+});
 await step('copying the PNG to the clipboard reports an outcome', async () => {
   await tab('publish');
   await page.click('#gpv-copy-image');
@@ -830,6 +883,7 @@ await step('the figure legend names the models and the colouring', async () => {
   await page.click('#gpv-figure-legend'); await page.waitForTimeout(500);
   const text = await page.inputValue('#gpv-legend-text');
   if (!/representation of /.test(text) || !/coloured/.test(text)) throw new Error('legend text: ' + text.slice(0, 120));
+  if (!/Rendered with Protein Structure Viewer 2\.10\.0 \(3Dmol\.js; Rego & Koes, 2015\)\./.test(text)) throw new Error('citation sentence missing');
   if (!/model_/.test(text)) throw new Error('no model name in: ' + text.slice(0, 120));
   console.log('       ' + text.slice(0, 110).replace(/\s+/g, ' ') + '…');
 });

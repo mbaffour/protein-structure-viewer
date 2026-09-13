@@ -86,7 +86,8 @@ arrows, lines, residue markers, text callouts, and corner titles — that follow
 and appear in every export; nudge any label into place and it stays there as the model turns. Give
 models display names for captions. Undo and redo every one of these changes.
 
-**Publish.** Fixed-size, supersampled PNG export (downloaded or copied to the clipboard), a stitched lettered comparison figure of every
+**Publish.** PNG, TIFF and SVG export at a stated print width and resolution with the dpi written
+into the file (or fixed pixel sizes), text sized in points, a journal font, a scale bar, a stitched lettered comparison figure of every
 synchronized panel, SVG variants of both with labels, arrows, captions, and the colour legend
 (pLDDT bands, chains, or models) as editable vector layers, and 5-, 10-, or 15-second WebM spin-video export. Reusable named views with
 captions, multi-panel contact-sheet export, and caption-text export.
@@ -169,6 +170,24 @@ script is a single IIFE holding all viewer state (`structures`, `labelRecords`, 
 Third-party libraries are pinned by exact version *and* SRI hash. When bumping one, update the
 `integrity` attribute together with the URL — the authoritative hash is available from
 `https://api.cdnjs.com/libraries/<name>/<version>?fields=sri`.
+
+## Publishing a figure
+
+Publish → **Output: Print size** states the width (85 mm single column, 178 mm double column, or
+custom), resolution (300 or 600 dpi) and text size in points; the PNG and TIFF carry the dpi in the
+file, the SVG keeps text as text in the chosen figure font, and a scale bar can be added. The
+**Colour-blind-safe palette** (Okabe–Ito) covers chains and domains, and **Write figure legend**
+drafts the legend including the colour bands, cut-offs, alignment statistics, print settings and a
+rendering credit. See [`docs/USAGE.md`](docs/USAGE.md#publishing-a-figure) for the checklist.
+
+## How to cite
+
+Awuah, M. B. (2026). *Protein Structure Viewer* (version 2.10.0) [software].
+https://github.com/mbaffour/protein-structure-viewer — each GitHub release is archived on Zenodo
+with a DOI; cite the DOI of the release you used. Metadata for reference managers is in
+[`CITATION.cff`](CITATION.cff). Please also cite the rendering library: Rego, N. & Koes, D. (2015).
+3Dmol.js: molecular visualization with WebGL. *Bioinformatics* 31(8), 1322–1324.
+doi:10.1093/bioinformatics/btu829.
 
 ## License
 

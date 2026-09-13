@@ -35,7 +35,7 @@ PSV_CHROMIUM=/opt/pw-browsers/chromium/chrome-linux/chrome npm test
 - Import: three models load, mean pLDDT computed from Cα B-factors, search filters, a model takes a
   display name that the model picker adopts
 - Navigation: previous/next, arrow keys, digit shortcuts for all six tabs
-- Appearance: every representation, colour scheme, projection, background, motion;
+- Appearance: the Okabe–Ito switch recolours chain A to rgb(0, 114, 178) and back; every representation, colour scheme, projection, background, motion;
   pLDDT legend; theme cycling; preference persistence across a reload
 - Compare: sequence-aware and identifier alignment, non-zero RMSD against a
   deliberately different model, CSV export, synchronised multi-view with a third panel that
@@ -69,7 +69,10 @@ PSV_CHROMIUM=/opt/pw-browsers/chromium/chrome-linux/chrome npm test
   offers the residue colour themes and a ligand control; renders, carries provenance, **keeps its canvas inside `#view`**,
   guided views, navigation by real click, play/pause, element colouring, two panels that
   rotate together under a real drag
-- Publish: copying the PNG to the clipboard reports an outcome; the figure legend names the models,
+- Publish: print-size export at 85 mm / 300 dpi yields a 1004 × 669 PNG carrying a `pHYs` chunk of
+  11811 px/m; the TIFF is a little-endian baseline TIFF of the same size at 300 dpi; a 20 Å scale bar
+  appears on screen and in the SVG with the Arial font; the legend text ends with the rendering credit;
+  copying the PNG to the clipboard reports an outcome; the figure legend names the models,
   representation and colouring.
 - Share links: a model fetched by ID (served from a stubbed RCSB response) enables *Copy share
   link*; opening the link in a fresh page refetches the model and restores its corner text.

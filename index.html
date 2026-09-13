@@ -864,6 +864,7 @@ html>body{padding:0}</style>
       <span class="viz-badge gpv-view-label" id="gpv-left-label" hidden>Primary</span>
       <div class="card gpv-stage" id="gpv-stage" tabindex="0" role="application" aria-label="Interactive three-dimensional protein structure viewer. Drag to rotate, scroll to zoom, click an atom to inspect it."></div>
       <div class="gpv-stage-empty" id="gpv-stage-empty"><i data-icon="orbit" aria-hidden="true"></i><strong>No structure loaded yet</strong><span class="text-muted">Drop a PDB, CIF, or AlphaFold ZIP anywhere on this page, or fetch an ID above</span><button class="btn" type="button" id="gpv-demo"><i data-icon="cloud-download" aria-hidden="true"></i>Load an example (PDB 1ubq)</button></div>
+      <div class="gpv-scalebar text-small" id="gpv-scalebar" hidden aria-hidden="true"><span id="gpv-scalebar-label"></span><i id="gpv-scalebar-line"></i></div>
       <div class="gpv-busy" id="gpv-busy" hidden aria-hidden="true"><span class="gpv-spinner"></span><span id="gpv-busy-label">Working…</span></div>
     </div>
   </div>
@@ -927,6 +928,7 @@ html>body{padding:0}</style>
       <label class="form-label">Color scheme<select class="form-select" id="gpv-color-mode"><option value="structure">Per structure</option><option value="chain">Per chain</option><option value="plddt">pLDDT confidence</option><option value="deviation">Cα deviation after alignment</option><option value="domain">PAE domains</option><option value="annotated">Annotated domains</option><option value="charge">Residue charge</option><option value="hydrophobicity">Hydrophobicity (Kyte–Doolittle)</option><option value="restype">Residue type</option><option value="amino">Amino acid</option><option value="ss">Secondary structure</option><option value="spectrum">Sequence spectrum</option><option value="element">Element</option></select></label>
       <label class="form-label">Low confidence<select class="form-select" id="gpv-hide-below" data-tooltip="Hide residues whose pLDDT is below the threshold — in the viewer, every panel and every export"><option value="0">Show every residue</option><option value="50">Hide pLDDT below 50</option><option value="70">Hide pLDDT below 70</option></select></label>
       <label class="form-label">Ligands and ions<select class="form-select" id="gpv-hetero" data-tooltip="How hetero groups — ligands, cofactors, ions, glycans — are drawn; water is never shown"><option value="stick">Sticks and spheres</option><option value="sphere">Spheres</option><option value="hide">Hidden</option></select></label>
+      <label class="form-check form-switch"><input class="form-check-input" id="gpv-safe-palette" type="checkbox"><span class="form-check-label">Colour-blind-safe palette (Okabe–Ito) for chains and domains</span></label>
       <label class="form-label">Surface<select class="form-select" id="gpv-surface" data-tooltip="Molecular surface coloured by the current scheme — charge or hydrophobicity on a surface reads like an electrostatics view"><option value="none">None</option><option value="translucent">Translucent surface</option><option value="opaque">Opaque surface</option></select></label>
       <label class="form-label">Projection<select class="form-select" id="gpv-projection"><option value="perspective">Perspective</option><option value="orthographic">Orthographic</option></select></label>
       <label class="form-label">Background<select class="form-select" id="gpv-background"><option value="transparent">Transparent</option><option value="white">White</option><option value="dark">Dark</option><option value="custom">Custom</option></select></label>
@@ -1048,8 +1050,18 @@ html>body{padding:0}</style>
     <div class="viz-controls">
       <label class="form-label">Image size<select class="form-select" id="gpv-export-size"><option value="1200x1200">Square · 1200 × 1200</option><option value="1800x1200" selected>Landscape · 1800 × 1200</option><option value="1200x1800">Portrait · 1200 × 1800</option><option value="2400x1600">Large landscape · 2400 × 1600</option></select></label>
       <label class="form-label">Scale<select class="form-select" id="gpv-export-scale"><option value="1">1×</option><option value="2" selected>2×</option><option value="4">4×</option></select></label>
+      <label class="form-label">Output<select class="form-select" id="gpv-export-mode" data-tooltip="Print size states a physical width and resolution and writes the resolution into the file; text is sized in points at that width"><option value="print" selected>Print size (mm at dpi)</option><option value="pixels">Pixels (size × scale)</option></select></label>
+      <label class="form-label">Figure width<select class="form-select" id="gpv-print-width"><option value="85">85 mm · single column</option><option value="114">114 mm · 1.5 columns</option><option value="178" selected>178 mm · double column</option><option value="custom">Custom…</option></select></label>
+      <label class="form-label">Custom width (mm)<input class="form-control" id="gpv-print-custom" type="number" min="20" max="400" step="1" value="120"></label>
+      <label class="form-label">Aspect<select class="form-select" id="gpv-print-aspect"><option value="1.5" selected>3 : 2</option><option value="1">1 : 1</option><option value="0.75">3 : 4</option><option value="1.7778">16 : 9</option></select></label>
+      <label class="form-label">Resolution<select class="form-select" id="gpv-print-dpi"><option value="300" selected>300 dpi</option><option value="600">600 dpi</option></select></label>
+      <label class="form-label">Text size<select class="form-select" id="gpv-print-text" data-tooltip="Point size of labels, callouts, measurements and the legend at the printed width"><option value="6">6 pt</option><option value="7">7 pt</option><option value="8" selected>8 pt</option><option value="10">10 pt</option></select></label>
+      <label class="form-label">Figure font<select class="form-select" id="gpv-figure-font"><option value="Arial, Helvetica, sans-serif" selected>Arial / Helvetica</option><option value="'Times New Roman', Times, serif">Times</option><option value="system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif">System default</option></select></label>
+      <label class="form-label">Scale bar<select class="form-select" id="gpv-scale-bar" data-tooltip="Bar of known length at the model centre, bottom right of the figure; exact in orthographic projection"><option value="0" selected>None</option><option value="10">10 Å</option><option value="20">20 Å</option><option value="50">50 Å</option><option value="100">100 Å</option></select></label>
+      <span class="text-muted text-small" id="gpv-export-estimate"></span>
       <button class="btn" type="button" id="gpv-image" disabled>Download publication PNG</button>
       <button class="btn" type="button" id="gpv-copy-image" disabled data-tooltip="Render the publication PNG and put it on the clipboard, ready to paste into slides or a document">Copy PNG to clipboard</button>
+      <button class="btn" type="button" id="gpv-tiff" disabled data-tooltip="Uncompressed RGB TIFF with the resolution written into the file, for journals that require TIFF">Download publication TIFF</button>
       <button class="btn" type="button" id="gpv-svg" disabled data-tooltip="Raster molecule with labels, arrows, callouts and legend as editable vector layers">Download figure SVG</button>
       <button class="btn" type="button" id="gpv-compare-image" disabled data-tooltip="Stitch every synchronized panel into one lettered figure at the chosen size">Download comparison PNG</button>
       <button class="btn" type="button" id="gpv-compare-svg" disabled data-tooltip="The stitched comparison figure with vector captions and annotations">Download comparison SVG</button>
@@ -1120,6 +1132,12 @@ html>body{padding:0}</style>
           <tr><th><kbd>Esc</kbd></th><td>Close help, leave full screen, stop measuring</td></tr>
         </tbody>
       </table>
+      <h3>How to cite</h3>
+      <p>Cite the viewer and the rendering library it builds on. Each GitHub release is archived on Zenodo with its own DOI; the repository's <code>CITATION.cff</code> carries the current metadata.</p>
+      <ul>
+        <li>Awuah, M. B. (2026). <em>Protein Structure Viewer</em>, version <span id="gpv-cite-version"></span> [software]. <code>github.com/mbaffour/protein-structure-viewer</code>.</li>
+        <li>Rego, N. &amp; Koes, D. (2015). 3Dmol.js: molecular visualization with WebGL. <em>Bioinformatics</em> 31(8), 1322–1324. doi:10.1093/bioinformatics/btu829.</li>
+      </ul>
       <h3>Reading the numbers</h3>
       <ul>
         <li><strong>pLDDT</strong> is per-residue local confidence. High pLDDT does not mean the relative placement of chains is right.</li>
@@ -1239,6 +1257,9 @@ html>body{padding:0}</style>
   #generic-protein-viewer .gpv-share-url { font-family: var(--font-mono); font-size: var(--font-size-small); min-width: min(100%, 320px); }
   #generic-protein-viewer .gpv-history { align-items: center; }
   #generic-protein-viewer .gpv-orient { display: inline-flex; gap: 4px; }
+  #generic-protein-viewer .form-label[hidden], #generic-protein-viewer .form-check[hidden] { display: none; }
+  #generic-protein-viewer .gpv-scalebar { position: absolute; right: 16px; bottom: 14px; pointer-events: none; display: grid; justify-items: center; gap: 3px; color: var(--card-foreground); text-shadow: 0 0 3px var(--card); }
+  #generic-protein-viewer .gpv-scalebar i { display: block; height: 3px; background: currentColor; border-radius: 1px; }
   #generic-protein-viewer .gpv-composition { margin-top: 10px; }
   #generic-protein-viewer .gpv-composition summary { cursor: pointer; color: var(--muted-foreground); }
   #generic-protein-viewer .gpv-composition .gpv-swatch { margin-right: 6px; }
@@ -1357,10 +1378,14 @@ html>body{padding:0}</style>
   const chainPalette = ['#3b82f6', '#f97316', '#22c55e', '#a855f7', '#ec4899', '#14b8a6', '#eab308', '#ef4444', '#6366f1', '#84cc16', '#0ea5e9', '#d946ef'];
   const chainOrder = new Map();
   const compareChains = (a, b) => String(a).localeCompare(String(b), undefined, { numeric: true });
+  /* Okabe & Ito (2008) palette, ordered so chain A stays blue. Black is replaced by grey for ribbons. */
+  const okabeIto = ['#0072b2', '#e69f00', '#009e73', '#cc79a7', '#56b4e9', '#d55e00', '#f0e442', '#999999'];
+  let safePaletteOn = false;
   function chainColor(chain) {
     const key = chain || '';
     if (!chainOrder.has(key)) chainOrder.set(key, chainOrder.size);
-    return chainPalette[chainOrder.get(key) % chainPalette.length];
+    const source = safePaletteOn ? okabeIto : chainPalette;
+    return source[chainOrder.get(key) % source.length];
   }
   function seedChainColors(atoms) {
     [...new Set(atoms.map(atom => atom.chain || ''))].sort(compareChains).forEach(chainColor);
@@ -1398,7 +1423,7 @@ html>body{padding:0}</style>
   let busyDepth = 0;
   let restoreMotion = null;
   const listPageSize = 60;
-  const viewerVersion = '2.9.0';
+  const viewerVersion = '2.10.0';
   const preferenceKey = 'protein-structure-viewer:preferences';
   const themeKey = 'protein-structure-viewer:theme';
   const labelColors = getComputedStyle(root);
@@ -2006,6 +2031,7 @@ html>body{padding:0}</style>
     root.querySelector('#gpv-share-link').disabled = !structures.some(entry => entry.fetchId);
     root.querySelector('#gpv-fasta').disabled = structures.length === 0;
     root.querySelector('#gpv-copy-image').disabled = structures.length === 0;
+    root.querySelector('#gpv-tiff').disabled = structures.length === 0;
     root.querySelector('#gpv-add-domain').disabled = !activeEntry();
     root.querySelector('#gpv-figure-legend').disabled = structures.length === 0;
     const scored = structures.some(entry => entry.visible && entry.scores.length);
@@ -2368,6 +2394,7 @@ html>body{padding:0}</style>
       borderColor: color || labelColors.getPropertyValue('--border').trim() || '#cbd5e1',
       borderThickness: 1,
       fontSize: Math.round((options.size || 12) * (options.scale || 1)),
+      font: figureFont(),
       inFront: true,
       showBackground: true
     };
@@ -2409,20 +2436,20 @@ html>body{padding:0}</style>
     });
   }
 
-  function drawLabels(target, shownIds) {
+  function drawLabels(target, shownIds, scale = 1) {
     const byId = entriesById();
     labelRecords.filter(label => shownIds.has(label.entryId)).forEach(label => {
       const entry = byId.get(label.entryId);
       const atom = entry && entry.atoms.find(item => (item.chain || '') === label.chain && item.resi === label.resi && (item.atom === 'CA' || item.atom === label.atom));
       const position = atom ? { x: atom.x, y: atom.y, z: atom.z } : { x: label.x, y: label.y, z: label.z };
-      target.addLabel(label.text, labelStyle(position, { color: label.color, size: label.size }));
+      target.addLabel(label.text, labelStyle(position, { color: label.color, size: label.size, scale }));
     });
     if (root.querySelector('#gpv-all-labels').checked) {
       const entry = activeEntry();
       if (entry && shownIds.has(entry.id)) {
         entry.atoms.filter(atom => atom.atom === 'CA').forEach(atom => {
           const text = (atom.resn || 'RES') + atom.resi + (atom.chain ? ' · ' + atom.chain : '');
-          target.addLabel(text, labelStyle({ x: atom.x, y: atom.y, z: atom.z }));
+          target.addLabel(text, labelStyle({ x: atom.x, y: atom.y, z: atom.z }, { scale }));
         });
       }
     }
@@ -2432,8 +2459,9 @@ html>body{padding:0}</style>
      any one of them never wipes the others, and so exports and comparison panels
      can draw the same overlays into their own viewers. */
   function drawOverlays(target, shownIds, dimensions, includeScreenText = true) {
-    drawLabels(target, shownIds);
-    drawMeasurements(target, shownIds);
+    const scale = overlayScale(dimensions);
+    drawLabels(target, shownIds, scale);
+    drawMeasurements(target, shownIds, scale);
     drawAnnotations(target, shownIds, dimensions, includeScreenText);
   }
 
@@ -2539,7 +2567,7 @@ html>body{padding:0}</style>
     return { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2, z: (a.z + b.z) / 2 };
   }
 
-  function drawMeasurements(target, shownIds) {
+  function drawMeasurements(target, shownIds, scale = 1) {
     measurementRecords.forEach(record => {
       if (!record.points.every(point => shownIds.has(point.entryId))) return;
       const points = record.points.map(resolvePoint);
@@ -2547,7 +2575,7 @@ html>body{padding:0}</style>
       const line = (start, end) => target.addLine({ start, end, color: '#e11d48', dashed: true, linewidth: 2 });
       line(points[0], points[1]);
       if (record.type === 'angle') line(points[1], points[2]);
-      target.addLabel(measurementText(record), labelStyle(record.type === 'angle' ? points[1] : midpoint(points[0], points[1])));
+      target.addLabel(measurementText(record), labelStyle(record.type === 'angle' ? points[1] : midpoint(points[0], points[1]), { scale }));
     });
   }
 
@@ -2619,7 +2647,7 @@ html>body{padding:0}</style>
     const y = Math.max(0, Math.min(height, (bottom ? height - margin : top) + (record.dy || 0) * scale));
     return {
       ...annotationLabelStyle({ x, y, z: 0 }, record, scale),
-      useScreen: true,
+      useScreen: true, font: figureFont(),
       alignment: (bottom ? 'bottom' : 'top') + (right ? 'Right' : 'Left'),
       fontSize: Math.round(16 * record.size * scale)
     };
@@ -2627,7 +2655,7 @@ html>body{padding:0}</style>
 
   function drawAnnotations(target, shownIds, dimensions, includeScreenText = true) {
     /* Exports are several times wider than the on-screen stage; keep annotation text legible at print size. */
-    const scale = dimensions && dimensions.width ? Math.max(1, dimensions.width / 600) : 1;
+    const scale = dimensions && dimensions.textScale ? dimensions.textScale : dimensions && dimensions.width ? Math.max(1, dimensions.width / 600) : 1;
     annotationRecords.forEach(record => {
       if (record.type === 'screen') {
         if (includeScreenText) target.addLabel(record.text, screenTextSpec(record, dimensions, scale));
@@ -3305,7 +3333,7 @@ html>body{padding:0}</style>
   /* ---------- PAE domains ---------- */
 
   const domainPalette = ['#2563eb', '#f97316', '#16a34a', '#a855f7', '#ec4899', '#0891b2', '#ca8a04', '#dc2626', '#4f46e5', '#65a30d', '#0ea5e9', '#c026d3'];
-  const domainColorFor = id => domainPalette[(id - 1) % domainPalette.length];
+  const domainColorFor = id => { const source = safePaletteOn ? okabeIto : domainPalette; return source[(id - 1) % source.length]; };
 
   /* Map PAE token index -> residue tag (chain|resi), or null for tokens that are not
      protein residues (AlphaFold 3 ligand tokens, for example). */
@@ -3529,7 +3557,7 @@ html>body{padding:0}</style>
     button.disabled = true;
     await afterPaint();
     try {
-      const uri = await withLegend(await renderPublicationImage(null, requested), requested.width, requested.height);
+      const uri = await withLegend(await renderPublicationImage(null, requested), requested);
       const blob = await (await fetch(uri)).blob();
       await navigator.clipboard.write([new ClipboardItem({ 'image/png': blob })]);
       announce('Figure copied to the clipboard · ' + requested.width + ' × ' + requested.height);
@@ -3662,7 +3690,10 @@ html>body{padding:0}</style>
     if (measurements.length) sentences.push('Measurements: ' + measurements.map(record => record.points.map(point => (point.chain ? point.chain + ':' : '') + point.resi).join('–') + ' ' + measurementText(record)).join('; ') + '.');
     const annotations = annotationRecords.filter(record => record.text && record.points.every(point => shownIds.has(point.entryId)));
     if (annotations.length) sentences.push('Annotations: ' + annotations.map(record => record.text).join('; ') + '.');
+    const plan = exportDimensions();
+    if (plan.mm) sentences.push('Figure prepared at ' + plan.mm + ' mm width, ' + plan.dpi + ' dpi, ' + plan.points + ' pt labels.');
     if (provenance.notes) sentences.push(provenance.notes);
+    sentences.push('Rendered with Protein Structure Viewer ' + viewerVersion + ' (3Dmol.js; Rego & Koes, 2015).');
     return sentences.join(' ');
   }
 
@@ -4905,15 +4936,54 @@ html>body{padding:0}</style>
     nameInput.value = ''; captionInput.value = ''; renderSavedViews(); updateStatus('Saved publication view ' + name);
   }
 
+  /* The export plan: pixel dimensions plus, in print mode, the physical width, the
+     resolution written into the file, and the text scale that makes labels the
+     chosen point size at that width. Overlays and legends read textScale. */
   function exportDimensions() {
+    const maxPixels = 24000000;
+    const cap = (width, height) => {
+      if (width * height <= maxPixels) return { width, height, capped: false };
+      const correction = Math.sqrt(maxPixels / (width * height));
+      return { width: Math.floor(width * correction), height: Math.floor(height * correction), capped: true };
+    };
+    if (root.querySelector('#gpv-export-mode').value === 'print') {
+      const choice = root.querySelector('#gpv-print-width').value;
+      const mm = choice === 'custom' ? Math.min(400, Math.max(20, Number(root.querySelector('#gpv-print-custom').value) || 120)) : Number(choice);
+      const dpi = Number(root.querySelector('#gpv-print-dpi').value) || 300;
+      const aspect = Number(root.querySelector('#gpv-print-aspect').value) || 1.5;
+      const points = Number(root.querySelector('#gpv-print-text').value) || 8;
+      const sized = cap(Math.round(mm / 25.4 * dpi), Math.round(mm / 25.4 * dpi / aspect));
+      return { ...sized, dpi, mm, heightMm: mm / aspect, points, textScale: (points / 72 * dpi) / 12 };
+    }
     const parts = root.querySelector('#gpv-export-size').value.split('x').map(Number);
     const requestedScale = Number(root.querySelector('#gpv-export-scale').value) || 1;
-    let width = parts[0] * requestedScale; let height = parts[1] * requestedScale;
-    const maxPixels = 24000000;
-    if (width * height > maxPixels) {
-      const correction = Math.sqrt(maxPixels / (width * height)); width = Math.floor(width * correction); height = Math.floor(height * correction);
-    }
-    return { width, height, capped: width !== parts[0] * requestedScale || height !== parts[1] * requestedScale };
+    const sized = cap(parts[0] * requestedScale, parts[1] * requestedScale);
+    return { ...sized, dpi: null, textScale: Math.max(1, sized.width / 600) };
+  }
+
+  function figureScale(plan) {
+    return plan && plan.textScale ? plan.textScale : Math.max(1, ((plan && plan.width) || 900) / 900);
+  }
+
+  function overlayScale(dimensions) {
+    return dimensions && dimensions.textScale ? dimensions.textScale : 1;
+  }
+
+  function figureFont() {
+    const value = root.querySelector('#gpv-figure-font').value;
+    svgFont = value;
+    return value;
+  }
+
+  function updateExportEstimate() {
+    const plan = exportDimensions();
+    const printMode = root.querySelector('#gpv-export-mode').value === 'print';
+    ['#gpv-export-size', '#gpv-export-scale'].forEach(selector => { root.querySelector(selector).closest('label').hidden = printMode; });
+    ['#gpv-print-width', '#gpv-print-aspect', '#gpv-print-dpi', '#gpv-print-text'].forEach(selector => { root.querySelector(selector).closest('label').hidden = !printMode; });
+    root.querySelector('#gpv-print-custom').closest('label').hidden = !printMode || root.querySelector('#gpv-print-width').value !== 'custom';
+    root.querySelector('#gpv-export-estimate').textContent = printMode
+      ? plan.width + ' × ' + plan.height + ' px · ' + plan.mm + ' × ' + Math.round(plan.heightMm) + ' mm at ' + plan.dpi + ' dpi · text ' + plan.points + ' pt' + (plan.capped ? ' · capped for browser stability' : '')
+      : plan.width + ' × ' + plan.height + ' px · no physical size recorded' + (plan.capped ? ' · capped for browser stability' : '');
   }
 
   /* Off-screen render target for PNG export.
@@ -4995,9 +5065,9 @@ html>body{padding:0}</style>
     button.disabled = true; button.textContent = 'Rendering…';
     await afterPaint();
     try {
-      const uri = await withLegend(await renderPublicationImage(null, requested), requested.width, requested.height);
-      const link = document.createElement('a'); link.href = uri; link.download = 'protein-publication-' + requested.width + 'x' + requested.height + '.png'; link.click();
-      announce('Publication PNG downloaded' + (requested.capped ? ' · size capped for browser stability' : ''));
+      const uri = await withLegend(await renderPublicationImage(null, requested), requested);
+      downloadBlob(await pngWithDpi(uri, requested.dpi), 'image/png', exportFileName('protein-publication', requested, 'png'));
+      announce('Publication PNG downloaded · ' + requested.width + ' × ' + requested.height + (requested.dpi ? ' at ' + requested.dpi + ' dpi (' + requested.mm + ' mm wide)' : '') + (requested.capped ? ' · size capped for browser stability' : ''));
     } catch (error) {
       announce('Could not render the publication PNG: ' + error.message, 'error');
     } finally {
@@ -5080,7 +5150,7 @@ html>body{padding:0}</style>
     if (!legend) return 0;
     const swatch = Math.round(14 * scale); const gap = Math.round(6 * scale); const font = Math.round(13 * scale);
     context.save();
-    context.font = '500 ' + font + 'px system-ui'; context.textBaseline = 'middle';
+    context.font = '500 ' + font + 'px ' + figureFont(); context.textBaseline = 'middle';
     const items = legend.items;
     const title = legend.title; const titleWidth = context.measureText(title).width + gap * 2;
     const widths = items.map(item => swatch + gap + context.measureText(item[1]).width + gap * 2);
@@ -5098,15 +5168,154 @@ html>body{padding:0}</style>
     return total;
   }
 
-  async function withLegend(uri, width, height) {
-    if (!legendWanted()) return uri;
+  async function withLegend(uri, plan) {
+    const bar = scaleBarSpec(exportViewer, plan);
+    if (!legendWanted() && !bar) return uri;
+    const { width, height } = plan;
     const imageValue = await loadImage(uri);
     const canvas = document.createElement('canvas'); canvas.width = width; canvas.height = height;
     const context = canvas.getContext('2d');
     context.drawImage(imageValue, 0, 0, width, height);
-    const scale = Math.max(1, width / 900);
-    drawPlddtLegend(context, Math.round(24 * scale), height - Math.round(26 * scale), scale, figurePalette());
+    const scale = figureScale(plan);
+    if (legendWanted()) drawPlddtLegend(context, Math.round(24 * scale), height - Math.round(26 * scale), scale, figurePalette());
+    if (bar) drawScaleBar(context, bar, scale, figurePalette());
     return canvas.toDataURL('image/png');
+  }
+
+  /* ---------- Scale bar ---------- */
+
+  let sceneCentreCache = null;
+  function sceneCentre() {
+    const shown = displayedEntries().filter(entry => entry.model);
+    if (!shown.length) return null;
+    const key = shown.map(entry => entry.id).join(',') + '|' + alignmentResults.length;
+    if (sceneCentreCache && sceneCentreCache.key === key) return sceneCentreCache.centre;
+    const centres = shown.map(modelCentroid);
+    const centre = { x: mean(centres.map(c => c.x)), y: mean(centres.map(c => c.y)), z: mean(centres.map(c => c.z)) };
+    sceneCentreCache = { key, centre };
+    return centre;
+  }
+
+  /* Pixels per ångström along the screen's horizontal axis at the model centre. */
+  function pixelsPerAngstrom(target) {
+    if (!target || typeof target.modelToScreen !== 'function' || typeof target.getView !== 'function') return null;
+    const centre = sceneCentre(); if (!centre) return null;
+    const axis = screenAxisInModelSpace(target.getView(), { x: 1, y: 0, z: 0 });
+    const a = target.modelToScreen(centre); const b = target.modelToScreen({ x: centre.x + axis.x, y: centre.y + axis.y, z: centre.z + axis.z });
+    if (!a || !b) return null;
+    const pixels = Math.hypot(b.x - a.x, b.y - a.y);
+    return Number.isFinite(pixels) && pixels > 0 ? pixels : null;
+  }
+
+  function scaleBarSpec(target, plan) {
+    const length = Number(root.querySelector('#gpv-scale-bar').value) || 0;
+    if (!length || !target) return null;
+    const perAngstrom = pixelsPerAngstrom(target); if (!perAngstrom) return null;
+    const pixels = length * perAngstrom;
+    if (pixels < 8 || pixels > plan.width * 0.9) return null;
+    return { length, pixels, width: plan.width, height: plan.height };
+  }
+
+  function drawScaleBar(context, bar, scale, palette) {
+    const margin = Math.round(24 * scale); const thickness = Math.max(2, Math.round(3 * scale)); const font = Math.round(13 * scale);
+    const x = bar.width - margin - bar.pixels; const y = bar.height - margin;
+    context.save();
+    context.fillStyle = palette.paper; context.globalAlpha = 0.85;
+    context.fillRect(x - margin / 3, y - font - thickness - margin / 3, bar.pixels + margin * 2 / 3, font + thickness * 2 + margin / 2); context.globalAlpha = 1;
+    context.fillStyle = palette.ink; context.fillRect(x, y, bar.pixels, thickness);
+    context.font = '600 ' + font + 'px ' + figureFont(); context.textAlign = 'center'; context.textBaseline = 'bottom';
+    context.fillText(bar.length + ' Å', x + bar.pixels / 2, y - Math.round(3 * scale));
+    context.restore();
+  }
+
+  function scaleBarSvg(bar, scale, palette) {
+    if (!bar) return '';
+    const margin = 24 * scale; const thickness = Math.max(2, 3 * scale); const fontSize = 13 * scale;
+    const x = bar.width - margin - bar.pixels; const y = bar.height - margin;
+    return '<g id="scale-bar"><rect x="' + f(x - margin / 3) + '" y="' + f(y - fontSize - thickness - margin / 3) + '" width="' + f(bar.pixels + margin * 2 / 3) + '" height="' + f(fontSize + thickness * 2 + margin / 2) + '" fill="' + palette.paper + '" fill-opacity="0.85"/>'
+      + '<rect x="' + f(x) + '" y="' + f(y) + '" width="' + f(bar.pixels) + '" height="' + f(thickness) + '" fill="' + palette.ink + '"/>'
+      + '<text x="' + f(x + bar.pixels / 2) + '" y="' + f(y - 3 * scale) + '" text-anchor="middle" font-family="' + svgFont + '" font-size="' + f(fontSize) + '" font-weight="600" fill="' + palette.ink + '">' + svgEscape(bar.length + ' Å') + '</text></g>';
+  }
+
+  let scaleBarFrame = 0;
+  function updateScreenScaleBar() {
+    scaleBarFrame = 0;
+    const host = root.querySelector('#gpv-scalebar');
+    const length = Number(root.querySelector('#gpv-scale-bar').value) || 0;
+    const perAngstrom = length ? pixelsPerAngstrom(viewer) : null;
+    const pixels = perAngstrom ? length * perAngstrom : 0;
+    const stage = root.querySelector('#gpv-stage');
+    const show = pixels >= 8 && pixels <= stage.clientWidth * 0.9 && structures.length > 0;
+    host.hidden = !show;
+    if (show) { root.querySelector('#gpv-scalebar-line').style.width = Math.round(pixels) + 'px'; root.querySelector('#gpv-scalebar-label').textContent = length + ' Å'; }
+    if (length) scaleBarFrame = requestAnimationFrame(updateScreenScaleBar);
+  }
+
+  function ensureScaleBarLoop() {
+    if (scaleBarFrame) return;
+    scaleBarFrame = requestAnimationFrame(updateScreenScaleBar);
+  }
+
+  /* ---------- File formats ---------- */
+
+  const crcTable = (() => { const table = new Uint32Array(256); for (let n = 0; n < 256; n += 1) { let c = n; for (let k = 0; k < 8; k += 1) c = c & 1 ? 0xedb88320 ^ (c >>> 1) : c >>> 1; table[n] = c >>> 0; } return table; })();
+  function crc32(bytes) { let c = 0xffffffff; for (let i = 0; i < bytes.length; i += 1) c = crcTable[(c ^ bytes[i]) & 0xff] ^ (c >>> 8); return (c ^ 0xffffffff) >>> 0; }
+
+  /* Canvas PNGs carry no resolution. Insert a pHYs chunk after IHDR so the file
+     states its dpi, which is what journals check. */
+  async function pngWithDpi(uri, dpi) {
+    const bytes = new Uint8Array(await (await fetch(uri)).arrayBuffer());
+    if (!dpi) return new Blob([bytes], { type: 'image/png' });
+    const perMetre = Math.round(dpi / 0.0254);
+    const chunk = new Uint8Array(21); const view = new DataView(chunk.buffer);
+    view.setUint32(0, 9); chunk.set([0x70, 0x48, 0x59, 0x73], 4); view.setUint32(8, perMetre); view.setUint32(12, perMetre); chunk[16] = 1;
+    view.setUint32(17, crc32(chunk.subarray(4, 17)));
+    const out = new Uint8Array(bytes.length + chunk.length);
+    out.set(bytes.subarray(0, 33), 0); out.set(chunk, 33); out.set(bytes.subarray(33), 33 + chunk.length);
+    return new Blob([out], { type: 'image/png' });
+  }
+
+  /* Baseline TIFF: uncompressed RGBA, one strip, resolution in dpi. */
+  async function tiffFromImage(uri, dpi) {
+    const image = await loadImage(uri); const width = image.naturalWidth; const height = image.naturalHeight;
+    const canvas = document.createElement('canvas'); canvas.width = width; canvas.height = height;
+    const context = canvas.getContext('2d'); context.drawImage(image, 0, 0);
+    const pixels = context.getImageData(0, 0, width, height).data;
+    const tagCount = 14; const ifdOffset = 8; const ifdSize = 2 + tagCount * 12 + 4;
+    const bitsOffset = ifdOffset + ifdSize; const xresOffset = bitsOffset + 8; const yresOffset = xresOffset + 8; const dataOffset = yresOffset + 8;
+    const buffer = new ArrayBuffer(dataOffset + pixels.length); const view = new DataView(buffer); const bytes = new Uint8Array(buffer);
+    bytes.set([0x49, 0x49, 0x2a, 0x00], 0); view.setUint32(4, ifdOffset, true);
+    let p = ifdOffset; view.setUint16(p, tagCount, true); p += 2;
+    const entry = (tag, type, count, value) => { view.setUint16(p, tag, true); view.setUint16(p + 2, type, true); view.setUint32(p + 4, count, true); if (type === 3 && count === 1) view.setUint16(p + 8, value, true); else view.setUint32(p + 8, value, true); p += 12; };
+    entry(256, 4, 1, width); entry(257, 4, 1, height); entry(258, 3, 4, bitsOffset); entry(259, 3, 1, 1); entry(262, 3, 1, 2); entry(273, 4, 1, dataOffset);
+    entry(277, 3, 1, 4); entry(278, 4, 1, height); entry(279, 4, 1, pixels.length); entry(282, 5, 1, xresOffset); entry(283, 5, 1, yresOffset); entry(284, 3, 1, 1); entry(296, 3, 1, 2); entry(338, 3, 1, 2);
+    view.setUint32(p, 0, true);
+    [0, 2, 4, 6].forEach(offset => view.setUint16(bitsOffset + offset, 8, true));
+    view.setUint32(xresOffset, dpi, true); view.setUint32(xresOffset + 4, 1, true); view.setUint32(yresOffset, dpi, true); view.setUint32(yresOffset + 4, 1, true);
+    bytes.set(pixels, dataOffset);
+    return new Blob([buffer], { type: 'image/tiff' });
+  }
+
+  async function downloadPublicationTiff() {
+    const button = root.querySelector('#gpv-tiff');
+    const plan = exportDimensions();
+    const done = setBusy('Rendering TIFF…');
+    button.disabled = true;
+    await afterPaint();
+    try {
+      const uri = await withLegend(await renderPublicationImage(null, plan), plan);
+      const blob = await tiffFromImage(uri, plan.dpi || 96);
+      downloadBlob(blob, 'image/tiff', exportFileName('protein-publication', plan, 'tiff'));
+      announce('Publication TIFF downloaded · ' + formatBytes(blob.size) + (plan.dpi ? ' · ' + plan.dpi + ' dpi' : ''));
+    } catch (error) {
+      announce('Could not render the publication TIFF: ' + error.message, 'error');
+    } finally {
+      releaseExportViewer(); done(); button.disabled = structures.length === 0;
+    }
+  }
+
+  function exportFileName(stem, plan, extension) {
+    return stem + '-' + (plan.mm ? plan.mm + 'mm-' + plan.dpi + 'dpi' : plan.width + 'x' + plan.height) + '.' + extension;
   }
 
   function truncateToWidth(context, text, maxWidth) {
@@ -5139,7 +5348,7 @@ html>body{padding:0}</style>
      written as SVG elements so it can be restyled in Illustrator or Inkscape. */
 
   const svgMeasure = document.createElement('canvas').getContext('2d');
-  const svgFont = 'system-ui, -apple-system, Segoe UI, Roboto, sans-serif';
+  let svgFont = 'Arial, Helvetica, sans-serif';
   const f = value => String(Math.round(value * 100) / 100);
 
   function svgEscape(value) {
@@ -5211,7 +5420,7 @@ html>body{padding:0}</style>
 
   function overlaySvg(target, shownIds, dimensions, includeScreenText) {
     const project = projectorFor(target);
-    const scale = Math.max(1, dimensions.width / 600);
+    const scale = dimensions.textScale || Math.max(1, dimensions.width / 600);
     const palette = figurePalette(); const byId = entriesById(); const parts = [];
     const ink = labelColors.getPropertyValue('--card-foreground').trim() || '#111827';
     labelRecords.filter(label => shownIds.has(label.entryId)).forEach(label => {
@@ -5267,8 +5476,8 @@ html>body{padding:0}</style>
       const uri = await renderPublicationImage(null, requested, false);
       const target = exportViewer;
       const overlay = overlaySvg(target, new Set(displayedEntries().map(entry => entry.id)), requested, true);
-      const scale = Math.max(1, requested.width / 900);
-      const legend = legendWanted() ? svgLegend(24 * scale, requested.height - 26 * scale, scale, figurePalette()).markup : '';
+      const scale = figureScale(requested);
+      const legend = (legendWanted() ? svgLegend(24 * scale, requested.height - 26 * scale, scale, figurePalette()).markup : '') + scaleBarSvg(scaleBarSpec(target, requested), scale, figurePalette());
       const background = backgroundSpec();
       const svg = svgDocument(requested.width, requested.height, background.alpha ? background.color : null, svgImage(uri, 0, 0, requested.width, requested.height) + '\n<g id="overlay">\n' + overlay + '\n' + legend + '</g>');
       downloadBlob(svg, 'image/svg+xml', 'protein-figure-' + requested.width + 'x' + requested.height + '.svg');
@@ -5367,7 +5576,7 @@ html>body{padding:0}</style>
         if (legendWanted('comparison')) used = drawPlddtLegend(context, Math.round(cellWidth * 0.025), y, scale, palette, 'comparison') + Math.round(cellWidth * 0.06);
         const title = provenanceValues().title;
         if (title) {
-          context.fillStyle = palette.ink; context.textBaseline = 'middle'; context.font = '600 ' + Math.round(captionHeight * 0.36) + 'px system-ui';
+          context.fillStyle = palette.ink; context.textBaseline = 'middle'; context.font = '600 ' + Math.round(captionHeight * 0.36) + 'px ' + figureFont();
           context.fillText(truncateToWidth(context, title, canvas.width - used - Math.round(cellWidth * 0.05)), Math.round(cellWidth * 0.025) + used, y);
         }
       }
@@ -5379,10 +5588,10 @@ html>body{padding:0}</style>
         const x = (index % columns) * cellWidth; const y = Math.floor(index / columns) * (cellHeight + captionHeight);
         context.drawImage(imageValue, x, y, cellWidth, cellHeight);
         context.fillStyle = palette.ink; context.textBaseline = 'middle';
-        context.font = '700 ' + Math.round(captionHeight * 0.46) + 'px system-ui';
+        context.font = '700 ' + Math.round(captionHeight * 0.46) + 'px ' + figureFont();
         context.fillText(String.fromCharCode(65 + index), x + Math.round(cellWidth * 0.025), y + cellHeight + captionHeight / 2);
         const score = mean(panes[index].entry.scores);
-        context.font = '500 ' + Math.round(captionHeight * 0.34) + 'px system-ui';
+        context.font = '500 ' + Math.round(captionHeight * 0.34) + 'px ' + figureFont();
         const caption = displayName(panes[index].entry) + (score === null ? '' : ' · mean pLDDT ' + score.toFixed(1));
         context.fillText(truncateToWidth(context, caption, cellWidth * 0.9), x + Math.round(cellWidth * 0.08), y + cellHeight + captionHeight / 2);
       }
@@ -5430,9 +5639,9 @@ html>body{padding:0}</style>
         await afterPaint();
         const uri = await renderPublicationImage(savedViews[index], { width: cellWidth, height: imageHeight }); const imageValue = await loadImage(uri);
         const x = (index % columns) * cellWidth; const y = Math.floor(index / columns) * (imageHeight + captionHeight); context.drawImage(imageValue, x, y, cellWidth, imageHeight);
-        context.font = '700 42px system-ui'; context.fillText(String.fromCharCode(65 + index), x + 32, y + imageHeight + 24);
-        context.font = '600 30px system-ui'; context.fillText(savedViews[index].name, x + 96, y + imageHeight + 24);
-        context.font = '24px system-ui';
+        context.font = '700 42px ' + figureFont(); context.fillText(String.fromCharCode(65 + index), x + 32, y + imageHeight + 24);
+        context.font = '600 30px ' + figureFont(); context.fillText(savedViews[index].name, x + 96, y + imageHeight + 24);
+        context.font = '24px ' + figureFont();
         wrapText(context, savedViews[index].caption, cellWidth - 128).slice(0, 3)
           .forEach((line, lineIndex) => context.fillText(line, x + 96, y + imageHeight + 70 + lineIndex * 30));
       }
@@ -5988,9 +6197,9 @@ async function downloadPng() {
     const x = (i % cols) * w, y = Math.floor(i / cols) * (h + cap);
     ctx.drawImage(img, x, y);
     ctx.fillStyle = dark ? '#f8fafc' : '#111827'; ctx.textBaseline = 'middle';
-    ctx.font = '700 ' + Math.round(cap * 0.46) + 'px system-ui';
+    ctx.font = '700 ' + Math.round(cap * 0.46) + 'px ' + figureFont();
     ctx.fillText(String.fromCharCode(65 + i), x + Math.round(w * 0.025), y + h + cap / 2);
-    ctx.font = '500 ' + Math.round(cap * 0.34) + 'px system-ui';
+    ctx.font = '500 ' + Math.round(cap * 0.34) + 'px ' + figureFont();
     const s = structures[panes[i].index];
     ctx.fillText((s.label || s.name) + (panes[i].plddt === null ? '' : ' · mean pLDDT ' + panes[i].plddt.toFixed(1)), x + Math.round(w * 0.08), y + h + cap / 2);
   });
@@ -6212,6 +6421,7 @@ applyBackground();
 
   const persistedControls = [
     '#gpv-style', '#gpv-color-mode', '#gpv-projection', '#gpv-background', '#gpv-background-color', '#gpv-hetero',
+    '#gpv-export-mode', '#gpv-print-width', '#gpv-print-aspect', '#gpv-print-dpi', '#gpv-print-text', '#gpv-figure-font', '#gpv-scale-bar',
     '#gpv-view-mode', '#gpv-order', '#gpv-alignment-mode', '#gpv-export-size', '#gpv-export-scale',
     '#gpv-panel-columns', '#gpv-video-length', '#gpv-cycle-speed', '#gpv-speed', '#gpv-report-scope'
   ];
@@ -6575,7 +6785,10 @@ applyBackground();
     'Publish → Copy PNG to clipboard renders the publication figure and puts it straight into your paste buffer for a slide or a document.',
     'Confidence → PAE domains groups residues that the prediction places together (low PAE to one another). Colour by domains or highlight them to see which parts of an assembly are predicted as a rigid unit.',
     'Every panel of the shared report now carries a sequence strip: reviewers hover to read a residue and its pLDDT, and click to zoom the panel to it.',
-    'Annotate → Domains: name a region, pick its colour, and apply it to every model from the same AlphaFold run. Colour by annotated domains paints them and the legend lists them by name — in the viewer, every export and the report.'
+    'Annotate → Domains: name a region, pick its colour, and apply it to every model from the same AlphaFold run. Colour by annotated domains paints them and the legend lists them by name — in the viewer, every export and the report.',
+    'Publish → Print size exports at a stated width (85 or 178 mm) and resolution (300 or 600 dpi), writes the dpi into the PNG or TIFF, and sizes labels in points — what a journal checks.',
+    'Appearance → Colour-blind-safe palette switches chains and domains to Okabe–Ito colours; a scale bar of 10–100 Å goes bottom-right of every export from Publish → Scale bar.',
+    'Help (?) → How to cite gives the viewer and 3Dmol.js references; each GitHub release is archived on Zenodo with a DOI.'
   ];
   let tipIndex = Math.floor(Math.random() * tips.length);
   function renderTip() {
@@ -6603,6 +6816,11 @@ applyBackground();
   root.querySelector('#gpv-domain-color').addEventListener('click', () => { const select = root.querySelector('#gpv-color-mode'); select.value = 'domain'; select.dispatchEvent(new Event('change', { bubbles: true })); });
   root.querySelector('#gpv-domain-highlight').addEventListener('click', () => { const entry = activeEntry(); if (entry && entry.domains && entry.domains.domains.length) highlightDomains(entry, entry.domains.domains); });
   root.querySelector('#gpv-copy-image').addEventListener('click', () => { copyPublicationPng(); });
+  root.querySelector('#gpv-tiff').addEventListener('click', () => { downloadPublicationTiff(); });
+  ['#gpv-export-mode', '#gpv-print-width', '#gpv-print-custom', '#gpv-print-aspect', '#gpv-print-dpi', '#gpv-print-text', '#gpv-export-size', '#gpv-export-scale'].forEach(selector => root.querySelector(selector).addEventListener('change', updateExportEstimate));
+  root.querySelector('#gpv-figure-font').addEventListener('change', () => { figureFont(); rebuildOverlays(); updateStatus('Figure font: ' + root.querySelector('#gpv-figure-font').selectedOptions[0].textContent); });
+  root.querySelector('#gpv-scale-bar').addEventListener('change', () => { if (Number(root.querySelector('#gpv-scale-bar').value)) ensureScaleBarLoop(); else updateScreenScaleBar(); });
+  root.querySelector('#gpv-safe-palette').addEventListener('change', () => { safePaletteOn = root.querySelector('#gpv-safe-palette').checked; applyStyle(); renderDomainList(); updateStatus(safePaletteOn ? 'Okabe–Ito palette on for chains and domains' : 'Default palette restored'); });
   root.querySelector('#gpv-goto-run').addEventListener('click', () => goToResidue(root.querySelector('#gpv-goto').value));
   root.querySelector('#gpv-goto').addEventListener('keydown', event => { if (event.key === 'Enter') { event.preventDefault(); goToResidue(root.querySelector('#gpv-goto').value); } });
   root.querySelector('#gpv-chains-all').addEventListener('click', () => { const entry = activeEntry(); if (!entry) return; entry.hiddenChains = []; applyStyle(); updateStatus('All chains of ' + displayName(entry) + ' shown'); });
@@ -6615,6 +6833,9 @@ applyBackground();
   renderTip();
   watchStageClicks();
   restorePreferences();
+  root.querySelector('#gpv-cite-version').textContent = viewerVersion;
+  figureFont(); updateExportEstimate();
+  if (Number(root.querySelector('#gpv-scale-bar').value)) ensureScaleBarLoop();
   openSharedScene();
   /* ?debug=1 exposes a few internals for the regression suite and for bug reports;
      it has no effect otherwise. */

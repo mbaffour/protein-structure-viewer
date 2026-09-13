@@ -1,0 +1,43 @@
+cff-version: 1.2.0
+message: "If you use this software, please cite it using the metadata below. Each GitHub release is archived on Zenodo; cite the release DOI you used."
+type: software
+title: "Protein Structure Viewer"
+abstract: >-
+  A single-file, browser-based viewer for comparing, annotating and publishing predicted and
+  experimental protein structures: AlphaFold confidence (pLDDT, PAE, ipTM), synchronized
+  multi-view comparison, Cα superposition with deviation colouring, PAE-derived and named domains,
+  residue-property colour schemes, figure annotation, publication-quality PNG, SVG and TIFF export
+  at stated print size and resolution, and self-contained interactive reports for reviewers.
+  All processing happens in the browser; local files are never uploaded.
+authors:
+  - family-names: Awuah
+    given-names: Michael Baffour
+    email: mbaffour890@gmail.com
+version: 2.10.0
+date-released: 2026-09-12
+license: MIT
+repository-code: "https://github.com/mbaffour/protein-structure-viewer"
+url: "https://mbaffour.github.io/structure-viewer/"
+keywords:
+  - protein structure
+  - AlphaFold
+  - pLDDT
+  - predicted aligned error
+  - structural biology
+  - molecular visualization
+  - 3Dmol.js
+references:
+  - type: article
+    title: "3Dmol.js: molecular visualization with WebGL"
+    authors:
+      - family-names: Rego
+        given-names: Nicholas
+      - family-names: Koes
+        given-names: David
+    journal: Bioinformatics
+    year: 2015
+    volume: 31
+    issue: 8
+    start: 1322
+    end: 1324
+    doi: 10.1093/bioinformatics/btu829

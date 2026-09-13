@@ -296,8 +296,16 @@ to the chain-pair ipTM and PAE above it.
 
 ## Publish tab
 
-**Images.** Choose a size and supersampling factor and export a PNG rendered off-screen at full
-resolution, independent of your window size. Very large requests are capped at roughly 24 megapixels
+**Images.** **Output** chooses between **Print size** — a physical width (85 mm single column,
+114 mm, 178 mm double column, or a custom width), an aspect ratio, a resolution of 300 or 600 dpi,
+and a text size in points — and **Pixels**, a fixed size times a supersampling factor. In print mode
+the estimate line gives the pixel dimensions and the physical size, the PNG carries its dpi in the
+file (a `pHYs` chunk, which is what journal figure checkers read), and every residue label, callout,
+measurement value, legend and caption is drawn so its text prints at the chosen point size. The
+**figure font** (Arial/Helvetica by default, Times, or the system font) applies to all of them and to
+SVG text. **Download publication TIFF** writes a baseline uncompressed RGBA TIFF with the resolution
+set; it is large (about 4 bytes per pixel) but it is what some journals ask for. The PNG is rendered
+off-screen at full resolution, independent of your window size. Very large requests are capped at roughly 24 megapixels
 for browser stability, and the status line says when that happened.
 
 Rendering is one long synchronous WebGL call, so the page stops responding while it runs — expect a
@@ -315,6 +323,11 @@ pLDDT in a caption strip. The total is capped at roughly 24 megapixels, so six p
 size come out smaller per panel than one. With *pLDDT legend on exports* ticked and confidence
 colouring active, the four-band legend is drawn onto both kinds of PNG, and the comparison figure gets
 a footer with the legend and your project title.
+
+**Scale bar.** Choose 10, 20, 50 or 100 Å. The bar is measured along the screen's horizontal axis
+at the model centre, shown bottom-right on screen, and drawn into PNG, TIFF and SVG exports with the
+legend. In perspective projection the bar is exact only at the model's depth; use orthographic
+projection for figures that carry one.
 
 **Vector figures.** **Download figure SVG** and **Download comparison SVG** write the same figures with
 the molecule as a raster image and everything drawn over it — residue labels, measurements, arrows,
@@ -368,6 +381,39 @@ Saved views whose models were fetched by identifier travel in the link too, so t
 follow your guided tour. Links are typically one
 to three kilobytes; a scene with many annotations may run longer, and every modern browser accepts
 fragments far larger than that.
+
+## Publishing a figure
+
+A checklist that fits most journals and theses:
+
+1. **Set the view.** Fit, then rotate in 90° steps (X/Y/Z keys) so companion panels share an
+   orientation; orthographic projection for anything with a scale bar or distances.
+2. **Choose what the colours mean.** pLDDT for confidence, Cα deviation after *Align visible* for
+   disagreement, chain or annotated domains for architecture, Okabe–Ito (*Appearance → Colour-blind-safe
+   palette*) whenever chains or domains carry the message. Keep the legend on.
+3. **Hide what distracts.** Low-confidence residues below 50 or 70, chains not under discussion, water
+   (never shown), ligands as sticks or hidden.
+4. **Annotate.** Residue labels, arrows, callouts, measurements; nudge labels into place; a corner
+   title for the panel letter.
+5. **Set the output.** *Print size*, 85 mm for a single column or 178 mm for a double, 300 dpi (600 for
+   line-heavy figures), 7–8 pt text, Arial/Helvetica unless the journal says otherwise, scale bar if
+   dimensions matter.
+6. **Export.** PNG or TIFF for submission systems, SVG when a designer or Illustrator will finish the
+   type. Comparison PNG/SVG for lettered multi-panel figures.
+7. **Write the legend.** *Write figure legend* drafts it with the colour bands, cut-offs, alignment
+   statistics, print settings and rendering credit; edit it into your voice.
+8. **Keep the scene.** Download scene JSON next to the structure files so the figure can be rebuilt,
+   and share a link or report with co-authors.
+
+## How to cite
+
+Awuah, M. B. (2026). *Protein Structure Viewer* (version 2.10.0) [software].
+https://github.com/mbaffour/protein-structure-viewer. Each GitHub release is archived on Zenodo with
+its own DOI; cite the DOI of the release you used, which the release page shows. Metadata for
+reference managers is in `CITATION.cff` (GitHub shows a "Cite this repository" button from it). The
+viewer renders with 3Dmol.js, which should be cited as well: Rego, N. & Koes, D. (2015). 3Dmol.js:
+molecular visualization with WebGL. *Bioinformatics* 31(8), 1322–1324.
+doi:10.1093/bioinformatics/btu829. *Help → How to cite* in the viewer has both.
 
 ## Reproducible scenes
 

@@ -1,0 +1,14 @@
+{
+  "title": "Protein Structure Viewer",
+  "description": "A single-file, browser-based viewer for comparing, annotating and publishing predicted and experimental protein structures: AlphaFold confidence (pLDDT, PAE, ipTM), synchronized multi-view comparison, superposition with deviation colouring, PAE-derived and named domains, residue-property colour schemes, figure annotation, publication-quality PNG/SVG/TIFF export at stated print size and resolution, and self-contained interactive reports for reviewers. All processing happens in the browser; local files are never uploaded.",
+  "creators": [
+    { "name": "Awuah, Michael Baffour" }
+  ],
+  "license": "MIT",
+  "upload_type": "software",
+  "access_right": "open",
+  "keywords": ["protein structure", "AlphaFold", "pLDDT", "predicted aligned error", "structural biology", "molecular visualization", "3Dmol.js"],
+  "related_identifiers": [
+    { "identifier": "https://mbaffour.github.io/structure-viewer/", "relation": "isDocumentedBy", "resource_type": "publication-other" }
+  ]
+}

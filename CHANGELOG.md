@@ -2,6 +2,35 @@
 
 All notable changes to this project are recorded here.
 
+## 2.10.0
+
+Publication output and citability. Scenes from 2.2 onward still load.
+
+### Added
+
+- **Print-size export.** *Publish → Output* defaults to a physical width (85 mm single column, 114 mm,
+  178 mm double column, or custom), an aspect, a resolution (300 or 600 dpi) and a text size in points.
+  Pixel dimensions follow, the estimate line shows them, and every label, callout, measurement, legend
+  and caption is scaled so text prints at the chosen point size. Pixel mode (size × scale) remains.
+- **Resolution in the file.** Publication PNGs carry a `pHYs` chunk stating the dpi, so journal
+  checkers and image editors read the intended print size. A **publication TIFF** (baseline,
+  uncompressed RGBA, resolution tags set) is available for journals that require TIFF.
+- **Figure font.** Arial/Helvetica by default, Times, or the system font, applied to every label,
+  legend, caption and to SVG text.
+- **Scale bar.** 10, 20, 50 or 100 Å, measured along the screen's horizontal axis at the model
+  centre, shown bottom-right on screen and drawn into PNG, TIFF and SVG exports. Exact in orthographic
+  projection.
+- **Colour-blind-safe palette.** *Appearance* switches chain and domain colours to Okabe–Ito, with
+  chain A staying blue.
+- **Citation.** *Help → How to cite* gives the viewer and 3Dmol.js references; the generated figure
+  legend ends with a rendering credit and, in print mode, the width, dpi and text size. The repository
+  gains `CITATION.cff` and `.zenodo.json` so each GitHub release is archived on Zenodo with a DOI.
+
+### Fixed
+
+- Exported residue labels, callouts and measurements were drawn at their on-screen pixel size, so a
+  12-pixel label printed at about 2 pt in a 3600-pixel figure. Overlays now scale with the export.
+
 ## 2.9.0
 
 Reading the PAE matrix as structure, and giving reviewers the strip. Scenes from 2.2 onward still load.
