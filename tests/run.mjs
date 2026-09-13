@@ -246,6 +246,17 @@ await step('entity colouring groups the two identical chains and reads as a stoi
   if (!/Stoichiometry: α ×2/.test(summary) || !/Cα extent \d+\.\d nm · radius of gyration \d+\.\d nm/.test(summary)) throw new Error('summary: ' + summary);
   console.log('       ' + summary.trim());
 });
+await step('the Cα extent is the exact maximum Cα–Cα distance', async () => {
+  const result = await page.evaluate(() => {
+    const d = window.__viewerDebug; const entry = d.activeEntry();
+    const cas = entry.atoms.filter(atom => atom.atom === 'CA' && !atom.hetflag);
+    let best = 0;
+    for (let i = 0; i < cas.length; i += 1) for (let j = i + 1; j < cas.length; j += 1) { const dd = (cas[i].x - cas[j].x) ** 2 + (cas[i].y - cas[j].y) ** 2 + (cas[i].z - cas[j].z) ** 2; if (dd > best) best = dd; }
+    const size = d.assemblyDimensions(entry); return { brute: Math.sqrt(best), extent: size.extent, exact: size.exact, count: cas.length };
+  });
+  if (!result.exact || Math.abs(result.brute - result.extent) > 1e-6) throw new Error(JSON.stringify(result));
+  console.log('       ' + result.count + ' Cα · extent ' + result.extent.toFixed(3) + ' Å, exact');
+});
 await step('chain colouring lists the chains in the legend', async () => {
   await page.selectOption('#gpv-color-mode', 'chain'); await page.waitForTimeout(400);
   const legend = page.locator('#gpv-plddt-legend');
@@ -574,6 +585,26 @@ await step('PAE domains are found from a block-diagonal matrix', async () => {
   await page.click('#gpv-domain-highlight'); await page.waitForTimeout(500);
   if ((await page.locator('#gpv-selection-list .gpv-entry').count()) !== before + 2) throw new Error('highlight all did not add two selections');
   await tab('appearance'); await page.selectOption('#gpv-color-mode', 'plddt'); await page.waitForTimeout(300); await tab('confidence');
+});
+await step('an AlphaFold 3 full_data file is scanned byte by byte: PAE kept as Float32 rows, contact matrix skipped', async () => {
+  const size = 60;
+  const pae = Array.from({ length: size }, (_, i) => Array.from({ length: size }, (_, j) => Math.round(Math.abs(i - j) * 37) / 100));
+  const contact = Array.from({ length: size }, () => Array.from({ length: size }, (_, j) => (j % 7 === 0 ? 0.9 : 0.01)));
+  const chains = Array.from({ length: size }, (_, i) => (i < 30 ? 'A' : 'B')); const resi = Array.from({ length: size }, (_, i) => (i % 30) + 1);
+  const file = join(work, 'model_b.json');
+  await writeFile(file, JSON.stringify({ atom_chain_ids: chains, atom_plddts: resi, contact_probs: contact, pae, token_chain_ids: chains, token_res_ids: resi }));
+  await page.setInputFiles('#gpv-files', [file]); await page.waitForTimeout(1500);
+  const info = await page.evaluate(() => {
+    const entry = window.__viewerDebug.entries().find(item => /model_b/.test(item.name)); const matrix = entry && entry.confidence && entry.confidence.pae;
+    return matrix ? { rows: matrix.length, typed: ArrayBuffer.isView(matrix[0]), value: matrix[3][10], max: entry.confidence.paeMaximum, chains: entry.confidence.tokenChainIds.length } : null;
+  });
+  if (!info) throw new Error('PAE not attached to model_b');
+  if (info.rows !== 60 || !info.typed || info.chains !== 60) throw new Error(JSON.stringify(info));
+  if (Math.abs(info.value - 2.59) > 1e-5 || Math.abs(info.max - 21.83) > 1e-5) throw new Error('values ' + info.value + ' ' + info.max);
+  await page.evaluate(() => { const select = document.querySelector('#gpv-current'); const option = [...select.options].find(item => /model_b/.test(item.textContent)); select.value = option.value; select.dispatchEvent(new Event('change', { bubbles: true })); });
+  await page.waitForTimeout(600); await tab('confidence');
+  if (!(await page.locator('#gpv-pae-plot').isVisible())) throw new Error('PAE heatmap hidden for model_b');
+  console.log('       60 × 60 PAE as Float32Array rows · maximum ' + info.max.toFixed(2) + ' Å · heatmap drawn');
 });
 await step('ligand sites report that the synthetic models carry no ligands', async () => {
   if (!(await page.locator('#gpv-site-run').isDisabled())) throw new Error('analyse enabled without ligands');
@@ -969,6 +1000,15 @@ await step('the figure legend names the models and the colouring', async () => {
   if (!/Rendered with Protein Structure Viewer \d+\.\d+\.\d+ \(3Dmol\.js; Rego & Koes, 2015\)\./.test(text)) throw new Error('citation sentence missing');
   if (!/model_/.test(text)) throw new Error('no model name in: ' + text.slice(0, 120));
   console.log('       ' + text.slice(0, 110).replace(/\s+/g, ' ') + '…');
+});
+await step('the methods text states the superposition, RMSD and dimension definitions', async () => {
+  await tab('compare'); await page.click('#gpv-align'); await page.waitForTimeout(2500);
+  await tab('publish'); await page.click('#gpv-methods-text'); await page.waitForTimeout(500);
+  const text = await page.inputValue('#gpv-methods-field');
+  if (!/Kabsch/.test(text) || !/RMSD is reported over all paired Cα atoms/.test(text)) throw new Error('no superposition sentence: ' + text.slice(0, 160));
+  if (!/maximum Cα–Cα distance/.test(text) || !/radius of gyration/.test(text)) throw new Error('no dimensions sentence');
+  if (!/3Dmol\.js 2\.4\.2/.test(text) || !/VALIDATION\.md/.test(text)) throw new Error('no software sentence');
+  console.log('       ' + text.length + ' characters · ' + text.split('. ').length + ' sentences');
 });
 
 group('session');

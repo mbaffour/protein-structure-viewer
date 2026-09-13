@@ -140,6 +140,9 @@ in exactly two situations:
 A Content-Security-Policy header restricts the page to exactly those origins. If the libraries cannot
 be reached, the viewer says so rather than failing silently.
 
+If cdnjs cannot be reached, the same three files are requested from jsDelivr under the same integrity
+hashes; no other host is ever contacted.
+
 ## Scientific-use notes
 
 - pLDDT is a per-residue confidence measure. It does not by itself establish that a multimeric
@@ -150,6 +153,18 @@ be reached, the viewer says so rather than failing silently.
 - Generated reports and exported images are presentation artefacts, not replacements for the original
   coordinate files, confidence JSON, PAE data, or experimental validation.
 - Present predictions as predictions, and keep them distinct from experimentally determined structures.
+
+## Validation
+
+Every number the viewer reports is cross-checked against an independent implementation. `tests/reference.py`
+computes, with Biopython and numpy, the mean Cα pLDDT, the Kabsch RMSD of each model onto the first,
+per-residue Cα RMSF across the superposed models, radius of gyration, exact Cα extent and the residue
+set within a cutoff of one chain; `tests/validate.mjs` drives the real viewer on the same files and
+compares. On three AlphaFold 3 runs (an M13 virion tip, an MS2 maturation-protein–coat complex and a
+phiX174 F–G complex) all 72 comparisons agree to within 5 × 10⁻⁵ Å, the rounding of the reference.
+[`VALIDATION.md`](VALIDATION.md) has the tables, what is and is not covered, and how to rerun the check on
+your own run. The viewer also loads a five-model, 4 410-token assembly with 175 MB of confidence JSON per
+model in under eight seconds and a fraction of a gigabyte of memory.
 
 ## Hosting it yourself
 
@@ -169,7 +184,8 @@ cd tests && npm install && npm test
 
 It drives the real viewer in Chromium and covers import, navigation, appearance, both alignment modes,
 annotation, confidence export, the full publish path, and the generated report. Run it before changing
-the alignment or export code.
+the alignment or export code. `tests/validate.mjs` cross-checks the analysis numbers on a real run against
+`tests/reference.py` (Biopython); see [Validation](#validation).
 
 The file is laid out as: design-system CSS variables and base styles, the viewer markup, viewer-specific
 CSS, the main application script, and a small inline icon set and tooltip helper. The application
@@ -178,7 +194,8 @@ script is a single IIFE holding all viewer state (`structures`, `labelRecords`, 
 
 Third-party libraries are pinned by exact version *and* SRI hash. When bumping one, update the
 `integrity` attribute together with the URL — the authoritative hash is available from
-`https://api.cdnjs.com/libraries/<name>/<version>?fields=sri`.
+`https://api.cdnjs.com/libraries/<name>/<version>?fields=sri` — and confirm that the jsDelivr copy named in
+the fallback block still has the same hash, or drop the fallback for that library.
 
 ## Publishing a figure
 

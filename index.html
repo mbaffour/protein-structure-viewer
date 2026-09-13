@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="referrer" content="no-referrer">
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self' 'unsafe-inline' 'unsafe-eval' 'wasm-unsafe-eval' blob: https://cdnjs.cloudflare.com; style-src 'self' 'unsafe-inline'; img-src 'self' blob: data:; font-src 'self' data:; media-src 'self' blob: data:; connect-src 'self' blob: data: https://files.rcsb.org https://alphafold.ebi.ac.uk https://cdnjs.cloudflare.com; worker-src blob:; frame-src 'none'; object-src 'none'; base-uri 'none'; form-action 'none'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self' 'unsafe-inline' 'unsafe-eval' 'wasm-unsafe-eval' blob: https://cdnjs.cloudflare.com https://cdn.jsdelivr.net; style-src 'self' 'unsafe-inline'; img-src 'self' blob: data:; font-src 'self' data:; media-src 'self' blob: data:; connect-src 'self' blob: data: https://files.rcsb.org https://alphafold.ebi.ac.uk https://cdnjs.cloudflare.com https://cdn.jsdelivr.net; worker-src blob:; frame-src 'none'; object-src 'none'; base-uri 'none'; form-action 'none'">
 <title>Protein Structure Viewer</title>
 <meta name="description" content="A single-file, offline-capable browser viewer for AlphaFold and experimental protein structures: overlay, align, measure, inspect confidence, and export publication figures without uploading anything.">
 <meta name="color-scheme" content="light dark">
@@ -1122,6 +1122,10 @@ html>body{padding:0}</style>
       <textarea class="form-control gpv-legend-text" id="gpv-legend-text" rows="5" hidden aria-label="Generated figure legend"></textarea>
     </div>
     <div class="viz-controls">
+      <button class="btn" type="button" id="gpv-methods-text" disabled data-tooltip="Draft a methods paragraph that states exactly how the numbers on screen were computed: superposition, RMSD, RMSF, domains, contacts, dimensions and colour scales">Write methods text</button>
+      <textarea class="form-control gpv-legend-text" id="gpv-methods-field" rows="6" hidden aria-label="Generated methods text"></textarea>
+    </div>
+    <div class="viz-controls">
       <label class="form-label">View name<input class="form-control" id="gpv-view-name" type="text" placeholder="Overview, interface, pore…"></label>
       <label class="form-label gpv-current-label">Caption<input class="form-control" id="gpv-view-caption" type="text" placeholder="Short panel caption"></label>
       <button class="btn" type="button" id="gpv-save-view" disabled>Save current view</button>
@@ -1186,6 +1190,8 @@ html>body{padding:0}</style>
       </ul>
       <h3>Tips for figures and reviewers</h3>
       <ul>
+        <li><em>Publish → Write methods text</em> drafts a Methods paragraph stating exactly how the numbers on screen were computed (superposition, RMSD, RMSF, domains, contacts, dimensions, colour scales); every definition is cross-checked against Biopython in the repository's <code>VALIDATION.md</code>.</li>
+        <li>Large AlphaFold 3 archives open whole: the confidence files are scanned byte by byte, the unused contact matrix is skipped and the PAE is kept compactly, so a five-model, 4 400-token assembly stays well under a gigabyte of memory.</li>
         <li>Colour by <strong>pLDDT confidence</strong> and switch to <strong>orthographic</strong> projection for publication panels; perspective exaggerates whatever is closest to the camera.</li>
         <li>Run <strong>Align visible</strong>, then enable multi-view with <em>Rotation and zoom</em> to inspect a superposition panel by panel. The shared report carries the aligned coordinates.</li>
         <li>Save named views with captions in <strong>Publish</strong>: they become lettered figure panels, a caption file, and a guided tour inside the report.</li>
@@ -1389,6 +1395,21 @@ html>body{padding:0}</style>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js" integrity="sha512-XMVd28F1oH/O71fzwBnV7HucLxVwtxf26XV8P4wPk26EDxuGZ91N8bsOttmnomcCD3CS5ZMRL50H0GgOHvegtg==" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/numeric/1.2.6/numeric.min.js" integrity="sha512-BK/c8SKG4PMGMg8wo/56FdGMkgQFJgFl8rnVdF1wqIZW73Vw6M/Tde9GmwibV8MoBSBJcwurXGg6B9yvd/Fvcw==" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
 <script>
+/* cdnjs and jsDelivr serve byte-identical files for these three versions (same SHA-512), so a
+   blocked or unreachable cdnjs falls back to jsDelivr under the very same integrity check. */
+(() => {
+  const fallbacks = [
+    ['$3Dmol', 'https://cdn.jsdelivr.net/npm/3dmol@2.4.2/build/3Dmol-min.js', 'sha512-hMLvWa58N20AYqzvAVgf4Utdz0jGshnzaknHRzQSm3I7TUeN6ehikRsICUbDB8JIt625tPV3a3s6I9BMrxT0Gg=='],
+    ['JSZip', 'https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js', 'sha512-XMVd28F1oH/O71fzwBnV7HucLxVwtxf26XV8P4wPk26EDxuGZ91N8bsOttmnomcCD3CS5ZMRL50H0GgOHvegtg=='],
+    ['numeric', 'https://cdn.jsdelivr.net/npm/numeric@1.2.6/numeric-1.2.6.min.js', 'sha512-BK/c8SKG4PMGMg8wo/56FdGMkgQFJgFl8rnVdF1wqIZW73Vw6M/Tde9GmwibV8MoBSBJcwurXGg6B9yvd/Fvcw==']
+  ];
+  fallbacks.forEach(([name, src, integrity]) => {
+    if (typeof window[name] !== 'undefined') return;
+    document.write('<script src="' + src + '" integrity="' + integrity + '" crossorigin="anonymous" referrerpolicy="no-referrer"><\/script>');
+  });
+})();
+</script>
+<script>
 (() => {
   const root = document.getElementById('generic-protein-viewer');
 
@@ -1466,7 +1487,7 @@ html>body{padding:0}</style>
   let busyDepth = 0;
   let restoreMotion = null;
   const listPageSize = 60;
-  const viewerVersion = '2.13.0';
+  const viewerVersion = '2.14.0';
   const preferenceKey = 'protein-structure-viewer:preferences';
   const themeKey = 'protein-structure-viewer:theme';
   const labelColors = getComputedStyle(root);
@@ -1560,14 +1581,112 @@ html>body{padding:0}</style>
     return number === null ? '—' : number.toFixed(digits);
   }
 
+  /* PAE rows are plain arrays when a small file went through JSON.parse and Float32Array
+     rows when a large one went through the byte scanner below; both index the same way. */
+  const isMatrixRow = row => Array.isArray(row) || (row !== null && typeof row === 'object' && ArrayBuffer.isView(row));
+
   function matrixMaximum(matrix) {
     let maximum = 0;
     if (!Array.isArray(matrix)) return maximum;
     matrix.forEach(row => {
-      if (!Array.isArray(row)) return;
-      row.forEach(value => { const number = finiteNumber(value); if (number !== null) maximum = Math.max(maximum, number); });
+      if (!isMatrixRow(row)) return;
+      if (Array.isArray(row)) { row.forEach(value => { const number = finiteNumber(value); if (number !== null) maximum = Math.max(maximum, number); }); return; }
+      for (let index = 0; index < row.length; index += 1) { const value = row[index]; if (value === value && value > maximum) maximum = value; }
     });
     return maximum;
+  }
+
+  /* ---------- Large confidence files ----------
+     An AlphaFold 3 full_data file carries two N×N matrices: the PAE, which the viewer uses,
+     and contact probabilities, which it does not. For a 4 400-token assembly that is 175 MB
+     of JSON per model, and JSON.parse would build sixteen million boxed numbers for each
+     matrix. This scanner reads the bytes once: the PAE is copied straight into Float32Array
+     rows, the contact matrix is dropped, and JSON.parse only ever sees the small remainder.
+     Measured on that assembly the browser heap fell from 2.2 GB to well under 1 GB. */
+  const jsonWhitespace = code => code === 32 || code === 10 || code === 13 || code === 9;
+
+  function findJsonKey(bytes, key) {
+    const pattern = new TextEncoder().encode('"' + key + '"');
+    const first = pattern[0]; const length = pattern.length;
+    for (let i = 0; i <= bytes.length - length; i += 1) {
+      if (bytes[i] !== first) continue;
+      let matched = true;
+      for (let k = 1; k < length; k += 1) { if (bytes[i + k] !== pattern[k]) { matched = false; break; } }
+      if (!matched) continue;
+      let j = i + length;
+      while (j < bytes.length && jsonWhitespace(bytes[j])) j += 1;
+      if (bytes[j] !== 58) continue;
+      j += 1;
+      while (j < bytes.length && jsonWhitespace(bytes[j])) j += 1;
+      if (bytes[j] !== 91) continue;
+      return { keyStart: i, valueStart: j };
+    }
+    return null;
+  }
+
+  /* Index of the bracket closing the array that opens at start, or -1 when the array holds
+     strings or objects (then it is not a numeric matrix and is left to JSON.parse). */
+  function matrixEnd(bytes, start) {
+    let depth = 0;
+    for (let i = start; i < bytes.length; i += 1) {
+      const code = bytes[i];
+      if (code === 91) depth += 1;
+      else if (code === 93) { depth -= 1; if (depth === 0) return i; }
+      else if (code === 34 || code === 123) return -1;
+    }
+    return -1;
+  }
+
+  function readFloatRows(bytes, start, end) {
+    const rows = []; let row = null; let filled = 0; let depth = 0; let expected = 0;
+    const push = value => {
+      if (!row) return;
+      if (filled === row.length) { const bigger = new Float32Array(Math.max(16, row.length * 2)); bigger.set(row); row = bigger; }
+      row[filled] = value; filled += 1;
+    };
+    let i = start;
+    while (i <= end) {
+      const code = bytes[i];
+      if (code === 91) { depth += 1; if (depth === 2) { row = new Float32Array(expected || 1024); filled = 0; } i += 1; continue; }
+      if (code === 93) { if (depth === 2 && row) { rows.push(filled === row.length ? row : row.slice(0, filled)); expected = filled; row = null; } depth -= 1; i += 1; continue; }
+      if ((code >= 48 && code <= 57) || code === 45 || code === 43 || code === 46) {
+        let j = i; let negative = false;
+        if (code === 45 || code === 43) { negative = code === 45; j += 1; }
+        let whole = 0; let fraction = 0; let scale = 1;
+        while (j <= end && bytes[j] >= 48 && bytes[j] <= 57) { whole = whole * 10 + (bytes[j] - 48); j += 1; }
+        if (bytes[j] === 46) { j += 1; while (j <= end && bytes[j] >= 48 && bytes[j] <= 57) { fraction = fraction * 10 + (bytes[j] - 48); scale *= 10; j += 1; } }
+        let value = whole + fraction / scale;
+        if (bytes[j] === 101 || bytes[j] === 69) {
+          j += 1; let sign = 1; if (bytes[j] === 45) { sign = -1; j += 1; } else if (bytes[j] === 43) j += 1;
+          let exponent = 0; while (j <= end && bytes[j] >= 48 && bytes[j] <= 57) { exponent = exponent * 10 + (bytes[j] - 48); j += 1; }
+          value *= Math.pow(10, sign * exponent);
+        }
+        push(negative ? -value : value); i = j; continue;
+      }
+      if ((code >= 65 && code <= 90) || (code >= 97 && code <= 122)) { /* null, NaN, Infinity */
+        let j = i; while (j <= end && ((bytes[j] >= 65 && bytes[j] <= 90) || (bytes[j] >= 97 && bytes[j] <= 122))) j += 1;
+        push(NaN); i = j; continue;
+      }
+      i += 1;
+    }
+    return rows;
+  }
+
+  function parseConfidenceBytes(bytes) {
+    const cuts = []; let pae = null;
+    ['pae', 'predicted_aligned_error', 'contact_probs'].forEach(key => {
+      const found = findJsonKey(bytes, key); if (!found) return;
+      const end = matrixEnd(bytes, found.valueStart); if (end < 0) return;
+      if (key !== 'contact_probs' && !pae) pae = readFloatRows(bytes, found.valueStart, end);
+      cuts.push([found.valueStart, end]);
+    });
+    cuts.sort((a, b) => a[0] - b[0]);
+    const decoder = new TextDecoder(); let text = ''; let position = 0;
+    cuts.forEach(([start, end]) => { text += decoder.decode(bytes.subarray(position, start)) + 'null'; position = end + 1; });
+    text += decoder.decode(bytes.subarray(position));
+    const data = JSON.parse(text);
+    if (pae && pae.length) { const target = normalizeConfidenceJson(data); if (target && typeof target === 'object' && !Array.isArray(target)) target.pae = pae; }
+    return data;
   }
 
   function fileStem(path) {
@@ -1689,7 +1808,7 @@ html>body{padding:0}</style>
     const panel = root.querySelector('#gpv-pae-panel');
     const plot = root.querySelector('#gpv-pae-plot');
     const matrix = entry && entry.confidence && entry.confidence.pae;
-    if (!Array.isArray(matrix) || !matrix.length || !Array.isArray(matrix[0])) {
+    if (!Array.isArray(matrix) || !matrix.length || !isMatrixRow(matrix[0])) {
       plot.hidden = true;
       renderInterfaceMetrics(entry);
       return;
@@ -2081,6 +2200,7 @@ html>body{padding:0}</style>
     root.querySelector('#gpv-tiff').disabled = structures.length === 0;
     root.querySelector('#gpv-add-domain').disabled = !activeEntry();
     root.querySelector('#gpv-figure-legend').disabled = structures.length === 0;
+    root.querySelector('#gpv-methods-text').disabled = structures.length === 0;
     const scored = structures.some(entry => entry.visible && entry.scores.length);
     root.querySelector('#gpv-profile-svg').disabled = !scored;
     root.querySelector('#gpv-profile-png').disabled = !scored;
@@ -3416,11 +3536,21 @@ html>body{padding:0}</style>
     if (cas.length < 2) return null;
     const centre = { x: mean(cas.map(a => a.x)), y: mean(cas.map(a => a.y)), z: mean(cas.map(a => a.z)) };
     const gyration = Math.sqrt(mean(cas.map(a => squaredDistance(a, centre))));
-    /* The farthest point from the centre, then the farthest from that point: a two-pass
-       estimate of the diameter that avoids the quadratic scan on large capsids. */
-    let far = cas[0]; cas.forEach(a => { if (squaredDistance(a, centre) > squaredDistance(far, centre)) far = a; });
-    let extent = 0; cas.forEach(a => { extent = Math.max(extent, squaredDistance(a, far)); });
-    return { extent: Math.sqrt(extent), gyration };
+    /* The exact maximum Cα–Cα distance up to 6 000 residues (18 million pairs, under a
+       second). Beyond that a two-pass estimate — farthest from the centre, then farthest
+       from that point — which is a lower bound and is reported as one (exact: false). */
+    let extent = 0; let exact = true;
+    if (cas.length <= 6000) {
+      const xs = Float64Array.from(cas, a => a.x); const ys = Float64Array.from(cas, a => a.y); const zs = Float64Array.from(cas, a => a.z);
+      for (let i = 0; i < xs.length; i += 1) for (let j = i + 1; j < xs.length; j += 1) {
+        const d = (xs[i] - xs[j]) ** 2 + (ys[i] - ys[j]) ** 2 + (zs[i] - zs[j]) ** 2; if (d > extent) extent = d;
+      }
+    } else {
+      exact = false;
+      let far = cas[0]; cas.forEach(a => { if (squaredDistance(a, centre) > squaredDistance(far, centre)) far = a; });
+      cas.forEach(a => { extent = Math.max(extent, squaredDistance(a, far)); });
+    }
+    return { extent: Math.sqrt(extent), gyration, exact, residues: cas.length };
   }
 
   /* ---------- Motif selection ---------- */
@@ -3522,13 +3652,21 @@ html>body{padding:0}</style>
     clearTimeout(sessionTimer);
     sessionTimer = setTimeout(() => { saveSession().catch(() => {}); }, 1500);
   }
+  /* A 4 400-token PAE is 78 MB per model as Float32; five of them would be written to
+     IndexedDB after every change. Matrices above 1 500 tokens are left out of the autosave
+     (the models, scores and everything else are kept); reopen the archive to get them back. */
+  function sessionConfidence(confidence) {
+    if (!confidence || !Array.isArray(confidence.pae) || confidence.pae.length <= 1500) return confidence;
+    const copy = { ...confidence }; delete copy.pae; delete copy.paeMaximum; copy.paeOmitted = true; return copy;
+  }
+
   async function saveSession() {
     if (!structures.length) { await sessionStore('readwrite', store => store.delete('current')); return; }
     const total = structures.reduce((sum, entry) => sum + (entry.text ? entry.text.length : 0), 0);
     if (total > 80 * 1024 * 1024) { if (!sessionWarned) { sessionWarned = true; toast('Session too large to autosave (over 80 MB of coordinates) — download scene JSON to keep your work.'); } return; }
     const snapshot = {
       savedAt: new Date().toISOString(), viewerVersion,
-      files: structures.map(entry => ({ name: entry.name, text: entry.text, format: entry.format, sourcePath: entry.sourcePath, collection: entry.collection, fetchId: entry.fetchId || null, confidence: entry.confidence || {}, rank: entry.rank })),
+      files: structures.map(entry => ({ name: entry.name, text: entry.text, format: entry.format, sourcePath: entry.sourcePath, collection: entry.collection, fetchId: entry.fetchId || null, confidence: sessionConfidence(entry.confidence) || {}, rank: entry.rank })),
       scene: { type: 'protein-viewer-scene', schemaVersion: 1, viewerVersion, provenance: provenanceValues(), models: structures.map(entry => ({ name: entry.name, visible: entry.visible, color: entry.color, label: entry.label || '', hiddenChains: entry.hiddenChains || [] })), settings: sceneSettings(), ...sceneOverlays(), savedViews: savedViews.map(view => ({ ...view })) }
     };
     await sessionStore('readwrite', store => store.put(snapshot, 'current'));
@@ -3836,7 +3974,7 @@ html>body{padding:0}</style>
      protein residues (AlphaFold 3 ligand tokens, for example). */
   function paeTokens(entry) {
     const confidence = entry.confidence || {}; const matrix = confidence.pae;
-    if (!Array.isArray(matrix) || !matrix.length || !Array.isArray(matrix[0])) return null;
+    if (!Array.isArray(matrix) || !matrix.length || !isMatrixRow(matrix[0])) return null;
     const size = matrix.length;
     const protein = entry.atoms.filter(atom => atom.atom === 'CA' && !atom.hetflag);
     const known = new Set(protein.map(residueTag));
@@ -4018,7 +4156,7 @@ html>body{padding:0}</style>
     root.querySelector('#gpv-chains-all').disabled = hidden.length === 0;
     const groups = entityGroups(entry); const size = assemblyDimensions(entry);
     root.querySelector('#gpv-assembly-summary').textContent = (groups.length ? 'Stoichiometry: ' + groups.map(group => group.label + ' ×' + group.chains.length + ' (' + clipText(group.chains.join(', '), 30) + ', ' + group.length + ' aa)').join(' · ') : '')
-      + (size ? (groups.length ? ' · ' : '') + 'Cα extent ' + (size.extent / 10).toFixed(1) + ' nm · radius of gyration ' + (size.gyration / 10).toFixed(1) + ' nm' : '');
+      + (size ? (groups.length ? ' · ' : '') + 'Cα extent ' + (size.exact ? '' : '≥ ') + (size.extent / 10).toFixed(1) + ' nm · radius of gyration ' + (size.gyration / 10).toFixed(1) + ' nm' : '');
   }
 
   /* ---------- Go to residue ---------- */
@@ -4207,6 +4345,52 @@ html>body{padding:0}</style>
     field.value = text; field.hidden = false;
     try { await navigator.clipboard.writeText(text); announce('Figure legend written and copied to the clipboard'); }
     catch (error) { field.focus(); field.select(); announce('Figure legend written — copy it from the field'); }
+  }
+
+  /* A methods paragraph in the past tense, stating the definitions behind every number the
+     viewer can show, so a paper's Methods section describes what was actually computed. */
+  function methodsText() {
+    const shown = displayedEntries().filter(entry => entry.model);
+    const first = shown[0] || structures.find(entry => entry.model) || null;
+    const mode = root.querySelector('#gpv-color-mode').value;
+    const sentences = [];
+    sentences.push('Predicted structures were inspected in Protein Structure Viewer ' + viewerVersion + ' (Awuah, 2026; github.com/mbaffour/protein-structure-viewer), a browser application built on 3Dmol.js 2.4.2 (Rego & Koes, 2015).');
+    if (shown.some(entry => entry.scores.length)) sentences.push('Per-residue pLDDT was read from the B-factor column of the model files and mean pLDDT was calculated over Cα atoms' + (shown.some(entry => entry.confidence && entry.confidence.pae) ? '; predicted aligned error (PAE) matrices were read from the accompanying confidence files' : '') + '.');
+    if (alignmentResults.length) {
+      const bySequence = alignmentResults[0].method !== 'chain/residue IDs';
+      sentences.push('Models were superposed on ' + alignmentResults[0].reference + ' by least-squares (Kabsch) fitting of Cα atoms paired by ' + (bySequence ? 'global Needleman–Wunsch alignment of each chain pair (match +2, mismatch −1, gap −2), chains being matched greedily by sequence identity' : 'chain and residue identifier') + '; RMSD is reported over all paired Cα atoms without outlier rejection (' + alignmentResults.map(result => result.name + ': n = ' + result.count + ', ' + result.rmsd.toFixed(2) + ' Å').join('; ') + ').');
+      sentences.push('Per-residue Cα deviation is the distance between paired Cα atoms after superposition.');
+    }
+    if (ensembleSpread) sentences.push('Model agreement was expressed per residue as the Cα root-mean-square fluctuation about the mean Cα position across the ' + ensembleSpread.count + ' superposed models, for residues present in at least two models.');
+    const domains = first && first.domains;
+    if (domains && domains.domains.length) sentences.push('Domains were derived from the PAE matrix by greedy agglomeration of ten-residue segments: the pair with the lowest mean inter-segment PAE was merged while that mean stayed below ' + domains.cutoff + ' Å; groups of fewer than twenty residues were absorbed into the nearest domain when within twice the cutoff and otherwise left unassigned. This segmentation is a heuristic and differs from the graph clustering used by the AlphaFold Protein Structure Database.');
+    if (nearbyResult && nearbyResult.residues) sentences.push('Contacting residues were defined as residues with any heavy atom within ' + nearbyResult.cutoff + ' Å of any heavy atom of the ' + (nearbyResult.mode === 'chain' ? 'target chain' : nearbyResult.mode === 'hetero' ? 'ligands and ions' : 'target residue') + ' (hydrogens and water excluded).');
+    if (siteResults && siteResults.rows.length) sentences.push('Ligand-binding sites were defined as protein residues with any heavy atom within ' + siteResults.cutoff + ' Å of a ligand or ion heavy atom' + (siteResults.rows.some(row => row.pae !== null) ? '; ligand–site PAE is the mean of the symmetrised PAE between ligand tokens and site-residue tokens' : '') + '.');
+    if (first) {
+      const size = assemblyDimensions(first);
+      if (size) sentences.push('Assembly size was summarised as the Cα extent (' + (size.exact ? 'the maximum Cα–Cα distance' : 'a two-pass lower-bound estimate of the maximum Cα–Cα distance, used above 6 000 residues') + ') and the radius of gyration over Cα atoms with equal weights.');
+    }
+    const colourNotes = {
+      plddt: 'pLDDT colouring used the AlphaFold bands (<50 very low, 50–70 low, 70–90 confident, ≥90 very high).',
+      charge: 'Residue charge colouring used formal charges at neutral pH (Lys and Arg positive; Asp and Glu negative; His shown as partially positive).',
+      hydrophobicity: 'Hydrophobicity colouring used the Kyte–Doolittle scale.',
+      entity: 'Chains were grouped into entities by identical sequence.',
+      data: residueData ? 'Per-residue values (' + residueData.name + ') were mapped linearly onto a ' + ({ viridis: 'viridis', diverging: 'diverging blue–white–red', heat: 'white–red' })[residueData.scale] + ' scale between the minimum and maximum of the data.' : null
+    };
+    if (colourNotes[mode]) sentences.push(colourNotes[mode]);
+    if (hideBelow()) sentences.push('Residues with pLDDT below ' + hideBelow() + ' were hidden from the figures.');
+    const plan = exportDimensions();
+    if (plan.mm) sentences.push('Figures were exported at ' + plan.mm + ' mm width and ' + plan.dpi + ' dpi' + (safePaletteOn ? ' using the Okabe–Ito colour-blind-safe palette' : '') + '.');
+    sentences.push('Definitions and their cross-validation against Biopython are documented in the software repository (SCIENTIFIC-AUDIT.md, VALIDATION.md).');
+    return sentences.join(' ');
+  }
+
+  async function writeMethodsText() {
+    const text = methodsText();
+    const field = root.querySelector('#gpv-methods-field');
+    field.value = text; field.hidden = false;
+    try { await navigator.clipboard.writeText(text); announce('Methods text written and copied to the clipboard'); }
+    catch (error) { field.focus(); field.select(); announce('Methods text written — copy it from the field'); }
   }
 
   /* ---------- Interface geometry ---------- */
@@ -4920,7 +5104,7 @@ html>body{padding:0}</style>
       return false;
     }
     let data;
-    try { data = JSON.parse(textValue); } catch (error) { return false; }
+    try { data = textValue instanceof Uint8Array ? parseConfidenceBytes(textValue) : JSON.parse(textValue); } catch (error) { return false; }
     if (data && data.type === 'protein-viewer-scene') {
       pendingScene = data;
       return true;
@@ -5306,7 +5490,7 @@ html>body{padding:0}</style>
           deferredPae += metadataMembers.length - selectedMetadata.length;
           for (let metadataIndex = 0; metadataIndex < selectedMetadata.length; metadataIndex += 1) {
             const member = selectedMetadata[metadataIndex];
-            try { registerMetadata(member.name, await member.async('string'), file.name); }
+            try { registerMetadata(member.name, /\.json$/i.test(member.name) ? await member.async('uint8array') : await member.async('string'), file.name); }
             catch (error) { skipped += 1; failures.push(member.name + ': confidence data could not be read'); }
             if (metadataIndex % 12 === 11) await nextPaint();
           }
@@ -5314,7 +5498,7 @@ html>body{padding:0}</style>
           addStructure(uniqueModelName(file.name, 'Individual files'), await file.text(), extension === 'pdb' ? 'pdb' : 'cif', file.name, 'Individual files');
           loaded += 1;
         } else if (['json', 'csv'].includes(extension)) {
-          if (!registerMetadata(file.name, await file.text())) skipped += 1;
+          if (!registerMetadata(file.name, extension === 'json' ? new Uint8Array(await file.arrayBuffer()) : await file.text())) skipped += 1;
         } else {
           skipped += 1; failures.push(file.name + ': unsupported file type');
         }
@@ -6232,9 +6416,12 @@ html>body{padding:0}</style>
     const matrix = confidence.pae;
     const limit = paeLimit();
     if (!limit) { delete confidence.pae; delete confidence.tokenChainIds; delete confidence.tokenResidueIds; confidence.paeOmitted = true; return confidence; }
-    if (!Array.isArray(matrix) || matrix.length <= limit) return confidence;
+    if (!Array.isArray(matrix)) return confidence;
+    /* Float32 rows would serialise as objects, and as 17-digit floats; two decimals is the file precision. */
+    const round = value => Math.round(Number(value) * 100) / 100;
+    if (matrix.length <= limit) { if (matrix.length && !Array.isArray(matrix[0])) confidence.pae = matrix.map(row => Array.from(row, round)); return confidence; }
     const indices = Array.from({ length: limit }, (_, index) => Math.min(matrix.length - 1, Math.floor(index * matrix.length / limit)));
-    confidence.pae = indices.map(row => indices.map(column => matrix[row][column]));
+    confidence.pae = indices.map(row => indices.map(column => round(matrix[row][column])));
     if (Array.isArray(confidence.tokenChainIds)) confidence.tokenChainIds = indices.map(index => confidence.tokenChainIds[index]);
     if (Array.isArray(confidence.tokenResidueIds)) confidence.tokenResidueIds = indices.map(index => confidence.tokenResidueIds[index]);
     confidence.paeOriginalSize = matrix.length;
@@ -7252,7 +7439,7 @@ applyBackground();
     const bounds = event.currentTarget.getBoundingClientRect();
     const row = Math.min(matrix.length - 1, Math.max(0, Math.floor((event.clientY - bounds.top) * matrix.length / bounds.height)));
     /* PAE matrices are square in practice, but do not assume it. */
-    const columns = Array.isArray(matrix[row]) ? matrix[row].length : matrix.length;
+    const columns = isMatrixRow(matrix[row]) ? matrix[row].length : matrix.length;
     const column = Math.min(columns - 1, Math.max(0, Math.floor((event.clientX - bounds.left) * columns / bounds.width)));
     const value = finiteNumber(matrix[row] && matrix[row][column]);
     const chains = entry.confidence.tokenChainIds || [];
@@ -7401,6 +7588,7 @@ applyBackground();
   root.querySelector('#gpv-goto').addEventListener('keydown', event => { if (event.key === 'Enter') { event.preventDefault(); goToResidue(root.querySelector('#gpv-goto').value); } });
   root.querySelector('#gpv-chains-all').addEventListener('click', () => { const entry = activeEntry(); if (!entry) return; entry.hiddenChains = []; applyStyle(); updateStatus('All chains of ' + displayName(entry) + ' shown'); });
   root.querySelector('#gpv-figure-legend').addEventListener('click', () => { writeFigureLegend(); });
+  root.querySelector('#gpv-methods-text').addEventListener('click', () => { writeMethodsText(); });
   root.querySelector('#gpv-redo').addEventListener('click', redo);
   root.querySelector('#gpv-share-link').addEventListener('click', () => { copyShareLink(); });
   root.querySelector('#gpv-sequence-toggle').addEventListener('click', () => { writeJson(sequenceKey, readJson(sequenceKey, false) !== true); renderSequence(); });
@@ -7416,7 +7604,7 @@ applyBackground();
   offerSessionRestore();
   /* ?debug=1 exposes a few internals for the regression suite and for bug reports;
      it has no effect otherwise. */
-  if (new URLSearchParams(location.search).has('debug')) window.__viewerDebug = { viewer, pickAtomAt, displayedEntries, activeEntry, colorOptions, entries: () => structures };
+  if (new URLSearchParams(location.search).has('debug')) window.__viewerDebug = { viewer, pickAtomAt, displayedEntries, activeEntry, colorOptions, entries: () => structures, nearbyResidues, assemblyDimensions, paeDomains, parseConfidenceBytes, methodsText, alignmentResults: () => alignmentResults, ensembleSpread: () => ensembleSpread, siteResults: () => siteResults };
   applyTheme(readJson(themeKey, 'system'));
   selectToolTab('models');
   applyAppearance();

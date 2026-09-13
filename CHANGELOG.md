@@ -2,6 +2,44 @@
 
 All notable changes to this project are recorded here.
 
+## 2.14.0
+
+The numbers are checked, the big runs fit, and the methods write themselves.
+
+### Added
+
+- **Cross-validation.** Every quantity the viewer reports — mean Cα pLDDT, Kabsch RMSD, per-residue
+  Cα RMSF, radius of gyration, Cα extent and residue contacts — is now compared against an independent
+  implementation (Biopython and numpy) on three real AlphaFold 3 runs: an M13 virion tip (15 chains),
+  an MS2 maturation-protein–coat complex and a phiX174 F–G complex. All 72 comparisons agree to
+  within 5 × 10⁻⁵ Å (the reference's rounding). `tests/reference.py` and `tests/validate.mjs` rerun
+  the check on any run; `VALIDATION.md` records the results.
+- **Methods text.** *Publish → Write methods text* drafts a Methods paragraph that states exactly how
+  the numbers on screen were computed — superposition and pairing rule, RMSD without outlier
+  rejection, RMSF definition, the PAE-domain heuristic and its cutoff, contact and ligand-site
+  cutoffs, extent and radius of gyration, colour scales, hidden residues and export settings — with
+  the software versions. Like the figure legend, it is a draft in the tool's words.
+- **A second CDN.** If cdnjs is blocked or down, the three libraries load from jsDelivr under the
+  same integrity hashes; the two hosts serve byte-identical files for these versions.
+
+### Changed
+
+- **Large AlphaFold 3 archives.** A `full_data` confidence file carries two N×N matrices, and the
+  viewer only needs one. The file is now scanned byte by byte: the predicted aligned error is copied
+  straight into compact Float32 rows, the unused contact-probability matrix is skipped, and
+  `JSON.parse` only ever sees the small remainder. On a five-model, 4 410-token M13 sub-complex
+  (175 MB of confidence JSON per model) the JavaScript heap after import fell from 2.2 GB to
+  0.16 GB, with the matrices themselves held in about 78 MB of typed arrays per model; RMSD,
+  domain and PAE values are unchanged. Matrices above 1 500 tokens are left out of the session
+  autosave to keep it fast; reopen the archive to get them back.
+- **Exact extent.** The Cα extent is the exact maximum Cα–Cα distance for assemblies up to 6 000
+  residues. The previous two-pass estimate under-read it by up to 5 % on real assemblies; it remains
+  as an explicit lower bound (shown as ≥) above that size.
+
+### Fixed
+
+- The README had a duplicated *Development* heading.
+
 ## 2.13.0
 
 Assemblies read as assemblies.

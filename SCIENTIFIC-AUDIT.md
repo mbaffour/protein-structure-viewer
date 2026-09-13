@@ -34,8 +34,13 @@ Audited against viewer version 2.13.0.
   alignment method and RMSD, ligand handling — which is the information reviewers most often find
   missing from structure figures. It is explicitly a draft.
 - Hetero groups are visible by default; a figure that silently drops a bound ligand or ion misleads.
-- Assemblies are described as assemblies: stoichiometry by identical sequence, extent and radius of
-  gyration, and a colour scheme that shows the distinct proteins of a capsid rather than its chains.
+- Assemblies are described as assemblies: stoichiometry by identical sequence, exact Cα extent and
+  radius of gyration, and a colour scheme that shows the distinct proteins of a capsid rather than its
+  chains.
+- The reported numbers are cross-validated: mean pLDDT, Kabsch RMSD, Cα RMSF, radius of gyration,
+  extent and residue contacts agree with Biopython/numpy to 5 × 10⁻⁵ Å on three real AlphaFold 3 runs
+  (`VALIDATION.md`), and the check can be rerun on any run. A generated methods paragraph states the
+  definitions in the past tense so a paper describes what was actually computed.
 - The models of one run can be asked where they disagree (per-residue Cα RMSF across the aligned
   ensemble), which is a more honest picture of local uncertainty than any one model's pLDDT, and
   ligand poses carry their site pLDDT and ligand–site PAE next to them.
@@ -125,6 +130,18 @@ Audited against viewer version 2.13.0.
   synchronized panels, per-panel model pickers, aligned coordinates, and stitched PNG or composite
   video export, with explicit control over whether the report carries the displayed models or all of
   them
+
+## Implemented validation milestone
+
+- Independent reference implementation (`tests/reference.py`, Biopython + numpy) and a validator that
+  drives the real viewer on the same files (`tests/validate.mjs`); results recorded in `VALIDATION.md`
+- Exact maximum Cα–Cα distance up to 6 000 residues, replacing a two-pass estimate that under-read
+  real assemblies by up to 5 %; the estimate remains above that size and is labelled as a lower bound
+- Byte-level parsing of AlphaFold 3 `full_data` files (PAE kept as Float32 rows, contact matrix
+  skipped): a 4 410-token, five-model assembly holds 0.16 GB of JavaScript heap after import instead of
+  2.2 GB, with unchanged RMSD, domain and PAE values
+- Methods-text generator covering superposition, RMSD, RMSF, domains, contacts, ligand sites,
+  dimensions, colour scales, hidden residues and export settings
 
 ## Supply-chain and integrity posture
 

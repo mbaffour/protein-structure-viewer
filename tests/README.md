@@ -36,7 +36,7 @@ PSV_CHROMIUM=/opt/pw-browsers/chromium/chrome-linux/chrome npm test
   display name that the model picker adopts
 - Navigation: previous/next, arrow keys, digit shortcuts for all six tabs
 - Appearance: entity colouring groups the two identical chains (α ×2, 30 aa) and the composition line
-  reports the Cα extent and radius of gyration; the Okabe–Ito switch recolours chain A to rgb(0, 114, 178) and back; every representation, colour scheme, projection, background, motion;
+  reports the Cα extent and radius of gyration, and the extent equals a brute-force maximum Cα–Cα distance; the Okabe–Ito switch recolours chain A to rgb(0, 114, 178) and back; every representation, colour scheme, projection, background, motion;
   pLDDT legend; theme cycling; preference persistence across a reload
 - Compare: sequence-aware and identifier alignment, non-zero RMSD against a
   deliberately different model, CSV export, synchronised multi-view with a third panel that
@@ -51,7 +51,9 @@ PSV_CHROMIUM=/opt/pw-browsers/chromium/chrome-linux/chrome npm test
   residue 5 and the RMSF CSV has a row per residue.
 - Confidence: the synthetic models report no ligand sites; the pLDDT profile SVG has one panel per chain and a trace per model; the PNG variant downloads;
   a block-diagonal PAE matrix loaded as `model_a.json` yields two domains (A:1–30 and B), the domain
-  colour scheme lists them in the legend, and Highlight all adds two selections.
+  colour scheme lists them in the legend, and Highlight all adds two selections; an AlphaFold 3-style
+  `full_data` file with a `contact_probs` matrix attaches its 60 × 60 PAE as Float32Array rows with the
+  right values and maximum, and the heatmap draws.
 - Annotate: the motif `A{5}` highlights 12 matches as one selection per chain, with no-match and
   invalid-pattern messages; a 30-row `resi,value` CSV colours residue 30 viridis-yellow and residue 1 viridis-purple with
   a legend stating the range; residues within 6 Å of chain B are highlighted and listable; a named domain (residues 1–15, same-source scope) paints the sibling model's residue 5
@@ -77,12 +79,30 @@ PSV_CHROMIUM=/opt/pw-browsers/chromium/chrome-linux/chrome npm test
   11811 px/m; the TIFF is a little-endian baseline TIFF of the same size at 300 dpi; a 20 Å scale bar
   appears on screen and in the SVG with the Arial font; the legend text ends with the rendering credit;
   copying the PNG to the clipboard reports an outcome; the figure legend names the models,
-  representation and colouring.
+  representation and colouring; the methods text names the Kabsch superposition, the RMSD rule, the
+  dimension definitions and the software versions.
 - Session: reloading the page offers to restore the autosaved session; Restore brings back every model and label.
 - Share links: a model fetched by ID (served from a stubbed RCSB response) enables *Copy share
   link*; opening the link in a fresh page refetches the model and restores its corner text.
 
 The two emphasised checks are regressions against bugs that shipped in 2.0.
+
+## Cross-validation against Biopython
+
+`reference.py` (Biopython + numpy) and `validate.mjs` check the viewer's analysis numbers on a real
+AlphaFold 3 run — mean Cα pLDDT, Kabsch RMSD onto model 0, per-residue Cα RMSF, radius of gyration,
+exact Cα extent and the residue set within a cutoff of a chain:
+
+```
+python3 reference.py /path/to/run K 6       # writes /path/to/run/reference.json
+node validate.mjs /path/to/run              # or: node validate.mjs /path/to/run /path/to/run.zip
+```
+
+The folder holds the run's `*_model_*.cif` and `*_full_data_*.json` / `*_summary_confidences_*.json`.
+Passing the archive as well loads through the ZIP path instead of individual files. The validator prints
+a Markdown table, writes `validation.json` next to the reference and exits non-zero on any disagreement
+(0.01 pLDDT, 0.001 Å, exact residue set). Results on three runs are in `../VALIDATION.md`. No run data
+is committed; point the scripts at your own.
 
 ## Notes
 

@@ -16,6 +16,7 @@ interpretation caveats see [`SCIENTIFIC-AUDIT.md`](../SCIENTIFIC-AUDIT.md).
 - [Reproducible scenes](#reproducible-scenes)
 - [Recipes](#recipes)
 - [Working with large AlphaFold archives](#working-with-large-alphafold-archives)
+- [Validation](#validation)
 - [Troubleshooting](#troubleshooting)
 
 ## Getting structures in
@@ -99,7 +100,7 @@ underneath counts ligands and ions by residue name (HEM ×4, ZN ×2 …); water 
 chains are stored in scene JSON, carried by share links, and respected by the report.
 
 Under the table, a line gives the **stoichiometry** (entities by identical sequence with their chains
-and lengths) and the **Cα extent** (largest Cα–Cα distance) and **radius of gyration**, both in
+and lengths) and the **Cα extent** (the exact maximum Cα–Cα distance, or a lower bound marked ≥ above 6 000 residues) and **radius of gyration**, both in
 nanometres, so a capsid diameter or a filament length is read off directly.
 
 **Download FASTA** writes the sequences of the displayed models, one record per chain. Headers carry
@@ -417,6 +418,14 @@ residues, highlighted ranges, measurements with their values, annotation text, a
 notes. The text is copied to the clipboard and appears in an editable field. It is a draft in the
 tool's words; edit it into yours.
 
+**Methods text.** **Write methods text** drafts the paragraph a Methods section needs: how the
+models were superposed (Kabsch least squares on Cα atoms, and whether the pairs came from chain and
+residue identifiers or from sequence alignment), that RMSD is over all paired Cα atoms without outlier
+rejection, how RMSF and Cα deviation are defined, the PAE-domain heuristic with its cutoff, the
+contact and ligand-site cutoffs, how extent and radius of gyration are computed, the colour scale in
+use, any hidden low-confidence residues and the export size — with the viewer and 3Dmol.js versions
+and a pointer to the validation record. Only sentences that apply to the current scene are written.
+
 **Share links.** **Copy share link** builds a URL that reopens the current scene in the viewer:
 the models that were fetched by identifier, plus the camera, representation, colours, projection,
 background, synchronized panels, labels, selections, measurements, figure annotations, and title.
@@ -517,9 +526,39 @@ Archives with hundreds of predictions are handled with a few deliberate compromi
 - Only the first model of an archive is parsed eagerly; the rest are parsed when first displayed.
 - Above 40 loaded models, models that are not displayed and not referenced by an annotation are
   released from GPU memory and re-parsed on demand.
-- Above 25 models in one archive, the large `*_full_data_*.json` PAE payloads are skipped. Drop the
+- `*_full_data_*.json` files are scanned byte by byte rather than parsed whole: the PAE matrix is
+  copied into compact Float32 rows and the contact-probability matrix, which the viewer does not use,
+  is skipped. A five-model, 4 410-token assembly (175 MB of confidence JSON per model) opens in about
+  eight seconds and keeps the browser well under a gigabyte.
+- Above 25 models in one archive, the `*_full_data_*.json` PAE payloads are skipped altogether. Drop the
   specific ones you need separately.
+- PAE matrices above 1 500 tokens are not written to the session autosave; everything else is. Reopen
+  the archive to get them back.
 - The model list renders 60 rows at a time.
+
+## Validation
+
+The analysis numbers are cross-checked against an independent implementation. In `tests/`:
+
+```
+python3 reference.py <folder of one run> <chain> <cutoff>   # Biopython + numpy → <folder>/reference.json
+node validate.mjs <folder> [archive.zip]                    # drives the viewer, compares, exits non-zero on disagreement
+```
+
+The folder holds a run's `*_model_*.cif`, `*_full_data_*.json` and `*_summary_confidences_*.json`
+(unzip the archive and drop `msas/` and `templates/`). The reference script computes the mean Cα pLDDT
+of every model, the Kabsch RMSD of each model onto model 0 with Cα atoms paired by chain and residue
+id, the per-residue Cα RMSF across the superposed models, the radius of gyration and the exact maximum
+Cα–Cα distance of model 0, and the residues with any heavy atom within `<cutoff>` Å of `<chain>`. The
+validator loads the same files (or the archive, to exercise the ZIP path), runs *Align visible* in
+identifier mode with model 0 as reference, reads the same quantities through the viewer's debug hook and
+prints a table. Tolerances are 0.01 for pLDDT and 0.001 Å for distances; the residue set must match
+exactly. `VALIDATION.md` at the repository root records the results on three real runs.
+
+Not covered by the check: the sequence-aware pairing (a design choice, not a computed quantity —
+inspect its reported chain mapping and identity), the PAE-domain heuristic (it is only checked to run
+on real matrices without error), interface geometry and buried area, and anything drawn rather than
+computed.
 
 ## Troubleshooting
 
