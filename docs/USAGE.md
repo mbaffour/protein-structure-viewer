@@ -426,6 +426,17 @@ contact and ligand-site cutoffs, how extent and radius of gyration are computed,
 use, any hidden low-confidence residues and the export size — with the viewer and 3Dmol.js versions
 and a pointer to the validation record. Only sentences that apply to the current scene are written.
 
+**Session files.** **Save session file** writes one ZIP that carries the models themselves (their
+coordinate text), every confidence matrix as binary floats, the current alignment, labels, selections,
+measurements, annotations, named domains, per-residue data, saved views, provenance and every setting.
+**Open session file** — or dropping the ZIP onto the page, or choosing it with *Add structures* —
+restores all of it, on any computer, with no other files. It is the way to stop work and continue
+later, to move between machines, or to give a colleague the exact state behind a figure. The file
+name starts with the figure title when one is set. Compared with the two other ways of keeping work:
+the browser autosave is automatic but stays on this machine and skips coordinates over 80 MB and PAE
+matrices over 1 500 tokens; scene JSON is small and reproducible but expects the original files
+alongside it.
+
 **Share links.** **Copy share link** builds a URL that reopens the current scene in the viewer:
 the models that were fetched by identifier, plus the camera, representation, colours, projection,
 background, synchronized panels, labels, selections, measurements, figure annotations, and title.

@@ -2,6 +2,19 @@
 
 All notable changes to this project are recorded here.
 
+## 2.15.0
+
+Save your progress as a file and pick it up anywhere.
+
+### Added
+
+- **Session files.** *Publish → Save session file* writes one ZIP holding the models themselves,
+  their confidence data (every PAE matrix, as compact binary), the alignment, labels, selections,
+  measurements, annotations, named domains, per-residue data, saved views, provenance and settings.
+  *Open session file*, or dropping the ZIP on the page, restores all of it on any computer with no
+  other files. This complements the browser autosave (same machine, size-capped) and scene JSON (light,
+  but expects the original files).
+
 ## 2.14.0
 
 The numbers are checked, the big runs fit, and the methods write themselves.

@@ -1135,7 +1135,7 @@ html>body{padding:0}</style>
       <button class="btn" type="button" id="gpv-captions" disabled>Download captions</button>
     </div>
     <div class="gpv-list" id="gpv-saved-views" aria-label="Saved publication views"></div>
-    <details class="gpv-provenance" open><summary>Provenance and reproducible scene</summary><div class="viz-controls"><label class="form-label">Figure or project title<input class="form-control" id="gpv-project-title" type="text"></label><label class="form-label">Model source or run<input class="form-control" id="gpv-project-source" type="text" placeholder="Job, accession, or run ID"></label><label class="form-label">Method and version<input class="form-control" id="gpv-project-method" type="text" placeholder="For example AlphaFold 3"></label><label class="form-label">Notes<textarea class="form-control" id="gpv-project-notes" rows="2"></textarea></label></div><div class="viz-controls"><button class="btn" type="button" id="gpv-save-scene" disabled>Download scene JSON</button><label class="form-label">Restore scene JSON<input class="form-control" id="gpv-load-scene" type="file" accept=".json"></label></div></details>
+    <details class="gpv-provenance" open><summary>Provenance and reproducible scene</summary><div class="viz-controls"><label class="form-label">Figure or project title<input class="form-control" id="gpv-project-title" type="text"></label><label class="form-label">Model source or run<input class="form-control" id="gpv-project-source" type="text" placeholder="Job, accession, or run ID"></label><label class="form-label">Method and version<input class="form-control" id="gpv-project-method" type="text" placeholder="For example AlphaFold 3"></label><label class="form-label">Notes<textarea class="form-control" id="gpv-project-notes" rows="2"></textarea></label></div><div class="viz-controls"><button class="btn" type="button" id="gpv-save-scene" disabled>Download scene JSON</button><label class="form-label">Restore scene JSON<input class="form-control" id="gpv-load-scene" type="file" accept=".json"></label></div><div class="viz-controls"><button class="btn" type="button" id="gpv-save-session" disabled data-tooltip="Save everything — models, confidence data, alignment, annotations, domains, views and settings — as one ZIP you can reopen later or on another computer">Save session file</button><label class="form-label">Open session file<input class="form-control" id="gpv-open-session" type="file" accept=".zip"></label><span class="text-muted text-small" id="gpv-session-note">A session file carries the models themselves, so it reopens with no other files. Scene JSON is the light alternative that expects the original files.</span></div></details>
   </section>
 
   <div class="gpv-toasts" id="gpv-toasts" aria-live="polite" aria-atomic="false"></div>
@@ -1191,6 +1191,7 @@ html>body{padding:0}</style>
       <h3>Tips for figures and reviewers</h3>
       <ul>
         <li><em>Publish → Write methods text</em> drafts a Methods paragraph stating exactly how the numbers on screen were computed (superposition, RMSD, RMSF, domains, contacts, dimensions, colour scales); every definition is cross-checked against Biopython in the repository's <code>VALIDATION.md</code>.</li>
+        <li><em>Publish → Save session file</em> writes one ZIP with the models, confidence data, alignment, annotations, domains, views and settings; open it later with <em>Open session file</em> or by dropping it on the page, on any computer, with no other files. Scene JSON remains the light option that expects the original files.</li>
         <li>Large AlphaFold 3 archives open whole: the confidence files are scanned byte by byte, the unused contact matrix is skipped and the PAE is kept compactly, so a five-model, 4 400-token assembly stays well under a gigabyte of memory.</li>
         <li>Colour by <strong>pLDDT confidence</strong> and switch to <strong>orthographic</strong> projection for publication panels; perspective exaggerates whatever is closest to the camera.</li>
         <li>Run <strong>Align visible</strong>, then enable multi-view with <em>Rotation and zoom</em> to inspect a superposition panel by panel. The shared report carries the aligned coordinates.</li>
@@ -1487,7 +1488,7 @@ html>body{padding:0}</style>
   let busyDepth = 0;
   let restoreMotion = null;
   const listPageSize = 60;
-  const viewerVersion = '2.14.0';
+  const viewerVersion = '2.15.0';
   const preferenceKey = 'protein-structure-viewer:preferences';
   const themeKey = 'protein-structure-viewer:theme';
   const labelColors = getComputedStyle(root);
@@ -2207,7 +2208,7 @@ html>body{padding:0}</style>
     root.querySelector('#gpv-image').disabled = structures.length === 0;
     root.querySelector('#gpv-svg').disabled = structures.length === 0;
     root.querySelector('#gpv-video').disabled = structures.length === 0;
-    root.querySelector('#gpv-save-scene').disabled = structures.length === 0;
+    root.querySelector('#gpv-save-scene').disabled = structures.length === 0; root.querySelector('#gpv-save-session').disabled = structures.length === 0;
     root.querySelector('#gpv-save-view').disabled = structures.length === 0;
     root.querySelector('#gpv-contact-sheet').disabled = savedViews.length === 0;
     root.querySelector('#gpv-views-zip').disabled = savedViews.length === 0;
@@ -3660,14 +3661,86 @@ html>body{padding:0}</style>
     const copy = { ...confidence }; delete copy.pae; delete copy.paeMaximum; copy.paeOmitted = true; return copy;
   }
 
+  function sessionScene() {
+    return { type: 'protein-viewer-scene', schemaVersion: 1, viewerVersion, provenance: provenanceValues(), models: structures.map(entry => ({ name: entry.name, visible: entry.visible, color: entry.color, label: entry.label || '', hiddenChains: entry.hiddenChains || [] })), settings: sceneSettings(), ...sceneOverlays(), savedViews: savedViews.map(view => ({ ...view })) };
+  }
+
+  function sessionSnapshot(confidenceOf = sessionConfidence) {
+    return {
+      savedAt: new Date().toISOString(), viewerVersion,
+      files: structures.map(entry => ({ name: entry.name, text: entry.text, format: entry.format, sourcePath: entry.sourcePath, collection: entry.collection, fetchId: entry.fetchId || null, confidence: confidenceOf(entry.confidence) || {}, rank: entry.rank })),
+      scene: sessionScene()
+    };
+  }
+
+  /* ---------- Session files ----------
+     The autosave snapshot, written as a ZIP the user keeps: session.json (everything but the bulky
+     parts), models/ with each model's text, and confidence/ with each PAE matrix as raw Float32
+     (row-major, little-endian). Unlike scene JSON it carries the models themselves, so it reopens
+     anywhere with no other files, and unlike the autosave it has no size cap and keeps every PAE. */
+  async function downloadSessionFile() {
+    if (!structures.length) return;
+    if (typeof JSZip === 'undefined') { announce('The ZIP writer did not load. Refresh the page and try again.', 'error'); return; }
+    const done = setBusy('Saving session…');
+    try {
+      const zip = new JSZip(); const snapshot = sessionSnapshot(confidence => confidence);
+      snapshot.type = 'protein-viewer-session'; snapshot.schemaVersion = 1;
+      snapshot.files.forEach((file, index) => {
+        const stem = String(index + 1).padStart(2, '0') + '-' + String(file.name).replace(/[^\w.-]+/g, '_');
+        file.textMember = 'models/' + stem; zip.file(file.textMember, file.text || ''); delete file.text;
+        const confidence = { ...(file.confidence || {}) };
+        if (Array.isArray(confidence.pae) && confidence.pae.length) {
+          const rows = confidence.pae.length; const cols = confidence.pae[0].length;
+          const flat = new Float32Array(rows * cols);
+          confidence.pae.forEach((row, r) => { for (let c = 0; c < cols; c += 1) flat[r * cols + c] = Number(row[c]); });
+          const member = 'confidence/' + stem + '.pae.f32'; zip.file(member, flat.buffer);
+          confidence.paeMember = member; confidence.paeRows = rows; confidence.paeCols = cols; delete confidence.pae;
+        }
+        file.confidence = confidence;
+      });
+      zip.file('session.json', JSON.stringify(snapshot));
+      const blob = await zip.generateAsync({ type: 'blob', compression: 'DEFLATE', compressionOptions: { level: 6 } });
+      const title = provenanceValues().title.replace(/[^\w.-]+/g, '_').replace(/^_+|_+$/g, '');
+      downloadBlob(blob, 'application/zip', (title || 'protein-session') + '-' + new Date().toISOString().slice(0, 10) + '.zip');
+      announce('Session saved · ' + structures.length + ' model' + (structures.length === 1 ? '' : 's') + ' · ' + formatBytes(blob.size) + ' · reopen it with Open session file or by dropping it on the page');
+    } catch (error) { announce('Could not save the session: ' + error.message, 'error'); }
+    finally { done(); }
+  }
+
+  async function readSessionZip(zip) {
+    const member = zip.file('session.json'); if (!member) return null;
+    const snapshot = JSON.parse(await member.async('string'));
+    if (snapshot.type !== 'protein-viewer-session' || !Array.isArray(snapshot.files)) return null;
+    for (const file of snapshot.files) {
+      if (file.textMember) { const text = zip.file(file.textMember); file.text = text ? await text.async('string') : ''; }
+      const confidence = file.confidence || {};
+      if (confidence.paeMember && zip.file(confidence.paeMember)) {
+        const bytes = await zip.file(confidence.paeMember).async('arraybuffer');
+        const flat = new Float32Array(bytes); const cols = confidence.paeCols || confidence.paeRows;
+        confidence.pae = Array.from({ length: confidence.paeRows }, (_, r) => flat.subarray(r * cols, (r + 1) * cols));
+        confidence.paeMaximum = matrixMaximum(confidence.pae);
+      }
+      delete confidence.paeMember; delete confidence.paeRows; delete confidence.paeCols;
+    }
+    return snapshot;
+  }
+
+  async function openSessionFile(file) {
+    if (typeof JSZip === 'undefined') { announce('The ZIP reader did not load. Refresh the page and try again.', 'error'); return false; }
+    const snapshot = await readSessionZip(await JSZip.loadAsync(file));
+    if (!snapshot) { announce('That ZIP is not a session file', 'error'); return false; }
+    await restoreSession(snapshot);
+    return true;
+  }
+
   async function saveSession() {
     if (!structures.length) { await sessionStore('readwrite', store => store.delete('current')); return; }
     const total = structures.reduce((sum, entry) => sum + (entry.text ? entry.text.length : 0), 0);
-    if (total > 80 * 1024 * 1024) { if (!sessionWarned) { sessionWarned = true; toast('Session too large to autosave (over 80 MB of coordinates) — download scene JSON to keep your work.'); } return; }
+    if (total > 80 * 1024 * 1024) { if (!sessionWarned) { sessionWarned = true; toast('Session too large to autosave (over 80 MB of coordinates) — use Save session file to keep your work.'); } return; }
     const snapshot = {
       savedAt: new Date().toISOString(), viewerVersion,
       files: structures.map(entry => ({ name: entry.name, text: entry.text, format: entry.format, sourcePath: entry.sourcePath, collection: entry.collection, fetchId: entry.fetchId || null, confidence: sessionConfidence(entry.confidence) || {}, rank: entry.rank })),
-      scene: { type: 'protein-viewer-scene', schemaVersion: 1, viewerVersion, provenance: provenanceValues(), models: structures.map(entry => ({ name: entry.name, visible: entry.visible, color: entry.color, label: entry.label || '', hiddenChains: entry.hiddenChains || [] })), settings: sceneSettings(), ...sceneOverlays(), savedViews: savedViews.map(view => ({ ...view })) }
+      scene: sessionScene()
     };
     await sessionStore('readwrite', store => store.put(snapshot, 'current'));
   }
@@ -5454,9 +5527,13 @@ html>body{padding:0}</style>
       try {
         if (extension === 'zip') {
           if (typeof JSZip === 'undefined') throw new Error('The ZIP reader did not load. Refresh the page and try again.');
-          importedArchive = true;
           importProgress(fileIndex, files.length, 'Opening ' + file.name + '…');
           const zip = await JSZip.loadAsync(file);
+          if (zip.file('session.json')) {
+            const snapshot = await readSessionZip(zip);
+            if (snapshot) { await restoreSession(snapshot); loaded += snapshot.files.length; continue; }
+          }
+          importedArchive = true;
           const members = Object.values(zip.files);
           const structureMembers = members.filter(member => {
             const lower = member.name.toLowerCase();
@@ -5516,7 +5593,7 @@ html>body{padding:0}</style>
     if (loaded && active && active.model) viewer.zoomTo({ model: active.model.getID() });
     viewer.render();
     root.querySelector('#gpv-files').value = '';
-    root.querySelector('#gpv-save-scene').disabled = structures.length === 0;
+    root.querySelector('#gpv-save-scene').disabled = structures.length === 0; root.querySelector('#gpv-save-session').disabled = structures.length === 0;
     root.querySelector('#gpv-import-state').hidden = true;
     if (pendingScene && structures.length) await applyScene(pendingScene);
     else {
@@ -7419,6 +7496,12 @@ applyBackground();
     updateStatus('PAE heatmap PNG downloaded');
   });
   root.querySelector('#gpv-save-scene').addEventListener('click', saveScene);
+  root.querySelector('#gpv-save-session').addEventListener('click', downloadSessionFile);
+  root.querySelector('#gpv-open-session').addEventListener('change', async event => {
+    const file = event.target.files[0]; if (!file) return;
+    try { await openSessionFile(file); } catch (error) { announce('Could not open that session file: ' + error.message, 'error'); }
+    event.target.value = '';
+  });
   root.querySelector('#gpv-load-scene').addEventListener('change', async event => {
     const file = event.target.files[0];
     if (!file) return;

@@ -123,6 +123,12 @@ produces a file that is slow to open, so narrow the selection when the report is
 
 ## Your work is kept
 
+**Session files.** *Publish → Save session file* writes one ZIP with the models, confidence data,
+alignment, annotations, domains, views and settings; *Open session file*, or dropping the ZIP on the
+page, restores everything on any computer with no other files. Use it to stop and continue, to move
+work between machines, or to hand a colleague the exact state behind a figure.
+
+
 The open models, annotations, domains, views and settings autosave to the browser's own storage a
 moment after every change; reopening the page offers to restore them. Nothing leaves the browser.
 Scene JSON, reports and share links remain the way to keep or hand over work deliberately.

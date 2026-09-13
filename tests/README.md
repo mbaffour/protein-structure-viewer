@@ -81,7 +81,9 @@ PSV_CHROMIUM=/opt/pw-browsers/chromium/chrome-linux/chrome npm test
   copying the PNG to the clipboard reports an outcome; the figure legend names the models,
   representation and colouring; the methods text names the Kabsch superposition, the RMSD rule, the
   dimension definitions and the software versions.
-- Session: reloading the page offers to restore the autosaved session; Restore brings back every model and label.
+- Session: reloading the page offers to restore the autosaved session; Restore brings back every model and label;
+  a session file downloads as a ZIP with `session.json` and reopens every model, label and PAE matrix both through
+  *Open session file* and when dropped as a structure file.
 - Share links: a model fetched by ID (served from a stubbed RCSB response) enables *Copy share
   link*; opening the link in a fresh page refetches the model and restores its corner text.
 

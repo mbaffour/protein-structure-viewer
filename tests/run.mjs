@@ -1026,6 +1026,30 @@ await step('reloading offers to restore the autosaved session', async () => {
   if ((await page.locator('#gpv-label-list .gpv-entry').count()) !== labels) throw new Error('labels not restored');
   console.log('       ' + text.trim().slice(0, 60));
 });
+await step('a session file saves everything and reopens it, by the picker and by drop', async () => {
+  const models = await page.locator('#gpv-list [data-entry-id]').count();
+  const labels = await page.locator('#gpv-label-list .gpv-entry').count();
+  const withPae = await page.evaluate(() => window.__viewerDebug.entries().filter(entry => entry.confidence && entry.confidence.pae && entry.confidence.pae.length).length);
+  await tab('publish');
+  const download = page.waitForEvent('download', { timeout: 60000 });
+  await page.click('#gpv-save-session');
+  const file = join(work, 'session.zip'); await (await download).saveAs(file);
+  const bytes = await readFile(file);
+  if (bytes.toString('latin1', 0, 2) !== 'PK' || !bytes.includes('session.json')) throw new Error('not a session ZIP');
+  const reopen = async open => {
+    await page.reload(); await page.waitForTimeout(2500);
+    if (!(await page.locator('#gpv-session-banner').isHidden())) await page.click('#gpv-session-no');
+    await open(); await page.waitForTimeout(4000);
+    const restored = await page.locator('#gpv-list [data-entry-id]').count();
+    if (restored !== models) throw new Error('restored ' + restored + ' of ' + models + ' models');
+    if ((await page.locator('#gpv-label-list .gpv-entry').count()) !== labels) throw new Error('labels not restored');
+    const pae = await page.evaluate(() => window.__viewerDebug.entries().filter(entry => entry.confidence && entry.confidence.pae && entry.confidence.pae.length).length);
+    if (pae !== withPae) throw new Error('PAE matrices: ' + pae + ' of ' + withPae);
+  };
+  await reopen(async () => { await tab('publish'); await page.setInputFiles('#gpv-open-session', [file]); });
+  await reopen(async () => { await page.setInputFiles('#gpv-files', [file]); });
+  console.log('       ' + (bytes.length / 1024).toFixed(0) + ' KB · ' + models + ' models, ' + labels + ' labels, ' + withPae + ' PAE matrices restored twice');
+});
 
 group('share links');
 /* A minimal mmCIF built from the first fixture stands in for files.rcsb.org, so the
