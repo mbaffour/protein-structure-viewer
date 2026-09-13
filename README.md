@@ -128,6 +128,13 @@ the left while the tool tabs scroll in a panel on the right, so you see each cha
 it. Drag the divider to resize the panel; the header's panel button switches to the stacked
 layout and back, and the choice is remembered. Screens narrower than 1100 px always stack.
 
+## Publication checklist
+
+The Publish tab lists what a journal or a reviewer would flag about the current figure — pixel
+export with no physical size, low resolution, small text, colour-blind-unsafe chain colours, a
+missing legend, a scale bar in perspective, unsuperposed models, no title — with one-click fixes.
+The badge reads *ready* when nothing remains.
+
 ## Interface contact map
 
 Compare → *Interface contact map*: choose two chains, a cutoff and whether any heavy atom or

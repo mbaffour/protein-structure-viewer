@@ -202,6 +202,19 @@ await step('a journal preset sets width, resolution, text size and font', async 
   if ((await page.inputValue('#gpv-print-width')) !== '85') throw new Error('85 mm should pick the built-in single column');
   await page.selectOption('#gpv-export-mode', 'pixels'); await page.waitForTimeout(200);
 });
+await step('the publication checklist flags pixel export and unsafe colours, and its fixes clear them', async () => {
+  await tab('appearance'); await page.selectOption('#gpv-color-mode', 'chain'); await page.waitForTimeout(200);
+  await tab('publish'); await page.selectOption('#gpv-export-mode', 'pixels'); await page.waitForTimeout(500);
+  const read = () => page.evaluate(() => ({ badge: document.querySelector('#gpv-check-badge').textContent, warnings: document.querySelectorAll('#gpv-check-list li.is-warn').length, texts: [...document.querySelectorAll('#gpv-check-list li')].map(li => li.textContent) }));
+  const before = await read();
+  if (before.warnings < 2 || !before.texts.some(text => /Pixel export/.test(text)) || !before.texts.some(text => /colour-blind/.test(text))) throw new Error(JSON.stringify(before));
+  await page.click('#gpv-check-list li.is-warn button'); await page.waitForTimeout(400);
+  await page.click('#gpv-check-list li.is-warn button'); await page.waitForTimeout(400);
+  const after = await read();
+  if (after.warnings !== before.warnings - 2 || (await page.inputValue('#gpv-export-mode')) !== 'print' || !(await page.isChecked('#gpv-safe-palette'))) throw new Error(JSON.stringify(after));
+  await page.selectOption('#gpv-export-mode', 'pixels'); await tab('appearance'); await page.uncheck('#gpv-safe-palette'); await page.selectOption('#gpv-color-mode', 'structure'); await tab('publish'); await page.waitForTimeout(200);
+  console.log('       ' + before.badge + ' → ' + after.badge);
+});
 await step('one panel per model downloads a lettered PNG three panels wide with resolution metadata', async () => {
   await page.selectOption('#gpv-export-mode', 'print'); await page.selectOption('#gpv-print-width', '85'); await page.waitForTimeout(200);
   if (await page.locator('#gpv-model-panels').isDisabled()) throw new Error('button disabled with three models loaded');

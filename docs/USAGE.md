@@ -7,6 +7,7 @@ interpretation caveats see [`SCIENTIFIC-AUDIT.md`](../SCIENTIFIC-AUDIT.md).
 ## Contents
 
 - [Layout](#layout)
+- [Publication checklist](#publication-checklist)
 - [Figure finishing](#figure-finishing)
 - [Interface contact map](#interface-contact-map)
 - [Getting structures in](#getting-structures-in)
@@ -528,6 +529,20 @@ reports and share links remain the deliberate ways to keep or hand over work.
 *Plain text* drops the card and border for clean figures where the box would cover the model.
 The choice applies to residue labels, measurements and callouts, is saved with scenes, and is
 carried into the shared report.
+
+
+## Publication checklist
+
+At the foot of the Publish tab. The viewer reads its own settings and lists, with a tick, a warning
+or a note, what a journal's figure guide or a careful reviewer would raise: a pixel export that
+carries no physical size; resolution below 300 dpi; text under 7 pt at the printed width; chain,
+entity or domain colours that are not colour-blind safe; a colour scheme whose legend is switched
+off; a scale bar in perspective projection, where its length depends on depth; several models shown
+without superposition; a pLDDT cut that hides residues; a dark or custom background; many chains
+without an outline; no figure title. Warnings have a one-click fix where one exists (use print size,
+use Okabe–Ito, draw legend, switch to orthographic). The list refreshes as you change settings, and
+the badge on the heading reads *ready* when no warning remains. It is a checklist, not a judge:
+notes are suggestions, and a warning you have a reason to ignore can be ignored.
 
 ## Figure finishing
 

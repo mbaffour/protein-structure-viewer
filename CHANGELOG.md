@@ -2,6 +2,20 @@
 
 All notable changes to this project are recorded here.
 
+## 2.19.0
+
+A reviewer's eye before you export.
+
+### Added
+
+- **Publication checklist** (Publish tab). Reads the current settings and lists what a journal
+  or a reviewer would flag: no physical size on a pixel export, resolution below 300 dpi, text
+  under 7 pt, chain or domain colours that are not colour-blind safe, a legend switched off, a
+  scale bar in perspective projection, several models shown without superposition, a hidden
+  pLDDT cut, a non-white background, many chains without an outline, no figure title. Warnings
+  carry one-click fixes; the badge reads *ready* when none remain. The list refreshes as you
+  change settings.
+
 ## 2.18.1
 
 ### Validated
