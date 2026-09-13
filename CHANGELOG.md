@@ -2,6 +2,20 @@
 
 All notable changes to this project are recorded here.
 
+## 2.13.0
+
+Assemblies read as assemblies.
+
+### Added
+
+- **Colour by entity.** Chains with identical sequences share one colour and the legend reads like a
+  stoichiometry — α ×60 (A, B, …) 426 aa — so a capsid or a filament shows its distinct proteins
+  rather than sixty colours. The composition table adds the same stoichiometry line plus the Cα extent
+  and radius of gyration in nanometres.
+- **Sequence motif selection.** *Annotate → Selections → Sequence motif* takes a regular expression
+  over one-letter codes (`N[^P][ST]` for N-glycosylation sequons, `RGD`, `C.{2,4}C`) and highlights
+  every match in every chain of the current model, listing the hits.
+
 ## 2.12.0
 
 Where the models of a run disagree, and whether a ligand pose deserves trust.

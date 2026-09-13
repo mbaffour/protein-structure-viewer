@@ -46,11 +46,10 @@ predictions as a single overlay. Large archives load models lazily and skip thei
 **Look at models.** Multiple structures at once with independent visibility, colour, and
 ranking-score readout per model. Overlay mode or one-at-a-time mode, with previous/next controls,
 arrow-key navigation, adjustable automatic cycling, and sorting by ranking score or mean pLDDT.
-Source-archive filtering and name/stoichiometry search keep large prediction sets navigable, a
-composition table lists each chain of the current model with a show/hide switch and counts its
-ligands and ions, and the displayed models export as FASTA, one record per chain.
+Source-archive filtering and name/stoichiometry search keep large prediction sets navigable, a composition table lists each chain of the current model with a show/hide switch, its stoichiometry
+by identical sequence, its Cα extent and radius of gyration, and counts its ligands and ions, and the displayed models export as FASTA, one record per chain.
 Cartoon, stick, sphere, and line representations, with an optional translucent or opaque molecular
-surface; per-structure, per-chain, pLDDT, Cα-deviation, residue-charge, hydrophobicity, residue-type,
+surface; per-structure, per-chain, per-entity (identical sequences share a colour), pLDDT, Cα-deviation, residue-charge, hydrophobicity, residue-type,
 amino-acid, secondary-structure, sequence-spectrum, and element colouring; a one-step cut that hides residues below pLDDT 50 or 70
 everywhere; ligands and ions as sticks, spheres, or hidden; perspective or orthographic projection;
 transparent, white, dark, or custom backgrounds; one-click presets for a thesis figure, a dark slide,
@@ -76,7 +75,7 @@ different size stay framed, or rotation and zoom for superposed models.
 
 **Annotate.** Map your own per-residue values (conservation, mutational scores, ΔΔG) onto the
 structure from a CSV with a gradient legend, and highlight every residue within a distance of a
-ligand, a chain, or a clicked residue. Click any atom to inspect its model, residue, chain, atom name, and pLDDT, or hover
+ligand, a chain, or a clicked residue, or every match of a sequence motif. Click any atom to inspect its model, residue, chain, atom name, and pLDDT, or hover
 to read it from the status bar. A sequence strip under the viewer draws every chain coloured by
 the current scheme: click a residue to select it, drag a range to fill the selection fields,
 double-click to zoom. A sequence-letters panel shows the one-letter sequence with residue numbers,

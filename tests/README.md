@@ -35,7 +35,8 @@ PSV_CHROMIUM=/opt/pw-browsers/chromium/chrome-linux/chrome npm test
 - Import: three models load, mean pLDDT computed from Cα B-factors, search filters, a model takes a
   display name that the model picker adopts
 - Navigation: previous/next, arrow keys, digit shortcuts for all six tabs
-- Appearance: the Okabe–Ito switch recolours chain A to rgb(0, 114, 178) and back; every representation, colour scheme, projection, background, motion;
+- Appearance: entity colouring groups the two identical chains (α ×2, 30 aa) and the composition line
+  reports the Cα extent and radius of gyration; the Okabe–Ito switch recolours chain A to rgb(0, 114, 178) and back; every representation, colour scheme, projection, background, motion;
   pLDDT legend; theme cycling; preference persistence across a reload
 - Compare: sequence-aware and identifier alignment, non-zero RMSD against a
   deliberately different model, CSV export, synchronised multi-view with a third panel that
@@ -51,7 +52,8 @@ PSV_CHROMIUM=/opt/pw-browsers/chromium/chrome-linux/chrome npm test
 - Confidence: the synthetic models report no ligand sites; the pLDDT profile SVG has one panel per chain and a trace per model; the PNG variant downloads;
   a block-diagonal PAE matrix loaded as `model_a.json` yields two domains (A:1–30 and B), the domain
   colour scheme lists them in the legend, and Highlight all adds two selections.
-- Annotate: a 30-row `resi,value` CSV colours residue 30 viridis-yellow and residue 1 viridis-purple with
+- Annotate: the motif `A{5}` highlights 12 matches as one selection per chain, with no-match and
+  invalid-pattern messages; a 30-row `resi,value` CSV colours residue 30 viridis-yellow and residue 1 viridis-purple with
   a legend stating the range; residues within 6 Å of chain B are highlighted and listable; a named domain (residues 1–15, same-source scope) paints the sibling model's residue 5
   in its colour and appears in the legend on both models; the sequence strip lists both chains, a click selects a residue, a drag fills the
   selection range, Go to `B:12` selects that residue, the sequence-letters panel lists both chains with sixty clickable letters and a

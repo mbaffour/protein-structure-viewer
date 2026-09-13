@@ -913,6 +913,7 @@ html>body{padding:0}</style>
     <div class="gpv-list" id="gpv-list" aria-label="Loaded structures"></div>
     <details class="gpv-composition" id="gpv-composition" open hidden><summary class="text-small">Composition of the current model</summary>
       <div class="table-responsive"><table class="table table-sm" aria-label="Chains of the current model"><thead><tr><th>Chain</th><th class="text-end">Residues</th><th>Range</th><th class="text-end">Mean pLDDT</th><th>Shown</th></tr></thead><tbody id="gpv-chain-rows"></tbody></table></div>
+      <div class="text-small text-muted" id="gpv-assembly-summary"></div>
       <div class="viz-controls"><span class="text-small text-muted" id="gpv-hetero-summary"></span><button class="btn btn-ghost" type="button" id="gpv-chains-all" data-tooltip="Show every chain of the current model again">Show all chains</button></div>
     </details>
     <div class="viz-controls gpv-list-more" id="gpv-list-more" hidden>
@@ -926,7 +927,7 @@ html>body{padding:0}</style>
     <div class="viz-controls gpv-presets"><span class="text-small text-muted">Presets</span><button class="btn" type="button" id="gpv-preset-thesis" data-tooltip="White background, orthographic cartoon, legend on exports, 1800 × 1200 at 2×">Thesis figure</button><button class="btn" type="button" id="gpv-preset-slide" data-tooltip="Dark background, perspective cartoon, colour by chain">Dark slide</button><button class="btn" type="button" id="gpv-preset-review" data-tooltip="pLDDT colouring with the legend, every residue shown, ligands as sticks">Confidence review</button></div>
     <div class="viz-controls">
       <label class="form-label">Representation<select class="form-select" id="gpv-style"><option value="cartoon">Cartoon</option><option value="stick">Sticks</option><option value="sphere">Spheres</option><option value="line">Lines</option></select></label>
-      <label class="form-label">Color scheme<select class="form-select" id="gpv-color-mode"><option value="structure">Per structure</option><option value="chain">Per chain</option><option value="plddt">pLDDT confidence</option><option value="deviation">Cα deviation after alignment</option><option value="agreement">Model agreement (Cα RMSF)</option><option value="domain">PAE domains</option><option value="annotated">Annotated domains</option><option value="data">Per-residue data</option><option value="charge">Residue charge</option><option value="hydrophobicity">Hydrophobicity (Kyte–Doolittle)</option><option value="restype">Residue type</option><option value="amino">Amino acid</option><option value="ss">Secondary structure</option><option value="spectrum">Sequence spectrum</option><option value="element">Element</option></select></label>
+      <label class="form-label">Color scheme<select class="form-select" id="gpv-color-mode"><option value="structure">Per structure</option><option value="chain">Per chain</option><option value="entity">Per entity (identical sequences)</option><option value="plddt">pLDDT confidence</option><option value="deviation">Cα deviation after alignment</option><option value="agreement">Model agreement (Cα RMSF)</option><option value="domain">PAE domains</option><option value="annotated">Annotated domains</option><option value="data">Per-residue data</option><option value="charge">Residue charge</option><option value="hydrophobicity">Hydrophobicity (Kyte–Doolittle)</option><option value="restype">Residue type</option><option value="amino">Amino acid</option><option value="ss">Secondary structure</option><option value="spectrum">Sequence spectrum</option><option value="element">Element</option></select></label>
       <label class="form-label">Low confidence<select class="form-select" id="gpv-hide-below" data-tooltip="Hide residues whose pLDDT is below the threshold — in the viewer, every panel and every export"><option value="0">Show every residue</option><option value="50">Hide pLDDT below 50</option><option value="70">Hide pLDDT below 70</option></select></label>
       <label class="form-label">Ligands and ions<select class="form-select" id="gpv-hetero" data-tooltip="How hetero groups — ligands, cofactors, ions, glycans — are drawn; water is never shown"><option value="stick">Sticks and spheres</option><option value="sphere">Spheres</option><option value="hide">Hidden</option></select></label>
       <label class="form-check form-switch"><input class="form-check-input" id="gpv-safe-palette" type="checkbox"><span class="form-check-label">Colour-blind-safe palette (Okabe–Ito) for chains and domains</span></label>
@@ -963,6 +964,11 @@ html>body{padding:0}</style>
       <label class="form-label">Within (Å)<input class="form-control" id="gpv-near-cutoff" type="number" min="2" max="12" step="0.5" value="4.5"></label>
       <button class="btn" type="button" id="gpv-near-run" disabled data-tooltip="Highlight residues of the current model with any heavy atom within the cutoff of the target, in the highlight colour above">Highlight nearby residues</button>
       <button class="btn btn-ghost" type="button" id="gpv-near-copy" disabled data-tooltip="Copy the nearby residue list to the clipboard">Copy residue list</button>
+    </div>
+    <div class="viz-controls">
+      <label class="form-label">Sequence motif<input class="form-control" id="gpv-motif" type="text" placeholder="N[^P][ST]  or  RGD  or  C.{2,4}C" maxlength="80" aria-label="Sequence motif as a regular expression over one-letter codes"></label>
+      <button class="btn" type="button" id="gpv-motif-run" disabled data-tooltip="Highlight every match of the pattern in every chain of the current model, in the highlight colour above">Highlight motif</button>
+      <span class="text-muted text-small" id="gpv-motif-state">Regular expression over one-letter codes; X stands for unknown residues.</span>
     </div>
     <div class="gpv-list" id="gpv-selection-list" aria-label="Structure selections"></div>
     <h3 class="gpv-subheading">Domains</h3>
@@ -1460,7 +1466,7 @@ html>body{padding:0}</style>
   let busyDepth = 0;
   let restoreMotion = null;
   const listPageSize = 60;
-  const viewerVersion = '2.12.0';
+  const viewerVersion = '2.13.0';
   const preferenceKey = 'protein-structure-viewer:preferences';
   const themeKey = 'protein-structure-viewer:theme';
   const labelColors = getComputedStyle(root);
@@ -1989,6 +1995,7 @@ html>body{padding:0}</style>
   function colorOptions(entry) {
     const mode = root.querySelector('#gpv-color-mode').value;
     if (mode === 'chain') return { colorfunc: atom => chainColor(atom.chain) };
+    if (mode === 'entity') return { colorfunc: atom => entityColor(entry, atom) };
     if (mode === 'plddt') return { colorfunc: atom => plddtColor(Number(atom.b || 0)) };
     if (mode === 'deviation') return { colorfunc: atom => deviationColor(entry, atom) };
     if (mode === 'agreement') return { colorfunc: atom => agreementColor(atom) };
@@ -2085,6 +2092,7 @@ html>body{padding:0}</style>
     root.querySelector('#gpv-contact-sheet').disabled = savedViews.length === 0;
     root.querySelector('#gpv-views-zip').disabled = savedViews.length === 0;
     root.querySelector('#gpv-near-run').disabled = structures.length === 0;
+    root.querySelector('#gpv-motif-run').disabled = structures.length === 0;
     root.querySelector('#gpv-data-apply').disabled = structures.length === 0;
     scheduleSessionSave();
     root.querySelector('#gpv-captions').disabled = savedViews.length === 0;
@@ -3037,6 +3045,7 @@ html>body{padding:0}</style>
   function sequenceColor(entry, atom) {
     const mode = root.querySelector('#gpv-color-mode').value;
     if (mode === 'chain') return chainColor(atom.chain);
+    if (mode === 'entity') return entityColor(entry, atom);
     if (mode === 'deviation') return deviationColor(entry, atom);
     if (mode === 'agreement') return agreementColor(atom);
     if (mode === 'domain') return domainColor(entry, atom);
@@ -3199,7 +3208,7 @@ html>body{padding:0}</style>
     const multi = entries.length > 1;
     const total = planned.reduce((sum, item) => sum + item.row.residues.length, 0);
     const mode = root.querySelector('#gpv-color-mode').value;
-    const colourNote = mode === 'chain' ? ' · coloured by chain' : mode === 'deviation' ? ' · coloured by Cα deviation' : mode === 'agreement' ? ' · coloured by model agreement (Cα RMSF)' : mode === 'domain' ? ' · coloured by PAE domains' : mode === 'annotated' ? ' · coloured by annotated domains' : mode === 'data' ? ' · coloured by ' + (residueData ? residueData.name : 'per-residue data') : residueModes.includes(mode) ? ' · coloured by ' + ({ charge: 'residue charge', hydrophobicity: 'hydrophobicity', restype: 'residue type', amino: 'amino acid', ss: 'secondary structure' })[mode] : entries.some(entry => entry.scores.length) ? ' · coloured by pLDDT' : '';
+    const colourNote = mode === 'chain' ? ' · coloured by chain' : mode === 'entity' ? ' · coloured by entity' : mode === 'deviation' ? ' · coloured by Cα deviation' : mode === 'agreement' ? ' · coloured by model agreement (Cα RMSF)' : mode === 'domain' ? ' · coloured by PAE domains' : mode === 'annotated' ? ' · coloured by annotated domains' : mode === 'data' ? ' · coloured by ' + (residueData ? residueData.name : 'per-residue data') : residueModes.includes(mode) ? ' · coloured by ' + ({ charge: 'residue charge', hydrophobicity: 'hydrophobicity', restype: 'residue type', amino: 'amino acid', ss: 'secondary structure' })[mode] : entries.some(entry => entry.scores.length) ? ' · coloured by pLDDT' : '';
     const chainNote = planned.length > shown.length ? ' · first ' + shown.length + ' of ' + planned.length + ' rows' : '';
     const cut = hideBelow();
     const cutNote = cut && entries.some(entry => entry.scores.length) ? ' · pLDDT below ' + cut + ' hidden' : '';
@@ -3371,6 +3380,75 @@ html>body{padding:0}</style>
     const table = parseResidueTable(root.querySelector('#gpv-data-text').value);
     if (!table) { announce('Could not read a residue column and a numeric value column from the pasted text', 'error'); return; }
     setResidueData(table, 'Pasted values');
+  }
+
+  /* ---------- Entities, stoichiometry and dimensions ---------- */
+
+  const greekLetters = ['α', 'β', 'γ', 'δ', 'ε', 'ζ', 'η', 'θ', 'ι', 'κ', 'λ', 'μ'];
+  function entityColorFor(index) { const source = safePaletteOn ? okabeIto : chainPalette; return source[index % source.length]; }
+
+  /* Chains with identical sequences form one entity; entities are numbered in order of
+     first appearance and named with Greek letters like a stoichiometry formula. */
+  function entityGroups(entry) {
+    if (!entry || !entry.model) return [];
+    if (entry.entityCache && entry.entityCache.atoms === entry.atoms) return entry.entityCache.groups;
+    const bySequence = new Map();
+    residueRows(entry).forEach(row => {
+      const sequence = row.residues.map(atom => residueLetter(atom.resn)).join('');
+      if (!bySequence.has(sequence)) bySequence.set(sequence, { chains: [], length: row.residues.length });
+      bySequence.get(sequence).chains.push(row.chain);
+    });
+    const groups = [...bySequence.values()].map((group, index) => ({ ...group, index, label: greekLetters[index] || 'e' + (index + 1) }));
+    const chainToGroup = new Map(); groups.forEach(group => group.chains.forEach(chain => chainToGroup.set(chain, group.index)));
+    entry.entityCache = { atoms: entry.atoms, groups, chainToGroup };
+    return groups;
+  }
+
+  function entityColor(entry, atom) {
+    entityGroups(entry);
+    const index = entry.entityCache ? entry.entityCache.chainToGroup.get(atom.chain || '') : undefined;
+    return index === undefined ? '#9ca3af' : entityColorFor(index);
+  }
+
+  /* Maximum Cα–Cα distance and radius of gyration of the Cα atoms, in Å. */
+  function assemblyDimensions(entry) {
+    const cas = entry.atoms.filter(atom => atom.atom === 'CA' && !atom.hetflag);
+    if (cas.length < 2) return null;
+    const centre = { x: mean(cas.map(a => a.x)), y: mean(cas.map(a => a.y)), z: mean(cas.map(a => a.z)) };
+    const gyration = Math.sqrt(mean(cas.map(a => squaredDistance(a, centre))));
+    /* The farthest point from the centre, then the farthest from that point: a two-pass
+       estimate of the diameter that avoids the quadratic scan on large capsids. */
+    let far = cas[0]; cas.forEach(a => { if (squaredDistance(a, centre) > squaredDistance(far, centre)) far = a; });
+    let extent = 0; cas.forEach(a => { extent = Math.max(extent, squaredDistance(a, far)); });
+    return { extent: Math.sqrt(extent), gyration };
+  }
+
+  /* ---------- Motif selection ---------- */
+
+  function highlightMotif() {
+    const entry = activeEntry(); if (!entry || !entry.model) return;
+    const pattern = root.querySelector('#gpv-motif').value.trim();
+    const state = root.querySelector('#gpv-motif-state');
+    if (!pattern) { state.textContent = 'Type a pattern first, for example N[^P][ST] for N-glycosylation sequons.'; return; }
+    let regex;
+    try { regex = new RegExp(pattern, 'gi'); } catch (error) { state.textContent = 'Not a valid pattern: ' + error.message; return; }
+    const hits = []; const byChain = new Map();
+    residueRows(entry).forEach(row => {
+      const sequence = row.residues.map(atom => residueLetter(atom.resn)).join('');
+      let match;
+      while ((match = regex.exec(sequence)) !== null) {
+        if (!match[0].length) { regex.lastIndex += 1; continue; }
+        for (let offset = 0; offset < match[0].length; offset += 1) { const atom = row.residues[match.index + offset]; if (!byChain.has(row.chain)) byChain.set(row.chain, []); byChain.get(row.chain).push(atom.resi); }
+        hits.push({ chain: row.chain, start: row.residues[match.index].resi, text: match[0] });
+      }
+    });
+    if (!hits.length) { state.textContent = 'No match for ' + pattern + ' in ' + displayName(entry) + '.'; return; }
+    remember('motif highlight');
+    const color = root.querySelector('#gpv-selection-color').value;
+    byChain.forEach((residues, chain) => selectionRecords.push({ id: nextAnnotationId++, entryId: entry.id, chain, residues: [...new Set(residues)].sort((a, b) => a - b), action: 'highlight', color }));
+    renderSelectionList(); applyStyle();
+    state.textContent = hits.length + ' match' + (hits.length === 1 ? '' : 'es') + ': ' + clipText(hits.map(hit => (hit.chain ? hit.chain + ':' : '') + hit.start + ' ' + hit.text).join(', '), 160);
+    updateStatus(hits.length + ' motif match' + (hits.length === 1 ? '' : 'es') + ' highlighted on ' + displayName(entry));
   }
 
   /* ---------- Proximity selection ---------- */
@@ -3938,6 +4016,9 @@ html>body{padding:0}</style>
       ? 'Ligands and ions: ' + inventory.slice(0, 12).map(([name, count]) => name + (count > 1 ? ' ×' + count : '')).join(', ') + (inventory.length > 12 ? ' and ' + (inventory.length - 12) + ' more' : '')
       : 'No ligands or ions (water is not counted).';
     root.querySelector('#gpv-chains-all').disabled = hidden.length === 0;
+    const groups = entityGroups(entry); const size = assemblyDimensions(entry);
+    root.querySelector('#gpv-assembly-summary').textContent = (groups.length ? 'Stoichiometry: ' + groups.map(group => group.label + ' ×' + group.chains.length + ' (' + clipText(group.chains.join(', '), 30) + ', ' + group.length + ' aa)').join(' · ') : '')
+      + (size ? (groups.length ? ' · ' : '') + 'Cα extent ' + (size.extent / 10).toFixed(1) + ' nm · radius of gyration ' + (size.gyration / 10).toFixed(1) + ' nm' : '');
   }
 
   /* ---------- Go to residue ---------- */
@@ -4076,6 +4157,7 @@ html>body{padding:0}</style>
     let colourText = {
       structure: 'coloured per model' + (shown.length > 1 ? ' (' + shown.map(entry => displayName(entry) + ' ' + entry.color).join('; ') + ')' : ''),
       chain: 'coloured by chain',
+      entity: 'coloured by entity — chains with identical sequences share a colour' + (shown[0] ? ' (' + entityGroups(shown[0]).map(group => group.label + ' ×' + group.chains.length).join(', ') + ')' : ''),
       plddt: 'coloured by per-residue pLDDT (very low <50 orange, low 50–70 yellow, confident 70–90 light blue, very high ≥90 dark blue)',
       agreement: 'coloured by per-residue Cα RMSF across ' + (ensembleSpread ? ensembleSpread.count + ' aligned models' : 'the aligned models') + ' (<0.5 Å blue, 0.5–1 Å green, 1–2 Å yellow, 2–4 Å orange, ≥4 Å red; residues present in one model grey)',
       deviation: 'coloured by Cα deviation from the reference after superposition (<1 Å blue, 1–2 Å green, 2–4 Å yellow, 4–8 Å orange, ≥8 Å red; unmatched residues grey)',
@@ -5070,7 +5152,7 @@ html>body{padding:0}</style>
     const settings = scene.settings || {};
     if (['overlay', 'single'].includes(settings.viewMode)) root.querySelector('#gpv-view-mode').value = settings.viewMode;
     if (['cartoon', 'stick', 'sphere', 'line'].includes(settings.representation)) root.querySelector('#gpv-style').value = settings.representation;
-    if (['structure', 'chain', 'plddt', 'deviation', 'agreement', 'domain', 'annotated', 'data', 'charge', 'hydrophobicity', 'restype', 'amino', 'ss', 'spectrum', 'element'].includes(settings.colorMode)) root.querySelector('#gpv-color-mode').value = settings.colorMode;
+    if (['structure', 'chain', 'entity', 'plddt', 'deviation', 'agreement', 'domain', 'annotated', 'data', 'charge', 'hydrophobicity', 'restype', 'amino', 'ss', 'spectrum', 'element'].includes(settings.colorMode)) root.querySelector('#gpv-color-mode').value = settings.colorMode;
     if (['loaded', 'ranking', 'plddt'].includes(settings.modelOrder)) root.querySelector('#gpv-order').value = settings.modelOrder;
     if (['sequence', 'identifier'].includes(settings.alignmentMode)) root.querySelector('#gpv-alignment-mode').value = settings.alignmentMode;
     if (['perspective', 'orthographic'].includes(settings.projection)) root.querySelector('#gpv-projection').value = settings.projection;
@@ -5330,7 +5412,7 @@ html>body{padding:0}</style>
     const active = byName.get(state.activeModel); if (active) activeId = active.id;
     if (['overlay', 'single'].includes(state.viewMode)) root.querySelector('#gpv-view-mode').value = state.viewMode;
     if (['cartoon', 'stick', 'sphere', 'line'].includes(state.representation)) root.querySelector('#gpv-style').value = state.representation;
-    if (['structure', 'chain', 'plddt', 'deviation', 'agreement', 'domain', 'annotated', 'data', 'charge', 'hydrophobicity', 'restype', 'amino', 'ss', 'spectrum', 'element'].includes(state.colorMode)) root.querySelector('#gpv-color-mode').value = state.colorMode;
+    if (['structure', 'chain', 'entity', 'plddt', 'deviation', 'agreement', 'domain', 'annotated', 'data', 'charge', 'hydrophobicity', 'restype', 'amino', 'ss', 'spectrum', 'element'].includes(state.colorMode)) root.querySelector('#gpv-color-mode').value = state.colorMode;
     if (['perspective', 'orthographic'].includes(state.projection)) root.querySelector('#gpv-projection').value = state.projection;
     if (['transparent', 'white', 'dark', 'custom'].includes(state.background)) root.querySelector('#gpv-background').value = state.background;
     if (/^#[0-9a-f]{6}$/i.test(state.backgroundColor || '')) root.querySelector('#gpv-background-color').value = state.backgroundColor;
@@ -5556,6 +5638,12 @@ html>body{padding:0}</style>
     if (mode === 'plddt') return { title: 'pLDDT', items: [['#ff7d45', '<50', 'Very low <50'], ['#ffdb13', '50–70', 'Low 50–70'], ['#65cbf3', '70–90', 'Confident 70–90'], ['#0053d6', '≥90', 'Very high ≥90']] };
     const shown = displayedEntries().filter(entry => entry.model);
     const panelEntries = root.querySelector('#gpv-side-by-side').checked ? comparePanels.map(panel => entryById(panel.entryId)).filter(entry => entry && entry.model) : [];
+    if (mode === 'entity') {
+      const active = sequenceEntry(); if (!active) return null;
+      const groups = entityGroups(active);
+      if (!groups.length || groups.length > legendChainLimit) return null;
+      return { title: 'Entity', items: groups.map(group => [entityColorFor(group.index), group.label + ' ×' + group.chains.length, group.label + ' ×' + group.chains.length + ' · ' + clipText(group.chains.join(', '), 24) + ' · ' + group.length + ' aa']) };
+    }
     if (mode === 'chain') {
       const chains = [...new Set([...shown, ...panelEntries].flatMap(entry => entry.atoms.map(atom => atom.chain || '')))].sort(compareChains);
       if (!chains.length || chains.length > legendChainLimit) return null;
@@ -7258,7 +7346,9 @@ applyBackground();
     'Annotate → Selections → Near: highlight every residue within 4.5 Å of the ligands, of a chain, or of the residue you clicked, and copy the list for your methods.',
     'Your session autosaves in the browser: reopen the page and choose Restore. Publish → Download all views (ZIP) renders every saved view at print size in one go.',
     'After Align visible, colour by Model agreement to see where the five models of a run disagree: per-residue Cα RMSF, blue under 0.5 Å to red at 4 Å or more, with a CSV in the Compare tab.',
-    'Confidence → Ligand sites lists every ligand and ion with its contact residues, their mean pLDDT and, for AlphaFold 3, the PAE between ligand and site — the numbers that say whether a pose is trustworthy.'
+    'Confidence → Ligand sites lists every ligand and ion with its contact residues, their mean pLDDT and, for AlphaFold 3, the PAE between ligand and site — the numbers that say whether a pose is trustworthy.',
+    'Colour by entity gives every copy of the same protein one colour and the legend reads like a stoichiometry: α ×60, β ×12. The composition table adds the Cα extent and radius of gyration in nanometres.',
+    'Annotate → Selections → Sequence motif takes a regular expression over one-letter codes — N[^P][ST] for sequons, C.{2,4}C for zinc knuckles — and highlights every match in every chain.'
   ];
   let tipIndex = Math.floor(Math.random() * tips.length);
   function renderTip() {
@@ -7282,6 +7372,8 @@ applyBackground();
   root.querySelector('#gpv-site-run').addEventListener('click', analyseLigandSites);
   root.querySelector('#gpv-site-csv').addEventListener('click', downloadSitesCsv);
   root.querySelector('#gpv-near-run').addEventListener('click', highlightNearby);
+  root.querySelector('#gpv-motif-run').addEventListener('click', highlightMotif);
+  root.querySelector('#gpv-motif').addEventListener('keydown', event => { if (event.key === 'Enter') { event.preventDefault(); highlightMotif(); } });
   root.querySelector('#gpv-near-target').addEventListener('change', () => { root.querySelector('#gpv-near-chain').closest('label').hidden = root.querySelector('#gpv-near-target').value !== 'chain'; });
   root.querySelector('#gpv-near-chain').closest('label').hidden = true;
   root.querySelector('#gpv-near-copy').addEventListener('click', async () => { const text = nearbyListText(); if (!text) return; try { await navigator.clipboard.writeText(text); announce('Residue list copied · ' + nearbyResult.residues.length + ' residues'); } catch (error) { root.querySelector('#gpv-data-text').value = text; announce('Clipboard unavailable — the list is in the paste box below'); } });

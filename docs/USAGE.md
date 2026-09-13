@@ -98,6 +98,10 @@ and marked *hidden*, so you still see what is missing. **Show all chains** resto
 underneath counts ligands and ions by residue name (HEM ×4, ZN ×2 …); water is never counted. Hidden
 chains are stored in scene JSON, carried by share links, and respected by the report.
 
+Under the table, a line gives the **stoichiometry** (entities by identical sequence with their chains
+and lengths) and the **Cα extent** (largest Cα–Cα distance) and **radius of gyration**, both in
+nanometres, so a capsid diameter or a filament length is read off directly.
+
 **Download FASTA** writes the sequences of the displayed models, one record per chain. Headers carry
 the model's display name, chain, length and — for models with pLDDT — the chain's mean pLDDT.
 Standard amino acids and nucleotides get their single-letter codes; anything else is X.
@@ -127,6 +131,9 @@ Notes on the colour schemes:
 
 - **pLDDT** colouring uses the standard AlphaFold bands and reveals the legend under the viewport.
   It reads the B-factor column, so it is only meaningful for files that carry pLDDT there.
+- **Per entity** gives every chain with the same sequence one colour, so a sixty-copy capsid shows
+  its two or three distinct proteins; the legend names each entity with a Greek letter and its copy
+  count, chains and length (α ×60 · A, B, … · 426 aa). The composition table carries the same line.
 - **Per chain** colouring uses a fixed palette in sorted chain order, so chain A is the same colour in
   every model, every synchronized panel, the sequence strip, the exported legend, and the report. The
   legend under the viewport names each chain (up to twelve). In overlay mode with per-structure
@@ -229,6 +236,11 @@ heavy atom within the cutoff (default 4.5 Å) of the **ligands and ions**, of **
 of **the selected residue** (click one first). The result is an ordinary highlight selection in the
 chosen colour, so it can be edited, undone, and it appears in exports and reports; **Copy residue
 list** puts `A:HIS87, A:LEU91, …` on the clipboard for a methods section.
+
+**Sequence motif.** Type a regular expression over one-letter codes and press **Highlight motif**:
+`N[^P][ST]` finds N-glycosylation sequons, `RGD` an integrin-binding motif, `C.{2,4}C` a zinc knuckle,
+`[KR]{4,}` a basic patch. Every match in every chain of the current model becomes a highlight selection
+in the chosen colour, and the hits are listed by chain and position. Unknown residues are `X`.
 
 **Measurements.** Choose distance (two atoms) or angle (three atoms), press **Start measuring**, and
 click the atoms in the viewport. Values update as coordinates change — so aligning models updates

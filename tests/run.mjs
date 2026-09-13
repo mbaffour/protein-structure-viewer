@@ -238,6 +238,14 @@ await step('the colour-blind-safe palette recolours chain A to Okabe–Ito blue'
   const restored = await page.locator('#gpv-plddt-legend .gpv-swatch').first().evaluate(el => getComputedStyle(el).backgroundColor);
   if (restored !== 'rgb(59, 130, 246)') throw new Error('default chain A swatch: ' + restored);
 });
+await step('entity colouring groups the two identical chains and reads as a stoichiometry', async () => {
+  await page.selectOption('#gpv-color-mode', 'entity'); await page.waitForTimeout(400);
+  const legend = (await page.locator('#gpv-plddt-legend').textContent()) || '';
+  if (!/α ×2/.test(legend) || !/A, B/.test(legend) || !/30 aa/.test(legend)) throw new Error('legend: ' + legend);
+  const summary = (await page.locator('#gpv-assembly-summary').textContent()) || '';
+  if (!/Stoichiometry: α ×2/.test(summary) || !/Cα extent \d+\.\d nm · radius of gyration \d+\.\d nm/.test(summary)) throw new Error('summary: ' + summary);
+  console.log('       ' + summary.trim());
+});
 await step('chain colouring lists the chains in the legend', async () => {
   await page.selectOption('#gpv-color-mode', 'chain'); await page.waitForTimeout(400);
   const legend = page.locator('#gpv-plddt-legend');
@@ -484,6 +492,18 @@ await step('a per-residue table colours the structure with a gradient legend', a
   if (colours[0] !== '#fde725' || colours[1] !== '#440154') throw new Error('gradient ends: ' + colours.join(' '));
   await page.click('#gpv-data-clear'); await page.waitForTimeout(300);
   await tab('appearance'); await page.selectOption('#gpv-color-mode', 'plddt'); await page.waitForTimeout(300); await tab('annotate');
+});
+await step('a sequence motif is highlighted in every chain', async () => {
+  const before = await page.locator('#gpv-selection-list .gpv-entry').count();
+  await page.fill('#gpv-motif', 'A{5}'); await page.click('#gpv-motif-run'); await page.waitForTimeout(500);
+  const state = (await page.locator('#gpv-motif-state').textContent()) || '';
+  if (!/^12 matches/.test(state)) throw new Error('motif state: ' + state);
+  if ((await page.locator('#gpv-selection-list .gpv-entry').count()) !== before + 2) throw new Error('expected one selection per chain');
+  await page.fill('#gpv-motif', 'WWW'); await page.click('#gpv-motif-run'); await page.waitForTimeout(300);
+  if (!/No match/.test((await page.locator('#gpv-motif-state').textContent()) || '')) throw new Error('no-match message missing');
+  await page.fill('#gpv-motif', '[unclosed'); await page.click('#gpv-motif-run'); await page.waitForTimeout(300);
+  if (!/Not a valid pattern/.test((await page.locator('#gpv-motif-state').textContent()) || '')) throw new Error('invalid-pattern message missing');
+  await page.click('#gpv-clear-selections'); await page.waitForTimeout(300);
 });
 await step('residues near a chain are highlighted and listed', async () => {
   const before = await page.locator('#gpv-selection-list .gpv-entry').count();

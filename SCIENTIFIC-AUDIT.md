@@ -4,7 +4,7 @@ This audit evaluates the viewer as a tool for comparing predicted structures, sh
 interactive review artefact, and preparing visual material for papers and theses. It is not a
 validation of any biological hypothesis, and nothing in the tool should be read as one.
 
-Audited against viewer version 2.12.0.
+Audited against viewer version 2.13.0.
 
 ## What is already strong
 
@@ -34,6 +34,8 @@ Audited against viewer version 2.12.0.
   alignment method and RMSD, ligand handling — which is the information reviewers most often find
   missing from structure figures. It is explicitly a draft.
 - Hetero groups are visible by default; a figure that silently drops a bound ligand or ion misleads.
+- Assemblies are described as assemblies: stoichiometry by identical sequence, extent and radius of
+  gyration, and a colour scheme that shows the distinct proteins of a capsid rather than its chains.
 - The models of one run can be asked where they disagree (per-residue Cα RMSF across the aligned
   ensemble), which is a more honest picture of local uncertainty than any one model's pLDDT, and
   ligand poses carry their site pLDDT and ligand–site PAE next to them.
