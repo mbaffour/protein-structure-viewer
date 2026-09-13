@@ -128,6 +128,14 @@ the left while the tool tabs scroll in a panel on the right, so you see each cha
 it. Drag the divider to resize the panel; the header's panel button switches to the stacked
 layout and back, and the choice is remembered. Screens narrower than 1100 px always stack.
 
+## Interface contact map
+
+Compare → *Interface contact map*: choose two chains, a cutoff and whether any heavy atom or
+only Cα counts, and the viewer draws every residue pair within the cutoff as a map, closer pairs
+darker. Hover reads the pair, a click selects both residues and zooms to them, *Highlight
+interface* colours the interface in 3D, and the map and the pair list download as a 300 dpi PNG
+and a CSV. The methods text states the rule and the counts.
+
 ## Figure finishing
 
 Appearance offers a silhouette **outline** (thin or bold) and **depth cueing** for figures

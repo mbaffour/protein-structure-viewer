@@ -81,6 +81,9 @@ PSV_CHROMIUM=/opt/pw-browsers/chromium/chrome-linux/chrome npm test
   copying the PNG to the clipboard reports an outcome; the figure legend names the models,
   representation and colouring; the methods text names the Kabsch superposition, the RMSD rule, the
   dimension definitions and the software versions.
+- Contact map: chains A and B of the fixture within 6 Å yield residue pairs, two interface selections, a CSV with one
+  row per pair and a PNG with resolution metadata; the plain label style is a scene setting; the methods text names
+  the contact rule.
 - Figure finishing: outline and depth cueing switch on without errors and survive a scene round-trip; fading
   chain B lightens its colour and dims its strip row; a journal preset sets width, dpi, text size and font; the
   per-model figure downloads as a PNG three panels wide with resolution metadata.

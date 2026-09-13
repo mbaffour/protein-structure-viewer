@@ -215,6 +215,38 @@ await step('one panel per model downloads a lettered PNG three panels wide with 
   await tab('models');
   console.log('       ' + width + ' × ' + height + ' px, 300 dpi');
 });
+await step('the contact map counts residue pairs between chains A and B and exports them', async () => {
+  await tab('compare');
+  if (await page.locator('#gpv-contact-run').isDisabled()) throw new Error('compute disabled with a two-chain model');
+  await page.fill('#gpv-contact-cutoff', '6'); await page.click('#gpv-contact-run'); await page.waitForTimeout(600);
+  const state = (await page.locator('#gpv-contact-state').textContent()) || '';
+  const pairs = Number((state.match(/^(\d+) residue pair/) || [])[1]);
+  if (!(pairs > 0)) throw new Error('state: ' + state);
+  const box = await page.locator('#gpv-contact-canvas').boundingBox();
+  if (!box || box.width < 50) throw new Error('map not drawn');
+  const before = await page.locator('#gpv-selection-list .gpv-entry').count();
+  await page.click('#gpv-contact-highlight'); await page.waitForTimeout(400);
+  if ((await page.locator('#gpv-selection-list .gpv-entry').count()) !== before + 2) throw new Error('interface highlight did not add two selections');
+  let download = page.waitForEvent('download', { timeout: 60000 }); await page.click('#gpv-contact-csv');
+  const csv = (await readFile(await (await download).path(), 'utf8')).split('\n');
+  if (!/^"?model"?,"?chain_a"?,"?resi_a/.test(csv[0]) || csv.length - 1 !== pairs) throw new Error('csv rows ' + (csv.length - 1) + ' vs ' + pairs);
+  download = page.waitForEvent('download', { timeout: 60000 }); await page.click('#gpv-contact-png');
+  const png = await readFile(await (await download).path());
+  if (png.toString('latin1', 1, 4) !== 'PNG' || !png.includes('pHYs')) throw new Error('not a PNG with resolution');
+  await tab('annotate'); await page.click('#gpv-clear-selections'); await page.waitForTimeout(300);
+  console.log('       ' + pairs + ' pairs · ' + state.replace(/^\d+ residue pairs? within [^·]+· /, ''));
+});
+await step('the plain label style is a scene setting and the methods text names the contact rule', async () => {
+  await tab('annotate'); await page.selectOption('#gpv-label-style', 'plain'); await page.waitForTimeout(300);
+  const scene = await page.evaluate(() => window.__viewerDebug.sceneSettings().labelStyle);
+  if (scene !== 'plain') throw new Error('labelStyle in scene: ' + scene);
+  await page.selectOption('#gpv-label-style', 'boxed');
+  await tab('publish'); await page.click('#gpv-methods-text'); await page.waitForTimeout(300);
+  const text = await page.inputValue('#gpv-methods-field');
+  if (!/Inter-chain contacts between chains A and B/.test(text)) throw new Error(text.slice(-200));
+  await tab('models');
+});
+
 await step('search filters the model list', async () => {
   await page.fill('#gpv-model-search', 'model_c'); await page.waitForTimeout(400);
   const rows = await page.locator('#gpv-list .gpv-entry').count();

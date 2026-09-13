@@ -218,3 +218,13 @@ the alignment and selection code, and a suite nobody runs automatically protects
 - Large-archive handling makes deliberate trade-offs (lazy parsing, model release above 40 loaded
   models, skipping `full_data` PAE payloads above 25 models per archive, paged model list). These are
   documented in the [usage guide](docs/USAGE.md) so results are not silently incomplete.
+
+
+## Interface contact map (2.18.0)
+
+Residue pairs of two chains are contacts when any pair of heavy atoms (or, optionally, the two
+Cα atoms) lies within the cutoff; the recorded value is the closest such distance. The atom
+distance rule and grid search are the ones behind *Nearby residues*, whose results VALIDATION.md
+compares with Biopython's NeighborSearch. Hydrogens, water and hetero groups are excluded. The map
+is a description of one model's geometry, not evidence that the interface exists; the text next
+to the tool says so and points to the inter-chain PAE and interface pTM.

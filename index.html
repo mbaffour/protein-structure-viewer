@@ -954,6 +954,7 @@ html>body{padding:0}</style>
       <label class="form-label">Residue label<input class="form-control" id="gpv-label-text" type="text" placeholder="Custom label"></label>
       <button class="btn" type="button" id="gpv-add-label" disabled>Add or update</button>
       <label class="form-check form-switch"><input class="form-check-input" id="gpv-all-labels" type="checkbox"><span class="form-check-label">Label every residue</span></label>
+      <label class="form-label">Label style<select class="form-select" id="gpv-label-style" data-tooltip="Boxed labels read on any background; plain text suits clean figures where the box would hide the model"><option value="boxed">Boxed</option><option value="plain">Plain text</option></select></label>
       <button class="btn btn-ghost" type="button" id="gpv-clear-labels">Clear labels</button>
     </div>
     <div class="gpv-list" id="gpv-label-list" aria-label="Residue labels"></div>
@@ -1052,6 +1053,24 @@ html>body{padding:0}</style>
     </div>
     <p class="text-muted text-small gpv-hint">Every panel follows the others as you drag, spin, or rock. <strong>Rotation only</strong> keeps each model framed on its own centre, which suits assemblies of different size. <strong>Rotation and zoom</strong> locks the cameras completely, which suits superposed models of the same target after <em>Align visible</em>.</p>
     <div class="gpv-list" id="gpv-compare-panels" aria-label="Comparison panels"></div>
+    <details class="gpv-contacts" id="gpv-contacts" open>
+      <summary>Interface contact map</summary>
+      <div class="viz-controls">
+        <label class="form-label">Chain<select class="form-select" id="gpv-contact-a" aria-label="First chain"></select></label>
+        <label class="form-label">against chain<select class="form-select" id="gpv-contact-b" aria-label="Second chain"></select></label>
+        <label class="form-label">Atoms<select class="form-select" id="gpv-contact-atoms"><option value="heavy">Any heavy atom</option><option value="ca">Cα only</option></select></label>
+        <label class="form-label">Cutoff (Å)<input class="form-control" id="gpv-contact-cutoff" type="number" min="3" max="15" step="0.5" value="4.5"></label>
+        <button class="btn" type="button" id="gpv-contact-run" disabled data-tooltip="Residue pairs of the two chains with atoms closer than the cutoff, as a map: rows are the first chain, columns the second">Compute contacts</button>
+        <button class="btn" type="button" id="gpv-contact-highlight" disabled data-tooltip="Highlight every interface residue of both chains in the 3D view">Highlight interface</button>
+        <button class="btn" type="button" id="gpv-contact-png" disabled data-tooltip="Contact map with axes and title at 300 dpi">Download map PNG</button>
+        <button class="btn" type="button" id="gpv-contact-csv" disabled data-tooltip="One row per residue pair with the closest atom distance">Download contacts CSV</button>
+      </div>
+      <p class="text-small text-muted" id="gpv-contact-state">Show a model with two or more chains.</p>
+      <div id="gpv-contact-wrap" hidden>
+        <canvas class="gpv-contact-canvas" id="gpv-contact-canvas" width="560" height="560" role="img" aria-label="Residue contact map"></canvas>
+        <div class="text-small text-muted" id="gpv-contact-readout">Hover a cell to read the residue pair · click a contact to select both residues and zoom to them</div>
+      </div>
+    </details>
   </section>
 
   <section class="gpv-tool-panel" data-gpv-panel="confidence" hidden>
@@ -1204,6 +1223,7 @@ html>body{padding:0}</style>
       <h3>Tips for figures and reviewers</h3>
       <ul>
         <li><em>Publish → Write methods text</em> drafts a Methods paragraph stating exactly how the numbers on screen were computed (superposition, RMSD, RMSF, domains, contacts, dimensions, colour scales); every definition is cross-checked against Biopython in the repository's <code>VALIDATION.md</code>.</li>
+        <li><em>Compare → Interface contact map</em> draws every residue pair of two chains within a cutoff, closer pairs darker; hover reads the pair, a click selects both residues, <em>Highlight interface</em> colours the interface, and the map and pair list download as PNG and CSV. <em>Annotate → Label style</em> switches every label between boxed and plain text.</li>
         <li><em>Appearance → Outline</em> draws a silhouette line around every element (thin for most figures, bold for small panels) and <em>Depth cueing</em> fades the far side; both apply to panels and exports. In the composition table, <em>Faded</em> blends a chain into the background to spotlight the others. <em>Publish → Journal preset</em> sets width, resolution, text size and font from a journal's figure guide, and <em>Download one panel per model</em> renders every model from the same camera into one lettered figure.</li>
         <li>The <em>layout</em> button in the header (panel icon) switches between the side-panel workspace, where the 3D view stays pinned while you work in the scrolling tool panel, and the stacked layout. Drag the divider between them to give tables more room; double-click it to reset. Screens narrower than 1100 px always stack.</li>
         <li><em>Publish → Save session file</em> writes one ZIP with the models, confidence data, alignment, annotations, domains, views and settings; open it later with <em>Open session file</em> or by dropping it on the page, on any computer, with no other files. Scene JSON remains the light option that expects the original files.</li>
@@ -1297,6 +1317,9 @@ html>body{padding:0}</style>
   #generic-protein-viewer .gpv-provenance { margin: 0 0 12px; }
   #generic-protein-viewer .gpv-provenance summary { cursor: pointer; margin-bottom: 10px; }
   #generic-protein-viewer .gpv-legend[hidden] { display: none; }
+  #generic-protein-viewer .gpv-contacts { margin-top: 14px; }
+  #generic-protein-viewer .gpv-contacts > summary { cursor: pointer; font-weight: 600; margin-bottom: 8px; }
+  #generic-protein-viewer .gpv-contact-canvas { display: block; max-width: 100%; height: auto; border: 1px solid var(--border); border-radius: var(--radius-md); image-rendering: pixelated; cursor: crosshair; }
   #generic-protein-viewer .gpv-legend { display: flex; gap: 14px; flex-wrap: wrap; margin: 0 0 10px; color: var(--muted-foreground); }
   #generic-protein-viewer .gpv-legend span { display: inline-flex; align-items: center; gap: 5px; }
   #generic-protein-viewer .gpv-swatch { width: 12px; height: 12px; display: inline-block; border-radius: 2px; margin-right: 5px; vertical-align: -1px; }
@@ -1533,7 +1556,7 @@ html>body{padding:0}</style>
   let busyDepth = 0;
   let restoreMotion = null;
   const listPageSize = 60;
-  const viewerVersion = '2.17.0';
+  const viewerVersion = '2.18.0';
   const preferenceKey = 'protein-structure-viewer:preferences';
   const themeKey = 'protein-structure-viewer:theme';
   const labelColors = getComputedStyle(root);
@@ -2642,16 +2665,19 @@ html>body{padding:0}</style>
 
   function labelStyle(position, options = {}) {
     const color = /^#[0-9a-f]{6}$/i.test(options.color || '') ? options.color : null;
+    const plain = root.querySelector('#gpv-label-style').value === 'plain';
+    const background = backgroundSpec();
+    const onDark = background.alpha > 0 && hexLuminance(background.color) < 0.45;
     return {
       position,
       backgroundColor: labelColors.getPropertyValue('--card').trim() || '#ffffff',
-      fontColor: color || labelColors.getPropertyValue('--card-foreground').trim() || '#111827',
+      fontColor: color || (plain ? (onDark ? '#f8fafc' : '#111827') : (labelColors.getPropertyValue('--card-foreground').trim() || '#111827')),
       borderColor: color || labelColors.getPropertyValue('--border').trim() || '#cbd5e1',
-      borderThickness: 1,
+      borderThickness: plain ? 0 : 1,
       fontSize: Math.round((options.size || 12) * (options.scale || 1)),
       font: figureFont(),
       inFront: true,
-      showBackground: true
+      showBackground: !plain
     };
   }
 
@@ -4280,6 +4306,7 @@ html>body{padding:0}</style>
 
   function renderComposition() {
     const entry = activeEntry();
+    contactChainOptions(entry);
     const wrap = root.querySelector('#gpv-composition');
     if (!entry || !entry.model) { wrap.hidden = true; return; }
     wrap.hidden = false;
@@ -4324,6 +4351,155 @@ html>body{padding:0}</style>
     const groups = entityGroups(entry); const size = assemblyDimensions(entry);
     root.querySelector('#gpv-assembly-summary').textContent = (groups.length ? 'Stoichiometry: ' + groups.map(group => group.label + ' ×' + group.chains.length + ' (' + clipText(group.chains.join(', '), 30) + ', ' + group.length + ' aa)').join(' · ') : '')
       + (size ? (groups.length ? ' · ' : '') + 'Cα extent ' + (size.exact ? '' : '≥ ') + (size.extent / 10).toFixed(1) + ' nm · radius of gyration ' + (size.gyration / 10).toFixed(1) + ' nm' : '');
+  }
+
+
+  /* ---------- Interface contact map ----------
+     Residue pairs of two chains whose atoms come within a cutoff, drawn as a map with the
+     first chain down the side and the second along the top. The same heavy-atom distance
+     rule as the proximity tool, so the numbers cross-validate the same way. */
+  let contactResult = null;
+  const contactButtons = ['#gpv-contact-highlight', '#gpv-contact-png', '#gpv-contact-csv'];
+
+  function contactChainOptions(entry) {
+    const first = root.querySelector('#gpv-contact-a'); const second = root.querySelector('#gpv-contact-b');
+    const rows = entry && entry.model ? residueRows(entry) : [];
+    const previous = [first.value, second.value];
+    [first, second].forEach((select, index) => {
+      select.replaceChildren();
+      rows.forEach(row => { const option = document.createElement('option'); option.value = row.chain; option.textContent = (row.chain || '—') + ' · ' + row.residues.length + ' aa'; select.append(option); });
+      if (rows.some(row => row.chain === previous[index])) select.value = previous[index]; else if (rows[Math.min(index, rows.length - 1)]) select.value = rows[Math.min(index, rows.length - 1)].chain;
+    });
+    const ready = rows.length >= 2;
+    root.querySelector('#gpv-contact-run').disabled = !ready;
+    if (contactResult && (!entry || contactResult.entryId !== entry.id)) {
+      contactResult = null; root.querySelector('#gpv-contact-wrap').hidden = true; contactButtons.forEach(selector => { root.querySelector(selector).disabled = true; });
+    }
+    if (!contactResult) root.querySelector('#gpv-contact-state').textContent = !entry || !entry.model ? 'Show a model with two or more chains.' : ready ? 'Choose two chains and compute.' : displayName(entry) + ' has a single chain; a contact map needs two.';
+  }
+
+  function computeContacts() {
+    const entry = activeEntry(); if (!entry || !entry.model) return;
+    const chainA = root.querySelector('#gpv-contact-a').value; const chainB = root.querySelector('#gpv-contact-b').value;
+    if (chainA === chainB) { updateStatus('Pick two different chains for the contact map'); return; }
+    const mode = root.querySelector('#gpv-contact-atoms').value;
+    const cutoff = Math.min(15, Math.max(3, Number(root.querySelector('#gpv-contact-cutoff').value) || 4.5));
+    root.querySelector('#gpv-contact-cutoff').value = String(cutoff);
+    const rows = residueRows(entry); const rowA = rows.find(row => row.chain === chainA); const rowB = rows.find(row => row.chain === chainB);
+    if (!rowA || !rowB) return;
+    const pick = chain => heavyAtoms(entry).filter(atom => !atom.hetflag && !isWater(atom) && (atom.chain || '') === chain && (mode === 'heavy' || atom.atom === 'CA'));
+    const atomsA = pick(chainA); const atomsB = pick(chainB);
+    const indexA = new Map(rowA.residues.map((atom, i) => [atom.resi, i])); const indexB = new Map(rowB.residues.map((atom, i) => [atom.resi, i]));
+    const grid = spatialGrid(atomsB, cutoff); const limit = cutoff * cutoff;
+    const pairs = new Map();
+    atomsA.forEach(a => {
+      const i = indexA.get(a.resi); if (i === undefined) return;
+      grid.near(a).forEach(k => {
+        const b = atomsB[k]; const d2 = squaredDistance(a, b); if (d2 > limit) return;
+        const j = indexB.get(b.resi); if (j === undefined) return;
+        const key = i + '|' + j; const d = Math.sqrt(d2);
+        if (!pairs.has(key) || pairs.get(key) > d) pairs.set(key, d);
+      });
+    });
+    const residuesA = new Set(); const residuesB = new Set();
+    pairs.forEach((d, key) => { const [i, j] = key.split('|').map(Number); residuesA.add(rowA.residues[i].resi); residuesB.add(rowB.residues[j].resi); });
+    contactResult = { entryId: entry.id, chainA, chainB, rowA, rowB, mode, cutoff, pairs, residuesA: [...residuesA].sort((x, y) => x - y), residuesB: [...residuesB].sort((x, y) => x - y) };
+    drawContactMap(root.querySelector('#gpv-contact-canvas'));
+    root.querySelector('#gpv-contact-state').textContent = pairs.size + ' residue pair' + (pairs.size === 1 ? '' : 's') + ' within ' + cutoff + ' Å (' + (mode === 'ca' ? 'Cα–Cα' : 'any heavy atom') + ') · ' + residuesA.size + ' interface residue' + (residuesA.size === 1 ? '' : 's') + ' on chain ' + (chainA || '—') + ', ' + residuesB.size + ' on chain ' + (chainB || '—');
+    contactButtons.forEach(selector => { root.querySelector(selector).disabled = pairs.size === 0; });
+    root.querySelector('#gpv-contact-wrap').hidden = false;
+    root.querySelector('#gpv-contact-readout').textContent = 'Hover a cell to read the residue pair · click a contact to select both residues and zoom to them';
+    updateStatus('Contact map: ' + pairs.size + ' residue pairs between chains ' + (chainA || '—') + ' and ' + (chainB || '—') + ' within ' + cutoff + ' Å');
+  }
+
+  function contactCell(canvas) {
+    const n = contactResult.rowA.residues.length; const m = contactResult.rowB.residues.length;
+    return Math.max(2, Math.min(12, Math.floor(560 / Math.max(n, m))));
+  }
+
+  /* Rows: chain A residues (top to bottom); columns: chain B residues (left to right).
+     Closer pairs are darker. With `figure` the map gets margins, ticks, titles and a scale. */
+  function drawContactMap(canvas, figure = false, scale = 1) {
+    if (!contactResult) return;
+    const { rowA, rowB, pairs, cutoff, chainA, chainB } = contactResult;
+    const n = rowA.residues.length; const m = rowB.residues.length;
+    const cell = contactCell(canvas) * scale;
+    const margin = figure ? { left: 72 * scale, top: 54 * scale, right: 24 * scale, bottom: 64 * scale } : { left: 0, top: 0, right: 0, bottom: 0 };
+    canvas.width = Math.round(m * cell + margin.left + margin.right); canvas.height = Math.round(n * cell + margin.top + margin.bottom);
+    const context = canvas.getContext('2d');
+    const palette = figure ? { paper: '#ffffff', ink: '#111827', grid: '#e5e7eb' } : { paper: labelColors.getPropertyValue('--card').trim() || '#ffffff', ink: labelColors.getPropertyValue('--foreground').trim() || '#111827', grid: labelColors.getPropertyValue('--border').trim() || '#e5e7eb' };
+    context.fillStyle = palette.paper; context.fillRect(0, 0, canvas.width, canvas.height);
+    const near = '#1e3a8a'; const far = '#bfdbfe';
+    pairs.forEach((distance, key) => {
+      const [i, j] = key.split('|').map(Number);
+      context.fillStyle = mixHex(near, far, Math.max(0, Math.min(1, distance / cutoff)));
+      context.fillRect(margin.left + j * cell, margin.top + i * cell, Math.max(1, cell), Math.max(1, cell));
+    });
+    const step = n > 400 || m > 400 ? 100 : n > 150 || m > 150 ? 50 : n > 60 || m > 60 ? 25 : 10;
+    context.strokeStyle = palette.grid; context.lineWidth = 1;
+    rowB.residues.forEach((atom, j) => { if (atom.resi % step === 0) { context.beginPath(); context.moveTo(margin.left + j * cell + 0.5, margin.top); context.lineTo(margin.left + j * cell + 0.5, margin.top + n * cell); context.stroke(); } });
+    rowA.residues.forEach((atom, i) => { if (atom.resi % step === 0) { context.beginPath(); context.moveTo(margin.left, margin.top + i * cell + 0.5); context.lineTo(margin.left + m * cell, margin.top + i * cell + 0.5); context.stroke(); } });
+    if (!figure) return;
+    const font = figureFont(); const size = 11 * scale;
+    context.fillStyle = palette.ink; context.font = size + 'px ' + font; context.textAlign = 'center'; context.textBaseline = 'top';
+    rowB.residues.forEach((atom, j) => { if (atom.resi % step === 0) context.fillText(String(atom.resi), margin.left + j * cell + cell / 2, margin.top + n * cell + 6 * scale); });
+    context.textAlign = 'right'; context.textBaseline = 'middle';
+    rowA.residues.forEach((atom, i) => { if (atom.resi % step === 0) context.fillText(String(atom.resi), margin.left - 6 * scale, margin.top + i * cell + cell / 2); });
+    context.font = '600 ' + (12 * scale) + 'px ' + font; context.textAlign = 'center'; context.textBaseline = 'alphabetic';
+    context.fillText('Chain ' + (chainB || '—') + ' residue', margin.left + m * cell / 2, canvas.height - 14 * scale);
+    context.save(); context.translate(18 * scale, margin.top + n * cell / 2); context.rotate(-Math.PI / 2); context.fillText('Chain ' + (chainA || '—') + ' residue', 0, 0); context.restore();
+    context.font = '600 ' + (13 * scale) + 'px ' + font; context.textAlign = 'left';
+    const entry = entryById(contactResult.entryId);
+    context.fillText((entry ? displayName(entry) + ' · ' : '') + 'contacts within ' + cutoff + ' Å (' + (contactResult.mode === 'ca' ? 'Cα–Cα' : 'any heavy atom') + ') · ' + pairs.size + ' pairs', margin.left, 22 * scale);
+    /* distance scale */
+    const barX = canvas.width - margin.right - 120 * scale; const barY = 32 * scale; const barW = 100 * scale; const barH = 8 * scale;
+    for (let x = 0; x < barW; x += 1) { context.fillStyle = mixHex(near, far, x / barW); context.fillRect(barX + x, barY, 1, barH); }
+    context.font = (10 * scale) + 'px ' + font; context.fillStyle = palette.ink; context.textAlign = 'left'; context.textBaseline = 'top';
+    context.fillText('0 Å', barX, barY + barH + 2 * scale); context.textAlign = 'right'; context.fillText(cutoff + ' Å', barX + barW, barY + barH + 2 * scale);
+  }
+
+  function contactAt(event) {
+    if (!contactResult) return null;
+    const canvas = root.querySelector('#gpv-contact-canvas'); const rect = canvas.getBoundingClientRect();
+    const n = contactResult.rowA.residues.length; const m = contactResult.rowB.residues.length;
+    const i = Math.floor((event.clientY - rect.top) / rect.height * n); const j = Math.floor((event.clientX - rect.left) / rect.width * m);
+    if (i < 0 || j < 0 || i >= n || j >= m) return null;
+    return { i, j, a: contactResult.rowA.residues[i], b: contactResult.rowB.residues[j], distance: contactResult.pairs.get(i + '|' + j) };
+  }
+
+  function contactPairText(hit) {
+    const label = atom => (atom.chain ? atom.chain + ':' : '') + (atom.resn || '') + ' ' + atom.resi;
+    return label(hit.a) + ' — ' + label(hit.b) + (hit.distance === undefined ? ' · no contact' : ' · ' + hit.distance.toFixed(2) + ' Å');
+  }
+
+  function highlightContactInterface() {
+    if (!contactResult) return;
+    const entry = entryById(contactResult.entryId); if (!entry) return;
+    remember('interface highlight');
+    const color = root.querySelector('#gpv-interface-color').value;
+    selectionRecords.push({ id: nextAnnotationId++, entryId: entry.id, chain: contactResult.chainA, residues: contactResult.residuesA.slice(), action: 'highlight', color });
+    selectionRecords.push({ id: nextAnnotationId++, entryId: entry.id, chain: contactResult.chainB, residues: contactResult.residuesB.slice(), action: 'highlight', color });
+    renderSelectionList(); applyStyle();
+    updateStatus('Interface highlighted · ' + contactResult.residuesA.length + ' residues on chain ' + (contactResult.chainA || '—') + ', ' + contactResult.residuesB.length + ' on chain ' + (contactResult.chainB || '—'));
+  }
+
+  function downloadContactsCsv() {
+    if (!contactResult) return;
+    const entry = entryById(contactResult.entryId);
+    const rows = [['model', 'chain_a', 'resi_a', 'resn_a', 'chain_b', 'resi_b', 'resn_b', 'min_distance_angstrom', 'atoms', 'cutoff_angstrom']];
+    [...contactResult.pairs.entries()].map(([key, d]) => { const [i, j] = key.split('|').map(Number); return { a: contactResult.rowA.residues[i], b: contactResult.rowB.residues[j], d }; })
+      .sort((x, y) => x.a.resi - y.a.resi || x.b.resi - y.b.resi)
+      .forEach(pair => rows.push([entry ? displayName(entry) : '', contactResult.chainA, pair.a.resi, pair.a.resn || '', contactResult.chainB, pair.b.resi, pair.b.resn || '', pair.d.toFixed(3), contactResult.mode === 'ca' ? 'CA' : 'heavy', contactResult.cutoff]));
+    downloadBlob(rows.map(row => row.map(csvCell).join(',')).join('\n'), 'text/csv', 'contacts-' + (contactResult.chainA || 'x') + '-' + (contactResult.chainB || 'y') + '.csv');
+    updateStatus('Contacts CSV downloaded · ' + contactResult.pairs.size + ' pairs');
+  }
+
+  async function downloadContactPng() {
+    if (!contactResult) return;
+    const canvas = document.createElement('canvas');
+    drawContactMap(canvas, true, 3);
+    downloadBlob(await pngWithDpi(canvas.toDataURL('image/png'), 300), 'image/png', 'contact-map-' + (contactResult.chainA || 'x') + '-' + (contactResult.chainB || 'y') + '.png');
+    updateStatus('Contact map PNG downloaded · ' + canvas.width + ' × ' + canvas.height + ' at 300 dpi');
   }
 
   /* ---------- Go to residue ---------- */
@@ -4529,6 +4705,7 @@ html>body{padding:0}</style>
       sentences.push('Per-residue Cα deviation is the distance between paired Cα atoms after superposition.');
     }
     if (ensembleSpread) sentences.push('Model agreement was expressed per residue as the Cα root-mean-square fluctuation about the mean Cα position across the ' + ensembleSpread.count + ' superposed models, for residues present in at least two models.');
+    if (contactResult && contactResult.pairs.size) { const target = entryById(contactResult.entryId); sentences.push('Inter-chain contacts between chains ' + (contactResult.chainA || '—') + ' and ' + (contactResult.chainB || '—') + (target ? ' of ' + displayName(target) : '') + ' were defined as residue pairs with ' + (contactResult.mode === 'ca' ? 'Cα atoms' : 'any pair of heavy atoms') + ' within ' + contactResult.cutoff + ' Å; ' + contactResult.pairs.size + ' residue pairs (' + contactResult.residuesA.length + ' residues on chain ' + (contactResult.chainA || '—') + ', ' + contactResult.residuesB.length + ' on chain ' + (contactResult.chainB || '—') + ') met the criterion.'); }
     const domains = first && first.domains;
     if (domains && domains.domains.length) sentences.push('Domains were derived from the PAE matrix by greedy agglomeration of ten-residue segments: the pair with the lowest mean inter-segment PAE was merged while that mean stayed below ' + domains.cutoff + ' Å; groups of fewer than twenty residues were absorbed into the nearest domain when within twice the cutoff and otherwise left unassigned. This segmentation is a heuristic and differs from the graph clustering used by the AlphaFold Protein Structure Database.');
     if (nearbyResult && nearbyResult.residues) sentences.push('Contacting residues were defined as residues with any heavy atom within ' + nearbyResult.cutoff + ' Å of any heavy atom of the ' + (nearbyResult.mode === 'chain' ? 'target chain' : nearbyResult.mode === 'hetero' ? 'ligands and ions' : 'target residue') + ' (hydrogens and water excluded).');
@@ -5320,6 +5497,7 @@ html>body{padding:0}</style>
       projection: root.querySelector('#gpv-projection').value,
       outline: root.querySelector('#gpv-outline').value,
       fog: root.querySelector('#gpv-fog').checked,
+      labelStyle: root.querySelector('#gpv-label-style').value,
       background: root.querySelector('#gpv-background').value,
       backgroundColor: root.querySelector('#gpv-background-color').value,
       hideBelow: hideBelow(),
@@ -5513,6 +5691,7 @@ html>body{padding:0}</style>
     if (['perspective', 'orthographic'].includes(settings.projection)) root.querySelector('#gpv-projection').value = settings.projection;
     if (['none', 'thin', 'bold'].includes(settings.outline)) root.querySelector('#gpv-outline').value = settings.outline;
     if (typeof settings.fog === 'boolean') root.querySelector('#gpv-fog').checked = settings.fog;
+    if (['boxed', 'plain'].includes(settings.labelStyle)) root.querySelector('#gpv-label-style').value = settings.labelStyle;
     if ([0, 50, 70].includes(Number(settings.hideBelow))) root.querySelector('#gpv-hide-below').value = String(Number(settings.hideBelow));
     if (['stick', 'sphere', 'hide'].includes(settings.hetero)) root.querySelector('#gpv-hetero').value = settings.hetero;
     if (['none', 'translucent', 'opaque'].includes(settings.surface)) root.querySelector('#gpv-surface').value = settings.surface;
@@ -6727,6 +6906,7 @@ html>body{padding:0}</style>
     }));
     const chosenNames = new Set(chosen.map(entry => entry.name));
     const initial = {
+      labelStyle: root.querySelector('#gpv-label-style').value,
       panels: reportPanelNames().filter(name => chosenNames.has(name)),
       sync: root.querySelector('#gpv-sync-mode').value,
       camera: typeof viewer.getView === 'function' ? viewer.getView() : null,
@@ -6917,13 +7097,13 @@ function show(pane, preserveView) {
   m.setStyle({ resn: ['HOH', 'WAT', 'DOD', 'H2O', 'TIP', 'SOL'] }, {});
   if (Array.isArray(s.hiddenChains) && s.hiddenChains.length) m.setStyle({ chain: s.hiddenChains }, {});
   pane.rows = stripRows(m); drawStrip(pane, s);
-  (s.labels || []).forEach(l => pane.viewer.addLabel(l.text, { position: { x: l.x, y: l.y, z: l.z }, backgroundColor: '#fff', fontColor: l.color || '#111827', borderColor: l.color || '#94a3b8', borderThickness: 1, fontSize: l.size || 12, inFront: true }));
+  (s.labels || []).forEach(l => pane.viewer.addLabel(l.text, { position: { x: l.x, y: l.y, z: l.z }, backgroundColor: '#fff', fontColor: l.color || '#111827', borderColor: l.color || '#94a3b8', borderThickness: initial.labelStyle === 'plain' ? 0 : 1, showBackground: initial.labelStyle !== 'plain', fontSize: l.size || 12, inFront: true }));
   (s.shapes || []).forEach(sh => {
     if (sh.kind === 'arrow') pane.viewer.addArrow({ start: sh.start, end: sh.end, radius: sh.radius, radiusRatio: 2.2, mid: 0.72, color: sh.color });
     else if (sh.kind === 'cylinder') pane.viewer.addCylinder({ start: sh.start, end: sh.end, radius: sh.radius, color: sh.color, dashed: !!sh.dashed, fromCap: 1, toCap: 1 });
     else if (sh.kind === 'line') pane.viewer.addLine({ start: sh.start, end: sh.end, color: sh.color, dashed: !!sh.dashed, linewidth: 2 });
     else if (sh.kind === 'sphere') pane.viewer.addSphere({ center: sh.center, radius: sh.radius, color: sh.color, alpha: sh.alpha === undefined ? 1 : sh.alpha });
-    else if (sh.kind === 'label') pane.viewer.addLabel(sh.text, { position: sh.position, backgroundColor: '#fff', fontColor: sh.color || '#111827', borderColor: sh.color || '#94a3b8', borderThickness: 1, fontSize: Math.round(13 * (sh.size || 1)), inFront: true, backgroundOpacity: 0.85 });
+    else if (sh.kind === 'label') pane.viewer.addLabel(sh.text, { position: sh.position, backgroundColor: '#fff', fontColor: sh.color || '#111827', borderColor: sh.color || '#94a3b8', borderThickness: initial.labelStyle === 'plain' ? 0 : 1, showBackground: initial.labelStyle !== 'plain', fontSize: Math.round(13 * (sh.size || 1)), inFront: true, backgroundOpacity: 0.85 });
   });
   if (panes.indexOf(pane) === 0) (initial.screenText || []).forEach(t => {
     const w = pane.stage.clientWidth || 800, h = pane.stage.clientHeight || 480, margin = 16, right = t.corner.endsWith('right'), bottom = t.corner.startsWith('bottom');
@@ -7364,7 +7544,7 @@ applyBackground();
   /* ---------- Preference persistence ---------- */
 
   const persistedControls = [
-    '#gpv-style', '#gpv-color-mode', '#gpv-projection', '#gpv-outline', '#gpv-background', '#gpv-background-color', '#gpv-hetero',
+    '#gpv-style', '#gpv-color-mode', '#gpv-projection', '#gpv-outline', '#gpv-label-style', '#gpv-background', '#gpv-background-color', '#gpv-hetero',
     '#gpv-export-mode', '#gpv-print-width', '#gpv-print-aspect', '#gpv-print-dpi', '#gpv-print-text', '#gpv-figure-font', '#gpv-scale-bar',
     '#gpv-view-mode', '#gpv-order', '#gpv-alignment-mode', '#gpv-export-size', '#gpv-export-scale',
     '#gpv-panel-columns', '#gpv-video-length', '#gpv-cycle-speed', '#gpv-speed', '#gpv-report-scope'
@@ -7640,6 +7820,20 @@ applyBackground();
   root.querySelector('#gpv-save-scene').addEventListener('click', saveScene);
   root.querySelector('#gpv-save-session').addEventListener('click', downloadSessionFile);
   root.querySelector('#gpv-model-panels').addEventListener('click', downloadModelPanels);
+  root.querySelector('#gpv-contact-run').addEventListener('click', computeContacts);
+  root.querySelector('#gpv-contact-highlight').addEventListener('click', highlightContactInterface);
+  root.querySelector('#gpv-contact-csv').addEventListener('click', downloadContactsCsv);
+  root.querySelector('#gpv-contact-png').addEventListener('click', () => { downloadContactPng().catch(error => announce('Could not render the contact map: ' + error.message, 'error')); });
+  root.querySelector('#gpv-contact-canvas').addEventListener('pointermove', event => { const hit = contactAt(event); root.querySelector('#gpv-contact-readout').textContent = hit ? contactPairText(hit) : 'Hover a cell to read the residue pair'; });
+  root.querySelector('#gpv-contact-canvas').addEventListener('click', event => {
+    const hit = contactAt(event); if (!hit || hit.distance === undefined) return;
+    const entry = entryById(contactResult.entryId); if (!entry || !entry.model) return;
+    handleAtomClick(entry, hit.a);
+    const selection = { model: entry.model.getID(), or: [{ chain: hit.a.chain, resi: hit.a.resi }, { chain: hit.b.chain, resi: hit.b.resi }] };
+    try { viewer.zoomTo(selection); viewer.render(); syncViewsFrom(viewer); } catch (error) { /* selection syntax unsupported: keep the current view */ }
+    updateStatus(contactPairText(hit) + ' · selected');
+  });
+  root.querySelector('#gpv-label-style').addEventListener('change', applyStyle);
   root.querySelector('#gpv-open-session').addEventListener('change', async event => {
     const file = event.target.files[0]; if (!file) return;
     try { await openSessionFile(file); } catch (error) { announce('Could not open that session file: ' + error.message, 'error'); }
@@ -7911,7 +8105,7 @@ applyBackground();
   offerSessionRestore();
   /* ?debug=1 exposes a few internals for the regression suite and for bug reports;
      it has no effect otherwise. */
-  if (new URLSearchParams(location.search).has('debug')) window.__viewerDebug = { viewer, pickAtomAt, displayedEntries, activeEntry, colorOptions, sceneSettings, entries: () => structures, nearbyResidues, assemblyDimensions, paeDomains, parseConfidenceBytes, methodsText, alignmentResults: () => alignmentResults, ensembleSpread: () => ensembleSpread, siteResults: () => siteResults };
+  if (new URLSearchParams(location.search).has('debug')) window.__viewerDebug = { viewer, pickAtomAt, displayedEntries, activeEntry, colorOptions, sceneSettings, contactResult: () => contactResult, entries: () => structures, nearbyResidues, assemblyDimensions, paeDomains, parseConfidenceBytes, methodsText, alignmentResults: () => alignmentResults, ensembleSpread: () => ensembleSpread, siteResults: () => siteResults };
   applyTheme(readJson(themeKey, 'system'));
   selectToolTab('models');
   applyAppearance();

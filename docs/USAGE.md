@@ -8,6 +8,7 @@ interpretation caveats see [`SCIENTIFIC-AUDIT.md`](../SCIENTIFIC-AUDIT.md).
 
 - [Layout](#layout)
 - [Figure finishing](#figure-finishing)
+- [Interface contact map](#interface-contact-map)
 - [Getting structures in](#getting-structures-in)
 - [Keyboard shortcuts](#keyboard-shortcuts)
 - [Models tab](#models-tab)
@@ -330,6 +331,22 @@ the cameras completely, which suits superposed models after **Align visible**. *
 <kbd>F</kbd>) refits every panel. The panel set, sync mode, and each panel's camera are stored in saved
 views and scene manifests, and the shared report opens with the same panels.
 
+
+### Interface contact map
+
+At the foot of the Compare tab. Choose two chains of the current model, a **cutoff** (default
+4.5 Å) and whether **any heavy atom** or **Cα only** counts, then **Compute contacts**. Every
+residue pair whose atoms come within the cutoff is a cell in the map — the first chain runs down
+the side, the second along the top, and closer pairs are darker; faint lines mark every 10, 25,
+50 or 100 residues depending on chain length. Hover a cell to read the pair and the closest-atom
+distance; click a contact to select both residues and zoom to them. **Highlight interface** adds
+two selections, one per chain, in the interface colour. **Download map PNG** writes the map with
+axes, title and distance scale at 300 dpi; **Download contacts CSV** lists one row per pair with
+the closest-atom distance. The definition is the same heavy-atom distance rule as *Nearby
+residues*, which VALIDATION.md checks against Biopython, and the methods text states the rule and
+the counts. A predicted interface is still a prediction: read the contact map alongside the
+inter-chain PAE and the interface pTM before believing it.
+
 ## Confidence tab
 
 The metrics table lists mean pLDDT, pTM, ipTM, ranking score, rank, and clash flag per model, and
@@ -505,6 +522,12 @@ page shows *Restore your last session?* with the model count and time; **Restore
 not autosaved (the viewer says so once). The copy lives only in that browser profile; scene JSON,
 reports and share links remain the deliberate ways to keep or hand over work.
 
+
+
+**Label style (Annotate).** *Boxed* labels sit on a small card and read on any background;
+*Plain text* drops the card and border for clean figures where the box would cover the model.
+The choice applies to residue labels, measurements and callouts, is saved with scenes, and is
+carried into the shared report.
 
 ## Figure finishing
 

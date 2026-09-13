@@ -2,6 +2,23 @@
 
 All notable changes to this project are recorded here.
 
+## 2.18.0
+
+The interface, as a map.
+
+### Added
+
+- **Interface contact map** (Compare tab). Pick two chains of the current model, a cutoff and
+  whether any heavy atom or only Cα counts; the map shows every residue pair within the cutoff,
+  closer pairs darker, with the first chain down the side and the second along the top. Hover
+  reads the pair and distance; a click selects both residues and zooms to them. *Highlight
+  interface* colours every interface residue of both chains in the 3D view. Download the map as
+  a 300 dpi PNG with axes, title and distance scale, or the pairs as CSV with the closest-atom
+  distance. The methods text states the rule and the counts. Same distance definition as the
+  proximity tool, which is cross-validated in VALIDATION.md.
+- **Label style** (Annotate). *Boxed* or *plain text* for every residue label, measurement and
+  callout; saved with scenes and preferences, and carried into the shared report.
+
 ## 2.17.0
 
 Figures that read in print.
