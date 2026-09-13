@@ -4,7 +4,7 @@ This audit evaluates the viewer as a tool for comparing predicted structures, sh
 interactive review artefact, and preparing visual material for papers and theses. It is not a
 validation of any biological hypothesis, and nothing in the tool should be read as one.
 
-Audited against viewer version 2.8.0.
+Audited against viewer version 2.9.0.
 
 ## What is already strong
 
@@ -34,6 +34,10 @@ Audited against viewer version 2.8.0.
   alignment method and RMSD, ligand handling — which is the information reviewers most often find
   missing from structure figures. It is explicitly a draft.
 - Hetero groups are visible by default; a figure that silently drops a bound ligand or ion misleads.
+- PAE-derived domains are labelled as what they are: groups the model places together, found by a
+  simple greedy merge with a stated cutoff, not a structural domain definition and not evidence of
+  correct placement. The cutoff and the merging rule are stated in the interface and in the generated
+  figure legend so that a reader can judge the grouping.
 - The composition table makes the model's actual content — chains, lengths, ligands and ions —
   explicit before any figure is made, and hiding a chain is recorded in the scene manifest rather
   than happening silently.

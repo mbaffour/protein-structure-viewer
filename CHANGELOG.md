@@ -2,6 +2,31 @@
 
 All notable changes to this project are recorded here.
 
+## 2.9.0
+
+Reading the PAE matrix as structure, and giving reviewers the strip. Scenes from 2.2 onward still load.
+
+### Added
+
+- **PAE domains.** *Confidence → PAE domains* segments the current model into groups of residues that
+  the prediction places together: ten-residue segments are merged greedily, lowest mean PAE first,
+  while the mean PAE between groups stays below a chosen cutoff (4, 6 or 8 Å). Domains need at least twenty residues, may be
+  discontinuous and may span chains; smaller leftovers join the nearest domain or are reported as
+  unassigned. The table lists each domain's residue ranges per chain, size and
+  mean internal PAE, with a Highlight button per domain, *Highlight all*, and *Colour by domains* — a
+  new colour scheme (with legend) in the viewer, the strip, the panels and every export. Token
+  mapping follows AlphaFold 3 token ids when present and falls back to Cα order, so ligand tokens are
+  skipped. The figure legend describes the scheme and cutoff.
+- **Annotated domains.** *Annotate → Domains* names a region — chain (or all chains), residue
+  ranges, colour — and chooses how far it applies: this model only, every model from the same source
+  (one AlphaFold run), or every loaded model. *Colour by annotated domains* paints them in the viewer,
+  the strip, the panels, every export and the report, and the legend lists them by name. Names,
+  colours and scope are editable in the list; *Adopt PAE domains* turns the groups found in the
+  Confidence tab into named domains. Domains take part in undo, scene JSON and share links.
+- **Sequence strip in the report.** Every panel of the shared report carries a strip of its model's
+  residues coloured by the panel's colour scheme, one row per chain, hidden chains dimmed. Hovering
+  reads chain, residue and pLDDT; clicking zooms that panel to the residue.
+
 ## 2.8.0
 
 Working on assemblies and answering by number. Scenes from 2.2 onward still load; scene manifests gain

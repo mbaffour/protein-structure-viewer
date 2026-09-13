@@ -924,7 +924,7 @@ html>body{padding:0}</style>
     <div class="viz-controls gpv-presets"><span class="text-small text-muted">Presets</span><button class="btn" type="button" id="gpv-preset-thesis" data-tooltip="White background, orthographic cartoon, legend on exports, 1800 × 1200 at 2×">Thesis figure</button><button class="btn" type="button" id="gpv-preset-slide" data-tooltip="Dark background, perspective cartoon, colour by chain">Dark slide</button><button class="btn" type="button" id="gpv-preset-review" data-tooltip="pLDDT colouring with the legend, every residue shown, ligands as sticks">Confidence review</button></div>
     <div class="viz-controls">
       <label class="form-label">Representation<select class="form-select" id="gpv-style"><option value="cartoon">Cartoon</option><option value="stick">Sticks</option><option value="sphere">Spheres</option><option value="line">Lines</option></select></label>
-      <label class="form-label">Color scheme<select class="form-select" id="gpv-color-mode"><option value="structure">Per structure</option><option value="chain">Per chain</option><option value="plddt">pLDDT confidence</option><option value="deviation">Cα deviation after alignment</option><option value="charge">Residue charge</option><option value="hydrophobicity">Hydrophobicity (Kyte–Doolittle)</option><option value="restype">Residue type</option><option value="amino">Amino acid</option><option value="ss">Secondary structure</option><option value="spectrum">Sequence spectrum</option><option value="element">Element</option></select></label>
+      <label class="form-label">Color scheme<select class="form-select" id="gpv-color-mode"><option value="structure">Per structure</option><option value="chain">Per chain</option><option value="plddt">pLDDT confidence</option><option value="deviation">Cα deviation after alignment</option><option value="domain">PAE domains</option><option value="annotated">Annotated domains</option><option value="charge">Residue charge</option><option value="hydrophobicity">Hydrophobicity (Kyte–Doolittle)</option><option value="restype">Residue type</option><option value="amino">Amino acid</option><option value="ss">Secondary structure</option><option value="spectrum">Sequence spectrum</option><option value="element">Element</option></select></label>
       <label class="form-label">Low confidence<select class="form-select" id="gpv-hide-below" data-tooltip="Hide residues whose pLDDT is below the threshold — in the viewer, every panel and every export"><option value="0">Show every residue</option><option value="50">Hide pLDDT below 50</option><option value="70">Hide pLDDT below 70</option></select></label>
       <label class="form-label">Ligands and ions<select class="form-select" id="gpv-hetero" data-tooltip="How hetero groups — ligands, cofactors, ions, glycans — are drawn; water is never shown"><option value="stick">Sticks and spheres</option><option value="sphere">Spheres</option><option value="hide">Hidden</option></select></label>
       <label class="form-label">Surface<select class="form-select" id="gpv-surface" data-tooltip="Molecular surface coloured by the current scheme — charge or hydrophobicity on a surface reads like an electrostatics view"><option value="none">None</option><option value="translucent">Translucent surface</option><option value="opaque">Opaque surface</option></select></label>
@@ -955,6 +955,20 @@ html>body{padding:0}</style>
       <button class="btn btn-ghost" type="button" id="gpv-clear-selections">Clear selections</button>
     </div>
     <div class="gpv-list" id="gpv-selection-list" aria-label="Structure selections"></div>
+    <h3 class="gpv-subheading">Domains</h3>
+    <p class="text-muted text-small gpv-hint">Name a region, give it a colour, and choose how far it applies: this model only, every model from the same source (an AlphaFold run), or every loaded model. Colour by annotated domains paints them and lists them by name in the legend.</p>
+    <div class="viz-controls">
+      <label class="form-label">Domain name<input class="form-control" id="gpv-domain-name" type="text" placeholder="N-lobe" maxlength="60"></label>
+      <label class="form-label">Chain<input class="form-control" id="gpv-domain-chain" type="text" placeholder="all" maxlength="4"></label>
+      <label class="form-label">Residues<input class="form-control" id="gpv-domain-range" type="text" placeholder="1-75 or 1-75,120-140"></label>
+      <label class="form-label">Colour<input class="form-control form-control-color" id="gpv-domain-colour" type="color" value="#2563eb"></label>
+      <label class="form-label">Applies to<select class="form-select" id="gpv-domain-scope"><option value="source" selected>Every model from the same source</option><option value="model">This model only</option><option value="all">Every loaded model</option></select></label>
+      <button class="btn" type="button" id="gpv-add-domain" disabled>Add domain</button>
+      <button class="btn" type="button" id="gpv-domain-adopt" disabled data-tooltip="Turn the PAE domains found in the Confidence tab into named, editable domains">Adopt PAE domains</button>
+      <button class="btn" type="button" id="gpv-domain-paint" disabled data-tooltip="Switch the colour scheme to annotated domains">Colour by annotated domains</button>
+      <button class="btn btn-ghost" type="button" id="gpv-clear-domains">Clear domains</button>
+    </div>
+    <div class="gpv-list" id="gpv-domain-list" aria-label="Annotated domains"></div>
     <div class="viz-controls">
       <label class="form-label">Measurement<select class="form-select" id="gpv-measure-type"><option value="distance">Distance (2 atoms)</option><option value="angle">Angle (3 atoms)</option></select></label>
       <button class="btn" type="button" id="gpv-measure">Start measuring</button>
@@ -1007,6 +1021,16 @@ html>body{padding:0}</style>
       <div><div class="viz-controls"><button class="btn" type="button" id="gpv-confidence-csv">Download confidence CSV</button><button class="btn" type="button" id="gpv-profile-svg" disabled data-tooltip="Per-residue pLDDT plot of the displayed models, one panel per chain, as editable SVG">pLDDT profile SVG</button><button class="btn" type="button" id="gpv-profile-png" disabled data-tooltip="The same pLDDT profile rendered at 2× as PNG">pLDDT profile PNG</button></div><div class="table-responsive"><table class="table table-sm" aria-label="AlphaFold model confidence metrics"><thead><tr><th>Model</th><th class="text-end">Mean pLDDT</th><th class="text-end">pTM</th><th class="text-end">ipTM</th><th class="text-end">Ranking score</th><th class="text-end">Rank</th><th>Clash</th></tr></thead><tbody id="gpv-metrics"></tbody></table></div></div>
       <div class="gpv-pae-panel" id="gpv-pae-panel" hidden><div id="gpv-pae-plot" hidden><div class="viz-controls"><button class="btn" type="button" id="gpv-pae-png">Download PAE PNG</button></div><canvas id="gpv-pae" width="420" height="420" role="img" aria-label="Predicted aligned error heatmap"></canvas><div class="gpv-pae-legend text-small"><span>Low error</span><span>PAE (Å)</span><span>High error</span></div><div class="text-small" id="gpv-pae-detail">Move over the heatmap to inspect a residue pair.</div></div><div class="table-responsive" id="gpv-interface-wrap" hidden><table class="table table-sm" aria-label="Chain-pair interface confidence"><thead><tr><th>Chain pair</th><th class="text-end">ipTM</th><th class="text-end">Min PAE (Å)</th></tr></thead><tbody id="gpv-interface-metrics"></tbody></table></div></div>
     </div>
+    <h3 class="gpv-subheading">PAE domains</h3>
+    <p class="text-muted text-small gpv-hint">Residues whose predicted aligned error to one another is low are placed together in the prediction. Ten-residue segments are merged greedily while the mean PAE between groups stays below the cutoff. This reads the PAE matrix; it is not a structural domain assignment, and it says nothing about whether the placement is right.</p>
+    <div class="viz-controls">
+      <label class="form-label">PAE cutoff<select class="form-select" id="gpv-domain-cutoff"><option value="4">4 Å (strict)</option><option value="6" selected>6 Å</option><option value="8">8 Å (loose)</option></select></label>
+      <button class="btn" type="button" id="gpv-domain-run" disabled>Find domains</button>
+      <button class="btn" type="button" id="gpv-domain-color" disabled data-tooltip="Switch the colour scheme to PAE domains">Colour by domains</button>
+      <button class="btn" type="button" id="gpv-domain-highlight" disabled data-tooltip="Add one highlight selection per domain, in the domain colours">Highlight all</button>
+      <span class="text-muted text-small" id="gpv-domain-state">Show a model with a PAE matrix, then find its domains.</span>
+    </div>
+    <div class="table-responsive" id="gpv-domain-wrap" hidden><table class="table table-sm" aria-label="PAE-derived domains of the current model"><thead><tr><th>Domain</th><th>Residues</th><th class="text-end">Count</th><th class="text-end">Mean PAE within (Å)</th><th></th></tr></thead><tbody id="gpv-domain-rows"></tbody></table></div>
     <h3 class="gpv-subheading">Interfaces</h3>
     <p class="text-muted text-small gpv-hint">Geometry of the model as loaded: inter-chain heavy-atom contacts and buried surface area (Shrake–Rupley, 1.4 Å probe, 92 points per atom). A predicted interface is a hypothesis about an interaction, not evidence of one — read it next to the chain-pair ipTM and PAE above.</p>
     <div class="viz-controls">
@@ -1374,7 +1398,7 @@ html>body{padding:0}</style>
   let busyDepth = 0;
   let restoreMotion = null;
   const listPageSize = 60;
-  const viewerVersion = '2.8.0';
+  const viewerVersion = '2.9.0';
   const preferenceKey = 'protein-structure-viewer:preferences';
   const themeKey = 'protein-structure-viewer:theme';
   const labelColors = getComputedStyle(root);
@@ -1592,6 +1616,7 @@ html>body{padding:0}</style>
   }
 
   function drawPae(entry) {
+    renderDomains(entry);
     const panel = root.querySelector('#gpv-pae-panel');
     const plot = root.querySelector('#gpv-pae-plot');
     const matrix = entry && entry.confidence && entry.confidence.pae;
@@ -1903,6 +1928,8 @@ html>body{padding:0}</style>
     if (mode === 'chain') return { colorfunc: atom => chainColor(atom.chain) };
     if (mode === 'plddt') return { colorfunc: atom => plddtColor(Number(atom.b || 0)) };
     if (mode === 'deviation') return { colorfunc: atom => deviationColor(entry, atom) };
+    if (mode === 'domain') return { colorfunc: atom => domainColor(entry, atom) };
+    if (mode === 'annotated') return { colorfunc: atom => annotatedColor(entry, atom) };
     if (residueModes.includes(mode)) return { colorfunc: atom => residueColor(mode, atom) };
     if (mode === 'spectrum') return { colorscheme: 'spectrum' };
     if (mode === 'element') return { colorscheme: 'default' };
@@ -1979,6 +2006,7 @@ html>body{padding:0}</style>
     root.querySelector('#gpv-share-link').disabled = !structures.some(entry => entry.fetchId);
     root.querySelector('#gpv-fasta').disabled = structures.length === 0;
     root.querySelector('#gpv-copy-image').disabled = structures.length === 0;
+    root.querySelector('#gpv-add-domain').disabled = !activeEntry();
     root.querySelector('#gpv-figure-legend').disabled = structures.length === 0;
     const scored = structures.some(entry => entry.visible && entry.scores.length);
     root.querySelector('#gpv-profile-svg').disabled = !scored;
@@ -2841,7 +2869,7 @@ html>body{padding:0}</style>
   let redoStack = [];
 
   function snapshotRecords() {
-    return structuredClone({ labels: labelRecords, selections: selectionRecords, measurements: measurementRecords, annotations: annotationRecords });
+    return structuredClone({ labels: labelRecords, selections: selectionRecords, measurements: measurementRecords, annotations: annotationRecords, domains: domainRecords });
   }
 
   function renderHistoryButtons() {
@@ -2868,7 +2896,8 @@ html>body{padding:0}</style>
     selectionRecords = state.selections.filter(alive);
     measurementRecords = state.measurements.filter(record => record.points.every(alive));
     annotationRecords = state.annotations.filter(record => record.points.every(alive));
-    renderLabelList(); renderSelectionList(); renderMeasurementList(); renderAnnotationList();
+    domainRecords = (state.domains || []).filter(record => record.scope === 'all' || alive(record)); domainVersion += 1;
+    renderLabelList(); renderSelectionList(); renderMeasurementList(); renderAnnotationList(); renderDomainList();
     applyStyle();
   }
 
@@ -2937,6 +2966,8 @@ html>body{padding:0}</style>
     const mode = root.querySelector('#gpv-color-mode').value;
     if (mode === 'chain') return chainColor(atom.chain);
     if (mode === 'deviation') return deviationColor(entry, atom);
+    if (mode === 'domain') return domainColor(entry, atom);
+    if (mode === 'annotated') return annotatedColor(entry, atom);
     if (residueModes.includes(mode)) return residueColor(mode, atom);
     return entry.scores.length ? plddtColor(Number(atom.b || 0)) : entry.color;
   }
@@ -3094,7 +3125,7 @@ html>body{padding:0}</style>
     const multi = entries.length > 1;
     const total = planned.reduce((sum, item) => sum + item.row.residues.length, 0);
     const mode = root.querySelector('#gpv-color-mode').value;
-    const colourNote = mode === 'chain' ? ' · coloured by chain' : mode === 'deviation' ? ' · coloured by Cα deviation' : entries.some(entry => entry.scores.length) ? ' · coloured by pLDDT' : '';
+    const colourNote = mode === 'chain' ? ' · coloured by chain' : mode === 'deviation' ? ' · coloured by Cα deviation' : mode === 'domain' ? ' · coloured by PAE domains' : mode === 'annotated' ? ' · coloured by annotated domains' : residueModes.includes(mode) ? ' · coloured by ' + ({ charge: 'residue charge', hydrophobicity: 'hydrophobicity', restype: 'residue type', amino: 'amino acid', ss: 'secondary structure' })[mode] : entries.some(entry => entry.scores.length) ? ' · coloured by pLDDT' : '';
     const chainNote = planned.length > shown.length ? ' · first ' + shown.length + ' of ' + planned.length + ' rows' : '';
     const cut = hideBelow();
     const cutNote = cut && entries.some(entry => entry.scores.length) ? ' · pLDDT below ' + cut + ' hidden' : '';
@@ -3171,6 +3202,247 @@ html>body{padding:0}</style>
   function renderSequenceSoon() {
     if (sequenceFrame) return;
     sequenceFrame = requestAnimationFrame(() => { sequenceFrame = 0; renderSequence(); });
+  }
+
+  /* ---------- Annotated domains ---------- */
+
+  let domainRecords = [];
+  let domainVersion = 0;
+
+  function domainApplies(record, entry) {
+    if (record.scope === 'all') return true;
+    const owner = entryById(record.entryId);
+    if (!owner) return false;
+    if (record.scope === 'model') return owner.id === entry.id;
+    return owner.collection === entry.collection;
+  }
+
+  /* Per-entry lookup from chain|resi to the domain that claims it, rebuilt when the
+     records change. Earlier records win where definitions overlap. */
+  function domainLookup(entry) {
+    if (entry.domainCache && entry.domainCache.version === domainVersion) return entry.domainCache.map;
+    const map = new Map();
+    domainRecords.filter(record => domainApplies(record, entry)).forEach(record => {
+      const chains = record.chain ? [record.chain] : [...new Set(entry.atoms.map(atom => atom.chain || ''))];
+      chains.forEach(chain => record.residues.forEach(resi => { const key = chain + '|' + resi; if (!map.has(key)) map.set(key, record); }));
+    });
+    entry.domainCache = { version: domainVersion, map };
+    return map;
+  }
+
+  function annotatedColor(entry, atom) {
+    const record = domainLookup(entry).get(residueTag(atom));
+    return record ? record.color : '#9ca3af';
+  }
+
+  function domainRecordRanges(record) {
+    return (record.chain ? record.chain + ':' : '') + compactRange(record.residues);
+  }
+
+  const scopeNames = { model: 'this model', source: 'same source', all: 'all models' };
+
+  function addDomainRecord() {
+    const entry = activeEntry(); if (!entry) return;
+    const name = root.querySelector('#gpv-domain-name').value.trim();
+    const residues = parseResidueRange(root.querySelector('#gpv-domain-range').value);
+    if (!name) { updateStatus('Give the domain a name'); root.querySelector('#gpv-domain-name').focus(); return; }
+    if (!residues.length) { updateStatus('Enter a residue range such as 1-75 or 1-75,120-140'); root.querySelector('#gpv-domain-range').focus(); return; }
+    remember('domain');
+    domainRecords.push({ id: nextAnnotationId++, entryId: entry.id, name, color: root.querySelector('#gpv-domain-colour').value, chain: root.querySelector('#gpv-domain-chain').value.trim(), residues, scope: root.querySelector('#gpv-domain-scope').value });
+    domainVersion += 1;
+    root.querySelector('#gpv-domain-name').value = ''; root.querySelector('#gpv-domain-range').value = '';
+    root.querySelector('#gpv-domain-colour').value = domainColorFor(domainRecords.length + 1);
+    renderDomainList(); applyStyle();
+    updateStatus('Domain "' + name + '" added · applies to ' + scopeNames[root.querySelector('#gpv-domain-scope').value]);
+  }
+
+  function adoptPaeDomains() {
+    const entry = activeEntry();
+    if (!entry || !entry.domains || !entry.domains.domains.length) { updateStatus('Find PAE domains in the Confidence tab first'); return; }
+    remember('adopting PAE domains');
+    const scope = root.querySelector('#gpv-domain-scope').value;
+    entry.domains.domains.forEach(domain => {
+      const byChain = new Map();
+      domain.tags.forEach(tag => { const [chain, resi] = tag.split('|'); if (!byChain.has(chain)) byChain.set(chain, []); byChain.get(chain).push(Number(resi)); });
+      byChain.forEach((residues, chain) => domainRecords.push({ id: nextAnnotationId++, entryId: entry.id, name: 'Domain ' + domain.id, color: domainColorFor(domain.id), chain, residues: residues.sort((a, b) => a - b), scope }));
+    });
+    domainVersion += 1;
+    renderDomainList(); applyStyle();
+    updateStatus(entry.domains.domains.length + ' PAE domain' + (entry.domains.domains.length === 1 ? '' : 's') + ' adopted as named domains · rename or recolour them in the list');
+  }
+
+  function renderDomainList() {
+    const list = root.querySelector('#gpv-domain-list'); list.replaceChildren();
+    const active = activeEntry();
+    root.querySelector('#gpv-add-domain').disabled = !active;
+    root.querySelector('#gpv-domain-adopt').disabled = !(active && active.domains && active.domains.domains.length);
+    root.querySelector('#gpv-domain-paint').disabled = !domainRecords.length;
+    domainRecords.forEach(record => {
+      const owner = entryById(record.entryId);
+      const row = document.createElement('div'); row.className = 'gpv-entry';
+      const copy = document.createElement('span'); copy.className = 'gpv-edit-copy';
+      const name = document.createElement('input'); name.className = 'form-control'; name.type = 'text'; name.value = record.name; name.maxLength = 60; name.setAttribute('aria-label', 'Domain name');
+      name.addEventListener('change', () => { const value = name.value.trim(); if (!value) { name.value = record.name; return; } remember('domain name'); record.name = value; domainVersion += 1; applyStyle(); updateStatus('Domain renamed'); });
+      name.addEventListener('keydown', event => { if (event.key === 'Enter') { event.preventDefault(); name.blur(); } });
+      const where = document.createElement('span'); where.className = 'gpv-entry-source text-small';
+      where.textContent = domainRecordRanges(record) + ' · ' + (record.chain ? 'chain ' + record.chain : 'all chains') + ' · ' + scopeNames[record.scope] + (owner ? ' (' + displayName(owner) + (record.scope === 'source' && owner.collection ? ' · ' + owner.collection : '') + ')' : '');
+      copy.append(name, where);
+      const tools = document.createElement('span'); tools.className = 'gpv-edit-tools';
+      const color = document.createElement('input'); color.className = 'form-control form-control-color'; color.type = 'color'; color.value = record.color; color.setAttribute('aria-label', 'Domain colour');
+      color.addEventListener('input', () => { if (!color.dataset.remembered) { remember('domain colour'); color.dataset.remembered = '1'; } record.color = color.value; domainVersion += 1; applyStyle(); });
+      color.addEventListener('change', () => { delete color.dataset.remembered; });
+      const scope = document.createElement('select'); scope.className = 'form-select'; scope.setAttribute('aria-label', 'Where the domain applies');
+      [['source', 'Same source'], ['model', 'This model'], ['all', 'All models']].forEach(([value, label]) => scope.append(new Option(label, value)));
+      scope.value = record.scope;
+      scope.addEventListener('change', () => { remember('domain scope'); record.scope = scope.value; domainVersion += 1; renderDomainList(); applyStyle(); });
+      const remove = document.createElement('button'); remove.className = 'btn btn-ghost'; remove.type = 'button'; remove.textContent = 'Remove';
+      remove.addEventListener('click', () => { remember('domain removal'); domainRecords = domainRecords.filter(item => item !== record); domainVersion += 1; renderDomainList(); applyStyle(); updateStatus('Domain removed'); });
+      tools.append(color, scope, remove);
+      row.append(copy, tools); list.append(row);
+    });
+  }
+
+  /* ---------- PAE domains ---------- */
+
+  const domainPalette = ['#2563eb', '#f97316', '#16a34a', '#a855f7', '#ec4899', '#0891b2', '#ca8a04', '#dc2626', '#4f46e5', '#65a30d', '#0ea5e9', '#c026d3'];
+  const domainColorFor = id => domainPalette[(id - 1) % domainPalette.length];
+
+  /* Map PAE token index -> residue tag (chain|resi), or null for tokens that are not
+     protein residues (AlphaFold 3 ligand tokens, for example). */
+  function paeTokens(entry) {
+    const confidence = entry.confidence || {}; const matrix = confidence.pae;
+    if (!Array.isArray(matrix) || !matrix.length || !Array.isArray(matrix[0])) return null;
+    const size = matrix.length;
+    const protein = entry.atoms.filter(atom => atom.atom === 'CA' && !atom.hetflag);
+    const known = new Set(protein.map(residueTag));
+    if (Array.isArray(confidence.tokenChainIds) && Array.isArray(confidence.tokenResidueIds) && confidence.tokenChainIds.length === size) {
+      return confidence.tokenChainIds.map((chain, index) => { const tag = String(chain) + '|' + Number(confidence.tokenResidueIds[index]); return known.has(tag) ? tag : null; });
+    }
+    if (protein.length === size) return protein.map(residueTag);
+    const sorted = residueRows(entry).flatMap(row => row.residues);
+    if (sorted.length === size) return sorted.map(residueTag);
+    return null;
+  }
+
+  /* Greedy agglomerative segmentation: ten-residue segments merge, lowest mean PAE first,
+     while the mean PAE between groups stays below the cutoff. Discontinuous domains can form. */
+  function paeDomains(entry, cutoff) {
+    const tags = paeTokens(entry); if (!tags) return null;
+    const matrix = entry.confidence.pae;
+    const value = (i, j) => (Number(matrix[i][j]) + Number(matrix[j][i])) / 2;
+    const indices = []; tags.forEach((tag, i) => { if (tag) indices.push(i); });
+    if (indices.length < 20) return { domains: [], tags, cutoff, unassigned: indices.length, tagToDomain: new Map(), reason: 'fewer than 20 protein residues in the PAE matrix' };
+    const chainOf = i => tags[i].split('|')[0];
+    const segments = []; let current = [];
+    indices.forEach((i, position) => {
+      const previous = indices[position - 1];
+      const newChain = previous !== undefined && chainOf(previous) !== chainOf(i);
+      if (current.length && (current.length >= 10 || newChain)) { segments.push(current); current = []; }
+      current.push(i);
+    });
+    if (current.length) segments.push(current);
+    for (let k = segments.length - 1; k > 0; k -= 1) {
+      if (segments[k].length < 5 && chainOf(segments[k][0]) === chainOf(segments[k - 1][0])) { segments[k - 1] = segments[k - 1].concat(segments[k]); segments.splice(k, 1); }
+    }
+    const meanBetween = (a, b) => { let sum = 0; let count = 0; for (const i of a) for (const j of b) { sum += value(i, j); count += 1; } return sum / count; };
+    const groups = segments.map(segment => segment.slice());
+    const means = groups.map((g, i) => groups.map((h, j) => (i === j ? Infinity : meanBetween(g, h))));
+    while (groups.length > 1) {
+      let best = Infinity; let bi = -1; let bj = -1;
+      for (let i = 0; i < groups.length; i += 1) for (let j = i + 1; j < groups.length; j += 1) if (means[i][j] < best) { best = means[i][j]; bi = i; bj = j; }
+      if (best >= cutoff) break;
+      const ni = groups[bi].length; const nj = groups[bj].length;
+      groups[bi] = groups[bi].concat(groups[bj]);
+      for (let k = 0; k < groups.length; k += 1) {
+        if (k === bi || k === bj) continue;
+        const merged = (means[bi][k] * ni + means[bj][k] * nj) / (ni + nj);
+        means[bi][k] = merged; means[k][bi] = merged;
+      }
+      groups.splice(bj, 1); means.splice(bj, 1); means.forEach(row => row.splice(bj, 1));
+    }
+    /* A domain needs at least twenty residues; smaller leftovers join the nearest domain when
+       they are within twice the cutoff, and are otherwise reported as unassigned. */
+    const large = groups.filter(group => group.length >= 20); const small = groups.filter(group => group.length < 20);
+    let unassigned = 0;
+    small.forEach(group => {
+      let best = Infinity; let target = null;
+      large.forEach(candidate => { const m = meanBetween(group, candidate); if (m < best) { best = m; target = candidate; } });
+      if (target && best < cutoff * 2) target.push(...group); else unassigned += group.length;
+    });
+    const domains = large.map(group => group.sort((a, b) => a - b)).sort((a, b) => a[0] - b[0]).map((tokens, index) => {
+      const step = Math.max(1, Math.ceil(tokens.length / 200)); const sample = tokens.filter((_, i) => i % step === 0);
+      let sum = 0; let count = 0;
+      for (let x = 0; x < sample.length; x += 1) for (let y = x + 1; y < sample.length; y += 1) { sum += value(sample[x], sample[y]); count += 1; }
+      return { id: index + 1, tokens, tags: tokens.map(i => tags[i]), internal: count ? sum / count : 0 };
+    });
+    const tagToDomain = new Map(); domains.forEach(domain => domain.tags.forEach(tag => tagToDomain.set(tag, domain.id)));
+    return { domains, tags, cutoff, unassigned, tagToDomain };
+  }
+
+  function domainColor(entry, atom) {
+    const found = entry.domains; if (!found) return '#9ca3af';
+    const id = found.tagToDomain.get(residueTag(atom));
+    return id ? domainColorFor(id) : '#9ca3af';
+  }
+
+  function domainRanges(domain) {
+    const byChain = new Map();
+    domain.tags.forEach(tag => { const [chain, resi] = tag.split('|'); if (!byChain.has(chain)) byChain.set(chain, []); byChain.get(chain).push(Number(resi)); });
+    return [...byChain.entries()].sort((a, b) => compareChains(a[0], b[0])).map(([chain, residues]) => (chain ? chain + ':' : '') + compactRange(residues)).join(', ');
+  }
+
+  function findDomains() {
+    const entry = activeEntry(); if (!entry || !entry.model) return;
+    const cutoff = Number(root.querySelector('#gpv-domain-cutoff').value) || 6;
+    const tags = paeTokens(entry);
+    if (!tags) { announce('No PAE matrix maps onto the residues of ' + displayName(entry), 'error'); return; }
+    if (tags.length > 6000) { announce('The PAE matrix is too large to segment in the browser (' + tags.length + ' tokens)', 'error'); return; }
+    const done = setBusy('Segmenting PAE…');
+    try { entry.domains = paeDomains(entry, cutoff); } finally { done(); }
+    renderDomains(entry);
+    if (root.querySelector('#gpv-color-mode').value === 'domain') applyStyle();
+    const count = entry.domains ? entry.domains.domains.length : 0;
+    updateStatus(count + ' PAE domain' + (count === 1 ? '' : 's') + ' at ' + cutoff + ' Å in ' + displayName(entry));
+  }
+
+  function renderDomains(entry) {
+    const hasPae = Boolean(entry && entry.model && paeTokens(entry));
+    const found = entry && entry.domains;
+    root.querySelector('#gpv-domain-run').disabled = !hasPae;
+    root.querySelector('#gpv-domain-color').disabled = !found || !found.domains.length;
+    root.querySelector('#gpv-domain-highlight').disabled = !found || !found.domains.length;
+    root.querySelector('#gpv-domain-adopt').disabled = !found || !found.domains.length;
+    const wrap = root.querySelector('#gpv-domain-wrap'); const body = root.querySelector('#gpv-domain-rows'); body.replaceChildren();
+    const state = root.querySelector('#gpv-domain-state');
+    if (!entry || !entry.model) { wrap.hidden = true; state.textContent = 'Show a model with a PAE matrix, then find its domains.'; return; }
+    if (!hasPae) { wrap.hidden = true; state.textContent = displayName(entry) + ' has no PAE matrix that maps onto its residues.'; return; }
+    if (!found) { wrap.hidden = true; state.textContent = 'PAE loaded for ' + displayName(entry) + ' · choose a cutoff and find domains.'; return; }
+    wrap.hidden = !found.domains.length;
+    state.textContent = found.domains.length
+      ? found.domains.length + ' domain' + (found.domains.length === 1 ? '' : 's') + ' at ' + found.cutoff + ' Å' + (found.unassigned ? ' · ' + found.unassigned + ' residue' + (found.unassigned === 1 ? '' : 's') + ' unassigned' : '')
+      : 'No group of twenty or more residues stayed under ' + found.cutoff + ' Å' + (found.reason ? ' (' + found.reason + ')' : '') + '.';
+    found.domains.forEach(domain => {
+      const tr = document.createElement('tr');
+      const name = document.createElement('th'); const swatch = document.createElement('i'); swatch.className = 'gpv-swatch'; swatch.style.background = domainColorFor(domain.id);
+      name.append(swatch, 'Domain ' + domain.id); tr.append(name);
+      const ranges = document.createElement('td'); ranges.textContent = domainRanges(domain); tr.append(ranges);
+      const count = document.createElement('td'); count.className = 'text-end'; count.textContent = String(domain.tags.length); tr.append(count);
+      const internal = document.createElement('td'); internal.className = 'text-end'; internal.textContent = domain.internal.toFixed(2); tr.append(internal);
+      const action = document.createElement('td'); const highlight = document.createElement('button'); highlight.className = 'btn btn-ghost'; highlight.type = 'button'; highlight.textContent = 'Highlight';
+      highlight.addEventListener('click', () => highlightDomains(entry, [domain]));
+      action.append(highlight); tr.append(action); body.append(tr);
+    });
+  }
+
+  function highlightDomains(entry, domains) {
+    remember('domain highlight');
+    domains.forEach(domain => {
+      const byChain = new Map();
+      domain.tags.forEach(tag => { const [chain, resi] = tag.split('|'); if (!byChain.has(chain)) byChain.set(chain, []); byChain.get(chain).push(Number(resi)); });
+      byChain.forEach((residues, chain) => selectionRecords.push({ id: nextAnnotationId++, entryId: entry.id, chain, residues: residues.sort((a, b) => a - b), action: 'highlight', color: domainColorFor(domain.id) }));
+    });
+    renderSelectionList(); applyStyle();
+    updateStatus(domains.length + ' domain' + (domains.length === 1 ? '' : 's') + ' highlighted on ' + displayName(entry) + ' · manage them in Annotate → Selections');
   }
 
   /* ---------- Composition ---------- */
@@ -3365,7 +3637,9 @@ html>body{padding:0}</style>
       hydrophobicity: 'coloured by Kyte–Doolittle hydrophobicity (hydrophilic blue through white to hydrophobic orange)',
       restype: 'coloured by residue type (hydrophobic amber, aromatic purple, polar green, positive blue, negative red, Gly/Pro/Cys grey)',
       amino: 'coloured by amino acid identity (RasMol colours)',
-      ss: 'coloured by secondary structure (helix magenta, strand yellow, loop grey)'
+      ss: 'coloured by secondary structure (helix magenta, strand yellow, loop grey)',
+      domain: 'coloured by PAE-derived domains' + (shown[0] && shown[0].domains && shown[0].domains.domains.length ? ' (' + shown[0].domains.domains.length + ' domains; ten-residue segments merged while the mean PAE between groups stayed below ' + shown[0].domains.cutoff + ' Å; grey residues unassigned)' : ' (none computed)'),
+      annotated: 'coloured by annotated domains (' + (domainRecords.length ? [...new Map(domainRecords.map(record => [record.name, record])).values()].map(record => record.name + ' ' + domainRecordRanges(record) + ' ' + record.color).join('; ') : 'none defined') + '; other residues grey)'
     }[mode] || 'coloured per model';
     const surfaceChoice = root.querySelector('#gpv-surface').value;
     if (surfaceChoice !== 'none') colourText += ', with a ' + (surfaceChoice === 'translucent' ? 'translucent' : 'solid') + ' molecular surface in the same colours';
@@ -4176,6 +4450,7 @@ html>body{padding:0}</style>
       labels: labelRecords.filter(kept).map(label => ({ model: nameOf(label.entryId), chain: label.chain, resi: label.resi, atom: label.atom, text: label.text, color: label.color, size: label.size })),
       selections: selectionRecords.filter(kept).map(record => ({ model: nameOf(record.entryId), chain: record.chain, residues: record.residues, action: record.action, color: record.color })),
       measurements: measurementRecords.filter(keptPoints).map(record => ({ type: record.type, points: record.points.map(point) })),
+      domains: domainRecords.filter(record => record.scope === 'all' || kept(record)).map(record => ({ name: record.name, color: record.color, chain: record.chain, residues: record.residues, scope: record.scope, model: nameOf(record.entryId) })),
       annotations: annotationRecords.filter(keptPoints).map(record => ({ type: record.type, text: record.text, color: record.color, size: record.size, dashed: record.dashed, corner: record.corner, offset: record.offset, distance: record.distance, dx: record.dx, dy: record.dy, points: record.points.map(point) }))
     };
   }
@@ -4337,7 +4612,7 @@ html>body{padding:0}</style>
     const settings = scene.settings || {};
     if (['overlay', 'single'].includes(settings.viewMode)) root.querySelector('#gpv-view-mode').value = settings.viewMode;
     if (['cartoon', 'stick', 'sphere', 'line'].includes(settings.representation)) root.querySelector('#gpv-style').value = settings.representation;
-    if (['structure', 'chain', 'plddt', 'deviation', 'charge', 'hydrophobicity', 'restype', 'amino', 'ss', 'spectrum', 'element'].includes(settings.colorMode)) root.querySelector('#gpv-color-mode').value = settings.colorMode;
+    if (['structure', 'chain', 'plddt', 'deviation', 'domain', 'annotated', 'charge', 'hydrophobicity', 'restype', 'amino', 'ss', 'spectrum', 'element'].includes(settings.colorMode)) root.querySelector('#gpv-color-mode').value = settings.colorMode;
     if (['loaded', 'ranking', 'plddt'].includes(settings.modelOrder)) root.querySelector('#gpv-order').value = settings.modelOrder;
     if (['sequence', 'identifier'].includes(settings.alignmentMode)) root.querySelector('#gpv-alignment-mode').value = settings.alignmentMode;
     if (['perspective', 'orthographic'].includes(settings.projection)) root.querySelector('#gpv-projection').value = settings.projection;
@@ -4372,6 +4647,14 @@ html>body{padding:0}</style>
       const offset = record.offset && ['x', 'y', 'z'].every(axis => Number.isFinite(Number(record.offset[axis]))) ? { x: Number(record.offset.x), y: Number(record.offset.y), z: Number(record.offset.z) } : { x: 0, y: 0, z: 0 };
       return { id: nextAnnotationId++, type, points, text: String(record.text || ''), color: /^#[0-9a-f]{6}$/i.test(record.color || '') ? record.color : '#f97316', size: Math.min(3, Math.max(0.5, Number(record.size) || 1)), dashed: record.dashed === true, corner: screenCorners.includes(record.corner) ? record.corner : 'top-left', offset, distance: Number.isFinite(Number(record.distance)) ? Number(record.distance) : null, dx: Number(record.dx) || 0, dy: Number(record.dy) || 0 };
     }).filter(Boolean);
+    domainRecords = (scene.domains || []).map(record => {
+      const entry = byName.get(record.model) || (record.scope === 'all' ? structures[0] : null);
+      if (!entry || !record.name) return null;
+      const residues = (record.residues || []).map(Number).filter(Number.isFinite);
+      if (!residues.length) return null;
+      return { id: nextAnnotationId++, entryId: entry.id, name: String(record.name).slice(0, 60), color: /^#[0-9a-f]{6}$/i.test(record.color || '') ? record.color : domainColorFor(domainRecords.length + 1), chain: String(record.chain || ''), residues, scope: ['model', 'source', 'all'].includes(record.scope) ? record.scope : 'source' };
+    }).filter(Boolean);
+    domainVersion += 1;
     savedViews = (scene.savedViews || []).map(view => ({ ...view, id: nextAnnotationId++ }));
     root.querySelector('#gpv-all-labels').checked = settings.allResidueLabels === true;
     const provenance = scene.provenance || {};
@@ -4387,7 +4670,7 @@ html>body{padding:0}</style>
     if (['rotation', 'full'].includes(settings.syncMode)) root.querySelector('#gpv-sync-mode').value = settings.syncMode;
     setComparePanels(legacyPanelNames(settings).map(name => byName.get(name)).filter(Boolean));
     root.querySelector('#gpv-side-by-side').checked = settings.sideBySide === true;
-    renderLabelList(); renderSelectionList(); renderMeasurementList(); renderAnnotationList(); renderSavedViews(); applyAppearance();
+    renderLabelList(); renderSelectionList(); renderMeasurementList(); renderAnnotationList(); renderDomainList(); renderSavedViews(); applyAppearance();
     applyStyle();
     if (settings.alignmentApplied && reference) alignVisible();
     if (settings.camera && typeof viewer.setView === 'function') viewer.setView(settings.camera);
@@ -4582,7 +4865,7 @@ html>body{padding:0}</style>
     const active = byName.get(state.activeModel); if (active) activeId = active.id;
     if (['overlay', 'single'].includes(state.viewMode)) root.querySelector('#gpv-view-mode').value = state.viewMode;
     if (['cartoon', 'stick', 'sphere', 'line'].includes(state.representation)) root.querySelector('#gpv-style').value = state.representation;
-    if (['structure', 'chain', 'plddt', 'deviation', 'charge', 'hydrophobicity', 'restype', 'amino', 'ss', 'spectrum', 'element'].includes(state.colorMode)) root.querySelector('#gpv-color-mode').value = state.colorMode;
+    if (['structure', 'chain', 'plddt', 'deviation', 'domain', 'annotated', 'charge', 'hydrophobicity', 'restype', 'amino', 'ss', 'spectrum', 'element'].includes(state.colorMode)) root.querySelector('#gpv-color-mode').value = state.colorMode;
     if (['perspective', 'orthographic'].includes(state.projection)) root.querySelector('#gpv-projection').value = state.projection;
     if (['transparent', 'white', 'dark', 'custom'].includes(state.background)) root.querySelector('#gpv-background').value = state.background;
     if (/^#[0-9a-f]{6}$/i.test(state.backgroundColor || '')) root.querySelector('#gpv-background-color').value = state.backgroundColor;
@@ -4745,6 +5028,18 @@ html>body{padding:0}</style>
   function legendItems(kind = 'figure') {
     const mode = root.querySelector('#gpv-color-mode').value;
     if (residueLegends[mode]) return residueLegends[mode](kind);
+    if (mode === 'annotated') {
+      const active = sequenceEntry();
+      const applicable = active ? domainRecords.filter(record => domainApplies(record, active)) : domainRecords;
+      const seen = new Map(); applicable.forEach(record => { if (!seen.has(record.name)) seen.set(record.name, record); });
+      if (!seen.size) return { title: 'Domains', items: [['#9ca3af', 'none', 'No annotated domains yet — Annotate → Domains']] };
+      return { title: 'Domains', items: [...seen.values()].slice(0, 12).map(record => [record.color, clipText(record.name, 18), record.name + ' · ' + clipText(domainRecordRanges(record), 30)]) };
+    }
+    if (mode === 'domain') {
+      const active = sequenceEntry(); const found = active && active.domains;
+      if (!found || !found.domains.length) return { title: 'PAE domains', items: [['#9ca3af', 'none yet', 'No domains found yet — Confidence → Find domains']] };
+      return { title: 'PAE domains', items: [...found.domains.slice(0, 12).map(domain => [domainColorFor(domain.id), 'D' + domain.id, 'Domain ' + domain.id + ' · ' + clipText(domainRanges(domain), 36)]), ...(found.unassigned ? [['#9ca3af', 'other', 'Unassigned']] : [])] };
+    }
     if (mode === 'deviation') return { title: 'Cα deviation', items: [...deviationBands.map(([, color, label]) => [color, label]), ['#9ca3af', 'unmatched']] };
     if (mode === 'plddt') return { title: 'pLDDT', items: [['#ff7d45', '<50', 'Very low <50'], ['#ffdb13', '50–70', 'Low 50–70'], ['#65cbf3', '70–90', 'Confident 70–90'], ['#0053d6', '≥90', 'Very high ≥90']] };
     const shown = displayedEntries().filter(entry => entry.model);
@@ -5289,6 +5584,7 @@ html>body{padding:0}</style>
     const exported = chosen.map(entry => ({
       name: entry.name,
       label: displayName(entry),
+      collection: entry.collection || '',
       text: entry.text,
       format: entry.format,
       color: entry.color,
@@ -5314,6 +5610,7 @@ html>body{padding:0}</style>
     };
     const embed = value => JSON.stringify(value).replace(/</g, '\\u003c');
     const html = reportTemplate({
+      domains: JSON.stringify(domainRecords.map(record => { const owner = entryById(record.entryId); return { name: record.name, color: record.color, chain: record.chain, residues: record.residues, scope: record.scope, model: owner ? owner.name : null, collection: owner ? owner.collection || '' : '' }; })),
       chainColors: JSON.stringify(Object.fromEntries([...chainOrder.keys()].map(chain => [chain, chainColor(chain)]))),
       residueThemes: JSON.stringify(residueThemeTables()),
       heteroMode: JSON.stringify(root.querySelector('#gpv-hetero').value),
@@ -5362,6 +5659,8 @@ button{cursor:pointer}button:hover{filter:brightness(1.12)}button:disabled{opaci
 .stage{position:relative;overflow:hidden;background:#020617;border-radius:10px;border:2px solid transparent;height:60vh;min-height:220px}
 body[data-background='light'] .stage,body[data-background='white'] .stage{background:#e2e8f0}
 .pane.is-focused .stage{border-color:#339cff}
+.strip{display:block;width:100%;cursor:crosshair;border-radius:4px}
+.readout{font-size:12px;color:#94a3b8;min-height:16px}
 .stage canvas{display:block}
 #status{display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-top:8px;opacity:.85;font-size:.9rem}
 .legend{display:flex;gap:12px;flex-wrap:wrap;margin:8px 0;font-size:.85rem}
@@ -5382,13 +5681,13 @@ kbd{font:inherit;padding:0 5px;border:1px solid currentColor;border-radius:4px;f
 <button id='previous'>Previous</button><button id='next'>Next</button><button id='play'>Play cycle</button>
 <label>Interval (seconds)<input id='interval' type='number' min='0.5' max='20' step='0.5' value='2'></label>
 <label>Representation<select id='style'><option value='cartoon'>Cartoon</option><option value='stick'>Sticks</option><option value='sphere'>Spheres</option><option value='line'>Lines</option></select></label>
-<label>Colors<select id='colors'><option value='plddt'>pLDDT</option><option value='structure'>Model color</option><option value='chain'>Chain</option><option value='charge'>Residue charge</option><option value='hydrophobicity'>Hydrophobicity</option><option value='restype'>Residue type</option><option value='amino'>Amino acid</option><option value='ss'>Secondary structure</option><option value='spectrum'>Spectrum</option><option value='element'>Element</option></select></label>
+<label>Colors<select id='colors'><option value='plddt'>pLDDT</option><option value='structure'>Model color</option><option value='chain'>Chain</option><option value='charge'>Residue charge</option><option value='hydrophobicity'>Hydrophobicity</option><option value='restype'>Residue type</option><option value='amino'>Amino acid</option><option value='ss'>Secondary structure</option><option value='annotated'>Annotated domains</option><option value='spectrum'>Spectrum</option><option value='element'>Element</option></select></label>
 <label>Ligands<select id='hetero'><option value='stick'>Sticks</option><option value='sphere'>Spheres</option><option value='hide'>Hidden</option></select></label>
 <label>Background<select id='background'><option value='dark'>Dark</option><option value='light'>Light</option><option value='white'>White</option><option value='transparent'>Transparent</option></select></label>
 <button id='spin'>Spin</button><button id='fit'>Fit</button><button id='fullscreen'>Full screen</button><button id='png'>Download PNG</button><button id='video'>Record video</button>
 </div>
 <div id='caption' hidden></div>
-<div class='legend' id='legend'><span><i class='swatch vlow'></i>&lt;50</span><span><i class='swatch low'></i>50–70</span><span><i class='swatch conf'></i>70–90</span><span><i class='swatch vhigh'></i>≥90</span></div>
+<div class='legend' id='legend'><span><i class='swatch vlow'></i>&lt;50</span><span><i class='swatch low'></i>50–70</span><span><i class='swatch conf'></i>70–90</span><span><i class='swatch vhigh'></i>≥90</span></div><div class='legend' id='domain-legend' hidden></div>
 <div id='view'></div>
 <div id='status'><span id='name'></span><span id='score'></span><span id='model-confidence'></span><span id='position'></span></div>
 <div id='pae-wrap' hidden><canvas id='pae' width='360' height='360' aria-label='Predicted aligned error heatmap'></canvas><div id='pae-detail'>Predicted aligned error (Å)</div></div>
@@ -5400,6 +5699,7 @@ const savedViews=${data.views};
 const metadata=${data.metadata};
 const initial=${data.initial};
 const chainColors=${data.chainColors};
+const domainRecords=${data.domains};
 const residueThemes=${data.residueThemes};
 const initialHetero=${data.heteroMode};
 const el = id => document.getElementById(id);
@@ -5417,7 +5717,7 @@ savedViews.forEach((v, i) => { const o = document.createElement('option'); o.val
 const panelSelect = el('panels');
 for (let n = 1; n <= Math.min(MAX_PANES, Math.max(1, structures.length)); n++) panelSelect.append(new Option(n === 1 ? '1 panel' : n + ' panels', String(n)));
 if (['cartoon', 'stick', 'sphere', 'line'].includes(initial.representation)) el('style').value = initial.representation;
-if (['plddt', 'structure', 'chain', 'charge', 'hydrophobicity', 'restype', 'amino', 'ss', 'spectrum', 'element'].includes(initial.colorMode)) el('colors').value = initial.colorMode;
+if (['plddt', 'structure', 'chain', 'charge', 'hydrophobicity', 'restype', 'amino', 'ss', 'annotated', 'spectrum', 'element'].includes(initial.colorMode)) el('colors').value = initial.colorMode;
 if (['stick', 'sphere', 'hide'].includes(initialHetero)) el('hetero').value = initialHetero;
 el('sync').value = initial.sync === 'full' ? 'full' : 'rotation';
 el('video').textContent = 'Record ' + initial.seconds + 's video';
@@ -5441,6 +5741,7 @@ function styleSpec(s) {
   if (mode === 'chain') options = { colorfunc: a => chainColors[a.chain || ''] || '#9ca3af' };
   if (residueThemes[mode] && mode !== 'ss') options = { colorfunc: a => residueThemes[mode][String(a.resn || '').toUpperCase()] || residueThemes.fallback };
   if (mode === 'ss') options = { colorfunc: a => residueThemes.ss[a.ss] || residueThemes.ss.c };
+  if (mode === 'annotated') { const lookup = domainLookupFor(s); options = { colorfunc: a => { const r = lookup.get((a.chain || '') + '|' + a.resi); return r ? r.color : '#9ca3af'; } }; }
   if (mode === 'spectrum') options = { colorscheme: 'spectrum' };
   if (mode === 'element') options = { colorscheme: 'default' };
   if (rep === 'line') options.linewidth = 2;
@@ -5482,6 +5783,7 @@ function show(pane, preserveView) {
   m.setStyle({ hetflag: true }, het === 'hide' ? {} : het === 'sphere' ? { sphere: { scale: 0.35, colorscheme: 'default' } } : { stick: { radius: 0.25, colorscheme: 'default' }, sphere: { scale: 0.28, colorscheme: 'default' } });
   m.setStyle({ resn: ['HOH', 'WAT', 'DOD', 'H2O', 'TIP', 'SOL'] }, {});
   if (Array.isArray(s.hiddenChains) && s.hiddenChains.length) m.setStyle({ chain: s.hiddenChains }, {});
+  pane.rows = stripRows(m); drawStrip(pane, s);
   (s.labels || []).forEach(l => pane.viewer.addLabel(l.text, { position: { x: l.x, y: l.y, z: l.z }, backgroundColor: '#fff', fontColor: l.color || '#111827', borderColor: l.color || '#94a3b8', borderThickness: 1, fontSize: l.size || 12, inFront: true }));
   (s.shapes || []).forEach(sh => {
     if (sh.kind === 'arrow') pane.viewer.addArrow({ start: sh.start, end: sh.end, radius: sh.radius, radiusRatio: 2.2, mid: 0.72, color: sh.color });
@@ -5541,13 +5843,27 @@ function addPane(index) {
   const stats = document.createElement('span'); stats.className = 'pane-stats';
   head.append(select, stats);
   const stage = document.createElement('div'); stage.className = 'stage';
-  element.append(head, stage); el('view').append(element);
+  const strip = document.createElement('canvas'); strip.className = 'strip'; strip.setAttribute('role', 'img'); strip.setAttribute('aria-label', 'Sequence strip: residues coloured by the current scheme; click to zoom');
+  const readout = document.createElement('div'); readout.className = 'readout'; readout.textContent = 'Hover the strip to read a residue; click to zoom to it.';
+  element.append(head, stage, strip, readout); el('view').append(element);
   const viewer = $3Dmol.createViewer(stage, Object.assign({ backgroundColor: '#ffffff', backgroundAlpha: 0, antialias: true }, directContexts ? { row: 0, col: 0, rows: 1, cols: 1 } : {}));
-  const pane = { element, stage, select, stats, viewer, index, plddt: null };
+  const pane = { element, stage, strip, readout, select, stats, viewer, index, plddt: null, rows: [], mark: null };
+  strip.addEventListener('pointermove', e => {
+    const hit = stripHit(pane, e); if (!hit) return;
+    pane.mark = { row: hit.row, index: hit.index };
+    readout.textContent = (hit.chain ? 'Chain ' + hit.chain + ' · ' : '') + (hit.atom.resn || 'RES') + hit.atom.resi + (Number.isFinite(Number(hit.atom.b)) ? ' · pLDDT ' + Number(hit.atom.b).toFixed(1) : '') + ' · click to zoom';
+    drawStrip(pane, structures[pane.index]);
+  });
+  strip.addEventListener('pointerleave', () => { pane.mark = null; readout.textContent = 'Hover the strip to read a residue; click to zoom to it.'; drawStrip(pane, structures[pane.index]); });
+  strip.addEventListener('click', e => {
+    const hit = stripHit(pane, e); if (!hit) return;
+    const sel = { resi: hit.atom.resi }; if (hit.chain) sel.chain = hit.chain;
+    pane.viewer.zoomTo(sel); pane.viewer.render(); focusPane(pane);
+  });
   const bg = backgroundFor(el('background').value); viewer.setBackgroundColor(bg.color, bg.alpha);
   select.addEventListener('change', () => { stop(); pane.index = Number(select.value); show(pane, true); focusPane(pane); });
   stage.addEventListener('pointerdown', () => focusPane(pane));
-  new ResizeObserver(() => viewer.resize()).observe(stage);
+  new ResizeObserver(() => { viewer.resize(); drawStrip(pane, structures[pane.index]); }).observe(stage);
   panes.push(pane);
   return pane;
 }
@@ -5570,6 +5886,65 @@ function setPanels(count) {
   applySpin();
 }
 function shift(delta) { panes.forEach(p => { p.index += delta; show(p, true); }); }
+function domainAppliesTo(r, s) { return r.scope === 'all' || (r.scope === 'model' ? r.model === s.name : r.collection === (s.collection || '')); }
+function domainLookupFor(s) {
+  if (s.domainLookup) return s.domainLookup;
+  const map = new Map();
+  domainRecords.filter(r => domainAppliesTo(r, s)).forEach(r => { const chains = r.chain ? [r.chain] : null; (r.residues || []).forEach(resi => (chains || ['*']).forEach(c => { const key = c + '|' + resi; if (!map.has(key)) map.set(key, r); })); });
+  s.domainLookup = { get: key => map.get(key) || map.get('*|' + key.split('|')[1]) };
+  return s.domainLookup;
+}
+function refreshDomainLegend() {
+  const host = el('domain-legend'); if (!host) return;
+  const show = el('colors').value === 'annotated';
+  host.hidden = !show; host.replaceChildren();
+  if (!show) return;
+  const seen = new Map(); domainRecords.forEach(r => { if (!seen.has(r.name)) seen.set(r.name, r); });
+  if (!seen.size) { host.textContent = 'No annotated domains in this report.'; return; }
+  [...seen.values()].forEach(r => { const span = document.createElement('span'); const swatch = document.createElement('i'); swatch.className = 'swatch'; swatch.style.background = r.color; span.append(swatch, r.name); host.append(span); });
+}
+function stripRows(m) {
+  const byChain = new Map();
+  m.selectedAtoms({}).forEach(a => { if (a.hetflag || a.atom !== 'CA') return; const c = a.chain || ''; if (!byChain.has(c)) byChain.set(c, []); byChain.get(c).push(a); });
+  return [...byChain.entries()].map(([chain, atoms]) => ({ chain, atoms: atoms.sort((x, y) => x.resi - y.resi) })).filter(r => r.atoms.length > 1).slice(0, 12);
+}
+function stripColor(s, a) {
+  const mode = el('colors').value;
+  if (mode === 'plddt') return pcolor(Number(a.b || 0));
+  if (mode === 'chain') return chainColors[a.chain || ''] || '#9ca3af';
+  if (mode === 'ss') return residueThemes.ss[a.ss] || residueThemes.ss.c;
+  if (mode === 'annotated') { const r = domainLookupFor(s).get((a.chain || '') + '|' + a.resi); return r ? r.color : '#9ca3af'; }
+  if (residueThemes[mode]) return residueThemes[mode][String(a.resn || '').toUpperCase()] || residueThemes.fallback;
+  return s.color;
+}
+const STRIP_ROW = 12, STRIP_GAP = 3;
+function drawStrip(pane, s) {
+  if (!pane.strip || !s) return;
+  const rows = pane.rows || []; const canvas = pane.strip;
+  const width = Math.max(1, pane.stage.clientWidth); const ratio = window.devicePixelRatio || 1;
+  const height = rows.length ? rows.length * (STRIP_ROW + STRIP_GAP) - STRIP_GAP : 0;
+  canvas.hidden = !rows.length; canvas.style.height = height + 'px';
+  canvas.width = Math.round(width * ratio); canvas.height = Math.round(Math.max(1, height) * ratio);
+  const ctx = canvas.getContext('2d'); ctx.setTransform(ratio, 0, 0, ratio, 0, 0); ctx.clearRect(0, 0, width, Math.max(1, height));
+  const hidden = s.hiddenChains || [];
+  rows.forEach((row, r) => {
+    const cell = width / row.atoms.length; const y = r * (STRIP_ROW + STRIP_GAP);
+    ctx.globalAlpha = hidden.includes(row.chain) ? 0.25 : 1;
+    row.atoms.forEach((a, i) => { ctx.fillStyle = stripColor(s, a); ctx.fillRect(i * cell, y, Math.max(0.5, cell - (cell > 3 ? 1 : 0)), STRIP_ROW); });
+    ctx.globalAlpha = 1;
+  });
+  if (pane.mark && rows[pane.mark.row]) {
+    const row = rows[pane.mark.row]; const cell = width / row.atoms.length;
+    ctx.strokeStyle = '#f8fafc'; ctx.lineWidth = 2; ctx.strokeRect(pane.mark.index * cell, pane.mark.row * (STRIP_ROW + STRIP_GAP), Math.max(3, cell), STRIP_ROW);
+  }
+}
+function stripHit(pane, event) {
+  const rows = pane.rows || []; if (!rows.length) return null;
+  const box = pane.strip.getBoundingClientRect();
+  const r = Math.min(rows.length - 1, Math.max(0, Math.floor((event.clientY - box.top) / (STRIP_ROW + STRIP_GAP))));
+  const row = rows[r]; const index = Math.min(row.atoms.length - 1, Math.max(0, Math.floor((event.clientX - box.left) / Math.max(1, box.width) * row.atoms.length)));
+  return { row: r, index, atom: row.atoms[index], chain: row.chain };
+}
 function refreshAll() { panes.forEach(p => show(p, true)); }
 function stop() { clearInterval(timer); timer = 0; el('play').textContent = 'Play cycle'; }
 function play() { if (timer) { stop(); return; } const seconds = Math.max(0.5, Number(el('interval').value) || 2); timer = setInterval(() => shift(1), seconds * 1000); el('play').textContent = 'Pause cycle'; }
@@ -5656,7 +6031,8 @@ el('previous').onclick = () => { stop(); shift(-1); };
 el('next').onclick = () => { stop(); shift(1); };
 el('play').onclick = play;
 el('style').onchange = refreshAll;
-el('colors').onchange = () => { refreshAll(); el('legend').hidden = el('colors').value !== 'plddt'; };
+el('colors').onchange = () => { refreshAll(); el('legend').hidden = el('colors').value !== 'plddt'; refreshDomainLegend(); };
+refreshDomainLegend();
 el('hetero').onchange = () => refreshAll();
 el('background').onchange = applyBackground;
 el('spin').onclick = () => { spinning = !spinning; applySpin(); };
@@ -5970,6 +6346,7 @@ applyBackground();
     selectedResidue = null;
     clearHistory();
     labelRecords = [];
+    domainRecords = []; domainVersion += 1;
     selectionRecords = [];
     measurementRecords = [];
     measurementDraft = [];
@@ -6195,7 +6572,10 @@ applyBackground();
     'Open “Sequence letters” under the strip to read the one-letter sequence in blocks of ten, coloured by the current scheme. Click a letter to select that residue; Copy takes the chain to the clipboard.',
     'Models → Composition lists every chain of the current model with a show/hide switch and counts its ligands and ions — the quickest way to isolate one subunit of an assembly.',
     'Annotate → Go to: type B:45 (or just 45) to select that residue and zoom to it. Reviewers ask about residues by number; now you can answer by number.',
-    'Publish → Copy PNG to clipboard renders the publication figure and puts it straight into your paste buffer for a slide or a document.'
+    'Publish → Copy PNG to clipboard renders the publication figure and puts it straight into your paste buffer for a slide or a document.',
+    'Confidence → PAE domains groups residues that the prediction places together (low PAE to one another). Colour by domains or highlight them to see which parts of an assembly are predicted as a rigid unit.',
+    'Every panel of the shared report now carries a sequence strip: reviewers hover to read a residue and its pLDDT, and click to zoom the panel to it.',
+    'Annotate → Domains: name a region, pick its colour, and apply it to every model from the same AlphaFold run. Colour by annotated domains paints them and the legend lists them by name — in the viewer, every export and the report.'
   ];
   let tipIndex = Math.floor(Math.random() * tips.length);
   function renderTip() {
@@ -6214,6 +6594,14 @@ applyBackground();
   root.querySelector('#gpv-sequence-text').open = readJson(lettersKey, false) === true;
   root.querySelector('#gpv-sequence-text').addEventListener('toggle', () => { writeJson(lettersKey, root.querySelector('#gpv-sequence-text').open); renderSequence(); });
   root.querySelector('#gpv-fasta').addEventListener('click', downloadFasta);
+  root.querySelector('#gpv-domain-run').addEventListener('click', findDomains);
+  root.querySelector('#gpv-add-domain').addEventListener('click', addDomainRecord);
+  root.querySelector('#gpv-domain-range').addEventListener('keydown', event => { if (event.key === 'Enter') { event.preventDefault(); addDomainRecord(); } });
+  root.querySelector('#gpv-domain-adopt').addEventListener('click', adoptPaeDomains);
+  root.querySelector('#gpv-domain-paint').addEventListener('click', () => { const select = root.querySelector('#gpv-color-mode'); select.value = 'annotated'; select.dispatchEvent(new Event('change', { bubbles: true })); });
+  root.querySelector('#gpv-clear-domains').addEventListener('click', () => { if (domainRecords.length) remember('clearing domains'); domainRecords = []; domainVersion += 1; renderDomainList(); applyStyle(); updateStatus('Domains cleared'); });
+  root.querySelector('#gpv-domain-color').addEventListener('click', () => { const select = root.querySelector('#gpv-color-mode'); select.value = 'domain'; select.dispatchEvent(new Event('change', { bubbles: true })); });
+  root.querySelector('#gpv-domain-highlight').addEventListener('click', () => { const entry = activeEntry(); if (entry && entry.domains && entry.domains.domains.length) highlightDomains(entry, entry.domains.domains); });
   root.querySelector('#gpv-copy-image').addEventListener('click', () => { copyPublicationPng(); });
   root.querySelector('#gpv-goto-run').addEventListener('click', () => goToResidue(root.querySelector('#gpv-goto').value));
   root.querySelector('#gpv-goto').addEventListener('keydown', event => { if (event.key === 'Enter') { event.preventDefault(); goToResidue(root.querySelector('#gpv-goto').value); } });
@@ -6230,7 +6618,7 @@ applyBackground();
   openSharedScene();
   /* ?debug=1 exposes a few internals for the regression suite and for bug reports;
      it has no effect otherwise. */
-  if (new URLSearchParams(location.search).has('debug')) window.__viewerDebug = { viewer, pickAtomAt, displayedEntries, entries: () => structures };
+  if (new URLSearchParams(location.search).has('debug')) window.__viewerDebug = { viewer, pickAtomAt, displayedEntries, activeEntry, colorOptions, entries: () => structures };
   applyTheme(readJson(themeKey, 'system'));
   selectToolTab('models');
   applyAppearance();

@@ -62,6 +62,8 @@ when the data is there. Interactive PAE heatmaps with per-token inspection that 
 strip, PNG export, a downloadable confidence-metrics CSV, and a per-residue pLDDT profile figure
 (SVG or PNG, one panel per chain, every displayed model overlaid). Interface geometry per model: inter-chain heavy-atom contacts,
 interface residues, and Shrake–Rupley buried surface area, with one-click highlighting and CSV export.
+PAE-derived domains — groups of residues the prediction places together — as a table, a colour
+scheme, and one-click highlights.
 
 **Compare.** Sequence-aware Cα alignment (global Needleman–Wunsch per chain pair, greedily matched)
 or strict chain/residue-ID alignment, with per-model aligned-residue count, sequence identity, chain
@@ -75,7 +77,9 @@ to read it from the status bar. A sequence strip under the viewer draws every ch
 the current scheme: click a residue to select it, drag a range to fill the selection fields,
 double-click to zoom. A sequence-letters panel shows the one-letter sequence with residue numbers,
 clickable and copyable per chain.
-Type a residue number to go straight to it. Add or edit custom residue labels, or label every residue
+Type a residue number to go straight to it. Name domains by residue range and colour, apply one
+definition to every model of an AlphaFold run, and colour by them with a legend that lists them by
+name. Add or edit custom residue labels, or label every residue
 in the current model. Highlight or hide chain/residue
 ranges, and add atom-to-atom distance or three-atom angle measurements. Draw figure annotations —
 arrows, lines, residue markers, text callouts, and corner titles — that follow rotation and alignment
@@ -86,7 +90,8 @@ models display names for captions. Undo and redo every one of these changes.
 synchronized panel, SVG variants of both with labels, arrows, captions, and the colour legend
 (pLDDT bands, chains, or models) as editable vector layers, and 5-, 10-, or 15-second WebM spin-video export. Reusable named views with
 captions, multi-panel contact-sheet export, and caption-text export.
-Self-contained interactive HTML reports, share links that reopen models fetched by identifier
+Self-contained interactive HTML reports (each panel with a hover-to-read, click-to-zoom sequence
+strip), share links that reopen models fetched by identifier
 with the same camera, colours, labels, and annotations, and a figure-legend writer that drafts the
 legend from what is on screen. Reproducible scene manifests carrying SHA-256 structure-file
 hashes, camera, model state, colours, labels, selections, measurements, saved views, comparison and

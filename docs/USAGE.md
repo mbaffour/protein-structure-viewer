@@ -197,6 +197,18 @@ large ones.
 mix), then **Highlight** it in a chosen colour or **Hide** it. Leaving the chain blank applies the
 range to every chain.
 
+**Domains.** Name a region — for example *N-lobe*, chain blank for every chain or a chain ID for
+one, residues `1-75` or `1-75,120-140`, a colour — and choose where it applies: **Every model from the
+same source** (the models of one AlphaFold run, which share a sequence), **This model only**, or
+**Every loaded model**. **Add domain** stores it; the list lets you rename, recolour, re-scope or
+remove it, and every change can be undone. **Colour by annotated domains** switches the colour scheme
+so the domains are painted in their colours and everything else is grey; the legend under the viewer
+and on every export lists the domains by name, so a figure legend can point at "the N-lobe in blue"
+and the picture agrees. Where two definitions overlap, the earlier one wins. **Adopt PAE domains**
+takes the groups found under *Confidence → PAE domains* and turns them into named domains you can
+edit. Domains are stored in scene JSON, travel in share links, and the shared report offers the same
+colour scheme with a legend of names.
+
 **Measurements.** Choose distance (two atoms) or angle (three atoms), press **Start measuring**, and
 click the atoms in the viewport. Values update as coordinates change — so aligning models updates
 the distances between them. <kbd>Esc</kbd> leaves measurement mode.
@@ -221,6 +233,19 @@ confidence for every displayed model that carries pLDDT — one panel per chain,
 the model's colour, the four confidence bands shaded behind, residue numbers along the axis, and a
 legend of model names. The figure title comes from *Provenance*. The SVG is fully editable; the PNG is
 rendered at twice the nominal size. Up to eight models and twelve chains are plotted.
+
+**PAE domains.** With a model that carries a PAE matrix shown, choose a cutoff (4 Å strict, 6 Å,
+8 Å loose) and press **Find domains**. Ten-residue segments along each chain are merged greedily —
+the pair with the lowest mean PAE between them first — while that mean stays below the cutoff, so
+groups that the prediction places rigidly relative to one another end up together, even across
+chains or with gaps. A domain needs at least twenty residues; smaller leftovers join the nearest domain when they are
+within twice the cutoff and are otherwise reported as unassigned. The table gives each domain's
+residue ranges per chain, its size, and the mean PAE within it; **Highlight** adds a selection for one
+domain, **Highlight all** does so for every domain in the domain colours, and **Colour by domains**
+switches the colour scheme (the legend lists the domains). AlphaFold 3 token ids are honoured, so
+ligand tokens are skipped; for AlphaFold 2 and AlphaFold DB the tokens are matched to Cα atoms in
+file order. This is a reading of the PAE matrix — which parts the model treats as one unit — not a
+structural domain assignment, and it says nothing about whether that unit is placed correctly.
 
 ## Compare tab
 
@@ -313,7 +338,9 @@ every panel forward and backward or cycle automatically, spin and fit them toget
 background and the colour scheme (including residue charge, hydrophobicity, residue type, amino acid
 and secondary structure), show ligands as sticks or spheres or hide them, follow your guided views,
 read pLDDT and PAE for the focused panel, and export a stitched lettered PNG or a composite video of
-their own. Chains you hid stay hidden in the report.
+their own. Chains you hid stay hidden in the report. Under every panel a sequence strip shows the model's
+residues in the panel's colour scheme, one row per chain, hidden chains dimmed: hover to read chain,
+residue and pLDDT, click to zoom that panel to the residue.
 
 Two controls govern size and portability. **PAE in report** keeps the heatmaps at full detail (up to
 400 × 400), compacts them to 200 × 200, or omits them; the size estimate updates as you switch.

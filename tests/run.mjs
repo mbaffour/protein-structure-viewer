@@ -85,7 +85,7 @@ const tapStageCentre = async () => {
 };
 const group = name => console.log('\n' + name);
 
-await page.goto(base + '/index.html?debug=1');
+await page.goto(base + '/index.html?debug=1'); /* ?debug=1 exposes window.__viewerDebug, a read-only hook used to check colours */
 await page.waitForTimeout(2500);
 
 group('boot');
@@ -428,6 +428,25 @@ await step('overlay mode gives the strip one row per model and chain', async () 
   await page.selectOption('#gpv-view-mode', previous); await tab('annotate'); await page.waitForTimeout(500);
   if ((await page.locator('#gpv-sequence-rows canvas').count()) !== 2) throw new Error('did not return to a single model');
 });
+await step('a named domain applies across models from the same source and fills the legend', async () => {
+  await page.fill('#gpv-domain-name', 'N-lobe'); await page.fill('#gpv-domain-range', '1-15');
+  await page.selectOption('#gpv-domain-scope', 'source'); await page.click('#gpv-add-domain'); await page.waitForTimeout(400);
+  if ((await page.locator('#gpv-domain-list .gpv-entry').count()) !== 1) throw new Error('domain row missing');
+  await page.click('#gpv-domain-paint'); await page.waitForTimeout(500);
+  const legend = (await page.locator('#gpv-plddt-legend').textContent()) || '';
+  if (!/N-lobe/.test(legend)) throw new Error('legend: ' + legend);
+  const activeBefore = await page.inputValue('#gpv-current');
+  await page.keyboard.press('ArrowRight'); await page.waitForTimeout(600);
+  if ((await page.inputValue('#gpv-current')) === activeBefore) throw new Error('did not move to another model');
+  const legendOther = (await page.locator('#gpv-plddt-legend').textContent()) || '';
+  if (!/N-lobe/.test(legendOther)) throw new Error('domain did not apply to the sibling model: ' + legendOther);
+  const painted = await page.evaluate(() => { const v = window.__viewerDebug; if (!v) return 'no debug hook'; const entry = v.activeEntry(); const atom = entry.atoms.find(a => a.atom === 'CA' && a.resi === 5); return v.colorOptions(entry).colorfunc(atom); });
+  if (painted !== '#2563eb') throw new Error('residue 5 colour: ' + painted);
+  await page.keyboard.press('ArrowLeft'); await page.waitForTimeout(400);
+  await tab('appearance'); await page.selectOption('#gpv-color-mode', 'plddt'); await page.waitForTimeout(300); await tab('annotate');
+  await page.click('#gpv-domain-list .gpv-entry button:has-text("Remove")'); await page.waitForTimeout(300);
+  if (await page.locator('#gpv-domain-list .gpv-entry').count()) throw new Error('domain was not removed');
+});
 await step('undo and redo walk label changes back and forth', async () => {
   await page.fill('#gpv-label-text', 'Undo me'); await page.click('#gpv-add-label'); await page.waitForTimeout(300);
   const count = () => page.locator('#gpv-label-list .gpv-entry').count();
@@ -461,6 +480,31 @@ await step('the pLDDT profile SVG has a panel per chain and a path per model', a
   if (paths < 2) throw new Error('paths=' + paths);
   const png = page.waitForEvent('download', { timeout: 30000 });
   await page.click('#gpv-profile-png'); await png;
+});
+await step('PAE domains are found from a block-diagonal matrix', async () => {
+  const size = 60;
+  const pae = Array.from({ length: size }, (_, i) => Array.from({ length: size }, (_, j) => ((i < 30) === (j < 30) ? 2 + Math.abs(i - j) * 0.05 : 18 + Math.abs(i - j) * 0.02)));
+  const file = join(work, 'model_a.json');
+  await writeFile(file, JSON.stringify({ pae, max_predicted_aligned_error: 31.75 }));
+  await page.setInputFiles('#gpv-files', [file]); await page.waitForTimeout(1500);
+  await page.evaluate(() => { const select = document.querySelector('#gpv-current'); const option = [...select.options].find(item => /model_a/.test(item.textContent)); select.value = option.value; select.dispatchEvent(new Event('change', { bubbles: true })); });
+  await page.waitForTimeout(600);
+  await tab('confidence');
+  if (await page.locator('#gpv-domain-run').isDisabled()) throw new Error('Find domains stayed disabled: ' + (await page.locator('#gpv-domain-state').textContent()));
+  await page.click('#gpv-domain-run'); await page.waitForTimeout(800);
+  const rows = await page.locator('#gpv-domain-rows tr').count();
+  const state = (await page.locator('#gpv-domain-state').textContent()) || '';
+  console.log('       ' + state.trim());
+  if (rows !== 2) throw new Error('domains=' + rows + ' · ' + state);
+  const ranges = await page.locator('#gpv-domain-rows tr td').first().textContent();
+  if (!/A:1–30/.test(ranges || '')) throw new Error('domain 1 ranges: ' + ranges);
+  await page.click('#gpv-domain-color'); await page.waitForTimeout(500);
+  const legend = (await page.locator('#gpv-plddt-legend').textContent()) || '';
+  if (!/Domain 1/.test(legend) || !/Domain 2/.test(legend)) throw new Error('legend: ' + legend);
+  const before = await page.locator('#gpv-selection-list .gpv-entry').count();
+  await page.click('#gpv-domain-highlight'); await page.waitForTimeout(500);
+  if ((await page.locator('#gpv-selection-list .gpv-entry').count()) !== before + 2) throw new Error('highlight all did not add two selections');
+  await tab('appearance'); await page.selectOption('#gpv-color-mode', 'plddt'); await page.waitForTimeout(300); await tab('confidence');
 });
 await step('confidence CSV downloads', async () => {
   const download = page.waitForEvent('download', { timeout: 20000 });
@@ -688,7 +732,7 @@ if (reportPath) {
   await report.goto(base + '/report-local.html');
   await report.waitForTimeout(3000);
   await step('the report renders a canvas', async () => {
-    if (!(await report.evaluate(() => Boolean(document.querySelector('#view canvas'))))) throw new Error('no canvas');
+    if (!(await report.evaluate(() => Boolean(document.querySelector('#view .stage canvas'))))) throw new Error('no canvas');
   });
   await step('the report carries the provenance title', async () => {
     const title = await report.locator('#project-title').textContent();
@@ -699,7 +743,7 @@ if (reportPath) {
        positioned canvas out against the page and covered the whole toolbar. */
     const state = await report.evaluate(() => {
       const view = document.getElementById('view').getBoundingClientRect();
-      const canvas = document.querySelector('#view canvas');
+      const canvas = document.querySelector('#view .stage canvas');
       if (!canvas) return { ok: false, why: 'no canvas' };
       const box = canvas.getBoundingClientRect();
       const inside = box.top >= view.top - 2 && box.left >= view.left - 2
@@ -730,6 +774,26 @@ if (reportPath) {
   await step('report element colouring is selectable', async () => {
     await report.selectOption('#colors', 'element'); await report.waitForTimeout(800);
   });
+  await step('each report panel carries a sequence strip that zooms on click', async () => {
+    const strips = await report.locator('#view .strip').count(); const paneCount = await report.locator('#view .pane').count();
+    if (!strips || strips !== paneCount) throw new Error('strips=' + strips + ' panes=' + paneCount);
+    const box = await report.locator('#view .strip').first().boundingBox();
+    await report.mouse.move(box.x + box.width * 0.4, box.y + 6); await report.waitForTimeout(300);
+    const readout = (await report.locator('#view .readout').first().textContent()) || '';
+    if (!/ALA\d+/.test(readout)) throw new Error('readout: ' + readout);
+    const before = await report.evaluate(() => document.querySelector('#view .stage canvas').toDataURL());
+    await report.mouse.click(box.x + box.width * 0.4, box.y + 6); await report.waitForTimeout(900);
+    const after = await report.evaluate(() => document.querySelector('#view .stage canvas').toDataURL());
+    if (before === after) throw new Error('clicking the strip did not zoom the panel');
+    console.log('       ' + readout.trim());
+  });
+  await step('the report can colour by annotated domains and lists them', async () => {
+    await report.selectOption('#colors', 'annotated'); await report.waitForTimeout(600);
+    if (await report.locator('#domain-legend').isHidden()) throw new Error('domain legend hidden');
+    const text = (await report.locator('#domain-legend').textContent()) || '';
+    if (!/No annotated domains|[A-Za-z]/.test(text)) throw new Error('legend text: ' + text);
+    await report.selectOption('#colors', 'plddt'); await report.waitForTimeout(300);
+  });
   await step('the report offers residue themes and a ligand control', async () => {
     await report.selectOption('#colors', 'charge'); await report.waitForTimeout(600);
     await report.selectOption('#colors', 'ss'); await report.waitForTimeout(600);
@@ -739,13 +803,13 @@ if (reportPath) {
   });
   await step('the report shows two panels that rotate together', async () => {
     await report.selectOption('#panels', '2'); await report.waitForTimeout(1500);
-    if ((await report.locator('#view canvas').count()) !== 2) throw new Error('expected two canvases');
-    const before = await report.evaluate(() => document.querySelectorAll('#view canvas')[1].toDataURL());
-    const box = await report.locator('#view canvas').first().boundingBox();
+    if ((await report.locator('#view .stage canvas').count()) !== 2) throw new Error('expected two canvases');
+    const before = await report.evaluate(() => document.querySelectorAll('#view .stage canvas')[1].toDataURL());
+    const box = await report.locator('#view .stage canvas').first().boundingBox();
     await report.mouse.move(box.x + box.width / 2, box.y + box.height / 2); await report.mouse.down();
     await report.mouse.move(box.x + box.width / 2 + 120, box.y + box.height / 2 + 40, { steps: 10 }); await report.mouse.up();
     await report.waitForTimeout(900);
-    const after = await report.evaluate(() => document.querySelectorAll('#view canvas')[1].toDataURL());
+    const after = await report.evaluate(() => document.querySelectorAll('#view .stage canvas')[1].toDataURL());
     if (before === after) throw new Error('the second panel did not follow the drag');
     await report.click('#next', { timeout: 15000 }); await report.waitForTimeout(700);
     if (!/panel 1/.test(await report.locator('#position').textContent())) throw new Error('position lost its panel index');

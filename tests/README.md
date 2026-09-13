@@ -47,8 +47,11 @@ PSV_CHROMIUM=/opt/pw-browsers/chromium/chrome-linux/chrome npm test
   Thesis preset apply; hiding residues below pLDDT 70 changes the render and is named in the strip title;
   colour by chain lists the chains in the on-screen legend.
 - Compare: the Cα-deviation colour scheme shows its band legend.
-- Confidence: the pLDDT profile SVG has one panel per chain and a trace per model; the PNG variant downloads.
-- Annotate: the sequence strip lists both chains, a click selects a residue, a drag fills the
+- Confidence: the pLDDT profile SVG has one panel per chain and a trace per model; the PNG variant downloads;
+  a block-diagonal PAE matrix loaded as `model_a.json` yields two domains (A:1–30 and B), the domain
+  colour scheme lists them in the legend, and Highlight all adds two selections.
+- Annotate: a named domain (residues 1–15, same-source scope) paints the sibling model's residue 5
+  in its colour and appears in the legend on both models; the sequence strip lists both chains, a click selects a residue, a drag fills the
   selection range, Go to `B:12` selects that residue, the sequence-letters panel lists both chains with sixty clickable letters and a
   Copy button, overlay mode gives one row per model and chain; undo and redo (keyboard and buttons) walk a label change back and forth;
   residue-range highlight, blank chain meaning every chain, rejection of an
@@ -62,7 +65,8 @@ PSV_CHROMIUM=/opt/pw-browsers/chromium/chrome-linux/chrome npm test
   comparison SVG exports, an offline report that embeds the library
 - Interface: help via `?`, `?` not hijacked while typing, full screen, cycle button
   keeping its icon, invalid fetch identifier
-- Generated report: offers the residue colour themes and a ligand control; renders, carries provenance, **keeps its canvas inside `#view`**,
+- Generated report: colouring by annotated domains shows the domain legend; each panel carries a sequence strip whose hover names a residue and whose click zooms the panel;
+  offers the residue colour themes and a ligand control; renders, carries provenance, **keeps its canvas inside `#view`**,
   guided views, navigation by real click, play/pause, element colouring, two panels that
   rotate together under a real drag
 - Publish: copying the PNG to the clipboard reports an outcome; the figure legend names the models,
