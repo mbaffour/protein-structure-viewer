@@ -3,8 +3,10 @@
 A task-oriented walkthrough of the viewer. For an overview see the [README](../README.md); for the
 interpretation caveats see [`SCIENTIFIC-AUDIT.md`](../SCIENTIFIC-AUDIT.md).
 
+
 ## Contents
 
+- [Layout](#layout)
 - [Getting structures in](#getting-structures-in)
 - [Keyboard shortcuts](#keyboard-shortcuts)
 - [Models tab](#models-tab)
@@ -18,6 +20,18 @@ interpretation caveats see [`SCIENTIFIC-AUDIT.md`](../SCIENTIFIC-AUDIT.md).
 - [Working with large AlphaFold archives](#working-with-large-alphafold-archives)
 - [Validation](#validation)
 - [Troubleshooting](#troubleshooting)
+
+## Layout
+
+**Workspace (default on screens 1100 px and wider).** The 3D view, the status line and the
+sequence strip stay pinned in the left column; the tool tabs — Models, Appearance, Annotate,
+Compare, Confidence, Publish — sit in a panel on the right that scrolls on its own. The stage
+grows to fill the window height, so a colour change, a label or an alignment is visible the
+moment it is made. Drag the divider between the columns to give the panel more or less room
+(tables inside it scroll sideways when it is narrow); double-click the divider, or press Enter
+on it, to reset the width. The panel button in the header switches to the **stacked layout**,
+the single column, and back; the choice is remembered on this browser. Full screen still
+expands the 3D view alone. Screens narrower than 1100 px always use the stacked layout.
 
 ## Getting structures in
 

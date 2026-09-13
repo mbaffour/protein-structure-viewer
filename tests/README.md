@@ -81,6 +81,8 @@ PSV_CHROMIUM=/opt/pw-browsers/chromium/chrome-linux/chrome npm test
   copying the PNG to the clipboard reports an outcome; the figure legend names the models,
   representation and colouring; the methods text names the Kabsch superposition, the RMSD rule, the
   dimension definitions and the software versions.
+- Layout: at 1280 px the tool panel sits beside the pinned stage and scrolls on its own; the divider resizes it;
+  the header button switches to the stacked layout and the choice survives a reload; 900 px stacks.
 - Session: reloading the page offers to restore the autosaved session; Restore brings back every model and label;
   a session file downloads as a ZIP with `session.json` and reopens every model, label and PAE matrix both through
   *Open session file* and when dropped as a structure file.

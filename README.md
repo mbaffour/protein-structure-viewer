@@ -121,6 +121,13 @@ the size.
 The Publish tab shows the estimated report size before you build it — embedding a few hundred models
 produces a file that is slow to open, so narrow the selection when the report is for a reviewer.
 
+## Layout
+
+On a wide screen the viewer is a workspace: the 3D view, status and sequence stay pinned on
+the left while the tool tabs scroll in a panel on the right, so you see each change as you make
+it. Drag the divider to resize the panel; the header's panel button switches to the stacked
+layout and back, and the choice is remembered. Screens narrower than 1100 px always stack.
+
 ## Your work is kept
 
 **Session files.** *Publish → Save session file* writes one ZIP with the models, confidence data,

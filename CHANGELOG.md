@@ -2,6 +2,19 @@
 
 All notable changes to this project are recorded here.
 
+## 2.16.0
+
+See the model while you work.
+
+### Added
+
+- **Workspace layout.** On screens 1100 px and wider the 3D view, status line and sequence
+  strip stay pinned in the left column while the six tool tabs live in a scrolling panel on
+  the right, so every change is visible as it is made. The stage grows to fill the window
+  height. A header button switches to the stacked layout and back; the choice is remembered.
+  Drag the divider to resize the panel (double-click or Enter to reset); tables inside the
+  panel scroll sideways when it is narrow. Narrower screens keep the stacked layout.
+
 ## 2.15.0
 
 Save your progress as a file and pick it up anywhere.

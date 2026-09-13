@@ -102,6 +102,50 @@ await step('icons render from the inline set', async () => {
   if (count < 10) throw new Error('only ' + count + ' icons rendered');
 });
 
+group('layout');
+const layoutGeometry = () => page.evaluate(() => {
+  const rect = selector => document.querySelector(selector).getBoundingClientRect();
+  const stage = rect('#gpv-stage'); const panel = rect('#gpv-side-panel');
+  return { workspace: document.querySelector('#generic-protein-viewer').classList.contains('is-workspace'), sideBySide: panel.left >= stage.right - 1 && panel.top < stage.bottom, panelWidth: Math.round(panel.width), stageWidth: Math.round(stage.width) };
+});
+await step('at 1280 px the tool panel sits beside the pinned 3D view', async () => {
+  const geometry = await layoutGeometry();
+  if (!geometry.workspace || !geometry.sideBySide) throw new Error(JSON.stringify(geometry));
+  console.log('       stage ' + geometry.stageWidth + ' px · panel ' + geometry.panelWidth + ' px');
+});
+await step('the panel scrolls on its own while the page and the stage stay put', async () => {
+  await tab('publish');
+  const result = await page.evaluate(() => { const panel = document.querySelector('#gpv-side-panel'); panel.scrollTop = 500; return { panelScroll: panel.scrollTop, pageScroll: window.scrollY, stageTop: Math.round(document.querySelector('#gpv-stage').getBoundingClientRect().top) }; });
+  if (result.panelScroll < 100 || result.pageScroll !== 0 || result.stageTop < 0) throw new Error(JSON.stringify(result));
+  await page.evaluate(() => { document.querySelector('#gpv-side-panel').scrollTop = 0; }); await tab('models');
+});
+await step('dragging the divider widens the panel', async () => {
+  const before = (await layoutGeometry()).panelWidth;
+  const box = await page.locator('#gpv-splitter').boundingBox();
+  await page.mouse.move(box.x + 5, box.y + 150); await page.mouse.down(); await page.mouse.move(box.x - 120, box.y + 150, { steps: 6 }); await page.mouse.up(); await page.waitForTimeout(300);
+  const after = (await layoutGeometry()).panelWidth;
+  if (after < before + 80) throw new Error(before + ' -> ' + after);
+  await page.dblclick('#gpv-splitter'); await page.waitForTimeout(300);
+  if (Math.abs((await layoutGeometry()).panelWidth - before) > 4) throw new Error('reset failed');
+});
+await step('the header button switches to the stacked layout and the choice survives a reload', async () => {
+  await page.click('#gpv-layout'); await page.waitForTimeout(400);
+  let geometry = await layoutGeometry();
+  if (geometry.workspace || geometry.sideBySide) throw new Error(JSON.stringify(geometry));
+  await page.reload(); await page.waitForTimeout(2000);
+  geometry = await layoutGeometry();
+  if (geometry.workspace) throw new Error('stacked layout not remembered');
+  await page.click('#gpv-layout'); await page.waitForTimeout(400);
+  if (!(await layoutGeometry()).workspace) throw new Error('could not return to the workspace layout');
+});
+await step('a 900 px window falls back to the stacked layout', async () => {
+  await page.setViewportSize({ width: 900, height: 1000 }); await page.waitForTimeout(500);
+  const narrow = await layoutGeometry();
+  await page.setViewportSize({ width: 1280, height: 1000 }); await page.waitForTimeout(500);
+  const wide = await layoutGeometry();
+  if (narrow.sideBySide || !wide.sideBySide) throw new Error(JSON.stringify({ narrow, wide }));
+});
+
 group('import');
 await page.setInputFiles('#gpv-files', models);
 await page.waitForTimeout(2500);

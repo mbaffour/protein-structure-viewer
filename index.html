@@ -822,6 +822,7 @@ html>body{padding:0}</style>
       </span>
     </div>
     <div class="gpv-header-actions">
+      <button class="btn btn-ghost gpv-icon-btn" type="button" id="gpv-layout" data-tooltip="Switch between the side-panel workspace and the stacked layout" aria-label="Layout: side panel" aria-pressed="true"><i data-icon="panel-right" aria-hidden="true"></i></button>
       <button class="btn btn-ghost gpv-icon-btn" type="button" id="gpv-theme" data-tooltip="Switch between system, light, and dark appearance" aria-label="Appearance: follow system"><i data-icon="monitor" aria-hidden="true"></i><span class="gpv-theme-text">System</span></button>
       <button class="btn btn-ghost gpv-icon-btn" type="button" id="gpv-help-open" data-tooltip="Keyboard shortcuts and quick help (?)" aria-label="Open help"><i data-icon="circle-help" aria-hidden="true"></i><span class="gpv-hide-narrow">Help</span></button>
     </div>
@@ -847,6 +848,8 @@ html>body{padding:0}</style>
   </div>
   <div class="text-destructive text-small" id="gpv-import-errors" hidden role="alert"></div>
 
+  <div class="gpv-workspace" id="gpv-workspace">
+  <div class="gpv-stage-column" id="gpv-stage-column">
   <div class="viz-controls gpv-primary" aria-label="Primary viewer controls">
     <label class="form-label gpv-current-label">Current model
       <select class="form-select" id="gpv-current" disabled><option>No models loaded</option></select>
@@ -887,6 +890,9 @@ html>body{padding:0}</style>
   <div class="gpv-tip text-small" id="gpv-tip" hidden><i data-icon="info" aria-hidden="true"></i><span id="gpv-tip-text"></span><button class="btn btn-ghost" type="button" id="gpv-tip-next">Next tip</button><button class="btn btn-ghost gpv-icon-btn" type="button" id="gpv-tip-hide" aria-label="Hide tips"><i data-icon="x" aria-hidden="true"></i></button></div>
 
   <div class="gpv-legend text-small" id="gpv-plddt-legend" hidden aria-label="Colour legend"></div>
+  </div>
+  <div class="gpv-splitter" id="gpv-splitter" role="separator" aria-orientation="vertical" aria-label="Resize the tool panel" tabindex="0" title="Drag to resize the tool panel"></div>
+  <aside class="gpv-side-panel" id="gpv-side-panel" aria-label="Tool panel">
 
   <div class="viz-controls gpv-tabs" role="tablist" aria-label="Viewer tools">
     <button class="btn" type="button" role="tab" aria-selected="true" data-gpv-tab="models"><i data-icon="layers-3" aria-hidden="true"></i>Models</button>
@@ -1138,6 +1144,9 @@ html>body{padding:0}</style>
     <details class="gpv-provenance" open><summary>Provenance and reproducible scene</summary><div class="viz-controls"><label class="form-label">Figure or project title<input class="form-control" id="gpv-project-title" type="text"></label><label class="form-label">Model source or run<input class="form-control" id="gpv-project-source" type="text" placeholder="Job, accession, or run ID"></label><label class="form-label">Method and version<input class="form-control" id="gpv-project-method" type="text" placeholder="For example AlphaFold 3"></label><label class="form-label">Notes<textarea class="form-control" id="gpv-project-notes" rows="2"></textarea></label></div><div class="viz-controls"><button class="btn" type="button" id="gpv-save-scene" disabled>Download scene JSON</button><label class="form-label">Restore scene JSON<input class="form-control" id="gpv-load-scene" type="file" accept=".json"></label></div><div class="viz-controls"><button class="btn" type="button" id="gpv-save-session" disabled data-tooltip="Save everything — models, confidence data, alignment, annotations, domains, views and settings — as one ZIP you can reopen later or on another computer">Save session file</button><label class="form-label">Open session file<input class="form-control" id="gpv-open-session" type="file" accept=".zip"></label><span class="text-muted text-small" id="gpv-session-note">A session file carries the models themselves, so it reopens with no other files. Scene JSON is the light alternative that expects the original files.</span></div></details>
   </section>
 
+  </aside>
+  </div>
+
   <div class="gpv-toasts" id="gpv-toasts" aria-live="polite" aria-atomic="false"></div>
 
   <dialog class="gpv-dialog" id="gpv-help">
@@ -1191,6 +1200,7 @@ html>body{padding:0}</style>
       <h3>Tips for figures and reviewers</h3>
       <ul>
         <li><em>Publish → Write methods text</em> drafts a Methods paragraph stating exactly how the numbers on screen were computed (superposition, RMSD, RMSF, domains, contacts, dimensions, colour scales); every definition is cross-checked against Biopython in the repository's <code>VALIDATION.md</code>.</li>
+        <li>The <em>layout</em> button in the header (panel icon) switches between the side-panel workspace, where the 3D view stays pinned while you work in the scrolling tool panel, and the stacked layout. Drag the divider between them to give tables more room; double-click it to reset. Screens narrower than 1100 px always stack.</li>
         <li><em>Publish → Save session file</em> writes one ZIP with the models, confidence data, alignment, annotations, domains, views and settings; open it later with <em>Open session file</em> or by dropping it on the page, on any computer, with no other files. Scene JSON remains the light option that expects the original files.</li>
         <li>Large AlphaFold 3 archives open whole: the confidence files are scanned byte by byte, the unused contact matrix is skipped and the PAE is kept compactly, so a five-model, 4 400-token assembly stays well under a gigabyte of memory.</li>
         <li>Colour by <strong>pLDDT confidence</strong> and switch to <strong>orthographic</strong> projection for publication panels; perspective exaggerates whatever is closest to the camera.</li>
@@ -1389,6 +1399,36 @@ html>body{padding:0}</style>
 
   @media (max-width: 680px) { #generic-protein-viewer .gpv-confidence-layout, #generic-protein-viewer .gpv-view-grid.is-comparing, #generic-protein-viewer .gpv-import-state, #generic-protein-viewer .gpv-drop.is-compact { grid-template-columns: 1fr; } }
   @media (max-width: 560px) { #generic-protein-viewer .gpv-hide-narrow { display: none; } #generic-protein-viewer .gpv-header-actions { gap: 4px; } }
+
+  /* ---------- Workspace layout ----------
+     Wide screens: the 3D view, status and sequence stay pinned in the left column while
+     the tool panel scrolls on the right, so a change is seen the moment it is made.
+     Below 1100px, or when the user picks the stacked layout, the columns stack. */
+  #generic-protein-viewer .gpv-splitter { display: none; }
+  #generic-protein-viewer.is-workspace .gpv-workspace { display: grid; grid-template-columns: minmax(0, 1fr) 10px minmax(300px, var(--gpv-panel-width, 420px)); gap: 0 8px; align-items: start; }
+  #generic-protein-viewer.is-workspace .gpv-stage-column { position: sticky; top: 8px; min-width: 0; }
+  #generic-protein-viewer.is-workspace .gpv-side-panel { position: sticky; top: 8px; max-height: calc(100vh - 16px); overflow-y: auto; overflow-x: hidden; min-width: 0; padding: 0 2px 16px 4px; scrollbar-gutter: stable; }
+  #generic-protein-viewer.is-workspace .gpv-side-panel .gpv-tabs { position: sticky; top: 0; z-index: 3; margin-top: 0; padding: 6px 0 8px; background: var(--background); flex-wrap: wrap; overflow: visible; row-gap: 6px; }
+  #generic-protein-viewer.is-workspace .gpv-side-panel .gpv-tool-panel { padding-top: 0; }
+  #generic-protein-viewer.is-workspace .gpv-side-panel .form-label { flex: 1 1 150px; }
+  #generic-protein-viewer.is-workspace .gpv-side-panel table { display: block; overflow-x: auto; max-width: 100%; }
+  #generic-protein-viewer.is-workspace .gpv-splitter { display: block; align-self: stretch; width: 10px; cursor: col-resize; border-radius: 5px; background: transparent; position: relative; }
+  #generic-protein-viewer.is-workspace .gpv-splitter::after { content: ''; position: absolute; left: 4px; top: 12px; bottom: 12px; width: 2px; border-radius: 1px; background: var(--border); transition: background 0.15s; }
+  #generic-protein-viewer.is-workspace .gpv-splitter:hover::after, #generic-protein-viewer.is-workspace .gpv-splitter.is-dragging::after, #generic-protein-viewer.is-workspace .gpv-splitter:focus-visible::after { background: var(--primary); }
+  #generic-protein-viewer.is-workspace .gpv-stage { height: var(--gpv-stage-height, 540px); }
+  #generic-protein-viewer.is-workspace .gpv-view-grid[data-panes="5"] .gpv-stage, #generic-protein-viewer.is-workspace .gpv-view-grid[data-panes="6"] .gpv-stage { height: calc(var(--gpv-stage-height, 540px) / 2 - 4px); }
+  #generic-protein-viewer.is-workspace .gpv-view-grid.is-comparing .gpv-stage { height: calc(var(--gpv-stage-height, 540px) / var(--gpv-rows, 1) - 4px); }
+  #generic-protein-viewer.is-workspace .gpv-sequence-rows { max-height: 26vh; overflow-y: auto; }
+  /* Text that changes on hover must not change height, or the pinned stage would resize under the pointer. */
+  #generic-protein-viewer.is-workspace .gpv-sequence-head { flex-wrap: nowrap; }
+  #generic-protein-viewer.is-workspace #gpv-sequence-hint { flex: 1 1 auto; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  #generic-protein-viewer.is-workspace .gpv-status { flex-wrap: nowrap; white-space: nowrap; overflow: hidden; }
+  #generic-protein-viewer.is-workspace .gpv-status > span { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+  #generic-protein-viewer.is-workspace #gpv-state { flex: 0 1 auto; }
+  #generic-protein-viewer.is-workspace .gpv-hover { flex: 1 1 auto; }
+  #generic-protein-viewer.is-workspace .gpv-view-grid.is-fullscreen .gpv-stage { height: 100%; }
+  #generic-protein-viewer.is-dragging-splitter, #generic-protein-viewer.is-dragging-splitter * { cursor: col-resize !important; user-select: none; }
+  @media (max-width: 1099px) { #generic-protein-viewer.is-workspace .gpv-workspace { display: block; } #generic-protein-viewer.is-workspace .gpv-stage-column, #generic-protein-viewer.is-workspace .gpv-side-panel { position: static; max-height: none; overflow: visible; padding: 0; } #generic-protein-viewer.is-workspace .gpv-splitter { display: none; } #generic-protein-viewer.is-workspace .gpv-stage { height: 480px; } #generic-protein-viewer.is-workspace .gpv-side-panel .gpv-tabs { position: static; margin-top: 14px; } #generic-protein-viewer.is-workspace .gpv-sequence-rows { max-height: none; } }
   @media (max-width: 520px) { #generic-protein-viewer .gpv-stage { height: 380px; } }
 </style>
 
@@ -1488,7 +1528,7 @@ html>body{padding:0}</style>
   let busyDepth = 0;
   let restoreMotion = null;
   const listPageSize = 60;
-  const viewerVersion = '2.15.0';
+  const viewerVersion = '2.16.0';
   const preferenceKey = 'protein-structure-viewer:preferences';
   const themeKey = 'protein-structure-viewer:theme';
   const labelColors = getComputedStyle(root);
@@ -7117,6 +7157,7 @@ applyBackground();
     fullscreen = next;
     const grid = root.querySelector('#gpv-view-grid');
     grid.classList.toggle('is-fullscreen', fullscreen);
+    if (!fullscreen) setTimeout(fitStageToViewport, 0);
     document.body.style.overflow = fullscreen ? 'hidden' : '';
     const button = root.querySelector('#gpv-fullscreen');
     const host = button.querySelector('[data-icon]');
@@ -7568,6 +7609,87 @@ applyBackground();
     }
   });
   new ResizeObserver(() => viewer.resize()).observe(root.querySelector('#gpv-stage'));
+
+  /* ---------- Workspace layout ----------
+     'workspace' keeps the 3D view pinned beside a scrolling tool panel; 'stacked' is the
+     single column. The choice is remembered; the CSS falls back to stacked below 1100px. */
+  const layoutKey = 'protein-structure-viewer:layout';
+  const panelWidthKey = 'protein-structure-viewer:panel-width';
+  let layoutMode = (() => { try { const stored = localStorage.getItem(layoutKey); return stored === 'stacked' ? 'stacked' : 'workspace'; } catch (error) { return 'workspace'; } })();
+  const workspaceActive = () => layoutMode === 'workspace' && window.matchMedia('(min-width: 1100px)').matches;
+
+  function fitStageToViewport() {
+    const stage = root.querySelector('#gpv-stage');
+    if (!workspaceActive()) { root.style.removeProperty('--gpv-stage-height'); return; }
+    const column = root.querySelector('#gpv-stage-column');
+    const grid = root.querySelector('#gpv-view-grid');
+    const others = ['#gpv-session-banner', '.gpv-primary', '.gpv-status', '#gpv-sequence', '#gpv-tip', '#gpv-plddt-legend']
+      .map(selector => root.querySelector(selector)).filter(node => node && !node.hidden)
+      .reduce((sum, node) => sum + node.getBoundingClientRect().height, 0);
+    const labels = [...grid.querySelectorAll('.gpv-view-label')].filter(node => !node.hidden).length ? 26 : 0;
+    const rows = Math.max(1, Math.ceil(Math.max(1, grid.children.length) / Math.max(1, Number(getComputedStyle(grid).getPropertyValue('--gpv-columns')) || 1)));
+    grid.style.setProperty('--gpv-rows', String(rows));
+    /* Measure from the workspace's natural (unscrolled) top so the whole column — controls,
+       stage, status and sequence — fits the window without scrolling, and the height stays
+       stable while the page scrolls. */
+    const workspaceTop = Math.max(0, root.querySelector('#gpv-workspace').getBoundingClientRect().top + window.scrollY);
+    const available = window.innerHeight - workspaceTop - others - labels - 44;
+    const height = Math.max(360, Math.min(available, 1200));
+    const current = parseFloat(root.style.getPropertyValue('--gpv-stage-height')) || 0;
+    if (Math.abs(current - height) < 8) return;
+    root.style.setProperty('--gpv-stage-height', height + 'px');
+    requestAnimationFrame(() => { viewer.resize(); viewer.render(); comparePanels.forEach(panel => { if (panel.viewer) { panel.viewer.resize(); panel.viewer.render(); } }); });
+  }
+
+  function applyLayout(announceChange) {
+    root.classList.toggle('is-workspace', layoutMode === 'workspace');
+    const button = root.querySelector('#gpv-layout');
+    button.setAttribute('aria-pressed', String(layoutMode === 'workspace'));
+    button.setAttribute('aria-label', 'Layout: ' + (layoutMode === 'workspace' ? 'side panel' : 'stacked'));
+    button.dataset.tooltip = layoutMode === 'workspace' ? 'Side-panel workspace · click for the stacked layout' : 'Stacked layout · click to pin the 3D view beside the tool panel';
+    fitStageToViewport();
+    requestAnimationFrame(() => { viewer.resize(); viewer.render(); comparePanels.forEach(panel => { if (panel.viewer) { panel.viewer.resize(); panel.viewer.render(); } }); renderSequenceSoon(); });
+    if (announceChange) announce(layoutMode === 'workspace' ? 'Side-panel layout · the 3D view stays in place while you work in the panel' : 'Stacked layout');
+  }
+
+  root.querySelector('#gpv-layout').addEventListener('click', () => {
+    layoutMode = layoutMode === 'workspace' ? 'stacked' : 'workspace';
+    try { localStorage.setItem(layoutKey, layoutMode); } catch (error) {}
+    applyLayout(true);
+  });
+  window.addEventListener('resize', fitStageToViewport);
+  new ResizeObserver(() => fitStageToViewport()).observe(root.querySelector('#gpv-sequence-rows'));
+  new ResizeObserver(() => fitStageToViewport()).observe(root.querySelector('#gpv-plddt-legend'));
+  root.querySelector('#gpv-sequence-toggle').addEventListener('click', () => setTimeout(fitStageToViewport, 0));
+
+  /* Drag the divider to resize the tool panel (double-click or Enter resets it). */
+  (() => {
+    const splitter = root.querySelector('#gpv-splitter');
+    const minWidth = 300; const maxWidth = () => Math.max(minWidth, Math.floor(root.getBoundingClientRect().width * 0.6));
+    const setWidth = (width, persist) => {
+      const clamped = Math.round(Math.max(minWidth, Math.min(maxWidth(), width)));
+      root.style.setProperty('--gpv-panel-width', clamped + 'px');
+      if (persist) { try { localStorage.setItem(panelWidthKey, String(clamped)); } catch (error) {} }
+      fitStageToViewport(); requestAnimationFrame(() => { viewer.resize(); viewer.render(); });
+    };
+    try { const stored = Number(localStorage.getItem(panelWidthKey)); if (stored >= minWidth) setWidth(stored, false); } catch (error) {}
+    let startX = 0; let startWidth = 0;
+    const move = event => { setWidth(startWidth + (startX - event.clientX), false); };
+    const stop = () => { splitter.classList.remove('is-dragging'); root.classList.remove('is-dragging-splitter'); window.removeEventListener('pointermove', move); window.removeEventListener('pointerup', stop); const width = parseFloat(root.style.getPropertyValue('--gpv-panel-width')); if (width) setWidth(width, true); };
+    splitter.addEventListener('pointerdown', event => {
+      event.preventDefault(); startX = event.clientX; startWidth = root.querySelector('#gpv-side-panel').getBoundingClientRect().width;
+      splitter.classList.add('is-dragging'); root.classList.add('is-dragging-splitter');
+      window.addEventListener('pointermove', move); window.addEventListener('pointerup', stop);
+    });
+    splitter.addEventListener('dblclick', () => { root.style.removeProperty('--gpv-panel-width'); try { localStorage.removeItem(panelWidthKey); } catch (error) {} fitStageToViewport(); requestAnimationFrame(() => { viewer.resize(); viewer.render(); }); });
+    splitter.addEventListener('keydown', event => {
+      const current = root.querySelector('#gpv-side-panel').getBoundingClientRect().width;
+      if (event.key === 'ArrowLeft') { event.preventDefault(); setWidth(current + 20, true); }
+      else if (event.key === 'ArrowRight') { event.preventDefault(); setWidth(current - 20, true); }
+      else if (event.key === 'Enter') { event.preventDefault(); root.style.removeProperty('--gpv-panel-width'); try { localStorage.removeItem(panelWidthKey); } catch (error) {} fitStageToViewport(); }
+    });
+  })();
+  applyLayout(false);
   /* ---------- Tips ---------- */
 
   const tipsKey = 'protein-structure-viewer:tips-hidden';
@@ -7702,7 +7824,7 @@ applyBackground();
    Both used to be CDN downloads; keeping them local removes two network
    round-trips and lets the page render correctly with no connectivity. */
 (() => {
-  const icons = {"folder-up":"<path d=\"M20 20a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.69-.9L9.6 3.9A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2Z\"/><path d=\"M12 10v6\"/><path d=\"m9 13 3-3 3 3\"/>","chevron-left":"<path d=\"m15 18-6-6 6-6\"/>","chevron-right":"<path d=\"m9 18 6-6-6-6\"/>","chevron-down":"<path d=\"m6 9 6 6 6-6\"/>","scan":"<path d=\"M3 7V5a2 2 0 0 1 2-2h2\"/><path d=\"M17 3h2a2 2 0 0 1 2 2v2\"/><path d=\"M21 17v2a2 2 0 0 1-2 2h-2\"/><path d=\"M7 21H5a2 2 0 0 1-2-2v-2\"/>","share-2":"<circle cx=\"18\" cy=\"5\" r=\"3\"/><circle cx=\"6\" cy=\"12\" r=\"3\"/><circle cx=\"18\" cy=\"19\" r=\"3\"/><line x1=\"8.59\" x2=\"15.42\" y1=\"13.51\" y2=\"17.49\"/><line x1=\"15.41\" x2=\"8.59\" y1=\"6.51\" y2=\"10.49\"/>","orbit":"<path d=\"M20.341 6.484A10 10 0 0 1 10.266 21.85\"/><path d=\"M3.659 17.516A10 10 0 0 1 13.74 2.152\"/><circle cx=\"12\" cy=\"12\" r=\"3\"/><circle cx=\"19\" cy=\"5\" r=\"2\"/><circle cx=\"5\" cy=\"19\" r=\"2\"/>","layers-3":"<path d=\"M12.83 2.18a2 2 0 0 0-1.66 0L2.6 6.08a1 1 0 0 0 0 1.83l8.58 3.91a2 2 0 0 0 1.66 0l8.58-3.9a1 1 0 0 0 0-1.83z\"/><path d=\"M2 12a1 1 0 0 0 .58.91l8.6 3.91a2 2 0 0 0 1.65 0l8.58-3.9A1 1 0 0 0 22 12\"/><path d=\"M2 17a1 1 0 0 0 .58.91l8.6 3.91a2 2 0 0 0 1.65 0l8.58-3.9A1 1 0 0 0 22 17\"/>","palette":"<path d=\"M12 22a1 1 0 0 1 0-20 10 9 0 0 1 10 9 5 5 0 0 1-5 5h-2.25a1.75 1.75 0 0 0-1.4 2.8l.3.4a1.75 1.75 0 0 1-1.4 2.8z\"/><circle cx=\"13.5\" cy=\"6.5\" r=\".5\" fill=\"currentColor\"/><circle cx=\"17.5\" cy=\"10.5\" r=\".5\" fill=\"currentColor\"/><circle cx=\"6.5\" cy=\"12.5\" r=\".5\" fill=\"currentColor\"/><circle cx=\"8.5\" cy=\"7.5\" r=\".5\" fill=\"currentColor\"/>","mouse-pointer-2":"<path d=\"M4.037 4.688a.495.495 0 0 1 .651-.651l16 6.5a.5.5 0 0 1-.063.947l-6.124 1.58a2 2 0 0 0-1.438 1.435l-1.579 6.126a.5.5 0 0 1-.947.063z\"/>","columns-2":"<rect width=\"18\" height=\"18\" x=\"3\" y=\"3\" rx=\"2\"/><path d=\"M12 3v18\"/>","chart-no-axes-column-increasing":"<path d=\"M5 21v-6\"/><path d=\"M12 21V9\"/><path d=\"M19 21V3\"/>","image-down":"<path d=\"M10.3 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2v10l-3.1-3.1a2 2 0 0 0-2.814.014L6 21\"/><path d=\"m14 19 3 3v-5.5\"/><path d=\"m17 22 3-3\"/><circle cx=\"9\" cy=\"9\" r=\"2\"/>","sun":"<circle cx=\"12\" cy=\"12\" r=\"4\"/><path d=\"M12 2v2\"/><path d=\"M12 20v2\"/><path d=\"m4.93 4.93 1.41 1.41\"/><path d=\"m17.66 17.66 1.41 1.41\"/><path d=\"M2 12h2\"/><path d=\"M20 12h2\"/><path d=\"m6.34 17.66-1.41 1.41\"/><path d=\"m19.07 4.93-1.41 1.41\"/>","moon":"<path d=\"M20.985 12.486a9 9 0 1 1-9.473-9.472c.405-.022.617.46.402.803a6 6 0 0 0 8.268 8.268c.344-.215.825-.004.803.401\"/>","monitor":"<rect width=\"20\" height=\"14\" x=\"2\" y=\"3\" rx=\"2\"/><line x1=\"8\" x2=\"16\" y1=\"21\" y2=\"21\"/><line x1=\"12\" x2=\"12\" y1=\"17\" y2=\"21\"/>","circle-help":"<circle cx=\"12\" cy=\"12\" r=\"10\"/><path d=\"M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3\"/><path d=\"M12 17h.01\"/>","maximize":"<path d=\"M8 3H5a2 2 0 0 0-2 2v3\"/><path d=\"M21 8V5a2 2 0 0 0-2-2h-3\"/><path d=\"M3 16v3a2 2 0 0 0 2 2h3\"/><path d=\"M16 21h3a2 2 0 0 0 2-2v-3\"/>","minimize":"<path d=\"M8 3v3a2 2 0 0 1-2 2H3\"/><path d=\"M21 8h-3a2 2 0 0 1-2-2V3\"/><path d=\"M3 16h3a2 2 0 0 1 2 2v3\"/><path d=\"M16 21v-3a2 2 0 0 1 2-2h3\"/>","download":"<path d=\"M12 15V3\"/><path d=\"M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4\"/><path d=\"m7 10 5 5 5-5\"/>","x":"<path d=\"M18 6 6 18\"/><path d=\"m6 6 12 12\"/>","search":"<path d=\"m21 21-4.34-4.34\"/><circle cx=\"11\" cy=\"11\" r=\"8\"/>","trash-2":"<path d=\"M10 11v6\"/><path d=\"M14 11v6\"/><path d=\"M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6\"/><path d=\"M3 6h18\"/><path d=\"M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2\"/>","play":"<path d=\"M5 5a2 2 0 0 1 3.008-1.728l11.997 6.998a2 2 0 0 1 .003 3.458l-12 7A2 2 0 0 1 5 19z\"/>","pause":"<rect x=\"14\" y=\"3\" width=\"5\" height=\"18\" rx=\"1\"/><rect x=\"5\" y=\"3\" width=\"5\" height=\"18\" rx=\"1\"/>","ruler":"<path d=\"M21.3 15.3a2.4 2.4 0 0 1 0 3.4l-2.6 2.6a2.4 2.4 0 0 1-3.4 0L2.7 8.7a2.41 2.41 0 0 1 0-3.4l2.6-2.6a2.41 2.41 0 0 1 3.4 0Z\"/><path d=\"m14.5 12.5 2-2\"/><path d=\"m11.5 9.5 2-2\"/><path d=\"m8.5 6.5 2-2\"/><path d=\"m17.5 15.5 2-2\"/>","tag":"<path d=\"M12.586 2.586A2 2 0 0 0 11.172 2H4a2 2 0 0 0-2 2v7.172a2 2 0 0 0 .586 1.414l8.704 8.704a2.426 2.426 0 0 0 3.42 0l6.58-6.58a2.426 2.426 0 0 0 0-3.42z\"/><circle cx=\"7.5\" cy=\"7.5\" r=\".5\" fill=\"currentColor\"/>","database":"<ellipse cx=\"12\" cy=\"5\" rx=\"9\" ry=\"3\"/><path d=\"M3 5V19A9 3 0 0 0 21 19V5\"/><path d=\"M3 12A9 3 0 0 0 21 12\"/>","rotate-ccw":"<path d=\"M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8\"/><path d=\"M3 3v5h5\"/>","eye":"<path d=\"M2.062 12.348a1 1 0 0 1 0-.696 10.75 10.75 0 0 1 19.876 0 1 1 0 0 1 0 .696 10.75 10.75 0 0 1-19.876 0\"/><circle cx=\"12\" cy=\"12\" r=\"3\"/>","eye-off":"<path d=\"M10.733 5.076a10.744 10.744 0 0 1 11.205 6.575 1 1 0 0 1 0 .696 10.747 10.747 0 0 1-1.444 2.49\"/><path d=\"M14.084 14.158a3 3 0 0 1-4.242-4.242\"/><path d=\"M17.479 17.499a10.75 10.75 0 0 1-15.417-5.151 1 1 0 0 1 0-.696 10.75 10.75 0 0 1 4.446-5.143\"/><path d=\"m2 2 20 20\"/>","triangle-alert":"<path d=\"m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3\"/><path d=\"M12 9v4\"/><path d=\"M12 17h.01\"/>","check":"<path d=\"M20 6 9 17l-5-5\"/>","refresh-cw":"<path d=\"M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8\"/><path d=\"M21 3v5h-5\"/><path d=\"M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16\"/><path d=\"M8 16H3v5\"/>","crosshair":"<circle cx=\"12\" cy=\"12\" r=\"10\"/><line x1=\"22\" x2=\"18\" y1=\"12\" y2=\"12\"/><line x1=\"6\" x2=\"2\" y1=\"12\" y2=\"12\"/><line x1=\"12\" x2=\"12\" y1=\"6\" y2=\"2\"/><line x1=\"12\" x2=\"12\" y1=\"22\" y2=\"18\"/>","file-down":"<path d=\"M6 22a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h8a2.4 2.4 0 0 1 1.704.706l3.588 3.588A2.4 2.4 0 0 1 20 8v12a2 2 0 0 1-2 2z\"/><path d=\"M14 2v5a1 1 0 0 0 1 1h5\"/><path d=\"M12 18v-6\"/><path d=\"m9 15 3 3 3-3\"/>","table":"<path d=\"M12 3v18\"/><rect width=\"18\" height=\"18\" x=\"3\" y=\"3\" rx=\"2\"/><path d=\"M3 9h18\"/><path d=\"M3 15h18\"/>","cloud-download":"<path d=\"M12 13v8l-4-4\"/><path d=\"m12 21 4-4\"/><path d=\"M4.393 15.269A7 7 0 1 1 15.71 8h1.79a4.5 4.5 0 0 1 2.436 8.284\"/>","info":"<circle cx=\"12\" cy=\"12\" r=\"10\"/><path d=\"M12 16v-4\"/><path d=\"M12 8h.01\"/>","circle-alert":"<circle cx=\"12\" cy=\"12\" r=\"10\"/><line x1=\"12\" x2=\"12\" y1=\"8\" y2=\"12\"/><line x1=\"12\" x2=\"12.01\" y1=\"16\" y2=\"16\"/>","external-link":"<path d=\"M15 3h6v6\"/><path d=\"M10 14 21 3\"/><path d=\"M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6\"/>","keyboard":"<path d=\"M10 8h.01\"/><path d=\"M12 12h.01\"/><path d=\"M14 8h.01\"/><path d=\"M16 12h.01\"/><path d=\"M18 8h.01\"/><path d=\"M6 8h.01\"/><path d=\"M7 16h10\"/><path d=\"M8 12h.01\"/><rect width=\"20\" height=\"16\" x=\"2\" y=\"4\" rx=\"2\"/>"};
+  const icons = {"folder-up":"<path d=\"M20 20a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.69-.9L9.6 3.9A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2Z\"/><path d=\"M12 10v6\"/><path d=\"m9 13 3-3 3 3\"/>","chevron-left":"<path d=\"m15 18-6-6 6-6\"/>","chevron-right":"<path d=\"m9 18 6-6-6-6\"/>","chevron-down":"<path d=\"m6 9 6 6 6-6\"/>","scan":"<path d=\"M3 7V5a2 2 0 0 1 2-2h2\"/><path d=\"M17 3h2a2 2 0 0 1 2 2v2\"/><path d=\"M21 17v2a2 2 0 0 1-2 2h-2\"/><path d=\"M7 21H5a2 2 0 0 1-2-2v-2\"/>","share-2":"<circle cx=\"18\" cy=\"5\" r=\"3\"/><circle cx=\"6\" cy=\"12\" r=\"3\"/><circle cx=\"18\" cy=\"19\" r=\"3\"/><line x1=\"8.59\" x2=\"15.42\" y1=\"13.51\" y2=\"17.49\"/><line x1=\"15.41\" x2=\"8.59\" y1=\"6.51\" y2=\"10.49\"/>","orbit":"<path d=\"M20.341 6.484A10 10 0 0 1 10.266 21.85\"/><path d=\"M3.659 17.516A10 10 0 0 1 13.74 2.152\"/><circle cx=\"12\" cy=\"12\" r=\"3\"/><circle cx=\"19\" cy=\"5\" r=\"2\"/><circle cx=\"5\" cy=\"19\" r=\"2\"/>","layers-3":"<path d=\"M12.83 2.18a2 2 0 0 0-1.66 0L2.6 6.08a1 1 0 0 0 0 1.83l8.58 3.91a2 2 0 0 0 1.66 0l8.58-3.9a1 1 0 0 0 0-1.83z\"/><path d=\"M2 12a1 1 0 0 0 .58.91l8.6 3.91a2 2 0 0 0 1.65 0l8.58-3.9A1 1 0 0 0 22 12\"/><path d=\"M2 17a1 1 0 0 0 .58.91l8.6 3.91a2 2 0 0 0 1.65 0l8.58-3.9A1 1 0 0 0 22 17\"/>","palette":"<path d=\"M12 22a1 1 0 0 1 0-20 10 9 0 0 1 10 9 5 5 0 0 1-5 5h-2.25a1.75 1.75 0 0 0-1.4 2.8l.3.4a1.75 1.75 0 0 1-1.4 2.8z\"/><circle cx=\"13.5\" cy=\"6.5\" r=\".5\" fill=\"currentColor\"/><circle cx=\"17.5\" cy=\"10.5\" r=\".5\" fill=\"currentColor\"/><circle cx=\"6.5\" cy=\"12.5\" r=\".5\" fill=\"currentColor\"/><circle cx=\"8.5\" cy=\"7.5\" r=\".5\" fill=\"currentColor\"/>","mouse-pointer-2":"<path d=\"M4.037 4.688a.495.495 0 0 1 .651-.651l16 6.5a.5.5 0 0 1-.063.947l-6.124 1.58a2 2 0 0 0-1.438 1.435l-1.579 6.126a.5.5 0 0 1-.947.063z\"/>","columns-2":"<rect width=\"18\" height=\"18\" x=\"3\" y=\"3\" rx=\"2\"/><path d=\"M12 3v18\"/>","chart-no-axes-column-increasing":"<path d=\"M5 21v-6\"/><path d=\"M12 21V9\"/><path d=\"M19 21V3\"/>","image-down":"<path d=\"M10.3 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2v10l-3.1-3.1a2 2 0 0 0-2.814.014L6 21\"/><path d=\"m14 19 3 3v-5.5\"/><path d=\"m17 22 3-3\"/><circle cx=\"9\" cy=\"9\" r=\"2\"/>","sun":"<circle cx=\"12\" cy=\"12\" r=\"4\"/><path d=\"M12 2v2\"/><path d=\"M12 20v2\"/><path d=\"m4.93 4.93 1.41 1.41\"/><path d=\"m17.66 17.66 1.41 1.41\"/><path d=\"M2 12h2\"/><path d=\"M20 12h2\"/><path d=\"m6.34 17.66-1.41 1.41\"/><path d=\"m19.07 4.93-1.41 1.41\"/>","moon":"<path d=\"M20.985 12.486a9 9 0 1 1-9.473-9.472c.405-.022.617.46.402.803a6 6 0 0 0 8.268 8.268c.344-.215.825-.004.803.401\"/>","monitor":"<rect width=\"20\" height=\"14\" x=\"2\" y=\"3\" rx=\"2\"/><line x1=\"8\" x2=\"16\" y1=\"21\" y2=\"21\"/><line x1=\"12\" x2=\"12\" y1=\"17\" y2=\"21\"/>","circle-help":"<circle cx=\"12\" cy=\"12\" r=\"10\"/><path d=\"M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3\"/><path d=\"M12 17h.01\"/>","maximize":"<path d=\"M8 3H5a2 2 0 0 0-2 2v3\"/><path d=\"M21 8V5a2 2 0 0 0-2-2h-3\"/><path d=\"M3 16v3a2 2 0 0 0 2 2h3\"/><path d=\"M16 21h3a2 2 0 0 0 2-2v-3\"/>","minimize":"<path d=\"M8 3v3a2 2 0 0 1-2 2H3\"/><path d=\"M21 8h-3a2 2 0 0 1-2-2V3\"/><path d=\"M3 16h3a2 2 0 0 1 2 2v3\"/><path d=\"M16 21v-3a2 2 0 0 1 2-2h3\"/>","download":"<path d=\"M12 15V3\"/><path d=\"M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4\"/><path d=\"m7 10 5 5 5-5\"/>","x":"<path d=\"M18 6 6 18\"/><path d=\"m6 6 12 12\"/>","search":"<path d=\"m21 21-4.34-4.34\"/><circle cx=\"11\" cy=\"11\" r=\"8\"/>","trash-2":"<path d=\"M10 11v6\"/><path d=\"M14 11v6\"/><path d=\"M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6\"/><path d=\"M3 6h18\"/><path d=\"M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2\"/>","play":"<path d=\"M5 5a2 2 0 0 1 3.008-1.728l11.997 6.998a2 2 0 0 1 .003 3.458l-12 7A2 2 0 0 1 5 19z\"/>","pause":"<rect x=\"14\" y=\"3\" width=\"5\" height=\"18\" rx=\"1\"/><rect x=\"5\" y=\"3\" width=\"5\" height=\"18\" rx=\"1\"/>","ruler":"<path d=\"M21.3 15.3a2.4 2.4 0 0 1 0 3.4l-2.6 2.6a2.4 2.4 0 0 1-3.4 0L2.7 8.7a2.41 2.41 0 0 1 0-3.4l2.6-2.6a2.41 2.41 0 0 1 3.4 0Z\"/><path d=\"m14.5 12.5 2-2\"/><path d=\"m11.5 9.5 2-2\"/><path d=\"m8.5 6.5 2-2\"/><path d=\"m17.5 15.5 2-2\"/>","tag":"<path d=\"M12.586 2.586A2 2 0 0 0 11.172 2H4a2 2 0 0 0-2 2v7.172a2 2 0 0 0 .586 1.414l8.704 8.704a2.426 2.426 0 0 0 3.42 0l6.58-6.58a2.426 2.426 0 0 0 0-3.42z\"/><circle cx=\"7.5\" cy=\"7.5\" r=\".5\" fill=\"currentColor\"/>","database":"<ellipse cx=\"12\" cy=\"5\" rx=\"9\" ry=\"3\"/><path d=\"M3 5V19A9 3 0 0 0 21 19V5\"/><path d=\"M3 12A9 3 0 0 0 21 12\"/>","rotate-ccw":"<path d=\"M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8\"/><path d=\"M3 3v5h5\"/>","eye":"<path d=\"M2.062 12.348a1 1 0 0 1 0-.696 10.75 10.75 0 0 1 19.876 0 1 1 0 0 1 0 .696 10.75 10.75 0 0 1-19.876 0\"/><circle cx=\"12\" cy=\"12\" r=\"3\"/>","eye-off":"<path d=\"M10.733 5.076a10.744 10.744 0 0 1 11.205 6.575 1 1 0 0 1 0 .696 10.747 10.747 0 0 1-1.444 2.49\"/><path d=\"M14.084 14.158a3 3 0 0 1-4.242-4.242\"/><path d=\"M17.479 17.499a10.75 10.75 0 0 1-15.417-5.151 1 1 0 0 1 0-.696 10.75 10.75 0 0 1 4.446-5.143\"/><path d=\"m2 2 20 20\"/>","triangle-alert":"<path d=\"m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3\"/><path d=\"M12 9v4\"/><path d=\"M12 17h.01\"/>","check":"<path d=\"M20 6 9 17l-5-5\"/>","refresh-cw":"<path d=\"M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8\"/><path d=\"M21 3v5h-5\"/><path d=\"M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16\"/><path d=\"M8 16H3v5\"/>","crosshair":"<circle cx=\"12\" cy=\"12\" r=\"10\"/><line x1=\"22\" x2=\"18\" y1=\"12\" y2=\"12\"/><line x1=\"6\" x2=\"2\" y1=\"12\" y2=\"12\"/><line x1=\"12\" x2=\"12\" y1=\"6\" y2=\"2\"/><line x1=\"12\" x2=\"12\" y1=\"22\" y2=\"18\"/>","file-down":"<path d=\"M6 22a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h8a2.4 2.4 0 0 1 1.704.706l3.588 3.588A2.4 2.4 0 0 1 20 8v12a2 2 0 0 1-2 2z\"/><path d=\"M14 2v5a1 1 0 0 0 1 1h5\"/><path d=\"M12 18v-6\"/><path d=\"m9 15 3 3 3-3\"/>","table":"<path d=\"M12 3v18\"/><rect width=\"18\" height=\"18\" x=\"3\" y=\"3\" rx=\"2\"/><path d=\"M3 9h18\"/><path d=\"M3 15h18\"/>","cloud-download":"<path d=\"M12 13v8l-4-4\"/><path d=\"m12 21 4-4\"/><path d=\"M4.393 15.269A7 7 0 1 1 15.71 8h1.79a4.5 4.5 0 0 1 2.436 8.284\"/>","info":"<circle cx=\"12\" cy=\"12\" r=\"10\"/><path d=\"M12 16v-4\"/><path d=\"M12 8h.01\"/>","circle-alert":"<circle cx=\"12\" cy=\"12\" r=\"10\"/><line x1=\"12\" x2=\"12\" y1=\"8\" y2=\"12\"/><line x1=\"12\" x2=\"12.01\" y1=\"16\" y2=\"16\"/>","external-link":"<path d=\"M15 3h6v6\"/><path d=\"M10 14 21 3\"/><path d=\"M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6\"/>","panel-right":"<rect width=\"18\" height=\"18\" x=\"3\" y=\"3\" rx=\"2\"/><path d=\"M15 3v18\"/>","keyboard":"<path d=\"M10 8h.01\"/><path d=\"M12 12h.01\"/><path d=\"M14 8h.01\"/><path d=\"M16 12h.01\"/><path d=\"M18 8h.01\"/><path d=\"M6 8h.01\"/><path d=\"M7 16h10\"/><path d=\"M8 12h.01\"/><rect width=\"20\" height=\"16\" x=\"2\" y=\"4\" rx=\"2\"/>"};
   const renderIcons = (scope = document) => {
     scope.querySelectorAll('[data-icon]').forEach(host => {
       const body = icons[host.getAttribute('data-icon')];
