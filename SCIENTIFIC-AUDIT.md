@@ -4,7 +4,7 @@ This audit evaluates the viewer as a tool for comparing predicted structures, sh
 interactive review artefact, and preparing visual material for papers and theses. It is not a
 validation of any biological hypothesis, and nothing in the tool should be read as one.
 
-Audited against viewer version 2.10.0.
+Audited against viewer version 2.11.0.
 
 ## What is already strong
 
@@ -34,6 +34,8 @@ Audited against viewer version 2.10.0.
   alignment method and RMSD, ligand handling — which is the information reviewers most often find
   missing from structure figures. It is explicitly a draft.
 - Hetero groups are visible by default; a figure that silently drops a bound ligand or ion misleads.
+- Experimental per-residue measurements can be shown on the model with a legend that states the
+  scale and range, which is how a prediction is confronted with data rather than admired.
 - Exports now state their physical size and resolution in the file and size text in points, so a
   figure meets journal requirements by construction rather than by resampling afterwards; a
   colour-blind-safe palette and a scale bar are one click each. The generated legend credits the

@@ -50,7 +50,8 @@ PSV_CHROMIUM=/opt/pw-browsers/chromium/chrome-linux/chrome npm test
 - Confidence: the pLDDT profile SVG has one panel per chain and a trace per model; the PNG variant downloads;
   a block-diagonal PAE matrix loaded as `model_a.json` yields two domains (A:1–30 and B), the domain
   colour scheme lists them in the legend, and Highlight all adds two selections.
-- Annotate: a named domain (residues 1–15, same-source scope) paints the sibling model's residue 5
+- Annotate: a 30-row `resi,value` CSV colours residue 30 viridis-yellow and residue 1 viridis-purple with
+  a legend stating the range; residues within 6 Å of chain B are highlighted and listable; a named domain (residues 1–15, same-source scope) paints the sibling model's residue 5
   in its colour and appears in the legend on both models; the sequence strip lists both chains, a click selects a residue, a drag fills the
   selection range, Go to `B:12` selects that residue, the sequence-letters panel lists both chains with sixty clickable letters and a
   Copy button, overlay mode gives one row per model and chain; undo and redo (keyboard and buttons) walk a label change back and forth;
@@ -69,11 +70,12 @@ PSV_CHROMIUM=/opt/pw-browsers/chromium/chrome-linux/chrome npm test
   offers the residue colour themes and a ligand control; renders, carries provenance, **keeps its canvas inside `#view`**,
   guided views, navigation by real click, play/pause, element colouring, two panels that
   rotate together under a real drag
-- Publish: print-size export at 85 mm / 300 dpi yields a 1004 × 669 PNG carrying a `pHYs` chunk of
+- Publish: all saved views download as a ZIP with a captions file; print-size export at 85 mm / 300 dpi yields a 1004 × 669 PNG carrying a `pHYs` chunk of
   11811 px/m; the TIFF is a little-endian baseline TIFF of the same size at 300 dpi; a 20 Å scale bar
   appears on screen and in the SVG with the Arial font; the legend text ends with the rendering credit;
   copying the PNG to the clipboard reports an outcome; the figure legend names the models,
   representation and colouring.
+- Session: reloading the page offers to restore the autosaved session; Restore brings back every model and label.
 - Share links: a model fetched by ID (served from a stubbed RCSB response) enables *Copy share
   link*; opening the link in a fresh page refetches the model and restores its corner text.
 

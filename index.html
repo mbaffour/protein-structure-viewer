@@ -859,6 +859,7 @@ html>body{padding:0}</style>
     <button class="btn btn-primary" type="button" id="gpv-report" disabled data-tooltip="Download a self-contained interactive HTML report"><i data-icon="share-2" aria-hidden="true"></i>Share report</button>
   </div>
 
+  <div class="gpv-restore text-small" id="gpv-session-banner" hidden role="status"><span id="gpv-session-text"></span><button class="btn btn-primary" type="button" id="gpv-session-yes">Restore</button><button class="btn btn-ghost" type="button" id="gpv-session-no">Not now</button><button class="btn btn-ghost" type="button" id="gpv-session-forget">Forget it</button></div>
   <div class="gpv-view-grid" id="gpv-view-grid">
     <div class="gpv-view-pane">
       <span class="viz-badge gpv-view-label" id="gpv-left-label" hidden>Primary</span>
@@ -925,7 +926,7 @@ html>body{padding:0}</style>
     <div class="viz-controls gpv-presets"><span class="text-small text-muted">Presets</span><button class="btn" type="button" id="gpv-preset-thesis" data-tooltip="White background, orthographic cartoon, legend on exports, 1800 × 1200 at 2×">Thesis figure</button><button class="btn" type="button" id="gpv-preset-slide" data-tooltip="Dark background, perspective cartoon, colour by chain">Dark slide</button><button class="btn" type="button" id="gpv-preset-review" data-tooltip="pLDDT colouring with the legend, every residue shown, ligands as sticks">Confidence review</button></div>
     <div class="viz-controls">
       <label class="form-label">Representation<select class="form-select" id="gpv-style"><option value="cartoon">Cartoon</option><option value="stick">Sticks</option><option value="sphere">Spheres</option><option value="line">Lines</option></select></label>
-      <label class="form-label">Color scheme<select class="form-select" id="gpv-color-mode"><option value="structure">Per structure</option><option value="chain">Per chain</option><option value="plddt">pLDDT confidence</option><option value="deviation">Cα deviation after alignment</option><option value="domain">PAE domains</option><option value="annotated">Annotated domains</option><option value="charge">Residue charge</option><option value="hydrophobicity">Hydrophobicity (Kyte–Doolittle)</option><option value="restype">Residue type</option><option value="amino">Amino acid</option><option value="ss">Secondary structure</option><option value="spectrum">Sequence spectrum</option><option value="element">Element</option></select></label>
+      <label class="form-label">Color scheme<select class="form-select" id="gpv-color-mode"><option value="structure">Per structure</option><option value="chain">Per chain</option><option value="plddt">pLDDT confidence</option><option value="deviation">Cα deviation after alignment</option><option value="domain">PAE domains</option><option value="annotated">Annotated domains</option><option value="data">Per-residue data</option><option value="charge">Residue charge</option><option value="hydrophobicity">Hydrophobicity (Kyte–Doolittle)</option><option value="restype">Residue type</option><option value="amino">Amino acid</option><option value="ss">Secondary structure</option><option value="spectrum">Sequence spectrum</option><option value="element">Element</option></select></label>
       <label class="form-label">Low confidence<select class="form-select" id="gpv-hide-below" data-tooltip="Hide residues whose pLDDT is below the threshold — in the viewer, every panel and every export"><option value="0">Show every residue</option><option value="50">Hide pLDDT below 50</option><option value="70">Hide pLDDT below 70</option></select></label>
       <label class="form-label">Ligands and ions<select class="form-select" id="gpv-hetero" data-tooltip="How hetero groups — ligands, cofactors, ions, glycans — are drawn; water is never shown"><option value="stick">Sticks and spheres</option><option value="sphere">Spheres</option><option value="hide">Hidden</option></select></label>
       <label class="form-check form-switch"><input class="form-check-input" id="gpv-safe-palette" type="checkbox"><span class="form-check-label">Colour-blind-safe palette (Okabe–Ito) for chains and domains</span></label>
@@ -956,6 +957,13 @@ html>body{padding:0}</style>
       <button class="btn" type="button" id="gpv-add-selection" disabled>Add selection</button>
       <button class="btn btn-ghost" type="button" id="gpv-clear-selections">Clear selections</button>
     </div>
+    <div class="viz-controls">
+      <label class="form-label">Near<select class="form-select" id="gpv-near-target"><option value="hetero">Ligands and ions</option><option value="chain">A chain…</option><option value="residue">The selected residue</option></select></label>
+      <label class="form-label">Chain<input class="form-control" id="gpv-near-chain" type="text" placeholder="B" maxlength="4"></label>
+      <label class="form-label">Within (Å)<input class="form-control" id="gpv-near-cutoff" type="number" min="2" max="12" step="0.5" value="4.5"></label>
+      <button class="btn" type="button" id="gpv-near-run" disabled data-tooltip="Highlight residues of the current model with any heavy atom within the cutoff of the target, in the highlight colour above">Highlight nearby residues</button>
+      <button class="btn btn-ghost" type="button" id="gpv-near-copy" disabled data-tooltip="Copy the nearby residue list to the clipboard">Copy residue list</button>
+    </div>
     <div class="gpv-list" id="gpv-selection-list" aria-label="Structure selections"></div>
     <h3 class="gpv-subheading">Domains</h3>
     <p class="text-muted text-small gpv-hint">Name a region, give it a colour, and choose how far it applies: this model only, every model from the same source (an AlphaFold run), or every loaded model. Colour by annotated domains paints them and lists them by name in the legend.</p>
@@ -971,6 +979,19 @@ html>body{padding:0}</style>
       <button class="btn btn-ghost" type="button" id="gpv-clear-domains">Clear domains</button>
     </div>
     <div class="gpv-list" id="gpv-domain-list" aria-label="Annotated domains"></div>
+    <h3 class="gpv-subheading">Per-residue data</h3>
+    <p class="text-muted text-small gpv-hint">Map your own numbers onto the structure — conservation, deep mutational scores, ΔΔG, coverage. A table with residue and value columns (chain optional) as CSV or TSV, chosen or pasted. Colour by per-residue data paints the values with a gradient legend, and the sequence strip follows.</p>
+    <div class="viz-controls">
+      <label class="form-label">Table file<input class="form-control gpv-file-input" id="gpv-data-file" type="file" accept=".csv,.tsv,.txt"></label>
+      <label class="form-label">Or paste<textarea class="form-control" id="gpv-data-text" rows="2" placeholder="chain,resi,value&#10;A,12,0.83"></textarea></label>
+      <label class="form-label">Name<input class="form-control" id="gpv-data-name" type="text" placeholder="Conservation" maxlength="40"></label>
+      <label class="form-label">Colour scale<select class="form-select" id="gpv-data-scale"><option value="viridis" selected>Viridis (sequential)</option><option value="diverging">Blue – white – red (diverging, centred on 0)</option><option value="heat">White – red (sequential)</option></select></label>
+      <label class="form-label">Applies to<select class="form-select" id="gpv-data-scope"><option value="source" selected>Every model from the same source</option><option value="model">This model only</option><option value="all">Every loaded model</option></select></label>
+      <button class="btn" type="button" id="gpv-data-apply" disabled>Load values</button>
+      <button class="btn" type="button" id="gpv-data-paint" disabled data-tooltip="Switch the colour scheme to per-residue data">Colour by data</button>
+      <button class="btn btn-ghost" type="button" id="gpv-data-clear">Clear data</button>
+      <span class="text-muted text-small" id="gpv-data-state">No per-residue data loaded.</span>
+    </div>
     <div class="viz-controls">
       <label class="form-label">Measurement<select class="form-select" id="gpv-measure-type"><option value="distance">Distance (2 atoms)</option><option value="angle">Angle (3 atoms)</option></select></label>
       <button class="btn" type="button" id="gpv-measure">Start measuring</button>
@@ -1090,6 +1111,7 @@ html>body{padding:0}</style>
       <button class="btn" type="button" id="gpv-save-view" disabled>Save current view</button>
       <label class="form-label">Panel columns<select class="form-select" id="gpv-panel-columns"><option value="1">1</option><option value="2" selected>2</option><option value="3">3</option></select></label>
       <button class="btn" type="button" id="gpv-contact-sheet" disabled>Download figure panels</button>
+      <button class="btn" type="button" id="gpv-views-zip" disabled data-tooltip="Render every saved view as a publication PNG at the current output settings and download them together with the captions">Download all views (ZIP)</button>
       <button class="btn" type="button" id="gpv-captions" disabled>Download captions</button>
     </div>
     <div class="gpv-list" id="gpv-saved-views" aria-label="Saved publication views"></div>
@@ -1132,6 +1154,8 @@ html>body{padding:0}</style>
           <tr><th><kbd>Esc</kbd></th><td>Close help, leave full screen, stop measuring</td></tr>
         </tbody>
       </table>
+      <h3>Your work is kept</h3>
+      <p>The open models, annotations, domains, views and settings are saved in this browser a moment after every change. Reopening the page offers to restore them; <em>Forget it</em> discards the copy. Nothing leaves the browser. For anything you must keep, download scene JSON or a report.</p>
       <h3>How to cite</h3>
       <p>Cite the viewer and the rendering library it builds on. Each GitHub release is archived on Zenodo with its own DOI; the repository's <code>CITATION.cff</code> carries the current metadata.</p>
       <ul>
@@ -1257,6 +1281,9 @@ html>body{padding:0}</style>
   #generic-protein-viewer .gpv-share-url { font-family: var(--font-mono); font-size: var(--font-size-small); min-width: min(100%, 320px); }
   #generic-protein-viewer .gpv-history { align-items: center; }
   #generic-protein-viewer .gpv-orient { display: inline-flex; gap: 4px; }
+  #generic-protein-viewer .gpv-restore { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; padding: 10px 12px; margin-bottom: 10px; border: 1px solid var(--border); border-radius: 8px; background: var(--muted); }
+  #generic-protein-viewer .gpv-restore span { flex: 1 1 200px; }
+  #generic-protein-viewer .gpv-restore[hidden] { display: none; }
   #generic-protein-viewer .form-label[hidden], #generic-protein-viewer .form-check[hidden] { display: none; }
   #generic-protein-viewer .gpv-scalebar { position: absolute; right: 16px; bottom: 14px; pointer-events: none; display: grid; justify-items: center; gap: 3px; color: var(--card-foreground); text-shadow: 0 0 3px var(--card); }
   #generic-protein-viewer .gpv-scalebar i { display: block; height: 3px; background: currentColor; border-radius: 1px; }
@@ -1423,7 +1450,7 @@ html>body{padding:0}</style>
   let busyDepth = 0;
   let restoreMotion = null;
   const listPageSize = 60;
-  const viewerVersion = '2.10.0';
+  const viewerVersion = '2.11.0';
   const preferenceKey = 'protein-structure-viewer:preferences';
   const themeKey = 'protein-structure-viewer:theme';
   const labelColors = getComputedStyle(root);
@@ -1955,6 +1982,7 @@ html>body{padding:0}</style>
     if (mode === 'deviation') return { colorfunc: atom => deviationColor(entry, atom) };
     if (mode === 'domain') return { colorfunc: atom => domainColor(entry, atom) };
     if (mode === 'annotated') return { colorfunc: atom => annotatedColor(entry, atom) };
+    if (mode === 'data') return { colorfunc: atom => dataColor(entry, atom) };
     if (residueModes.includes(mode)) return { colorfunc: atom => residueColor(mode, atom) };
     if (mode === 'spectrum') return { colorscheme: 'spectrum' };
     if (mode === 'element') return { colorscheme: 'default' };
@@ -2043,6 +2071,10 @@ html>body{padding:0}</style>
     root.querySelector('#gpv-save-scene').disabled = structures.length === 0;
     root.querySelector('#gpv-save-view').disabled = structures.length === 0;
     root.querySelector('#gpv-contact-sheet').disabled = savedViews.length === 0;
+    root.querySelector('#gpv-views-zip').disabled = savedViews.length === 0;
+    root.querySelector('#gpv-near-run').disabled = structures.length === 0;
+    root.querySelector('#gpv-data-apply').disabled = structures.length === 0;
+    scheduleSessionSave();
     root.querySelector('#gpv-captions').disabled = savedViews.length === 0;
     updateReportEstimate();
     ['#gpv-current', '#gpv-reference', '#gpv-selection-model', '#gpv-left-model', '#gpv-previous', '#gpv-next', '#gpv-cycle', '#gpv-align', '#gpv-restore', '#gpv-add-selection', '#gpv-annotate', '#gpv-add-screen-text', '#gpv-interface-model', '#gpv-interface-run'].forEach(selector => {
@@ -2996,6 +3028,7 @@ html>body{padding:0}</style>
     if (mode === 'deviation') return deviationColor(entry, atom);
     if (mode === 'domain') return domainColor(entry, atom);
     if (mode === 'annotated') return annotatedColor(entry, atom);
+    if (mode === 'data') return dataColor(entry, atom);
     if (residueModes.includes(mode)) return residueColor(mode, atom);
     return entry.scores.length ? plddtColor(Number(atom.b || 0)) : entry.color;
   }
@@ -3153,7 +3186,7 @@ html>body{padding:0}</style>
     const multi = entries.length > 1;
     const total = planned.reduce((sum, item) => sum + item.row.residues.length, 0);
     const mode = root.querySelector('#gpv-color-mode').value;
-    const colourNote = mode === 'chain' ? ' · coloured by chain' : mode === 'deviation' ? ' · coloured by Cα deviation' : mode === 'domain' ? ' · coloured by PAE domains' : mode === 'annotated' ? ' · coloured by annotated domains' : residueModes.includes(mode) ? ' · coloured by ' + ({ charge: 'residue charge', hydrophobicity: 'hydrophobicity', restype: 'residue type', amino: 'amino acid', ss: 'secondary structure' })[mode] : entries.some(entry => entry.scores.length) ? ' · coloured by pLDDT' : '';
+    const colourNote = mode === 'chain' ? ' · coloured by chain' : mode === 'deviation' ? ' · coloured by Cα deviation' : mode === 'domain' ? ' · coloured by PAE domains' : mode === 'annotated' ? ' · coloured by annotated domains' : mode === 'data' ? ' · coloured by ' + (residueData ? residueData.name : 'per-residue data') : residueModes.includes(mode) ? ' · coloured by ' + ({ charge: 'residue charge', hydrophobicity: 'hydrophobicity', restype: 'residue type', amino: 'amino acid', ss: 'secondary structure' })[mode] : entries.some(entry => entry.scores.length) ? ' · coloured by pLDDT' : '';
     const chainNote = planned.length > shown.length ? ' · first ' + shown.length + ' of ' + planned.length + ' rows' : '';
     const cut = hideBelow();
     const cutNote = cut && entries.some(entry => entry.scores.length) ? ' · pLDDT below ' + cut + ' hidden' : '';
@@ -3230,6 +3263,235 @@ html>body{padding:0}</style>
   function renderSequenceSoon() {
     if (sequenceFrame) return;
     sequenceFrame = requestAnimationFrame(() => { sequenceFrame = 0; renderSequence(); });
+  }
+
+  /* ---------- Per-residue data ---------- */
+
+  let residueData = null;
+  const dataScales = {
+    viridis: ['#440154', '#3b528b', '#21918c', '#5ec962', '#fde725'],
+    diverging: ['#2563eb', '#f8fafc', '#dc2626'],
+    heat: ['#fff5f0', '#fb6a4a', '#67000d']
+  };
+  const hexToRgb = hex => { const n = parseInt(hex.slice(1), 16); return [(n >> 16) & 255, (n >> 8) & 255, n & 255]; };
+  const rgbToHex = rgb => '#' + rgb.map(v => Math.round(Math.max(0, Math.min(255, v))).toString(16).padStart(2, '0')).join('');
+  function gradientColor(stops, t) {
+    const clamped = Math.max(0, Math.min(1, Number.isFinite(t) ? t : 0));
+    const position = clamped * (stops.length - 1); const index = Math.min(stops.length - 2, Math.floor(position)); const local = position - index;
+    const a = hexToRgb(stops[index]); const b = hexToRgb(stops[index + 1]);
+    return rgbToHex(a.map((channel, i) => channel + (b[i] - channel) * local));
+  }
+  const formatDataValue = value => Math.abs(value) >= 100 ? value.toFixed(0) : Math.abs(value) >= 10 ? value.toFixed(1) : value.toFixed(2);
+
+  function parseResidueRows(rows) {
+    const values = new Map(); const byResi = new Map();
+    rows.forEach(row => { const chain = String(row[0] || '').trim(); const resi = Number(row[1]); const value = Number(row[2]); if (!Number.isFinite(resi) || !Number.isFinite(value)) return; if (chain) values.set(chain + '|' + resi, value); else byResi.set(resi, value); });
+    const all = [...values.values(), ...byResi.values()];
+    if (!all.length) return null;
+    return { values, byResi, min: Math.min(...all), max: Math.max(...all), count: all.length };
+  }
+
+  /* CSV/TSV with a residue column and a numeric value column; chain optional. Header
+     names are recognised loosely; a header-less table is read as resi,value or
+     chain,resi,value. */
+  function parseResidueTable(text) {
+    const lines = String(text || '').split(/\r?\n/).map(line => line.trim()).filter(line => line && !line.startsWith('#'));
+    if (lines.length < 2) return null;
+    const delimiter = lines[0].includes('\t') ? '\t' : lines[0].includes(';') ? ';' : ',';
+    const rows = lines.map(line => line.split(delimiter).map(cell => cell.trim().replace(/^"|"$/g, '')));
+    const header = rows[0].map(cell => cell.toLowerCase());
+    const numeric = cell => /^-?\d+(\.\d+)?(e[-+]?\d+)?$/i.test(cell || '');
+    const headerless = header.every(cell => cell === '' || numeric(cell));
+    let chainCol = -1; let resiCol = -1; let valueCol = -1;
+    if (!headerless) {
+      chainCol = header.findIndex(cell => ['chain', 'chain_id', 'asym', 'asym_id', 'auth_asym_id', 'label_asym_id'].includes(cell));
+      resiCol = header.findIndex(cell => ['resi', 'residue', 'resid', 'res', 'position', 'pos', 'site', 'resnum', 'residue_number', 'auth_seq_id', 'seq_id', 'index'].includes(cell));
+      const skip = new Set(['resn', 'aa', 'residue_name', 'wt', 'wild_type', 'mutation', 'name', 'label', 'chain', 'chain_id']);
+      valueCol = header.findIndex((cell, index) => index !== chainCol && index !== resiCol && !skip.has(cell) && rows.slice(1).some(row => numeric(row[index])));
+    }
+    const body = headerless ? rows : rows.slice(1);
+    if (resiCol < 0) { if (body[0] && body[0].length >= 3 && !numeric(body[0][0])) { chainCol = 0; resiCol = 1; valueCol = 2; } else { chainCol = -1; resiCol = 0; valueCol = 1; } }
+    if (valueCol < 0) return null;
+    return parseResidueRows(body.map(row => [chainCol >= 0 ? row[chainCol] : '', row[resiCol], row[valueCol]]));
+  }
+
+  function dataRange() {
+    if (!residueData) return { min: 0, max: 1 };
+    if (residueData.scale === 'diverging') { const limit = Math.max(Math.abs(residueData.min), Math.abs(residueData.max)) || 1; return { min: -limit, max: limit }; }
+    return { min: residueData.min, max: residueData.max === residueData.min ? residueData.min + 1 : residueData.max };
+  }
+
+  function residueDataValue(entry, atom) {
+    if (!residueData || !domainApplies(residueData, entry)) return undefined;
+    const key = (atom.chain || '') + '|' + atom.resi;
+    if (residueData.values.has(key)) return residueData.values.get(key);
+    return residueData.byResi.get(atom.resi);
+  }
+
+  function dataColor(entry, atom) {
+    const value = residueDataValue(entry, atom);
+    if (value === undefined) return '#d1d5db';
+    const range = dataRange();
+    return gradientColor(dataScales[residueData.scale] || dataScales.viridis, (value - range.min) / (range.max - range.min || 1));
+  }
+
+  function setResidueData(table, nameHint) {
+    const entry = activeEntry();
+    if (!entry) { announce('Load a model before adding per-residue data', 'error'); return; }
+    const name = (root.querySelector('#gpv-data-name').value.trim() || nameHint || 'Values').slice(0, 40);
+    residueData = { ...table, name, scale: root.querySelector('#gpv-data-scale').value, scope: root.querySelector('#gpv-data-scope').value, entryId: entry.id };
+    root.querySelector('#gpv-data-name').value = name;
+    renderDataState(); applyStyle();
+    announce(name + ': ' + table.count + ' values from ' + formatDataValue(table.min) + ' to ' + formatDataValue(table.max) + (table.values.size ? '' : ' (no chain column — applied to every chain)'));
+  }
+
+  function renderDataState() {
+    const state = root.querySelector('#gpv-data-state');
+    root.querySelector('#gpv-data-paint').disabled = !residueData;
+    root.querySelector('#gpv-data-apply').disabled = !activeEntry();
+    if (!residueData) { state.textContent = 'No per-residue data loaded.'; return; }
+    const owner = entryById(residueData.entryId);
+    state.textContent = residueData.name + ' · ' + residueData.count + ' values · ' + formatDataValue(residueData.min) + ' to ' + formatDataValue(residueData.max) + ' · ' + ({ viridis: 'viridis', diverging: 'diverging', heat: 'white–red' })[residueData.scale] + ' · ' + scopeNames[residueData.scope] + (owner ? ' (' + displayName(owner) + ')' : '');
+  }
+
+  function loadPastedData() {
+    const table = parseResidueTable(root.querySelector('#gpv-data-text').value);
+    if (!table) { announce('Could not read a residue column and a numeric value column from the pasted text', 'error'); return; }
+    setResidueData(table, 'Pasted values');
+  }
+
+  /* ---------- Proximity selection ---------- */
+
+  let nearbyResult = null;
+  function nearbyResidues() {
+    const entry = activeEntry(); if (!entry || !entry.model) return null;
+    const mode = root.querySelector('#gpv-near-target').value;
+    const cutoff = Math.min(12, Math.max(2, Number(root.querySelector('#gpv-near-cutoff').value) || 4.5));
+    const chain = root.querySelector('#gpv-near-chain').value.trim();
+    const heavy = heavyAtoms(entry);
+    let targets;
+    if (mode === 'hetero') targets = heavy.filter(atom => atom.hetflag && !isWater(atom));
+    else if (mode === 'chain') { if (!chain) return { error: 'Type the chain to measure from' }; targets = heavy.filter(atom => (atom.chain || '') === chain); }
+    else { if (!selectedResidue || selectedResidue.entryId !== entry.id) return { error: 'Click a residue of this model first' }; targets = heavy.filter(atom => (atom.chain || '') === selectedResidue.chain && atom.resi === selectedResidue.resi); }
+    if (!targets.length) return { error: mode === 'hetero' ? 'No ligands or ions in ' + displayName(entry) : 'No atoms matched the target' };
+    const targetSet = new Set(targets);
+    const candidates = heavy.filter(atom => !atom.hetflag && !targetSet.has(atom) && !(mode === 'chain' && (atom.chain || '') === chain) && !(mode === 'residue' && (atom.chain || '') === selectedResidue.chain && atom.resi === selectedResidue.resi));
+    const grid = spatialGrid(candidates, cutoff); const limit = cutoff * cutoff; const found = new Map();
+    targets.forEach(target => grid.near(target).forEach(index => {
+      const atom = candidates[index];
+      if (squaredDistance(atom, target) > limit) return;
+      const key = (atom.chain || '') + '|' + atom.resi;
+      if (!found.has(key)) found.set(key, { chain: atom.chain || '', resi: atom.resi, resn: atom.resn || '' });
+    }));
+    return { entry, cutoff, mode, residues: [...found.values()].sort((a, b) => compareChains(a.chain, b.chain) || a.resi - b.resi) };
+  }
+
+  function highlightNearby() {
+    const result = nearbyResidues(); if (!result) return;
+    if (result.error) { updateStatus(result.error); return; }
+    nearbyResult = result;
+    root.querySelector('#gpv-near-copy').disabled = !result.residues.length;
+    if (!result.residues.length) { updateStatus('No residues within ' + result.cutoff + ' Å of the target'); return; }
+    remember('nearby residues');
+    const byChain = new Map();
+    result.residues.forEach(item => { if (!byChain.has(item.chain)) byChain.set(item.chain, []); byChain.get(item.chain).push(item.resi); });
+    const color = root.querySelector('#gpv-selection-color').value;
+    byChain.forEach((residues, chain) => selectionRecords.push({ id: nextAnnotationId++, entryId: result.entry.id, chain, residues, action: 'highlight', color }));
+    renderSelectionList(); applyStyle();
+    updateStatus(result.residues.length + ' residue' + (result.residues.length === 1 ? '' : 's') + ' within ' + result.cutoff + ' Å highlighted on ' + displayName(result.entry) + ' · Copy residue list for the methods');
+  }
+
+  function nearbyListText() {
+    if (!nearbyResult || !nearbyResult.residues) return '';
+    return nearbyResult.residues.map(item => (item.chain ? item.chain + ':' : '') + item.resn + item.resi).join(', ');
+  }
+
+  /* ---------- Session autosave ---------- */
+
+  const sessionDbName = 'protein-structure-viewer';
+  let sessionTimer = 0; let sessionWarned = false;
+  function openSessionDb() {
+    return new Promise((resolve, reject) => {
+      if (!('indexedDB' in window)) { reject(new Error('no IndexedDB')); return; }
+      const request = indexedDB.open(sessionDbName, 1);
+      request.onupgradeneeded = () => request.result.createObjectStore('session');
+      request.onsuccess = () => resolve(request.result);
+      request.onerror = () => reject(request.error);
+    });
+  }
+  async function sessionStore(mode, work) {
+    const db = await openSessionDb();
+    return new Promise((resolve, reject) => {
+      const tx = db.transaction('session', mode); const request = work(tx.objectStore('session'));
+      tx.oncomplete = () => { db.close(); resolve(request && request.result); };
+      tx.onerror = () => { db.close(); reject(tx.error); };
+    });
+  }
+  function scheduleSessionSave() {
+    clearTimeout(sessionTimer);
+    sessionTimer = setTimeout(() => { saveSession().catch(() => {}); }, 1500);
+  }
+  async function saveSession() {
+    if (!structures.length) { await sessionStore('readwrite', store => store.delete('current')); return; }
+    const total = structures.reduce((sum, entry) => sum + (entry.text ? entry.text.length : 0), 0);
+    if (total > 80 * 1024 * 1024) { if (!sessionWarned) { sessionWarned = true; toast('Session too large to autosave (over 80 MB of coordinates) — download scene JSON to keep your work.'); } return; }
+    const snapshot = {
+      savedAt: new Date().toISOString(), viewerVersion,
+      files: structures.map(entry => ({ name: entry.name, text: entry.text, format: entry.format, sourcePath: entry.sourcePath, collection: entry.collection, fetchId: entry.fetchId || null, confidence: entry.confidence || {}, rank: entry.rank })),
+      scene: { type: 'protein-viewer-scene', schemaVersion: 1, viewerVersion, provenance: provenanceValues(), models: structures.map(entry => ({ name: entry.name, visible: entry.visible, color: entry.color, label: entry.label || '', hiddenChains: entry.hiddenChains || [] })), settings: sceneSettings(), ...sceneOverlays(), savedViews: savedViews.map(view => ({ ...view })) }
+    };
+    await sessionStore('readwrite', store => store.put(snapshot, 'current'));
+  }
+  async function offerSessionRestore() {
+    if (location.hash.startsWith('#scene=') || structures.length) return;
+    let saved = null;
+    try { saved = await sessionStore('readonly', store => store.get('current')); } catch (error) { return; }
+    if (!saved || !Array.isArray(saved.files) || !saved.files.length || structures.length) return;
+    const banner = root.querySelector('#gpv-session-banner'); banner.hidden = false;
+    root.querySelector('#gpv-session-text').textContent = 'Restore your last session? ' + saved.files.length + ' model' + (saved.files.length === 1 ? '' : 's') + ', saved ' + new Date(saved.savedAt).toLocaleString() + '.';
+    root.querySelector('#gpv-session-yes').onclick = () => { banner.hidden = true; restoreSession(saved).catch(error => announce('Could not restore the session: ' + error.message, 'error')); };
+    root.querySelector('#gpv-session-no').onclick = () => { banner.hidden = true; };
+    root.querySelector('#gpv-session-forget').onclick = () => { banner.hidden = true; sessionStore('readwrite', store => store.delete('current')).then(() => updateStatus('Saved session discarded')).catch(() => {}); };
+  }
+  async function restoreSession(saved) {
+    const done = setBusy('Restoring session…');
+    try {
+      saved.files.forEach(file => {
+        const entry = addStructure(uniqueModelName(file.name, file.collection), file.text, file.format, file.sourcePath, file.collection);
+        if (file.fetchId) entry.fetchId = file.fetchId;
+        if (file.confidence) entry.confidence = file.confidence;
+        if (file.rank !== undefined && file.rank !== null) entry.rank = file.rank;
+      });
+      renderList(); applyStyle();
+      await applyScene(saved.scene);
+      announce('Session restored · ' + saved.files.length + ' model' + (saved.files.length === 1 ? '' : 's') + ' from ' + new Date(saved.savedAt).toLocaleTimeString());
+    } finally { done(); }
+  }
+
+  /* ---------- Batch export ---------- */
+
+  async function downloadViewsZip() {
+    if (!savedViews.length) { announce('Save a view first (Publish → Save current view)', 'error'); return; }
+    if (typeof JSZip === 'undefined') { announce('The ZIP writer did not load. Refresh the page and try again.', 'error'); return; }
+    const plan = exportDimensions(); const button = root.querySelector('#gpv-views-zip');
+    const done = setBusy('Rendering views…'); button.disabled = true;
+    try {
+      const zip = new JSZip();
+      for (let index = 0; index < savedViews.length; index += 1) {
+        button.textContent = 'Rendering ' + (index + 1) + ' / ' + savedViews.length + '…'; await afterPaint();
+        const uri = await withLegend(await renderPublicationImage(savedViews[index], plan), plan);
+        zip.file(String(index + 1).padStart(2, '0') + '-' + String.fromCharCode(65 + index) + '-' + String(savedViews[index].name || 'view').replace(/[^\w.-]+/g, '_') + '.png', await pngWithDpi(uri, plan.dpi));
+      }
+      const provenance = provenanceValues();
+      zip.file('captions.txt', [provenance.title || 'Protein structure figure', provenance.source, provenance.method, '', ...savedViews.map((view, index) => String.fromCharCode(65 + index) + '. ' + view.name + (view.caption ? ': ' + view.caption : '')), '', provenance.notes, '', figureLegendText()].filter((line, index, array) => line || array[index - 1]).join('\n'));
+      const blob = await zip.generateAsync({ type: 'blob' });
+      downloadBlob(blob, 'application/zip', exportFileName('protein-views', plan, 'zip'));
+      announce(savedViews.length + ' view' + (savedViews.length === 1 ? '' : 's') + ' exported · ' + formatBytes(blob.size) + (plan.dpi ? ' · ' + plan.dpi + ' dpi' : ''));
+    } catch (error) {
+      announce('Could not export the views: ' + error.message, 'error');
+    } finally {
+      releaseExportViewer(); done(); button.disabled = savedViews.length === 0; button.textContent = 'Download all views (ZIP)';
+    }
   }
 
   /* ---------- Annotated domains ---------- */
@@ -3667,6 +3929,7 @@ html>body{padding:0}</style>
       amino: 'coloured by amino acid identity (RasMol colours)',
       ss: 'coloured by secondary structure (helix magenta, strand yellow, loop grey)',
       domain: 'coloured by PAE-derived domains' + (shown[0] && shown[0].domains && shown[0].domains.domains.length ? ' (' + shown[0].domains.domains.length + ' domains; ten-residue segments merged while the mean PAE between groups stayed below ' + shown[0].domains.cutoff + ' Å; grey residues unassigned)' : ' (none computed)'),
+      data: residueData ? 'coloured by ' + residueData.name + ' (' + ({ viridis: 'viridis', diverging: 'blue–white–red diverging', heat: 'white–red' })[residueData.scale] + ' scale from ' + formatDataValue(dataRange().min) + ' to ' + formatDataValue(dataRange().max) + '; residues without a value grey)' : 'coloured by per-residue data (none loaded)',
       annotated: 'coloured by annotated domains (' + (domainRecords.length ? [...new Map(domainRecords.map(record => [record.name, record])).values()].map(record => record.name + ' ' + domainRecordRanges(record) + ' ' + record.color).join('; ') : 'none defined') + '; other residues grey)'
     }[mode] || 'coloured per model';
     const surfaceChoice = root.querySelector('#gpv-surface').value;
@@ -4405,11 +4668,12 @@ html>body{padding:0}</style>
 
   function registerMetadata(name, textValue, collection = null) {
     const lower = name.toLowerCase();
-    if (lower.endsWith('.csv')) {
-      const assets = parseRankingCsv(name, textValue);
-      assets.forEach(asset => { asset.collection = collection; });
-      confidenceAssets.push(...assets);
-      return assets.length > 0;
+    if (lower.endsWith('.csv') || lower.endsWith('.tsv')) {
+      const assets = lower.endsWith('.csv') ? parseRankingCsv(name, textValue) : [];
+      if (assets.length) { assets.forEach(asset => { asset.collection = collection; }); confidenceAssets.push(...assets); return true; }
+      const table = parseResidueTable(textValue);
+      if (table) { setResidueData(table, fileStem(name)); return true; }
+      return false;
     }
     let data;
     try { data = JSON.parse(textValue); } catch (error) { return false; }
@@ -4481,6 +4745,7 @@ html>body{padding:0}</style>
       labels: labelRecords.filter(kept).map(label => ({ model: nameOf(label.entryId), chain: label.chain, resi: label.resi, atom: label.atom, text: label.text, color: label.color, size: label.size })),
       selections: selectionRecords.filter(kept).map(record => ({ model: nameOf(record.entryId), chain: record.chain, residues: record.residues, action: record.action, color: record.color })),
       measurements: measurementRecords.filter(keptPoints).map(record => ({ type: record.type, points: record.points.map(point) })),
+      residueData: residueData && (residueData.scope === 'all' || keep(residueData.entryId)) ? { name: residueData.name, scale: residueData.scale, scope: residueData.scope, model: nameOf(residueData.entryId), rows: [...residueData.values.entries()].map(([key, value]) => [key.split('|')[0], Number(key.split('|')[1]), value]).concat([...residueData.byResi.entries()].map(([resi, value]) => ['', resi, value])) } : null,
       domains: domainRecords.filter(record => record.scope === 'all' || kept(record)).map(record => ({ name: record.name, color: record.color, chain: record.chain, residues: record.residues, scope: record.scope, model: nameOf(record.entryId) })),
       annotations: annotationRecords.filter(keptPoints).map(record => ({ type: record.type, text: record.text, color: record.color, size: record.size, dashed: record.dashed, corner: record.corner, offset: record.offset, distance: record.distance, dx: record.dx, dy: record.dy, points: record.points.map(point) }))
     };
@@ -4643,7 +4908,7 @@ html>body{padding:0}</style>
     const settings = scene.settings || {};
     if (['overlay', 'single'].includes(settings.viewMode)) root.querySelector('#gpv-view-mode').value = settings.viewMode;
     if (['cartoon', 'stick', 'sphere', 'line'].includes(settings.representation)) root.querySelector('#gpv-style').value = settings.representation;
-    if (['structure', 'chain', 'plddt', 'deviation', 'domain', 'annotated', 'charge', 'hydrophobicity', 'restype', 'amino', 'ss', 'spectrum', 'element'].includes(settings.colorMode)) root.querySelector('#gpv-color-mode').value = settings.colorMode;
+    if (['structure', 'chain', 'plddt', 'deviation', 'domain', 'annotated', 'data', 'charge', 'hydrophobicity', 'restype', 'amino', 'ss', 'spectrum', 'element'].includes(settings.colorMode)) root.querySelector('#gpv-color-mode').value = settings.colorMode;
     if (['loaded', 'ranking', 'plddt'].includes(settings.modelOrder)) root.querySelector('#gpv-order').value = settings.modelOrder;
     if (['sequence', 'identifier'].includes(settings.alignmentMode)) root.querySelector('#gpv-alignment-mode').value = settings.alignmentMode;
     if (['perspective', 'orthographic'].includes(settings.projection)) root.querySelector('#gpv-projection').value = settings.projection;
@@ -4686,6 +4951,13 @@ html>body{padding:0}</style>
       return { id: nextAnnotationId++, entryId: entry.id, name: String(record.name).slice(0, 60), color: /^#[0-9a-f]{6}$/i.test(record.color || '') ? record.color : domainColorFor(domainRecords.length + 1), chain: String(record.chain || ''), residues, scope: ['model', 'source', 'all'].includes(record.scope) ? record.scope : 'source' };
     }).filter(Boolean);
     domainVersion += 1;
+    residueData = null;
+    if (scene.residueData && Array.isArray(scene.residueData.rows)) {
+      const owner = byName.get(scene.residueData.model) || structures[0];
+      const table = parseResidueRows(scene.residueData.rows);
+      if (owner && table) residueData = { ...table, name: String(scene.residueData.name || 'Values').slice(0, 40), scale: dataScales[scene.residueData.scale] ? scene.residueData.scale : 'viridis', scope: ['model', 'source', 'all'].includes(scene.residueData.scope) ? scene.residueData.scope : 'source', entryId: owner.id };
+    }
+    renderDataState();
     savedViews = (scene.savedViews || []).map(view => ({ ...view, id: nextAnnotationId++ }));
     root.querySelector('#gpv-all-labels').checked = settings.allResidueLabels === true;
     const provenance = scene.provenance || {};
@@ -4896,7 +5168,7 @@ html>body{padding:0}</style>
     const active = byName.get(state.activeModel); if (active) activeId = active.id;
     if (['overlay', 'single'].includes(state.viewMode)) root.querySelector('#gpv-view-mode').value = state.viewMode;
     if (['cartoon', 'stick', 'sphere', 'line'].includes(state.representation)) root.querySelector('#gpv-style').value = state.representation;
-    if (['structure', 'chain', 'plddt', 'deviation', 'domain', 'annotated', 'charge', 'hydrophobicity', 'restype', 'amino', 'ss', 'spectrum', 'element'].includes(state.colorMode)) root.querySelector('#gpv-color-mode').value = state.colorMode;
+    if (['structure', 'chain', 'plddt', 'deviation', 'domain', 'annotated', 'data', 'charge', 'hydrophobicity', 'restype', 'amino', 'ss', 'spectrum', 'element'].includes(state.colorMode)) root.querySelector('#gpv-color-mode').value = state.colorMode;
     if (['perspective', 'orthographic'].includes(state.projection)) root.querySelector('#gpv-projection').value = state.projection;
     if (['transparent', 'white', 'dark', 'custom'].includes(state.background)) root.querySelector('#gpv-background').value = state.background;
     if (/^#[0-9a-f]{6}$/i.test(state.backgroundColor || '')) root.querySelector('#gpv-background-color').value = state.backgroundColor;
@@ -5098,6 +5370,13 @@ html>body{padding:0}</style>
   function legendItems(kind = 'figure') {
     const mode = root.querySelector('#gpv-color-mode').value;
     if (residueLegends[mode]) return residueLegends[mode](kind);
+    if (mode === 'data') {
+      if (!residueData) return { title: 'Per-residue data', items: [['#d1d5db', 'none', 'No per-residue data loaded — Annotate → Per-residue data']] };
+      const stops = dataScales[residueData.scale] || dataScales.viridis;
+      const range = dataRange();
+      const items = [0, 0.25, 0.5, 0.75, 1].map(t => [gradientColor(stops, t), formatDataValue(range.min + (range.max - range.min) * t)]);
+      return { title: residueData.name, items: [...items, ['#d1d5db', 'no value', 'No value']] };
+    }
     if (mode === 'annotated') {
       const active = sequenceEntry();
       const applicable = active ? domainRecords.filter(record => domainApplies(record, active)) : domainRecords;
@@ -6557,6 +6836,7 @@ applyBackground();
     clearHistory();
     labelRecords = [];
     domainRecords = []; domainVersion += 1;
+    residueData = null; nearbyResult = null; renderDataState();
     selectionRecords = [];
     measurementRecords = [];
     measurementDraft = [];
@@ -6788,7 +7068,10 @@ applyBackground();
     'Annotate → Domains: name a region, pick its colour, and apply it to every model from the same AlphaFold run. Colour by annotated domains paints them and the legend lists them by name — in the viewer, every export and the report.',
     'Publish → Print size exports at a stated width (85 or 178 mm) and resolution (300 or 600 dpi), writes the dpi into the PNG or TIFF, and sizes labels in points — what a journal checks.',
     'Appearance → Colour-blind-safe palette switches chains and domains to Okabe–Ito colours; a scale bar of 10–100 Å goes bottom-right of every export from Publish → Scale bar.',
-    'Help (?) → How to cite gives the viewer and 3Dmol.js references; each GitHub release is archived on Zenodo with a DOI.'
+    'Help (?) → How to cite gives the viewer and 3Dmol.js references; each GitHub release is archived on Zenodo with a DOI.',
+    'Annotate → Per-residue data: drop a CSV of residue and value columns — conservation, mutational scores, ΔΔG — and colour the structure by it with a gradient legend that states the range.',
+    'Annotate → Selections → Near: highlight every residue within 4.5 Å of the ligands, of a chain, or of the residue you clicked, and copy the list for your methods.',
+    'Your session autosaves in the browser: reopen the page and choose Restore. Publish → Download all views (ZIP) renders every saved view at print size in one go.'
   ];
   let tipIndex = Math.floor(Math.random() * tips.length);
   function renderTip() {
@@ -6808,6 +7091,17 @@ applyBackground();
   root.querySelector('#gpv-sequence-text').addEventListener('toggle', () => { writeJson(lettersKey, root.querySelector('#gpv-sequence-text').open); renderSequence(); });
   root.querySelector('#gpv-fasta').addEventListener('click', downloadFasta);
   root.querySelector('#gpv-domain-run').addEventListener('click', findDomains);
+  root.querySelector('#gpv-near-run').addEventListener('click', highlightNearby);
+  root.querySelector('#gpv-near-target').addEventListener('change', () => { root.querySelector('#gpv-near-chain').closest('label').hidden = root.querySelector('#gpv-near-target').value !== 'chain'; });
+  root.querySelector('#gpv-near-chain').closest('label').hidden = true;
+  root.querySelector('#gpv-near-copy').addEventListener('click', async () => { const text = nearbyListText(); if (!text) return; try { await navigator.clipboard.writeText(text); announce('Residue list copied · ' + nearbyResult.residues.length + ' residues'); } catch (error) { root.querySelector('#gpv-data-text').value = text; announce('Clipboard unavailable — the list is in the paste box below'); } });
+  root.querySelector('#gpv-data-apply').addEventListener('click', loadPastedData);
+  root.querySelector('#gpv-data-file').addEventListener('change', async event => { const file = event.target.files[0]; if (!file) return; const table = parseResidueTable(await file.text()); if (!table) { announce('Could not read a residue column and a numeric value column from ' + file.name, 'error'); return; } setResidueData(table, fileStem(file.name)); event.target.value = ''; });
+  root.querySelector('#gpv-data-paint').addEventListener('click', () => { const select = root.querySelector('#gpv-color-mode'); select.value = 'data'; select.dispatchEvent(new Event('change', { bubbles: true })); });
+  root.querySelector('#gpv-data-clear').addEventListener('click', () => { residueData = null; renderDataState(); applyStyle(); updateStatus('Per-residue data cleared'); });
+  ['#gpv-data-scale', '#gpv-data-scope'].forEach(selector => root.querySelector(selector).addEventListener('change', () => { if (!residueData) return; residueData.scale = root.querySelector('#gpv-data-scale').value; residueData.scope = root.querySelector('#gpv-data-scope').value; renderDataState(); applyStyle(); }));
+  root.querySelector('#gpv-views-zip').addEventListener('click', () => { downloadViewsZip(); });
+  document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'hidden' && structures.length) saveSession().catch(() => {}); });
   root.querySelector('#gpv-add-domain').addEventListener('click', addDomainRecord);
   root.querySelector('#gpv-domain-range').addEventListener('keydown', event => { if (event.key === 'Enter') { event.preventDefault(); addDomainRecord(); } });
   root.querySelector('#gpv-domain-adopt').addEventListener('click', adoptPaeDomains);
@@ -6837,6 +7131,7 @@ applyBackground();
   figureFont(); updateExportEstimate();
   if (Number(root.querySelector('#gpv-scale-bar').value)) ensureScaleBarLoop();
   openSharedScene();
+  offerSessionRestore();
   /* ?debug=1 exposes a few internals for the regression suite and for bug reports;
      it has no effect otherwise. */
   if (new URLSearchParams(location.search).has('debug')) window.__viewerDebug = { viewer, pickAtomAt, displayedEntries, activeEntry, colorOptions, entries: () => structures };

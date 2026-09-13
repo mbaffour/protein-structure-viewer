@@ -72,7 +72,9 @@ paints each residue by its Cα deviation from the reference. Synchronized
 multi-view of up to six models whose cameras follow each other — rotation only, so assemblies of
 different size stay framed, or rotation and zoom for superposed models.
 
-**Annotate.** Click any atom to inspect its model, residue, chain, atom name, and pLDDT, or hover
+**Annotate.** Map your own per-residue values (conservation, mutational scores, ΔΔG) onto the
+structure from a CSV with a gradient legend, and highlight every residue within a distance of a
+ligand, a chain, or a clicked residue. Click any atom to inspect its model, residue, chain, atom name, and pLDDT, or hover
 to read it from the status bar. A sequence strip under the viewer draws every chain coloured by
 the current scheme: click a residue to select it, drag a range to fill the selection fields,
 double-click to zoom. A sequence-letters panel shows the one-letter sequence with residue numbers,
@@ -88,7 +90,7 @@ models display names for captions. Undo and redo every one of these changes.
 
 **Publish.** PNG, TIFF and SVG export at a stated print width and resolution with the dpi written
 into the file (or fixed pixel sizes), text sized in points, a journal font, a scale bar, a stitched lettered comparison figure of every
-synchronized panel, SVG variants of both with labels, arrows, captions, and the colour legend
+synchronized panel, every saved view as a ZIP of print-size PNGs, SVG variants of both with labels, arrows, captions, and the colour legend
 (pLDDT bands, chains, or models) as editable vector layers, and 5-, 10-, or 15-second WebM spin-video export. Reusable named views with
 captions, multi-panel contact-sheet export, and caption-text export.
 Self-contained interactive HTML reports (each panel with a hover-to-read, click-to-zoom sequence
@@ -117,6 +119,12 @@ the size.
 
 The Publish tab shows the estimated report size before you build it — embedding a few hundred models
 produces a file that is slow to open, so narrow the selection when the report is for a reviewer.
+
+## Your work is kept
+
+The open models, annotations, domains, views and settings autosave to the browser's own storage a
+moment after every change; reopening the page offers to restore them. Nothing leaves the browser.
+Scene JSON, reports and share links remain the way to keep or hand over work deliberately.
 
 ## Privacy and network use
 

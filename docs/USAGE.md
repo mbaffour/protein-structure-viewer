@@ -209,6 +209,22 @@ takes the groups found under *Confidence → PAE domains* and turns them into na
 edit. Domains are stored in scene JSON, travel in share links, and the shared report offers the same
 colour scheme with a legend of names.
 
+**Per-residue data.** Choose or paste a table with a residue column and a numeric value column —
+a chain column is optional; header names such as `resi`, `residue`, `position`, `chain`, `value`,
+`score` are recognised, and a header-less `resi,value` or `chain,resi,value` table works too. Give the
+dataset a name, a colour scale (viridis for sequential values, blue–white–red centred on zero for
+signed ones such as ΔΔG, white–red for densities), and a scope (this model, every model from the
+same source, every model). **Colour by data** paints the values; the legend shows five steps of the
+scale with their values; residues without a value are grey; the sequence strip follows. Datasets are
+stored in scene JSON and share links. A CSV dropped together with the structures is read as
+per-residue data when it is not an AlphaFold ranking file.
+
+**Nearby residues.** Under *Selections*, **Near** highlights every residue of the current model with a
+heavy atom within the cutoff (default 4.5 Å) of the **ligands and ions**, of **a chain** you name, or
+of **the selected residue** (click one first). The result is an ordinary highlight selection in the
+chosen colour, so it can be edited, undone, and it appears in exports and reports; **Copy residue
+list** puts `A:HIS87, A:LEU91, …` on the clipboard for a methods section.
+
 **Measurements.** Choose distance (two atoms) or angle (three atoms), press **Start measuring**, and
 click the atoms in the viewport. Values update as coordinates change — so aligning models updates
 the distances between them. <kbd>Esc</kbd> leaves measurement mode.
@@ -338,6 +354,11 @@ re-rendering.
 **Video.** Record a 5, 10, or 15 second WebM of the structure spinning. Chrome and Firefox support
 this; Safari does not, and the viewer will say so.
 
+**All views as a ZIP.** **Download all views (ZIP)** renders each saved view as a publication PNG
+at the current output settings — print size, resolution, text size, legend, scale bar — named
+`01-A-<view>.png` onward, together with `captions.txt` (title, captions, notes and the generated
+figure legend). Large view sets take a while; the button counts progress.
+
 **Saved views.** Save the current camera, model selection, colours, representation, and background
 under a name and caption. Saved views can be reloaded, exported as a multi-panel contact sheet with
 lettered captions, exported as caption text, and followed as a guided tour inside the shared report.
@@ -414,6 +435,15 @@ reference managers is in `CITATION.cff` (GitHub shows a "Cite this repository" b
 viewer renders with 3Dmol.js, which should be cited as well: Rego, N. & Koes, D. (2015). 3Dmol.js:
 molecular visualization with WebGL. *Bioinformatics* 31(8), 1322–1324.
 doi:10.1093/bioinformatics/btu829. *Help → How to cite* in the viewer has both.
+
+## Your work is kept
+
+A moment after every change, the open models (coordinates and confidence data), annotations,
+domains, per-residue data, views and settings are saved in the browser's IndexedDB. Reopening the
+page shows *Restore your last session?* with the model count and time; **Restore** rebuilds it,
+**Not now** leaves it for later, **Forget it** deletes it. Sessions above 80 MB of coordinates are
+not autosaved (the viewer says so once). The copy lives only in that browser profile; scene JSON,
+reports and share links remain the deliberate ways to keep or hand over work.
 
 ## Reproducible scenes
 

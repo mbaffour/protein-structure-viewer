@@ -2,6 +2,30 @@
 
 All notable changes to this project are recorded here.
 
+## 2.11.0
+
+Your data on the structure, and your work kept. Scenes from 2.2 onward still load; scene manifests
+gain an optional `residueData` block.
+
+### Added
+
+- **Per-residue data.** *Annotate → Per-residue data* takes a CSV or TSV (file or pasted) with a
+  residue column, a numeric value column and an optional chain column — conservation, deep
+  mutational scanning scores, ΔΔG, coverage — and a new colour scheme paints the values with a
+  viridis, diverging (centred on zero) or white–red scale. The legend states the range, the strip
+  follows, residues without a value are grey, and the dataset applies to this model, every model
+  from the same source, or every model. A CSV dropped with the models that is not an AlphaFold ranking
+  file is read the same way. Datasets travel in scene JSON and share links.
+- **Nearby residues.** *Annotate → Selections → Near* highlights every residue of the current model
+  with a heavy atom within a chosen distance of the ligands and ions, of a chain, or of the residue
+  you clicked, and copies the residue list for a methods section.
+- **Session autosave.** The open models, confidence data, annotations, domains, views and settings
+  are saved in the browser's IndexedDB a moment after every change (up to 80 MB of coordinates).
+  Reopening the page offers to restore them, or to forget the copy. Nothing leaves the browser.
+- **All views as a ZIP.** *Publish → Download all views (ZIP)* renders every saved view as a
+  publication PNG at the current output settings (print size, dpi, text size, legend, scale bar) and
+  packs them with a captions file and the generated figure legend.
+
 ## 2.10.0
 
 Publication output and citability. Scenes from 2.2 onward still load.

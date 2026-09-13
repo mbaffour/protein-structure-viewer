@@ -455,6 +455,31 @@ await step('a named domain applies across models from the same source and fills 
   await page.click('#gpv-domain-list .gpv-entry button:has-text("Remove")'); await page.waitForTimeout(300);
   if (await page.locator('#gpv-domain-list .gpv-entry').count()) throw new Error('domain was not removed');
 });
+await step('a per-residue table colours the structure with a gradient legend', async () => {
+  const csv = 'resi,value\n' + Array.from({ length: 30 }, (_, i) => (i + 1) + ',' + ((i + 1) / 30).toFixed(3)).join('\n') + '\n';
+  const file = join(work, 'conservation.csv'); await writeFile(file, csv);
+  await page.setInputFiles('#gpv-data-file', [file]); await page.waitForTimeout(600);
+  const state = (await page.locator('#gpv-data-state').textContent()) || '';
+  if (!/conservation · 30 values · 0\.03 to 1\.00/.test(state)) throw new Error('data state: ' + state);
+  await page.click('#gpv-data-paint'); await page.waitForTimeout(500);
+  const legend = (await page.locator('#gpv-plddt-legend').textContent()) || '';
+  if (!/conservation/.test(legend) || !/1\.00/.test(legend)) throw new Error('legend: ' + legend);
+  const colours = await page.evaluate(() => { const v = window.__viewerDebug; const entry = v.activeEntry(); const fn = v.colorOptions(entry).colorfunc; const at = resi => fn(entry.atoms.find(a => a.atom === 'CA' && a.resi === resi && (a.chain || '') === 'A')); return [at(30), at(1)]; });
+  if (colours[0] !== '#fde725' || colours[1] !== '#440154') throw new Error('gradient ends: ' + colours.join(' '));
+  await page.click('#gpv-data-clear'); await page.waitForTimeout(300);
+  await tab('appearance'); await page.selectOption('#gpv-color-mode', 'plddt'); await page.waitForTimeout(300); await tab('annotate');
+});
+await step('residues near a chain are highlighted and listed', async () => {
+  const before = await page.locator('#gpv-selection-list .gpv-entry').count();
+  await page.selectOption('#gpv-near-target', 'chain'); await page.fill('#gpv-near-chain', 'B'); await page.fill('#gpv-near-cutoff', '6');
+  await page.click('#gpv-near-run'); await page.waitForTimeout(600);
+  const state = (await page.locator('#gpv-state').textContent()) || '';
+  if (!/residues? within 6 Å highlighted/.test(state)) throw new Error('status: ' + state);
+  if ((await page.locator('#gpv-selection-list .gpv-entry').count()) <= before) throw new Error('no selection added');
+  if (await page.locator('#gpv-near-copy').isDisabled()) throw new Error('copy list disabled');
+  console.log('       ' + state.trim().slice(0, 70));
+  await page.click('#gpv-clear-selections'); await page.waitForTimeout(300);
+});
 await step('undo and redo walk label changes back and forth', async () => {
   await page.fill('#gpv-label-text', 'Undo me'); await page.click('#gpv-add-label'); await page.waitForTimeout(300);
   const count = () => page.locator('#gpv-label-list .gpv-entry').count();
@@ -869,6 +894,16 @@ await step('a scale bar of known length appears in the figure SVG', async () => 
   await page.selectOption('#gpv-scale-bar', '0'); await page.waitForTimeout(300);
   await page.selectOption('#gpv-export-mode', 'pixels'); await page.waitForTimeout(200);
 });
+await step('all saved views download as a ZIP of print-size PNGs', async () => {
+  if (await page.locator('#gpv-views-zip').isDisabled()) throw new Error('ZIP button disabled although views are saved');
+  const download = page.waitForEvent('download', { timeout: 180000 });
+  await page.click('#gpv-views-zip');
+  const file = join(work, 'views.zip'); await (await download).saveAs(file);
+  const zip = await readFile(file);
+  if (zip.toString('latin1', 0, 2) !== 'PK') throw new Error('not a ZIP');
+  if (!zip.includes('captions.txt') || !zip.includes('01-A-')) throw new Error('ZIP lacks expected entries');
+  console.log('       views ZIP ' + (zip.length / 1024).toFixed(0) + ' KB');
+});
 await step('copying the PNG to the clipboard reports an outcome', async () => {
   await tab('publish');
   await page.click('#gpv-copy-image');
@@ -883,9 +918,25 @@ await step('the figure legend names the models and the colouring', async () => {
   await page.click('#gpv-figure-legend'); await page.waitForTimeout(500);
   const text = await page.inputValue('#gpv-legend-text');
   if (!/representation of /.test(text) || !/coloured/.test(text)) throw new Error('legend text: ' + text.slice(0, 120));
-  if (!/Rendered with Protein Structure Viewer 2\.10\.0 \(3Dmol\.js; Rego & Koes, 2015\)\./.test(text)) throw new Error('citation sentence missing');
+  if (!/Rendered with Protein Structure Viewer \d+\.\d+\.\d+ \(3Dmol\.js; Rego & Koes, 2015\)\./.test(text)) throw new Error('citation sentence missing');
   if (!/model_/.test(text)) throw new Error('no model name in: ' + text.slice(0, 120));
   console.log('       ' + text.slice(0, 110).replace(/\s+/g, ' ') + '…');
+});
+
+group('session');
+await step('reloading offers to restore the autosaved session', async () => {
+  const models = await page.locator('#gpv-list [data-entry-id]').count();
+  const labels = await page.locator('#gpv-label-list .gpv-entry').count();
+  await page.waitForTimeout(2000);
+  await page.reload(); await page.waitForTimeout(3000);
+  if (await page.locator('#gpv-session-banner').isHidden()) throw new Error('restore banner not shown');
+  const text = (await page.locator('#gpv-session-text').textContent()) || '';
+  if (!new RegExp(models + ' models').test(text)) throw new Error('banner text: ' + text);
+  await page.click('#gpv-session-yes'); await page.waitForTimeout(4000);
+  const restored = await page.locator('#gpv-list [data-entry-id]').count();
+  if (restored !== models) throw new Error('restored ' + restored + ' of ' + models + ' models');
+  if ((await page.locator('#gpv-label-list .gpv-entry').count()) !== labels) throw new Error('labels not restored');
+  console.log('       ' + text.trim().slice(0, 60));
 });
 
 group('share links');
