@@ -128,6 +128,15 @@ the left while the tool tabs scroll in a panel on the right, so you see each cha
 it. Drag the divider to resize the panel; the header's panel button switches to the stacked
 layout and back, and the choice is remembered. Screens narrower than 1100 px always stack.
 
+## Figure finishing
+
+Appearance offers a silhouette **outline** (thin or bold) and **depth cueing** for figures
+that stay legible at column width; both apply everywhere the scene is drawn. The composition
+table can **fade** a chain into the background to spotlight the others. Publish has **journal
+presets** (Nature, Science, Cell Press, PNAS, PLOS, eLife) that set width, resolution, text
+size and font, and **one panel per model**, which renders the models of a run from one camera
+into a lettered figure.
+
 ## Your work is kept
 
 **Session files.** *Publish → Save session file* writes one ZIP with the models, confidence data,

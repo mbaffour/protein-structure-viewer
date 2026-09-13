@@ -2,6 +2,26 @@
 
 All notable changes to this project are recorded here.
 
+## 2.17.0
+
+Figures that read in print.
+
+### Added
+
+- **Outline and depth cueing.** Appearance → *Outline* draws a thin or bold silhouette line
+  around every element, the ink-drawing look that keeps overlapping chains legible at column
+  width; *Depth cueing* fades distant parts. Both apply to the main view, every synchronized
+  panel and every export, and are saved with scenes and sessions.
+- **Fade a chain.** The composition table gains a *Faded* switch per chain: the chain keeps
+  its colour scheme but is blended most of the way into the background, spotlighting the
+  others. Carried into panels, exports and the sequence strip; saved with scenes.
+- **Journal presets.** Publish → *Journal preset* sets the printed width, resolution, text
+  size and font from the figure guides of Nature, Science, Cell Press, PNAS, PLOS and eLife.
+  Check the current guide before submitting; the presets are a starting point.
+- **One panel per model.** Publish → *Download one panel per model* renders every shown
+  model (or every model of the current run) from the same camera into one lettered figure at
+  the chosen print size, with the resolution written into the file.
+
 ## 2.16.0
 
 See the model while you work.

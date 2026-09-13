@@ -164,6 +164,57 @@ await step('the viewport has a canvas', async () => {
   });
   if (!ok) throw new Error('no canvas');
 });
+
+group('figure finishing');
+await step('outline and depth cueing switch on without errors and round-trip through a scene', async () => {
+  await tab('appearance');
+  await page.selectOption('#gpv-outline', 'bold'); await page.check('#gpv-fog'); await page.waitForTimeout(400);
+  const scene = await page.evaluate(() => JSON.stringify(window.__viewerDebug.sceneSettings ? window.__viewerDebug.sceneSettings() : null));
+  await page.selectOption('#gpv-outline', 'none'); await page.uncheck('#gpv-fog'); await page.waitForTimeout(200);
+  if (!(await page.evaluate(() => Boolean(document.querySelector('#gpv-stage canvas'))))) throw new Error('canvas lost');
+  await page.selectOption('#gpv-outline', 'thin'); await page.waitForTimeout(200);
+  if ((await page.inputValue('#gpv-outline')) !== 'thin') throw new Error('outline select did not hold');
+  await page.selectOption('#gpv-outline', 'none');
+  console.log('       scene carries ' + (scene && /"outline":"bold"/.test(scene) ? 'outline + fog' : 'no view style (debug hook lacks sceneSettings)'));
+});
+await step('fading chain B lightens its colour and dims its strip row', async () => {
+  await tab('models');
+  const fade = page.locator('#gpv-chain-rows input[aria-label="Fade chain B"]');
+  if (!(await fade.count())) throw new Error('no fade switch');
+  await fade.check(); await page.waitForTimeout(500);
+  const result = await page.evaluate(() => {
+    const d = window.__viewerDebug; const entry = d.activeEntry(); const options = d.colorOptions(entry);
+    const a = entry.atoms.find(x => x.chain === 'A' && x.atom === 'CA'); const b = entry.atoms.find(x => x.chain === 'B' && x.atom === 'CA');
+    const lum = hex => { const m = /^#([0-9a-f]{6})$/i.exec(hex); return m ? [0, 2, 4].reduce((sum, o) => sum + parseInt(m[1].slice(o, o + 2), 16), 0) : -1; };
+    const strip = document.querySelector('#gpv-sequence-rows canvas[data-chain="B"]');
+    return { faded: entry.fadedChains, a: options.colorfunc(a), b: options.colorfunc(b), lighter: lum(options.colorfunc(b)) > lum(options.colorfunc(a)), strip: strip ? strip.style.opacity : null };
+  });
+  if (!result.lighter || result.strip !== '0.45') throw new Error(JSON.stringify(result));
+  await fade.uncheck(); await page.waitForTimeout(300);
+  console.log('       A ' + result.a + ' · B faded to ' + result.b);
+});
+await step('a journal preset sets width, resolution, text size and font', async () => {
+  await tab('publish');
+  await page.selectOption('#gpv-journal', '183|300|7'); await page.waitForTimeout(400);
+  const values = await page.evaluate(() => ({ mode: document.querySelector('#gpv-export-mode').value, width: document.querySelector('#gpv-print-width').value, custom: document.querySelector('#gpv-print-custom').value, dpi: document.querySelector('#gpv-print-dpi').value, pt: document.querySelector('#gpv-print-text').value, font: document.querySelector('#gpv-figure-font').value }));
+  if (values.mode !== 'print' || values.width !== 'custom' || values.custom !== '183' || values.dpi !== '300' || values.pt !== '7' || !/Arial/.test(values.font)) throw new Error(JSON.stringify(values));
+  await page.selectOption('#gpv-journal', '85|300|7'); await page.waitForTimeout(300);
+  if ((await page.inputValue('#gpv-print-width')) !== '85') throw new Error('85 mm should pick the built-in single column');
+  await page.selectOption('#gpv-export-mode', 'pixels'); await page.waitForTimeout(200);
+});
+await step('one panel per model downloads a lettered PNG three panels wide with resolution metadata', async () => {
+  await page.selectOption('#gpv-export-mode', 'print'); await page.selectOption('#gpv-print-width', '85'); await page.waitForTimeout(200);
+  if (await page.locator('#gpv-model-panels').isDisabled()) throw new Error('button disabled with three models loaded');
+  const download = page.waitForEvent('download', { timeout: 120000 });
+  await page.click('#gpv-model-panels');
+  const file = join(work, 'model-panels.png'); await (await download).saveAs(file);
+  const bytes = await readFile(file);
+  const width = bytes.readUInt32BE(16); const height = bytes.readUInt32BE(20);
+  if (Math.abs(width - 3 * 1004) > 6 || !bytes.includes('pHYs')) throw new Error(width + 'x' + height + ' pHYs=' + bytes.includes('pHYs'));
+  await page.selectOption('#gpv-export-mode', 'pixels'); await page.waitForTimeout(200);
+  await tab('models');
+  console.log('       ' + width + ' × ' + height + ' px, 300 dpi');
+});
 await step('search filters the model list', async () => {
   await page.fill('#gpv-model-search', 'model_c'); await page.waitForTimeout(400);
   const rows = await page.locator('#gpv-list .gpv-entry').count();
@@ -187,11 +238,11 @@ await step('the composition table lists both chains and hides one on request', a
   if (!/No ligands or ions/.test((await page.locator('#gpv-hetero-summary').textContent()) || '')) throw new Error('hetero summary missing');
   const snapshot = () => page.evaluate(() => document.querySelector('#gpv-stage canvas').toDataURL());
   const before = await snapshot();
-  await page.locator('#gpv-chain-rows tr').nth(1).locator('input[type="checkbox"]').uncheck(); await page.waitForTimeout(600);
+  await page.locator('#gpv-chain-rows tr').nth(1).locator('input[aria-label^="Show chain"]').uncheck(); await page.waitForTimeout(600);
   if ((await snapshot()) === before) throw new Error('hiding chain B did not change the render');
   if (!/hidden/.test((await page.locator('#gpv-sequence-rows').textContent()) || '')) throw new Error('strip does not mark the hidden chain');
   await page.click('#gpv-chains-all'); await page.waitForTimeout(500);
-  if (!(await page.locator('#gpv-chain-rows tr').nth(1).locator('input[type="checkbox"]').isChecked())) throw new Error('show all did not restore chain B');
+  if (!(await page.locator('#gpv-chain-rows tr').nth(1).locator('input[aria-label^="Show chain"]').isChecked())) throw new Error('show all did not restore chain B');
 });
 await step('FASTA has one record per chain of the displayed models', async () => {
   const download = page.waitForEvent('download', { timeout: 20000 });

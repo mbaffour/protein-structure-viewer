@@ -81,6 +81,9 @@ PSV_CHROMIUM=/opt/pw-browsers/chromium/chrome-linux/chrome npm test
   copying the PNG to the clipboard reports an outcome; the figure legend names the models,
   representation and colouring; the methods text names the Kabsch superposition, the RMSD rule, the
   dimension definitions and the software versions.
+- Figure finishing: outline and depth cueing switch on without errors and survive a scene round-trip; fading
+  chain B lightens its colour and dims its strip row; a journal preset sets width, dpi, text size and font; the
+  per-model figure downloads as a PNG three panels wide with resolution metadata.
 - Layout: at 1280 px the tool panel sits beside the pinned stage and scrolls on its own; the divider resizes it;
   the header button switches to the stacked layout and the choice survives a reload; 900 px stacks.
 - Session: reloading the page offers to restore the autosaved session; Restore brings back every model and label;

@@ -918,7 +918,7 @@ html>body{padding:0}</style>
     </div>
     <div class="gpv-list" id="gpv-list" aria-label="Loaded structures"></div>
     <details class="gpv-composition" id="gpv-composition" open hidden><summary class="text-small">Composition of the current model</summary>
-      <div class="table-responsive"><table class="table table-sm" aria-label="Chains of the current model"><thead><tr><th>Chain</th><th class="text-end">Residues</th><th>Range</th><th class="text-end">Mean pLDDT</th><th>Shown</th></tr></thead><tbody id="gpv-chain-rows"></tbody></table></div>
+      <div class="table-responsive"><table class="table table-sm" aria-label="Chains of the current model"><thead><tr><th>Chain</th><th class="text-end">Residues</th><th>Range</th><th class="text-end">Mean pLDDT</th><th>Shown</th><th data-tooltip="Blend the chain most of the way into the background to spotlight the others; kept in panels, exports and the sequence strip">Faded</th></tr></thead><tbody id="gpv-chain-rows"></tbody></table></div>
       <div class="text-small text-muted" id="gpv-assembly-summary"></div>
       <div class="viz-controls"><span class="text-small text-muted" id="gpv-hetero-summary"></span><button class="btn btn-ghost" type="button" id="gpv-chains-all" data-tooltip="Show every chain of the current model again">Show all chains</button></div>
     </details>
@@ -939,6 +939,8 @@ html>body{padding:0}</style>
       <label class="form-check form-switch"><input class="form-check-input" id="gpv-safe-palette" type="checkbox"><span class="form-check-label">Colour-blind-safe palette (Okabe–Ito) for chains and domains</span></label>
       <label class="form-label">Surface<select class="form-select" id="gpv-surface" data-tooltip="Molecular surface coloured by the current scheme — charge or hydrophobicity on a surface reads like an electrostatics view"><option value="none">None</option><option value="translucent">Translucent surface</option><option value="opaque">Opaque surface</option></select></label>
       <label class="form-label">Projection<select class="form-select" id="gpv-projection"><option value="perspective">Perspective</option><option value="orthographic">Orthographic</option></select></label>
+      <label class="form-label">Outline<select class="form-select" id="gpv-outline" data-tooltip="Silhouette line around every element — the ink-drawing look that keeps overlapping chains legible in print; drawn in every panel and export"><option value="none">None</option><option value="thin">Thin</option><option value="bold">Bold</option></select></label>
+      <label class="form-check form-switch"><input class="form-check-input" id="gpv-fog" type="checkbox"><span class="form-check-label">Depth cueing (distant parts fade)</span></label>
       <label class="form-label">Background<select class="form-select" id="gpv-background"><option value="transparent">Transparent</option><option value="white">White</option><option value="dark">Dark</option><option value="custom">Custom</option></select></label>
       <label class="form-label">Custom background<input class="form-control form-control-color" id="gpv-background-color" type="color" value="#ffffff"></label>
       <label class="form-label">Motion<select class="form-select" id="gpv-motion"><option value="off">Off</option><option value="spin">Spin</option><option value="rock">Rock</option></select></label>
@@ -1094,6 +1096,7 @@ html>body{padding:0}</style>
       <label class="form-label">Image size<select class="form-select" id="gpv-export-size"><option value="1200x1200">Square · 1200 × 1200</option><option value="1800x1200" selected>Landscape · 1800 × 1200</option><option value="1200x1800">Portrait · 1200 × 1800</option><option value="2400x1600">Large landscape · 2400 × 1600</option></select></label>
       <label class="form-label">Scale<select class="form-select" id="gpv-export-scale"><option value="1">1×</option><option value="2" selected>2×</option><option value="4">4×</option></select></label>
       <label class="form-label">Output<select class="form-select" id="gpv-export-mode" data-tooltip="Print size states a physical width and resolution and writes the resolution into the file; text is sized in points at that width"><option value="print" selected>Print size (mm at dpi)</option><option value="pixels">Pixels (size × scale)</option></select></label>
+      <label class="form-label">Journal preset<select class="form-select" id="gpv-journal" data-tooltip="Sets the printed width, resolution, text size and font from the journal's figure guide; check the current guide before submitting"><option value="">Choose a journal…</option><option value="89|300|7">Nature · single column · 89 mm</option><option value="183|300|7">Nature · double column · 183 mm</option><option value="55|300|7">Science · one column · 55 mm</option><option value="121|300|7">Science · two columns · 121 mm</option><option value="184|300|7">Science · three columns · 184 mm</option><option value="85|300|7">Cell Press · one column · 85 mm</option><option value="114|300|7">Cell Press · 1.5 columns · 114 mm</option><option value="174|300|7">Cell Press · two columns · 174 mm</option><option value="87|300|7">PNAS · one column · 87 mm</option><option value="178|300|7">PNAS · two columns · 178 mm</option><option value="190|300|8">PLOS · full width · 190 mm</option><option value="85|300|8">eLife · one column · 85 mm</option><option value="170|300|8">eLife · full width · 170 mm</option></select></label>
       <label class="form-label">Figure width<select class="form-select" id="gpv-print-width"><option value="85">85 mm · single column</option><option value="114">114 mm · 1.5 columns</option><option value="178" selected>178 mm · double column</option><option value="custom">Custom…</option></select></label>
       <label class="form-label">Custom width (mm)<input class="form-control" id="gpv-print-custom" type="number" min="20" max="400" step="1" value="120"></label>
       <label class="form-label">Aspect<select class="form-select" id="gpv-print-aspect"><option value="1.5" selected>3 : 2</option><option value="1">1 : 1</option><option value="0.75">3 : 4</option><option value="1.7778">16 : 9</option></select></label>
@@ -1107,6 +1110,7 @@ html>body{padding:0}</style>
       <button class="btn" type="button" id="gpv-tiff" disabled data-tooltip="Uncompressed RGB TIFF with the resolution written into the file, for journals that require TIFF">Download publication TIFF</button>
       <button class="btn" type="button" id="gpv-svg" disabled data-tooltip="Raster molecule with labels, arrows, callouts and legend as editable vector layers">Download figure SVG</button>
       <button class="btn" type="button" id="gpv-compare-image" disabled data-tooltip="Stitch every synchronized panel into one lettered figure at the chosen size">Download comparison PNG</button>
+      <button class="btn" type="button" id="gpv-model-panels" disabled data-tooltip="One lettered panel per model, every panel rendered from the current camera — the five models of an AlphaFold run side by side, identically framed">Download one panel per model</button>
       <button class="btn" type="button" id="gpv-compare-svg" disabled data-tooltip="The stitched comparison figure with vector captions and annotations">Download comparison SVG</button>
       <label class="form-check form-switch"><input class="form-check-input" id="gpv-export-legend" type="checkbox" checked><span class="form-check-label">Colour legend on exports</span></label>
       <label class="form-label">Video length<select class="form-select" id="gpv-video-length"><option value="5">5 seconds</option><option value="10">10 seconds</option><option value="15">15 seconds</option></select></label>
@@ -1200,6 +1204,7 @@ html>body{padding:0}</style>
       <h3>Tips for figures and reviewers</h3>
       <ul>
         <li><em>Publish → Write methods text</em> drafts a Methods paragraph stating exactly how the numbers on screen were computed (superposition, RMSD, RMSF, domains, contacts, dimensions, colour scales); every definition is cross-checked against Biopython in the repository's <code>VALIDATION.md</code>.</li>
+        <li><em>Appearance → Outline</em> draws a silhouette line around every element (thin for most figures, bold for small panels) and <em>Depth cueing</em> fades the far side; both apply to panels and exports. In the composition table, <em>Faded</em> blends a chain into the background to spotlight the others. <em>Publish → Journal preset</em> sets width, resolution, text size and font from a journal's figure guide, and <em>Download one panel per model</em> renders every model from the same camera into one lettered figure.</li>
         <li>The <em>layout</em> button in the header (panel icon) switches between the side-panel workspace, where the 3D view stays pinned while you work in the scrolling tool panel, and the stacked layout. Drag the divider between them to give tables more room; double-click it to reset. Screens narrower than 1100 px always stack.</li>
         <li><em>Publish → Save session file</em> writes one ZIP with the models, confidence data, alignment, annotations, domains, views and settings; open it later with <em>Open session file</em> or by dropping it on the page, on any computer, with no other files. Scene JSON remains the light option that expects the original files.</li>
         <li>Large AlphaFold 3 archives open whole: the confidence files are scanned byte by byte, the unused contact matrix is skipped and the PAE is kept compactly, so a five-model, 4 400-token assembly stays well under a gigabyte of memory.</li>
@@ -1418,7 +1423,7 @@ html>body{padding:0}</style>
   #generic-protein-viewer.is-workspace .gpv-stage { height: var(--gpv-stage-height, 540px); }
   #generic-protein-viewer.is-workspace .gpv-view-grid[data-panes="5"] .gpv-stage, #generic-protein-viewer.is-workspace .gpv-view-grid[data-panes="6"] .gpv-stage { height: calc(var(--gpv-stage-height, 540px) / 2 - 4px); }
   #generic-protein-viewer.is-workspace .gpv-view-grid.is-comparing .gpv-stage { height: calc(var(--gpv-stage-height, 540px) / var(--gpv-rows, 1) - 4px); }
-  #generic-protein-viewer.is-workspace .gpv-sequence-rows { max-height: 26vh; overflow-y: auto; }
+  #generic-protein-viewer.is-workspace .gpv-sequence-rows { max-height: 18vh; overflow-y: auto; }
   /* Text that changes on hover must not change height, or the pinned stage would resize under the pointer. */
   #generic-protein-viewer.is-workspace .gpv-sequence-head { flex-wrap: nowrap; }
   #generic-protein-viewer.is-workspace #gpv-sequence-hint { flex: 1 1 auto; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
@@ -1528,7 +1533,7 @@ html>body{padding:0}</style>
   let busyDepth = 0;
   let restoreMotion = null;
   const listPageSize = 60;
-  const viewerVersion = '2.16.0';
+  const viewerVersion = '2.17.0';
   const preferenceKey = 'protein-structure-viewer:preferences';
   const themeKey = 'protein-structure-viewer:theme';
   const labelColors = getComputedStyle(root);
@@ -2085,15 +2090,30 @@ html>body{padding:0}</style>
     return { color: '#ffffff', alpha: 1 };
   }
 
+  /* Silhouette outline and depth cueing are properties of a viewer, not of a model, so
+     every viewer that shows the scene — main, panels, export — gets them from one place. */
+  function applyViewStyle(target) {
+    if (!target || typeof target.setViewStyle !== 'function') return;
+    const mode = root.querySelector('#gpv-outline').value;
+    const background = backgroundSpec();
+    const dark = background.alpha > 0 && hexLuminance(background.color) < 0.45;
+    try {
+      target.setViewStyle(mode === 'none' ? { style: 'none' } : { style: 'outline', color: dark ? '#f8fafc' : '#111827', width: mode === 'bold' ? 0.12 : 0.06 });
+      if (typeof target.enableFog === 'function') target.enableFog(root.querySelector('#gpv-fog').checked);
+    } catch (error) { /* an engine without the feature keeps the plain view */ }
+  }
+
   function applyAppearance() {
     const background = backgroundSpec();
     root.querySelector('#gpv-background-color').disabled = root.querySelector('#gpv-background').value !== 'custom';
     viewer.setBackgroundColor(background.color, background.alpha);
     if (typeof viewer.setProjection === 'function') viewer.setProjection(root.querySelector('#gpv-projection').value);
+    applyViewStyle(viewer);
     comparePanels.forEach(panel => {
       if (!panel.viewer) return;
       panel.viewer.setBackgroundColor(background.color, background.alpha);
       if (typeof panel.viewer.setProjection === 'function') panel.viewer.setProjection(root.querySelector('#gpv-projection').value);
+      applyViewStyle(panel.viewer);
       panel.viewer.render();
     });
     viewer.render();
@@ -2152,7 +2172,29 @@ html>body{padding:0}</style>
   }
 
   /* The colour part of a style — shared by the representation and the surface. */
+  function mixHex(color, target, amount) {
+    const parse = value => { const m = /^#([0-9a-f]{6})$/i.exec(String(value || '').trim()); return m ? [0, 2, 4].map(o => parseInt(m[1].slice(o, o + 2), 16)) : null; };
+    const a = parse(color); const b = parse(target);
+    if (!a || !b) return color;
+    return '#' + a.map((channel, i) => Math.round(channel + (b[i] - channel) * amount).toString(16).padStart(2, '0')).join('');
+  }
+
+  /* Faded chains keep their colour scheme but are blended most of the way into the paper,
+     which spotlights one subunit without the per-model opacity limits of cartoon rendering. */
+  function fadeOptions(entry, options) {
+    const faded = entry.fadedChains || [];
+    if (!faded.length) return options;
+    const background = backgroundSpec(); const paper = background.alpha === 0 ? '#ffffff' : background.color;
+    const colorOf = options.colorfunc ? options.colorfunc : options.color ? () => options.color : null;
+    if (!colorOf) return options;
+    return { colorfunc: atom => faded.includes(atom.chain || '') ? mixHex(colorOf(atom), paper, 0.72) : colorOf(atom) };
+  }
+
   function colorOptions(entry) {
+    return fadeOptions(entry, baseColorOptions(entry));
+  }
+
+  function baseColorOptions(entry) {
     const mode = root.querySelector('#gpv-color-mode').value;
     if (mode === 'chain') return { colorfunc: atom => chainColor(atom.chain) };
     if (mode === 'entity') return { colorfunc: atom => entityColor(entry, atom) };
@@ -2245,7 +2287,7 @@ html>body{padding:0}</style>
     const scored = structures.some(entry => entry.visible && entry.scores.length);
     root.querySelector('#gpv-profile-svg').disabled = !scored;
     root.querySelector('#gpv-profile-png').disabled = !scored;
-    root.querySelector('#gpv-image').disabled = structures.length === 0;
+    root.querySelector('#gpv-image').disabled = structures.length === 0; root.querySelector('#gpv-model-panels').disabled = structures.length < 2;
     root.querySelector('#gpv-svg').disabled = structures.length === 0;
     root.querySelector('#gpv-video').disabled = structures.length === 0;
     root.querySelector('#gpv-save-scene').disabled = structures.length === 0; root.querySelector('#gpv-save-session').disabled = structures.length === 0;
@@ -3374,7 +3416,7 @@ html>body{padding:0}</style>
     const cut = hideBelow();
     const cutNote = cut && entries.some(entry => entry.scores.length) ? ' · pLDDT below ' + cut + ' hidden' : '';
     root.querySelector('#gpv-sequence-title').textContent = (multi ? entries.length + ' models' : displayName(entries[0])) + ' · ' + total + ' residues' + colourNote + cutNote + chainNote;
-    const key = shown.map(item => item.entry.id + ':' + item.row.chain + ((item.entry.hiddenChains || []).includes(item.row.chain) ? '!' : '')).join(',');
+    const key = shown.map(item => item.entry.id + ':' + item.row.chain + ((item.entry.hiddenChains || []).includes(item.row.chain) ? '!' : '') + ((item.entry.fadedChains || []).includes(item.row.chain) ? '~' : '')).join(',');
     rows.classList.toggle('is-multi', multi);
     if (rows.dataset.key !== key) {
       rows.replaceChildren(); rows.dataset.key = key;
@@ -3383,9 +3425,11 @@ html>body{padding:0}</style>
         const name = document.createElement('span'); name.className = 'gpv-sequence-chain';
         const chainName = row.chain ? 'Chain ' + row.chain : 'No chain';
         const hiddenChain = (entry.hiddenChains || []).includes(row.chain);
-        name.textContent = (multi ? clipText(displayName(entry), 14) + ' · ' + (row.chain || '—') : chainName) + (hiddenChain ? ' · hidden' : '');
+        const fadedChain = (entry.fadedChains || []).includes(row.chain);
+        name.textContent = (multi ? clipText(displayName(entry), 14) + ' · ' + (row.chain || '—') : chainName) + (hiddenChain ? ' · hidden' : fadedChain ? ' · faded' : '');
         name.title = displayName(entry) + ' · ' + chainName + ' · ' + row.residues.length + ' residues';
         const canvas = document.createElement('canvas'); canvas.dataset.chain = row.chain; canvas.dataset.entryId = String(entry.id);
+        if (fadedChain) canvas.style.opacity = '0.45';
         canvas.setAttribute('role', 'img'); canvas.setAttribute('aria-label', displayName(entry) + ', ' + chainName + ', ' + row.residues.length + ' residues');
         wireSequenceCanvas(canvas);
         line.append(name, canvas); rows.append(line);
@@ -3702,7 +3746,7 @@ html>body{padding:0}</style>
   }
 
   function sessionScene() {
-    return { type: 'protein-viewer-scene', schemaVersion: 1, viewerVersion, provenance: provenanceValues(), models: structures.map(entry => ({ name: entry.name, visible: entry.visible, color: entry.color, label: entry.label || '', hiddenChains: entry.hiddenChains || [] })), settings: sceneSettings(), ...sceneOverlays(), savedViews: savedViews.map(view => ({ ...view })) };
+    return { type: 'protein-viewer-scene', schemaVersion: 1, viewerVersion, provenance: provenanceValues(), models: structures.map(entry => ({ name: entry.name, visible: entry.visible, color: entry.color, label: entry.label || '', hiddenChains: entry.hiddenChains || [], fadedChains: entry.fadedChains || [] })), settings: sceneSettings(), ...sceneOverlays(), savedViews: savedViews.map(view => ({ ...view })) };
   }
 
   function sessionSnapshot(confidenceOf = sessionConfidence) {
@@ -4260,13 +4304,23 @@ html>body{padding:0}</style>
       });
       const wrapper = document.createElement('label'); wrapper.className = 'form-check form-switch gpv-chain-switch'; wrapper.append(toggle);
       toggleCell.append(wrapper); tr.append(toggleCell);
+      const fadeCell = document.createElement('td');
+      const fade = document.createElement('input'); fade.type = 'checkbox'; fade.className = 'form-check-input'; fade.checked = (entry.fadedChains || []).includes(row.chain);
+      fade.setAttribute('aria-label', 'Fade chain ' + (row.chain || '—'));
+      fade.addEventListener('change', () => {
+        entry.fadedChains = fade.checked ? [...new Set([...(entry.fadedChains || []), row.chain])] : (entry.fadedChains || []).filter(chain => chain !== row.chain);
+        applyStyle();
+        updateStatus((fade.checked ? 'Faded' : 'Restored') + ' chain ' + (row.chain || '—') + ' of ' + displayName(entry));
+      });
+      const fadeWrap = document.createElement('label'); fadeWrap.className = 'form-check form-switch gpv-chain-switch'; fadeWrap.append(fade);
+      fadeCell.append(fadeWrap); tr.append(fadeCell);
       body.append(tr);
     });
     const inventory = heteroInventory(entry);
     root.querySelector('#gpv-hetero-summary').textContent = inventory.length
       ? 'Ligands and ions: ' + inventory.slice(0, 12).map(([name, count]) => name + (count > 1 ? ' ×' + count : '')).join(', ') + (inventory.length > 12 ? ' and ' + (inventory.length - 12) + ' more' : '')
       : 'No ligands or ions (water is not counted).';
-    root.querySelector('#gpv-chains-all').disabled = hidden.length === 0;
+    root.querySelector('#gpv-chains-all').disabled = hidden.length === 0 && !(entry.fadedChains || []).length;
     const groups = entityGroups(entry); const size = assemblyDimensions(entry);
     root.querySelector('#gpv-assembly-summary').textContent = (groups.length ? 'Stoichiometry: ' + groups.map(group => group.label + ' ×' + group.chains.length + ' (' + clipText(group.chains.join(', '), 30) + ', ' + group.length + ' aa)').join(' · ') : '')
       + (size ? (groups.length ? ' · ' : '') + 'Cα extent ' + (size.exact ? '' : '≥ ') + (size.extent / 10).toFixed(1) + ' nm · radius of gyration ' + (size.gyration / 10).toFixed(1) + ' nm' : '');
@@ -4831,6 +4885,7 @@ html>body{padding:0}</style>
     root.querySelector('#gpv-view-grid').append(pane);
     panel.element = pane; panel.stage = stage; panel.label = label;
     panel.viewer = $3Dmol.createViewer(stage, viewerOptions());
+    applyViewStyle(panel.viewer);
     panel.observer = new ResizeObserver(() => { if (panel.viewer) panel.viewer.resize(); });
     panel.observer.observe(stage);
     return panel.viewer;
@@ -5263,6 +5318,8 @@ html>body{padding:0}</style>
       referenceModel: reference ? reference.name : null,
       allResidueLabels: root.querySelector('#gpv-all-labels').checked,
       projection: root.querySelector('#gpv-projection').value,
+      outline: root.querySelector('#gpv-outline').value,
+      fog: root.querySelector('#gpv-fog').checked,
       background: root.querySelector('#gpv-background').value,
       backgroundColor: root.querySelector('#gpv-background-color').value,
       hideBelow: hideBelow(),
@@ -5441,6 +5498,7 @@ html>body{padding:0}</style>
       if (/^#[0-9a-f]{6}$/i.test(modelRecord.color || '')) entry.color = modelRecord.color;
       if (typeof modelRecord.label === 'string') entry.label = modelRecord.label.trim().slice(0, 120);
       entry.hiddenChains = Array.isArray(modelRecord.hiddenChains) ? modelRecord.hiddenChains.map(String).slice(0, 200) : [];
+      entry.fadedChains = Array.isArray(modelRecord.fadedChains) ? modelRecord.fadedChains.map(String).slice(0, 200) : [];
       if (modelRecord.sha256) {
         const actual = entry.hash || await sha256(entry.text);
         if (actual && actual !== modelRecord.sha256) hashWarnings += 1;
@@ -5453,6 +5511,8 @@ html>body{padding:0}</style>
     if (['loaded', 'ranking', 'plddt'].includes(settings.modelOrder)) root.querySelector('#gpv-order').value = settings.modelOrder;
     if (['sequence', 'identifier'].includes(settings.alignmentMode)) root.querySelector('#gpv-alignment-mode').value = settings.alignmentMode;
     if (['perspective', 'orthographic'].includes(settings.projection)) root.querySelector('#gpv-projection').value = settings.projection;
+    if (['none', 'thin', 'bold'].includes(settings.outline)) root.querySelector('#gpv-outline').value = settings.outline;
+    if (typeof settings.fog === 'boolean') root.querySelector('#gpv-fog').checked = settings.fog;
     if ([0, 50, 70].includes(Number(settings.hideBelow))) root.querySelector('#gpv-hide-below').value = String(Number(settings.hideBelow));
     if (['stick', 'sphere', 'hide'].includes(settings.hetero)) root.querySelector('#gpv-hetero').value = settings.hetero;
     if (['none', 'translucent', 'opaque'].includes(settings.surface)) root.querySelector('#gpv-surface').value = settings.surface;
@@ -5853,6 +5913,7 @@ html>body{padding:0}</style>
     const background = backgroundSpec();
     target.setBackgroundColor(background.color, background.alpha);
     if (typeof target.setProjection === 'function') target.setProjection(root.querySelector('#gpv-projection').value);
+    applyViewStyle(target);
     const pending = [];
     displayedEntries().forEach(entry => {
       if (!entry.model) return;
@@ -6161,6 +6222,7 @@ html>body{padding:0}</style>
     const background = backgroundSpec();
     target.setBackgroundColor(background.color, background.alpha);
     if (typeof target.setProjection === 'function') target.setProjection(root.querySelector('#gpv-projection').value);
+    applyViewStyle(target);
     if (!entry.model) materializeEntry(entry);
     const model = target.addModel(entry.text, entry.format);
     model.selectedAtoms({}).forEach((atom, index) => { const source = entry.atoms[index]; if (source) { atom.x = source.x; atom.y = source.y; atom.z = source.z; } });
@@ -6381,7 +6443,31 @@ html>body{padding:0}</style>
   async function downloadComparisonPng() {
     const panes = comparisonPanes();
     if (panes.length < 2) { announce('Turn on the synchronized multi-view with at least one panel first', 'error'); return; }
-    const button = root.querySelector('#gpv-compare-image');
+    await renderPanelFigure(panes, root.querySelector('#gpv-compare-image'), {
+      idle: 'Download comparison PNG', noun: 'Comparison figure', filename: 'protein-comparison-' + panes.length + '-panels.png',
+      disabledAfter: () => !(root.querySelector('#gpv-side-by-side').checked && comparePanels.length)
+    });
+  }
+
+  /* One lettered panel per model, all rendered from the camera of the main view, so the
+     models of a run are framed identically — the figure a reviewer asks for first. */
+  async function downloadModelPanels() {
+    const active = activeEntry();
+    const shown = displayedEntries().filter(entry => entry.model);
+    const entries = shown.length >= 2 ? shown : structures.filter(entry => active && entry.collection === active.collection);
+    if (entries.length < 2) { announce('Load at least two models (or show two) to make a per-model figure', 'error'); return; }
+    const failures = [];
+    entries.forEach(entry => { try { materializeEntry(entry); } catch (error) { failures.push(entry.name); } });
+    const ready = entries.filter(entry => entry.model);
+    if (failures.length) showImportErrors(failures.map(name => name + ': could not be read'));
+    const camera = typeof viewer.getView === 'function' ? viewer.getView() : null;
+    await renderPanelFigure(ready.map(entry => ({ entry, camera })), root.querySelector('#gpv-model-panels'), {
+      idle: 'Download one panel per model', noun: 'Per-model figure', filename: exportFileName('protein-models-' + ready.length + '-panels', exportDimensions(), 'png'),
+      disabledAfter: () => structures.length < 2
+    });
+  }
+
+  async function renderPanelFigure(panes, button, options) {
     const requested = exportDimensions();
     const columns = panelColumns(panes.length); const rows = Math.ceil(panes.length / columns);
     let cellWidth = requested.width; let cellHeight = requested.height;
@@ -6426,15 +6512,16 @@ html>body{padding:0}</style>
         const caption = displayName(panes[index].entry) + (score === null ? '' : ' · mean pLDDT ' + score.toFixed(1));
         context.fillText(truncateToWidth(context, caption, cellWidth * 0.9), x + Math.round(cellWidth * 0.08), y + cellHeight + captionHeight / 2);
       }
-      const link = document.createElement('a'); link.href = canvas.toDataURL('image/png'); link.download = 'protein-comparison-' + panes.length + '-panels.png'; link.click();
-      announce('Comparison figure downloaded · ' + panes.length + ' panels · ' + canvas.width + ' × ' + canvas.height);
+      const uri = canvas.toDataURL('image/png');
+      downloadBlob(await pngWithDpi(uri, requested.dpi), 'image/png', options.filename);
+      announce(options.noun + ' downloaded · ' + panes.length + ' panels · ' + canvas.width + ' × ' + canvas.height + (requested.dpi ? ' at ' + requested.dpi + ' dpi' : ''));
     } catch (error) {
-      announce('Could not render the comparison figure: ' + error.message, 'error');
+      announce('Could not render the figure: ' + error.message, 'error');
     } finally {
       releaseExportViewer();
       done();
-      button.textContent = 'Download comparison PNG';
-      button.disabled = !(root.querySelector('#gpv-side-by-side').checked && comparePanels.length);
+      button.textContent = options.idle;
+      button.disabled = options.disabledAfter();
     }
   }
 
@@ -7277,7 +7364,7 @@ applyBackground();
   /* ---------- Preference persistence ---------- */
 
   const persistedControls = [
-    '#gpv-style', '#gpv-color-mode', '#gpv-projection', '#gpv-background', '#gpv-background-color', '#gpv-hetero',
+    '#gpv-style', '#gpv-color-mode', '#gpv-projection', '#gpv-outline', '#gpv-background', '#gpv-background-color', '#gpv-hetero',
     '#gpv-export-mode', '#gpv-print-width', '#gpv-print-aspect', '#gpv-print-dpi', '#gpv-print-text', '#gpv-figure-font', '#gpv-scale-bar',
     '#gpv-view-mode', '#gpv-order', '#gpv-alignment-mode', '#gpv-export-size', '#gpv-export-scale',
     '#gpv-panel-columns', '#gpv-video-length', '#gpv-cycle-speed', '#gpv-speed', '#gpv-report-scope'
@@ -7358,6 +7445,20 @@ applyBackground();
     });
   });
   root.querySelector('#gpv-projection').addEventListener('change', applyAppearance);
+  root.querySelector('#gpv-outline').addEventListener('change', applyAppearance);
+  root.querySelector('#gpv-journal').addEventListener('change', event => {
+    const [mm, dpi, points] = String(event.target.value || '').split('|').map(Number);
+    if (!mm) return;
+    const set = (selector, value) => { const control = root.querySelector(selector); if ([...control.options].some(option => option.value === String(value))) control.value = String(value); control.dispatchEvent(new Event('change', { bubbles: true })); };
+    set('#gpv-export-mode', 'print');
+    const width = root.querySelector('#gpv-print-width');
+    if ([...width.options].some(option => option.value === String(mm))) set('#gpv-print-width', mm);
+    else { root.querySelector('#gpv-print-custom').value = String(mm); set('#gpv-print-width', 'custom'); root.querySelector('#gpv-print-custom').dispatchEvent(new Event('change', { bubbles: true })); }
+    set('#gpv-print-dpi', dpi); set('#gpv-print-text', points); set('#gpv-figure-font', 'Arial, Helvetica, sans-serif');
+    updateExportEstimate();
+    announce(event.target.selectedOptions[0].textContent + ' · ' + mm + ' mm at ' + dpi + ' dpi, ' + points + ' pt Arial');
+  });
+  root.querySelector('#gpv-fog').addEventListener('change', applyAppearance);
   root.querySelector('#gpv-background').addEventListener('change', applyAppearance);
   root.querySelector('#gpv-background-color').addEventListener('input', applyAppearance);
   root.querySelector('#gpv-view-mode').addEventListener('change', () => {
@@ -7538,6 +7639,7 @@ applyBackground();
   });
   root.querySelector('#gpv-save-scene').addEventListener('click', saveScene);
   root.querySelector('#gpv-save-session').addEventListener('click', downloadSessionFile);
+  root.querySelector('#gpv-model-panels').addEventListener('click', downloadModelPanels);
   root.querySelector('#gpv-open-session').addEventListener('change', async event => {
     const file = event.target.files[0]; if (!file) return;
     try { await openSessionFile(file); } catch (error) { announce('Could not open that session file: ' + error.message, 'error'); }
@@ -7634,7 +7736,7 @@ applyBackground();
        stable while the page scrolls. */
     const workspaceTop = Math.max(0, root.querySelector('#gpv-workspace').getBoundingClientRect().top + window.scrollY);
     const available = window.innerHeight - workspaceTop - others - labels - 44;
-    const height = Math.max(360, Math.min(available, 1200));
+    const height = Math.max(420, Math.min(available, 1200));
     const current = parseFloat(root.style.getPropertyValue('--gpv-stage-height')) || 0;
     if (Math.abs(current - height) < 8) return;
     root.style.setProperty('--gpv-stage-height', height + 'px');
@@ -7791,7 +7893,7 @@ applyBackground();
   root.querySelector('#gpv-safe-palette').addEventListener('change', () => { safePaletteOn = root.querySelector('#gpv-safe-palette').checked; applyStyle(); renderDomainList(); updateStatus(safePaletteOn ? 'Okabe–Ito palette on for chains and domains' : 'Default palette restored'); });
   root.querySelector('#gpv-goto-run').addEventListener('click', () => goToResidue(root.querySelector('#gpv-goto').value));
   root.querySelector('#gpv-goto').addEventListener('keydown', event => { if (event.key === 'Enter') { event.preventDefault(); goToResidue(root.querySelector('#gpv-goto').value); } });
-  root.querySelector('#gpv-chains-all').addEventListener('click', () => { const entry = activeEntry(); if (!entry) return; entry.hiddenChains = []; applyStyle(); updateStatus('All chains of ' + displayName(entry) + ' shown'); });
+  root.querySelector('#gpv-chains-all').addEventListener('click', () => { const entry = activeEntry(); if (!entry) return; entry.hiddenChains = []; entry.fadedChains = []; applyStyle(); updateStatus('All chains of ' + displayName(entry) + ' shown'); });
   root.querySelector('#gpv-figure-legend').addEventListener('click', () => { writeFigureLegend(); });
   root.querySelector('#gpv-methods-text').addEventListener('click', () => { writeMethodsText(); });
   root.querySelector('#gpv-redo').addEventListener('click', redo);
@@ -7809,7 +7911,7 @@ applyBackground();
   offerSessionRestore();
   /* ?debug=1 exposes a few internals for the regression suite and for bug reports;
      it has no effect otherwise. */
-  if (new URLSearchParams(location.search).has('debug')) window.__viewerDebug = { viewer, pickAtomAt, displayedEntries, activeEntry, colorOptions, entries: () => structures, nearbyResidues, assemblyDimensions, paeDomains, parseConfidenceBytes, methodsText, alignmentResults: () => alignmentResults, ensembleSpread: () => ensembleSpread, siteResults: () => siteResults };
+  if (new URLSearchParams(location.search).has('debug')) window.__viewerDebug = { viewer, pickAtomAt, displayedEntries, activeEntry, colorOptions, sceneSettings, entries: () => structures, nearbyResidues, assemblyDimensions, paeDomains, parseConfidenceBytes, methodsText, alignmentResults: () => alignmentResults, ensembleSpread: () => ensembleSpread, siteResults: () => siteResults };
   applyTheme(readJson(themeKey, 'system'));
   selectToolTab('models');
   applyAppearance();

@@ -7,6 +7,7 @@ interpretation caveats see [`SCIENTIFIC-AUDIT.md`](../SCIENTIFIC-AUDIT.md).
 ## Contents
 
 - [Layout](#layout)
+- [Figure finishing](#figure-finishing)
 - [Getting structures in](#getting-structures-in)
 - [Keyboard shortcuts](#keyboard-shortcuts)
 - [Models tab](#models-tab)
@@ -503,6 +504,35 @@ page shows *Restore your last session?* with the model count and time; **Restore
 **Not now** leaves it for later, **Forget it** deletes it. Sessions above 80 MB of coordinates are
 not autosaved (the viewer says so once). The copy lives only in that browser profile; scene JSON,
 reports and share links remain the deliberate ways to keep or hand over work.
+
+
+## Figure finishing
+
+**Outline and depth cueing (Appearance).** *Outline* draws a silhouette line around every
+element — thin for most figures, bold for small panels — so overlapping chains stay legible at
+column width; the line is dark on light backgrounds and light on dark ones. *Depth cueing* fades
+the parts farthest from the camera. Both are properties of the view rather than of a model:
+they apply to the main view, every synchronized panel, every PNG, TIFF and SVG export, and
+they are saved with scenes and sessions.
+
+**Fading a chain (Models → Composition).** The *Faded* switch keeps a chain visible but blends
+its colour most of the way into the background, which spotlights the other chains without
+removing the context. Faded chains are drawn that way in panels and exports, are dimmed on the
+sequence strip, and are saved with scenes. *Show all chains* clears hidden and faded chains
+together. Spectrum and element colouring cannot be faded, because those colours are computed
+inside the renderer.
+
+**Journal presets (Publish).** Choosing a journal sets the print width, the resolution (300 dpi),
+the text size and Arial from that journal's figure guide: Nature 89 / 183 mm, Science 55 / 121 /
+184 mm, Cell Press 85 / 114 / 174 mm, PNAS 87 / 178 mm, PLOS 190 mm, eLife 85 / 170 mm. Guides
+change; treat the preset as a starting point and check the current instructions before you
+submit. Every setting can still be changed afterwards.
+
+**One panel per model (Publish).** Renders every shown model — or, when one model is shown,
+every model of the current run — from the camera of the main view into one lettered figure at
+the chosen size, with the model name and mean pLDDT under each panel and the resolution written
+into the PNG. This is the "five models, identically framed" figure that a reviewer asks for
+first. Align the models first if you want superposed frames rather than the raw coordinates.
 
 ## Reproducible scenes
 
