@@ -127,3 +127,8 @@ is committed; point the scripts at your own.
 The suite opens the page with `?debug=1`, which exposes `window.__viewerDebug` (the 3Dmol viewer, the
 atom picker and the displayed entries). Setting `PSV_DIAG=/path/to/screenshot.png` makes the suite save a
 screenshot and print picking diagnostics at the start of the Annotate group.
+
+
+The validation harness (`reference.py` + `validate.mjs`) also compares the Compare tab's contact map with
+Biopython: `python3 reference.py <folder> <chain> <cutoff> [chainA chainB]` chooses the second chain with the
+most contacts when it is not given.

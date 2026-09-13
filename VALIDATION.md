@@ -2,7 +2,7 @@
 
 Every quantity the viewer reports was compared with an independent implementation on three real
 AlphaFold 3 runs. This file records the method, the results and the limits of the check, and how to
-rerun it on your own run. Last run: 2026-09-13, viewer 2.14.0.
+rerun it on your own run. Last run: 2026-09-13, viewer 2.18.1.
 
 ## Method
 
@@ -17,7 +17,9 @@ rerun it on your own run. Last run: 2026-09-13, viewer 2.14.0.
 - the radius of gyration of model 0 over Cα atoms with equal weights, and its exact maximum Cα–Cα
   distance (full pairwise scan);
 - the set of residues (chain, number, name) with any heavy atom within a cutoff of any heavy atom of
-  one chain, hetero groups excluded.
+  one chain, hetero groups excluded;
+- the inter-chain contact map of two chains on model 0: every residue pair with a heavy-atom pair
+  within the cutoff, with the closest such distance (the Compare tab's *Interface contact map*).
 
 `tests/validate.mjs` then opens the same files in the real viewer (headless Chromium via Playwright),
 runs *Align visible* in identifier mode with model 0 as reference, reads the same quantities through the
@@ -124,7 +126,7 @@ PAE domains at 6 Å on model 0: 6 domains, 50 residues unassigned (heuristic; ru
 
 PAE domains at 6 Å on model 0: 4 domains, 10 residues unassigned (heuristic; run without error, not compared). Console errors: 0.
 
-**All 72 comparisons agree within tolerance.** RMSD, RMSF, radius of gyration and extent agree to
+**All 84 comparisons agree within tolerance** (72 from the 2.14.0 pass plus 12 for the contact map added in 2.18.1). RMSD, RMSF, radius of gyration and extent agree to
 better than 5 × 10⁻⁵ Å; contact residue sets are identical; mean pLDDT agrees to 4 × 10⁻⁴.
 
 ## What the check found
@@ -160,12 +162,25 @@ errors. Rendering cost 0.5, 1.9 and 3.1 ms per frame under software rendering.
 - **PAE domains.** A heuristic (greedy merge of ten-residue segments below a mean-PAE cutoff, minimum
   twenty residues). It is checked only to run on real matrices without error. It is not the clustering
   used by the AlphaFold Protein Structure Database and will cut differently.
-- **Interface geometry** (contacts and buried surface area on the Confidence tab) and **ligand-site PAE**
-  are not yet in the reference script.
+- **Buried surface area** (Confidence tab) and **ligand-site PAE** are not yet in the reference script. The
+  Compare tab's contact map is (below); the Confidence tab's interface table uses the same distance rule.
 - **Residue colour themes** are lookups (formal charge at neutral pH, Kyte–Doolittle hydrophobicity,
   RasMol amino colours); nothing to compute, but state the scale when you use one.
 - Anything **drawn** — cartoons, surfaces, the PAE heatmap — is 3Dmol.js's or the canvas's rendering
   and is checked only for absence of errors.
+
+## Contact map (added 2.18.1)
+
+Chain pair chosen as the one with the most contacts to the chain used above; heavy atoms, hetero groups
+excluded. The viewer's pair set, interface residue counts and every closest-atom distance were compared.
+
+| run | chains | cutoff | pairs (viewer / reference) | interface residues (viewer / reference) | largest distance difference | |
+|---|---|---:|---:|---:|---:|:--:|
+| A — M13 virion tip | K–F | 6 Å | 42 / 42 | 20 + 19 / 20 + 19 | 4.9 × 10⁻⁵ Å | ✓ |
+| B — MS2 maturation protein–coat | A–B | 5 Å | 31 / 31 | 15 + 16 / 15 + 16 | 4.7 × 10⁻⁵ Å | ✓ |
+| C — phiX174 F–G | A–B | 5 Å | 18 / 18 | 9 + 10 / 9 + 10 | 4.6 × 10⁻⁵ Å | ✓ |
+
+The differences are the four-decimal rounding of the reference values.
 
 ## Rerunning
 
@@ -173,6 +188,7 @@ errors. Rendering cost 0.5, 1.9 and 3.1 ms per frame under software rendering.
 cd tests && npm install && npm test            # once; installs Playwright and verifies the vendored libraries
 mkdir run && unzip -d run fold_x.zip -x "msas/*" "templates/*"
 python3 reference.py run K 6                    # chain K, 6 Å; needs biopython and numpy
+python3 reference.py run K 6 K F                # optionally name the two chains for the contact map
 node validate.mjs run                           # or: node validate.mjs run fold_x.zip
 ```
 

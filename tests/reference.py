@@ -1,7 +1,8 @@
 """Independent reference values for an AlphaFold 3 run, computed with Biopython + numpy.
 Mirrors the viewer's definitions: Cα pairs matched by chain|resi, Kabsch superposition
 onto model 0, RMSF around the mean Cα position across all superposed models, Rg over Cα,
-exact maximum Cα–Cα distance, heavy-atom residue contacts within a cutoff of one chain."""
+exact maximum Cα–Cα distance, heavy-atom residue contacts within a cutoff of one chain, and the
+inter-chain residue contact map (pairs with closest heavy-atom distance) for two chains."""
 import sys, json, glob, re, warnings
 import numpy as np
 from Bio.PDB.MMCIFParser import MMCIFParser
@@ -50,5 +51,27 @@ for t in targets:
     for a in ns.search(t.coord, cutoff):
         r = a.get_parent(); found.add((r.get_parent().id, r.id[1], r.get_resname()))
 out['contacts'] = {'chain': chain_for_contacts, 'cutoff': cutoff, 'count': len(found), 'residues': sorted(found)}
+
+# Inter-chain contact map on model 0: residue pairs of two chains with any heavy-atom pair within
+# the cutoff, recorded with the closest such distance (mirrors the viewer's Compare → contact map).
+def chain_atoms(chain_id):
+    return [a for a in heavy if a.get_parent().get_parent().id == chain_id and a.get_parent().id[0] == ' ']
+chain_ids = [c.id for c in model0]
+pair_counts = {}
+for ia, ca_id in enumerate(chain_ids):
+    for cb_id in chain_ids[ia + 1:]:
+        nsb = NeighborSearch(chain_atoms(cb_id)); seen = set()
+        for a in chain_atoms(ca_id):
+            for b in nsb.search(a.coord, cutoff): seen.add((a.get_parent().id[1], b.get_parent().id[1]))
+        if seen: pair_counts[f'{ca_id}|{cb_id}'] = len(seen)
+map_a = sys.argv[4] if len(sys.argv) > 4 else chain_for_contacts
+map_b = sys.argv[5] if len(sys.argv) > 5 else max((k for k in pair_counts if k.startswith(map_a + '|') or k.endswith('|' + map_a)), key=lambda k: pair_counts[k], default=chain_ids[0] + '|' + chain_ids[1]).replace(map_a, '').replace('|', '')
+nsb = NeighborSearch(chain_atoms(map_b)); pairs = {}
+for a in chain_atoms(map_a):
+    for b in nsb.search(a.coord, cutoff):
+        key = (a.get_parent().id[1], b.get_parent().id[1]); d = float(np.linalg.norm(a.coord - b.coord))
+        if key not in pairs or pairs[key] > d: pairs[key] = d
+out['contact_map'] = {'chains': [map_a, map_b], 'cutoff': cutoff, 'pairs': len(pairs), 'residues_a': len({k[0] for k in pairs}), 'residues_b': len({k[1] for k in pairs}),
+    'all_pairs': [[k[0], k[1], round(v, 4)] for k, v in sorted(pairs.items())], 'chain_pair_counts': pair_counts}
 json.dump(out, open(f'{folder}/reference.json', 'w'), indent=1)
-print(json.dumps({k: v for k, v in out.items() if k != 'contacts'}, indent=1)); print('contacts', out['contacts']['count'], out['contacts']['residues'][:6])
+print(json.dumps({k: v for k, v in out.items() if k != 'contacts'}, indent=1)); print('contacts', out['contacts']['count'], out['contacts']['residues'][:6]); print('contact map', out['contact_map']['chains'], out['contact_map']['pairs'], 'pairs; chain pairs with contacts:', out['contact_map']['chain_pair_counts'])

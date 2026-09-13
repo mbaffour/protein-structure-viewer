@@ -76,6 +76,26 @@ else {
   if (!/_model_0\./.test(near.active)) console.log('  ! contacts measured on ' + near.active);
 }
 
+/* inter-chain contact map on model 0: the same residue pairs and closest distances as Biopython */
+if (reference.contact_map) {
+  const cm = reference.contact_map;
+  await page.click('[data-gpv-tab="compare"]');
+  await page.selectOption('#gpv-contact-a', cm.chains[0]); await page.selectOption('#gpv-contact-b', cm.chains[1]);
+  await page.selectOption('#gpv-contact-atoms', 'heavy'); await page.fill('#gpv-contact-cutoff', String(cm.cutoff));
+  await page.click('#gpv-contact-run'); await page.waitForTimeout(800);
+  const map = await page.evaluate(() => { const c = window.__viewerDebug.contactResult(); if (!c) return null; return { pairs: [...c.pairs.entries()].map(([key, d]) => { const [i, j] = key.split('|').map(Number); return [c.rowA.residues[i].resi, c.rowB.residues[j].resi, d]; }), residuesA: c.residuesA.length, residuesB: c.residuesB.length }; });
+  if (!map) { rows.push({ label: 'contact map ' + cm.chains.join('–'), viewer: NaN, reference: cm.pairs, delta: NaN, ok: false }); failed += 1; }
+  else {
+    const viewerPairs = new Map(map.pairs.map(([a, b, d]) => [a + '|' + b, d])); const referencePairs = new Map(cm.all_pairs.map(([a, b, d]) => [a + '|' + b, d]));
+    const sameSet = viewerPairs.size === referencePairs.size && [...viewerPairs.keys()].every(key => referencePairs.has(key));
+    rows.push({ label: 'contact map ' + cm.chains.join('–') + ' within ' + cm.cutoff + ' Å (pair set)', viewer: viewerPairs.size, reference: referencePairs.size, delta: sameSet ? 0 : NaN, ok: sameSet }); if (!sameSet) failed += 1;
+    check('contact map · interface residues on ' + cm.chains[0], map.residuesA, cm.residues_a, 0);
+    check('contact map · interface residues on ' + cm.chains[1], map.residuesB, cm.residues_b, 0);
+    let worst = 0; referencePairs.forEach((d, key) => { if (viewerPairs.has(key)) worst = Math.max(worst, Math.abs(viewerPairs.get(key) - d)); });
+    check('contact map · largest distance difference over ' + referencePairs.size + ' pairs (Å)', worst, 0, 0.001);
+  }
+}
+
 /* Kabsch superposition of every model onto model 0 and per-residue RMSF */
 await page.click('[data-gpv-tab="compare"]');
 await page.selectOption('#gpv-alignment-mode', 'identifier');

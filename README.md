@@ -191,7 +191,8 @@ computes, with Biopython and numpy, the mean Cα pLDDT, the Kabsch RMSD of each 
 per-residue Cα RMSF across the superposed models, radius of gyration, exact Cα extent and the residue
 set within a cutoff of one chain; `tests/validate.mjs` drives the real viewer on the same files and
 compares. On three AlphaFold 3 runs (an M13 virion tip, an MS2 maturation-protein–coat complex and a
-phiX174 F–G complex) all 72 comparisons agree to within 5 × 10⁻⁵ Å, the rounding of the reference.
+phiX174 F–G complex) all 84 comparisons — including the interface contact map — agree to within
+5 × 10⁻⁵ Å, the rounding of the reference.
 [`VALIDATION.md`](VALIDATION.md) has the tables, what is and is not covered, and how to rerun the check on
 your own run. The viewer also loads a five-model, 4 410-token assembly with 175 MB of confidence JSON per
 model in under eight seconds and a fraction of a gigabyte of memory.

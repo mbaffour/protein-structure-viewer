@@ -2,6 +2,15 @@
 
 All notable changes to this project are recorded here.
 
+## 2.18.1
+
+### Validated
+
+- The interface contact map is now part of the Biopython cross-validation: on the three real
+  runs, the residue-pair sets, the interface residue counts and every closest-atom distance
+  agree with NeighborSearch to within 5 × 10⁻⁵ Å (12 new comparisons; 84 in total). See
+  VALIDATION.md.
+
 ## 2.18.0
 
 The interface, as a map.

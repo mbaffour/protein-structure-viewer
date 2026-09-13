@@ -223,8 +223,8 @@ the alignment and selection code, and a suite nobody runs automatically protects
 ## Interface contact map (2.18.0)
 
 Residue pairs of two chains are contacts when any pair of heavy atoms (or, optionally, the two
-Cα atoms) lies within the cutoff; the recorded value is the closest such distance. The atom
-distance rule and grid search are the ones behind *Nearby residues*, whose results VALIDATION.md
-compares with Biopython's NeighborSearch. Hydrogens, water and hetero groups are excluded. The map
+Cα atoms) lies within the cutoff; the recorded value is the closest such distance. The map itself is
+cross-validated: on three real runs the residue-pair sets, interface residue counts and every
+closest-atom distance agree with Biopython's NeighborSearch to within 5 × 10⁻⁵ Å (VALIDATION.md). Hydrogens, water and hetero groups are excluded. The map
 is a description of one model's geometry, not evidence that the interface exists; the text next
 to the tool says so and points to the inter-chain PAE and interface pTM.
