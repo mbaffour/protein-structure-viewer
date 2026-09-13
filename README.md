@@ -63,12 +63,14 @@ strip, PNG export, a downloadable confidence-metrics CSV, and a per-residue pLDD
 (SVG or PNG, one panel per chain, every displayed model overlaid). Interface geometry per model: inter-chain heavy-atom contacts,
 interface residues, and Shrake–Rupley buried surface area, with one-click highlighting and CSV export.
 PAE-derived domains — groups of residues the prediction places together — as a table, a colour
-scheme, and one-click highlights.
+scheme, and one-click highlights. Ligand sites: contact residues per ligand or ion, site mean pLDDT
+and, for AlphaFold 3, ligand–site PAE.
 
 **Compare.** Sequence-aware Cα alignment (global Needleman–Wunsch per chain pair, greedily matched)
 or strict chain/residue-ID alignment, with per-model aligned-residue count, sequence identity, chain
-mapping, and Cα RMSD, plus a CSV export, a one-click coordinate restore, and a colour scheme that
-paints each residue by its Cα deviation from the reference. Synchronized
+mapping, and Cα RMSD, plus a CSV export, a one-click coordinate restore, a colour scheme that
+paints each residue by its Cα deviation from the reference, and another that paints the per-residue
+Cα RMSF across all aligned models (with a CSV) — where the models of a run agree and where they do not. Synchronized
 multi-view of up to six models whose cameras follow each other — rotation only, so assemblies of
 different size stay framed, or rotation and zoom for superposed models.
 

@@ -46,8 +46,9 @@ PSV_CHROMIUM=/opt/pw-browsers/chromium/chrome-linux/chrome npm test
   translucent surface changes the render and clears; 90° rotation changes the render and Shift+R resets it; the ligand control and the
   Thesis preset apply; hiding residues below pLDDT 70 changes the render and is named in the strip title;
   colour by chain lists the chains in the on-screen legend.
-- Compare: the Cα-deviation colour scheme shows its band legend.
-- Confidence: the pLDDT profile SVG has one panel per chain and a trace per model; the PNG variant downloads;
+- Compare: the Cα-deviation colour scheme shows its band legend; after alignment, model agreement paints
+  residue 5 and the RMSF CSV has a row per residue.
+- Confidence: the synthetic models report no ligand sites; the pLDDT profile SVG has one panel per chain and a trace per model; the PNG variant downloads;
   a block-diagonal PAE matrix loaded as `model_a.json` yields two domains (A:1–30 and B), the domain
   colour scheme lists them in the legend, and Highlight all adds two selections.
 - Annotate: a 30-row `resi,value` CSV colours residue 30 viridis-yellow and residue 1 viridis-purple with
@@ -66,7 +67,7 @@ PSV_CHROMIUM=/opt/pw-browsers/chromium/chrome-linux/chrome npm test
   comparison SVG exports, an offline report that embeds the library
 - Interface: help via `?`, `?` not hijacked while typing, full screen, cycle button
   keeping its icon, invalid fetch identifier
-- Generated report: colouring by annotated domains shows the domain legend; each panel carries a sequence strip whose hover names a residue and whose click zooms the panel;
+- Generated report: colouring by per-residue data shows its legend; colouring by annotated domains shows the domain legend; each panel carries a sequence strip whose hover names a residue and whose click zooms the panel;
   offers the residue colour themes and a ligand control; renders, carries provenance, **keeps its canvas inside `#view`**,
   guided views, navigation by real click, play/pause, element colouring, two panels that
   rotate together under a real drag

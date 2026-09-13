@@ -294,6 +294,22 @@ await step('RMSD CSV downloads', async () => {
   const download = page.waitForEvent('download', { timeout: 20000 });
   await page.click('#gpv-alignment-csv'); await download;
 });
+await step('model agreement colours residues by Cα RMSF and exports a CSV', async () => {
+  await tab('appearance'); await page.selectOption('#gpv-color-mode', 'agreement'); await page.waitForTimeout(500); await tab('compare');
+  const legend = (await page.locator('#gpv-plddt-legend').textContent()) || '';
+  if (!/Cα RMSF/.test(legend) || !/<0\.5 Å/.test(legend)) throw new Error('legend: ' + legend);
+  const painted = await page.evaluate(() => { const v = window.__viewerDebug; const entry = v.activeEntry(); const atom = entry.atoms.find(a => a.atom === 'CA' && a.resi === 5 && (a.chain || '') === 'A'); return v.colorOptions(entry).colorfunc(atom); });
+  if (painted === '#9ca3af') throw new Error('residue 5 has no RMSF after alignment');
+  if (await page.locator('#gpv-rmsf-csv').isDisabled()) throw new Error('RMSF CSV disabled');
+  const download = page.waitForEvent('download', { timeout: 20000 });
+  await page.click('#gpv-rmsf-csv');
+  const file = join(work, 'rmsf.csv'); await (await download).saveAs(file);
+  const csv = await readFile(file, 'utf8');
+  const rows = csv.split('\n').filter(line => /^[A-Z],\d+,\d+,/.test(line)).length;
+  if (rows < 50) throw new Error('rmsf rows=' + rows);
+  console.log('       RMSF rows ' + rows + ' · ' + painted);
+  await tab('appearance'); await page.selectOption('#gpv-color-mode', 'plddt'); await page.waitForTimeout(300); await tab('compare');
+});
 await step('side-by-side renders a second viewport', async () => {
   await page.check('#gpv-side-by-side'); await page.waitForTimeout(1500);
   if (!(await page.locator('#gpv-stage-compare canvas').count())) throw new Error('no compare canvas');
@@ -538,6 +554,11 @@ await step('PAE domains are found from a block-diagonal matrix', async () => {
   await page.click('#gpv-domain-highlight'); await page.waitForTimeout(500);
   if ((await page.locator('#gpv-selection-list .gpv-entry').count()) !== before + 2) throw new Error('highlight all did not add two selections');
   await tab('appearance'); await page.selectOption('#gpv-color-mode', 'plddt'); await page.waitForTimeout(300); await tab('confidence');
+});
+await step('ligand sites report that the synthetic models carry no ligands', async () => {
+  if (!(await page.locator('#gpv-site-run').isDisabled())) throw new Error('analyse enabled without ligands');
+  const state = (await page.locator('#gpv-site-state').textContent()) || '';
+  if (!/no ligands or ions/.test(state)) throw new Error('state: ' + state);
 });
 await step('confidence CSV downloads', async () => {
   const download = page.waitForEvent('download', { timeout: 20000 });
@@ -822,6 +843,13 @@ if (reportPath) {
     const after = await report.evaluate(() => document.querySelector('#view .stage canvas').toDataURL());
     if (before === after) throw new Error('clicking the strip did not zoom the panel');
     console.log('       ' + readout.trim());
+  });
+  await step('the report offers per-residue data colouring with its legend', async () => {
+    await report.selectOption('#colors', 'data'); await report.waitForTimeout(600);
+    if (await report.locator('#domain-legend').isHidden()) throw new Error('data legend hidden');
+    const text = (await report.locator('#domain-legend').textContent()) || '';
+    if (!/No per-residue data|\d/.test(text)) throw new Error('legend text: ' + text);
+    await report.selectOption('#colors', 'plddt'); await report.waitForTimeout(300);
   });
   await step('the report can colour by annotated domains and lists them', async () => {
     await report.selectOption('#colors', 'annotated'); await report.waitForTimeout(600);

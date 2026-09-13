@@ -926,7 +926,7 @@ html>body{padding:0}</style>
     <div class="viz-controls gpv-presets"><span class="text-small text-muted">Presets</span><button class="btn" type="button" id="gpv-preset-thesis" data-tooltip="White background, orthographic cartoon, legend on exports, 1800 × 1200 at 2×">Thesis figure</button><button class="btn" type="button" id="gpv-preset-slide" data-tooltip="Dark background, perspective cartoon, colour by chain">Dark slide</button><button class="btn" type="button" id="gpv-preset-review" data-tooltip="pLDDT colouring with the legend, every residue shown, ligands as sticks">Confidence review</button></div>
     <div class="viz-controls">
       <label class="form-label">Representation<select class="form-select" id="gpv-style"><option value="cartoon">Cartoon</option><option value="stick">Sticks</option><option value="sphere">Spheres</option><option value="line">Lines</option></select></label>
-      <label class="form-label">Color scheme<select class="form-select" id="gpv-color-mode"><option value="structure">Per structure</option><option value="chain">Per chain</option><option value="plddt">pLDDT confidence</option><option value="deviation">Cα deviation after alignment</option><option value="domain">PAE domains</option><option value="annotated">Annotated domains</option><option value="data">Per-residue data</option><option value="charge">Residue charge</option><option value="hydrophobicity">Hydrophobicity (Kyte–Doolittle)</option><option value="restype">Residue type</option><option value="amino">Amino acid</option><option value="ss">Secondary structure</option><option value="spectrum">Sequence spectrum</option><option value="element">Element</option></select></label>
+      <label class="form-label">Color scheme<select class="form-select" id="gpv-color-mode"><option value="structure">Per structure</option><option value="chain">Per chain</option><option value="plddt">pLDDT confidence</option><option value="deviation">Cα deviation after alignment</option><option value="agreement">Model agreement (Cα RMSF)</option><option value="domain">PAE domains</option><option value="annotated">Annotated domains</option><option value="data">Per-residue data</option><option value="charge">Residue charge</option><option value="hydrophobicity">Hydrophobicity (Kyte–Doolittle)</option><option value="restype">Residue type</option><option value="amino">Amino acid</option><option value="ss">Secondary structure</option><option value="spectrum">Sequence spectrum</option><option value="element">Element</option></select></label>
       <label class="form-label">Low confidence<select class="form-select" id="gpv-hide-below" data-tooltip="Hide residues whose pLDDT is below the threshold — in the viewer, every panel and every export"><option value="0">Show every residue</option><option value="50">Hide pLDDT below 50</option><option value="70">Hide pLDDT below 70</option></select></label>
       <label class="form-label">Ligands and ions<select class="form-select" id="gpv-hetero" data-tooltip="How hetero groups — ligands, cofactors, ions, glycans — are drawn; water is never shown"><option value="stick">Sticks and spheres</option><option value="sphere">Spheres</option><option value="hide">Hidden</option></select></label>
       <label class="form-check form-switch"><input class="form-check-input" id="gpv-safe-palette" type="checkbox"><span class="form-check-label">Colour-blind-safe palette (Okabe–Ito) for chains and domains</span></label>
@@ -1026,6 +1026,7 @@ html>body{padding:0}</style>
       <button class="btn" type="button" id="gpv-align" disabled>Align visible</button>
       <button class="btn" type="button" id="gpv-restore" disabled>Restore coordinates</button>
       <button class="btn" type="button" id="gpv-alignment-csv" disabled>Download RMSD CSV</button>
+      <button class="btn" type="button" id="gpv-rmsf-csv" disabled data-tooltip="Per-residue Cα spread (RMSF) across the aligned models — the ensemble agreement the colour scheme shows">Download RMSF CSV</button>
     </div>
     <div class="table-responsive" id="gpv-alignment-wrap" hidden><table class="table table-sm" aria-label="Structural alignment results"><thead><tr><th>Model</th><th>Reference</th><th class="text-end">Cα pairs</th><th class="text-end">Identity</th><th class="text-end">RMSD (Å)</th><th>Mapping</th></tr></thead><tbody id="gpv-alignment-results"></tbody></table></div>
     <div class="viz-controls">
@@ -1054,6 +1055,15 @@ html>body{padding:0}</style>
       <span class="text-muted text-small" id="gpv-domain-state">Show a model with a PAE matrix, then find its domains.</span>
     </div>
     <div class="table-responsive" id="gpv-domain-wrap" hidden><table class="table table-sm" aria-label="PAE-derived domains of the current model"><thead><tr><th>Domain</th><th>Residues</th><th class="text-end">Count</th><th class="text-end">Mean PAE within (Å)</th><th></th></tr></thead><tbody id="gpv-domain-rows"></tbody></table></div>
+    <h3 class="gpv-subheading">Ligand sites</h3>
+    <p class="text-muted text-small gpv-hint">For each ligand or ion of the current model: the residues with a heavy atom within the cutoff, their mean pLDDT, and — when the PAE matrix carries ligand tokens (AlphaFold 3) — the mean predicted aligned error between the ligand and its site. A low site pLDDT or a high ligand–site PAE says the pose is not to be trusted, whatever it looks like.</p>
+    <div class="viz-controls">
+      <label class="form-label">Contact cutoff (Å)<input class="form-control" id="gpv-site-cutoff" type="number" min="2" max="8" step="0.5" value="4.5"></label>
+      <button class="btn" type="button" id="gpv-site-run" disabled>Analyse ligand sites</button>
+      <button class="btn" type="button" id="gpv-site-csv" disabled>Download sites CSV</button>
+      <span class="text-muted text-small" id="gpv-site-state">Show a model with ligands or ions.</span>
+    </div>
+    <div class="table-responsive" id="gpv-site-wrap" hidden><table class="table table-sm" aria-label="Ligand binding sites of the current model"><thead><tr><th>Ligand</th><th class="text-end">Atoms</th><th class="text-end">Site residues</th><th class="text-end">Site mean pLDDT</th><th class="text-end">Ligand–site PAE (Å)</th><th></th></tr></thead><tbody id="gpv-site-rows"></tbody></table></div>
     <h3 class="gpv-subheading">Interfaces</h3>
     <p class="text-muted text-small gpv-hint">Geometry of the model as loaded: inter-chain heavy-atom contacts and buried surface area (Shrake–Rupley, 1.4 Å probe, 92 points per atom). A predicted interface is a hypothesis about an interaction, not evidence of one — read it next to the chain-pair ipTM and PAE above.</p>
     <div class="viz-controls">
@@ -1450,7 +1460,7 @@ html>body{padding:0}</style>
   let busyDepth = 0;
   let restoreMotion = null;
   const listPageSize = 60;
-  const viewerVersion = '2.11.0';
+  const viewerVersion = '2.12.0';
   const preferenceKey = 'protein-structure-viewer:preferences';
   const themeKey = 'protein-structure-viewer:theme';
   const labelColors = getComputedStyle(root);
@@ -1669,6 +1679,7 @@ html>body{padding:0}</style>
 
   function drawPae(entry) {
     renderDomains(entry);
+    renderLigandSites(entry);
     const panel = root.querySelector('#gpv-pae-panel');
     const plot = root.querySelector('#gpv-pae-plot');
     const matrix = entry && entry.confidence && entry.confidence.pae;
@@ -1980,6 +1991,7 @@ html>body{padding:0}</style>
     if (mode === 'chain') return { colorfunc: atom => chainColor(atom.chain) };
     if (mode === 'plddt') return { colorfunc: atom => plddtColor(Number(atom.b || 0)) };
     if (mode === 'deviation') return { colorfunc: atom => deviationColor(entry, atom) };
+    if (mode === 'agreement') return { colorfunc: atom => agreementColor(atom) };
     if (mode === 'domain') return { colorfunc: atom => domainColor(entry, atom) };
     if (mode === 'annotated') return { colorfunc: atom => annotatedColor(entry, atom) };
     if (mode === 'data') return { colorfunc: atom => dataColor(entry, atom) };
@@ -3026,6 +3038,7 @@ html>body{padding:0}</style>
     const mode = root.querySelector('#gpv-color-mode').value;
     if (mode === 'chain') return chainColor(atom.chain);
     if (mode === 'deviation') return deviationColor(entry, atom);
+    if (mode === 'agreement') return agreementColor(atom);
     if (mode === 'domain') return domainColor(entry, atom);
     if (mode === 'annotated') return annotatedColor(entry, atom);
     if (mode === 'data') return dataColor(entry, atom);
@@ -3186,7 +3199,7 @@ html>body{padding:0}</style>
     const multi = entries.length > 1;
     const total = planned.reduce((sum, item) => sum + item.row.residues.length, 0);
     const mode = root.querySelector('#gpv-color-mode').value;
-    const colourNote = mode === 'chain' ? ' · coloured by chain' : mode === 'deviation' ? ' · coloured by Cα deviation' : mode === 'domain' ? ' · coloured by PAE domains' : mode === 'annotated' ? ' · coloured by annotated domains' : mode === 'data' ? ' · coloured by ' + (residueData ? residueData.name : 'per-residue data') : residueModes.includes(mode) ? ' · coloured by ' + ({ charge: 'residue charge', hydrophobicity: 'hydrophobicity', restype: 'residue type', amino: 'amino acid', ss: 'secondary structure' })[mode] : entries.some(entry => entry.scores.length) ? ' · coloured by pLDDT' : '';
+    const colourNote = mode === 'chain' ? ' · coloured by chain' : mode === 'deviation' ? ' · coloured by Cα deviation' : mode === 'agreement' ? ' · coloured by model agreement (Cα RMSF)' : mode === 'domain' ? ' · coloured by PAE domains' : mode === 'annotated' ? ' · coloured by annotated domains' : mode === 'data' ? ' · coloured by ' + (residueData ? residueData.name : 'per-residue data') : residueModes.includes(mode) ? ' · coloured by ' + ({ charge: 'residue charge', hydrophobicity: 'hydrophobicity', restype: 'residue type', amino: 'amino acid', ss: 'secondary structure' })[mode] : entries.some(entry => entry.scores.length) ? ' · coloured by pLDDT' : '';
     const chainNote = planned.length > shown.length ? ' · first ' + shown.length + ' of ' + planned.length + ' rows' : '';
     const cut = hideBelow();
     const cutNote = cut && entries.some(entry => entry.scores.length) ? ' · pLDDT below ' + cut + ' hidden' : '';
@@ -3592,6 +3605,150 @@ html>body{padding:0}</style>
     });
   }
 
+  /* ---------- Model agreement (ensemble RMSF) ---------- */
+
+  let ensembleSpread = null;
+  const agreementBands = [[0.5, '#2563eb', '<0.5 Å'], [1, '#22c55e', '0.5–1 Å'], [2, '#eab308', '1–2 Å'], [4, '#f97316', '2–4 Å'], [Infinity, '#dc2626', '≥4 Å']];
+
+  /* Per-residue root-mean-square fluctuation of Cα positions across the aligned
+     models, keyed by chain|resi. Residues present in one model only are skipped. */
+  function ensembleAgreement(entries) {
+    if (entries.length < 2) return null;
+    const perTag = new Map();
+    entries.forEach(entry => entry.atoms.forEach(atom => {
+      if (atom.atom !== 'CA' || atom.hetflag) return;
+      const tag = residueTag(atom);
+      if (!perTag.has(tag)) perTag.set(tag, []);
+      perTag.get(tag).push([atom.x, atom.y, atom.z]);
+    }));
+    const values = new Map(); let max = 0;
+    perTag.forEach((points, tag) => {
+      if (points.length < 2) return;
+      const centre = [0, 1, 2].map(axis => points.reduce((sum, point) => sum + point[axis], 0) / points.length);
+      const rmsf = Math.sqrt(points.reduce((sum, point) => sum + (point[0] - centre[0]) ** 2 + (point[1] - centre[1]) ** 2 + (point[2] - centre[2]) ** 2, 0) / points.length);
+      values.set(tag, rmsf); max = Math.max(max, rmsf);
+    });
+    return values.size ? { values, count: entries.length, models: entries.map(entry => entry.name), max } : null;
+  }
+
+  function agreementColor(atom) {
+    const value = ensembleSpread ? ensembleSpread.values.get(residueTag(atom)) : undefined;
+    if (value === undefined) return '#9ca3af';
+    return agreementBands.find(([limit]) => value < limit)[1];
+  }
+
+  function downloadRmsfCsv() {
+    if (!ensembleSpread) return;
+    const rows = [['chain', 'resi', 'models', 'ca_rmsf_angstrom']];
+    [...ensembleSpread.values.entries()].sort((a, b) => compareChains(a[0].split('|')[0], b[0].split('|')[0]) || Number(a[0].split('|')[1]) - Number(b[0].split('|')[1]))
+      .forEach(([tag, value]) => rows.push([tag.split('|')[0], tag.split('|')[1], ensembleSpread.count, value.toFixed(3)]));
+    rows.push([]); rows.push(['# models', ensembleSpread.models.join(' | ')]);
+    downloadBlob(rows.map(row => row.join(',')).join('\n'), 'text/csv', 'protein-ensemble-rmsf.csv');
+    updateStatus('Per-residue RMSF downloaded for ' + ensembleSpread.values.size + ' residues across ' + ensembleSpread.count + ' models');
+  }
+
+  /* ---------- Ligand sites ---------- */
+
+  let siteResults = null;
+
+  function ligandGroups(entry) {
+    const groups = new Map();
+    heavyAtoms(entry).forEach(atom => {
+      if (!atom.hetflag || isWater(atom)) return;
+      const resn = String(atom.resn || '?').toUpperCase(); const key = (atom.chain || '') + '|' + atom.resi + '|' + resn;
+      if (!groups.has(key)) groups.set(key, { chain: atom.chain || '', resi: atom.resi, resn, atoms: [] });
+      groups.get(key).atoms.push(atom);
+    });
+    return [...groups.values()];
+  }
+
+  /* chain|resi -> PAE token indices, including ligand tokens when the matrix has
+     AlphaFold 3 token ids (ligands are tokenised per atom, all sharing one residue id). */
+  function paeTokenIndex(entry) {
+    const confidence = entry.confidence || {}; const matrix = confidence.pae;
+    if (!Array.isArray(matrix) || !matrix.length) return null;
+    const index = new Map();
+    const add = (tag, i) => { if (!tag) return; if (!index.has(tag)) index.set(tag, []); index.get(tag).push(i); };
+    if (Array.isArray(confidence.tokenChainIds) && Array.isArray(confidence.tokenResidueIds) && confidence.tokenChainIds.length === matrix.length) {
+      confidence.tokenChainIds.forEach((chain, i) => add(String(chain) + '|' + Number(confidence.tokenResidueIds[i]), i));
+      return index;
+    }
+    const tags = paeTokens(entry); if (!tags) return null;
+    tags.forEach((tag, i) => add(tag, i));
+    return index;
+  }
+
+  function analyseLigandSites() {
+    const entry = activeEntry(); if (!entry || !entry.model) return;
+    const cutoff = Math.min(8, Math.max(2, Number(root.querySelector('#gpv-site-cutoff').value) || 4.5));
+    const groups = ligandGroups(entry);
+    if (!groups.length) { siteResults = null; renderLigandSites(entry); updateStatus('No ligands or ions in ' + displayName(entry)); return; }
+    const protein = heavyAtoms(entry).filter(atom => !atom.hetflag);
+    const grid = spatialGrid(protein, cutoff); const limit = cutoff * cutoff;
+    const tokenIndex = paeTokenIndex(entry); const matrix = entry.confidence && entry.confidence.pae;
+    const rows = groups.map(group => {
+      const residues = new Map();
+      group.atoms.forEach(target => grid.near(target).forEach(i => { const atom = protein[i]; if (squaredDistance(atom, target) <= limit) { const tag = residueTag(atom); if (!residues.has(tag)) residues.set(tag, atom); } }));
+      const site = [...residues.values()].sort((a, b) => compareChains(a.chain || '', b.chain || '') || a.resi - b.resi);
+      const plddt = entry.scores.length && site.length ? mean(site.map(atom => Number(atom.b) || 0)) : null;
+      let pae = null;
+      if (tokenIndex && matrix) {
+        const ligandTokens = tokenIndex.get(group.chain + '|' + group.resi) || [];
+        const siteTokens = site.flatMap(atom => tokenIndex.get(residueTag(atom)) || []);
+        if (ligandTokens.length && siteTokens.length) {
+          let sum = 0; let count = 0;
+          ligandTokens.forEach(i => siteTokens.forEach(j => { const a = Number(matrix[i] && matrix[i][j]); const b = Number(matrix[j] && matrix[j][i]); if (Number.isFinite(a) && Number.isFinite(b)) { sum += (a + b) / 2; count += 1; } }));
+          pae = count ? sum / count : null;
+        }
+      }
+      return { group, site, plddt, pae };
+    }).sort((a, b) => b.group.atoms.length - a.group.atoms.length || compareChains(a.group.chain, b.group.chain) || a.group.resi - b.group.resi);
+    siteResults = { entryId: entry.id, cutoff, rows };
+    renderLigandSites(entry);
+    updateStatus(rows.length + ' ligand site' + (rows.length === 1 ? '' : 's') + ' analysed at ' + cutoff + ' Å on ' + displayName(entry));
+  }
+
+  function siteLabel(group) { return group.resn + ' ' + (group.chain ? group.chain + ':' : '') + group.resi; }
+  function siteResidueList(site) { return site.map(atom => (atom.chain ? atom.chain + ':' : '') + (atom.resn || '') + atom.resi).join('; '); }
+
+  function renderLigandSites(entry) {
+    const run = root.querySelector('#gpv-site-run'); const state = root.querySelector('#gpv-site-state');
+    const wrap = root.querySelector('#gpv-site-wrap'); const body = root.querySelector('#gpv-site-rows'); body.replaceChildren();
+    const groups = entry && entry.model ? ligandGroups(entry) : [];
+    run.disabled = !groups.length;
+    const results = siteResults && entry && siteResults.entryId === entry.id ? siteResults : null;
+    root.querySelector('#gpv-site-csv').disabled = !results;
+    if (!entry || !entry.model) { wrap.hidden = true; state.textContent = 'Show a model with ligands or ions.'; return; }
+    if (!groups.length) { wrap.hidden = true; state.textContent = displayName(entry) + ' has no ligands or ions (water is not counted).'; return; }
+    if (!results) { wrap.hidden = true; state.textContent = groups.length + ' ligand or ion group' + (groups.length === 1 ? '' : 's') + ' · choose a cutoff and analyse.'; return; }
+    wrap.hidden = false;
+    state.textContent = results.rows.length + ' site' + (results.rows.length === 1 ? '' : 's') + ' at ' + results.cutoff + ' Å' + (results.rows.some(row => row.pae !== null) ? ' · ligand–site PAE from AlphaFold 3 tokens' : entry.confidence && entry.confidence.pae ? ' · the PAE matrix carries no ligand tokens' : '');
+    results.rows.forEach(row => {
+      const tr = document.createElement('tr');
+      const name = document.createElement('th'); name.textContent = siteLabel(row.group); name.title = siteResidueList(row.site); tr.append(name);
+      [[String(row.group.atoms.length), 'text-end'], [String(row.site.length), 'text-end'], [row.plddt === null ? '—' : row.plddt.toFixed(1), 'text-end'], [row.pae === null ? '—' : row.pae.toFixed(2), 'text-end']].forEach(([value, className]) => { const td = document.createElement('td'); td.className = className; td.textContent = value; tr.append(td); });
+      const action = document.createElement('td'); const highlight = document.createElement('button'); highlight.className = 'btn btn-ghost'; highlight.type = 'button'; highlight.textContent = 'Highlight';
+      highlight.disabled = !row.site.length;
+      highlight.addEventListener('click', () => {
+        remember('ligand site');
+        const byChain = new Map(); row.site.forEach(atom => { const chain = atom.chain || ''; if (!byChain.has(chain)) byChain.set(chain, []); byChain.get(chain).push(atom.resi); });
+        byChain.forEach((residues, chain) => selectionRecords.push({ id: nextAnnotationId++, entryId: entry.id, chain, residues: residues.sort((a, b) => a - b), action: 'highlight', color: root.querySelector('#gpv-interface-color').value }));
+        renderSelectionList(); applyStyle();
+        updateStatus(siteLabel(row.group) + ' site highlighted · ' + row.site.length + ' residues');
+      });
+      action.append(highlight); tr.append(action); body.append(tr);
+    });
+  }
+
+  function downloadSitesCsv() {
+    const entry = activeEntry(); if (!siteResults || !entry) return;
+    const quote = value => '"' + String(value).replace(/"/g, '""') + '"';
+    const rows = [['model', 'ligand', 'chain', 'resi', 'ligand_atoms', 'cutoff_angstrom', 'site_residue_count', 'site_mean_plddt', 'ligand_site_mean_pae', 'site_residues']];
+    siteResults.rows.forEach(row => rows.push([displayName(entry), row.group.resn, row.group.chain, row.group.resi, row.group.atoms.length, siteResults.cutoff, row.site.length, row.plddt === null ? '' : row.plddt.toFixed(2), row.pae === null ? '' : row.pae.toFixed(3), siteResidueList(row.site)]));
+    downloadBlob(rows.map(row => row.map(quote).join(',')).join('\n'), 'text/csv', 'ligand-sites.csv');
+    updateStatus('Ligand sites CSV downloaded');
+  }
+
   /* ---------- PAE domains ---------- */
 
   const domainPalette = ['#2563eb', '#f97316', '#16a34a', '#a855f7', '#ec4899', '#0891b2', '#ca8a04', '#dc2626', '#4f46e5', '#65a30d', '#0ea5e9', '#c026d3'];
@@ -3920,6 +4077,7 @@ html>body{padding:0}</style>
       structure: 'coloured per model' + (shown.length > 1 ? ' (' + shown.map(entry => displayName(entry) + ' ' + entry.color).join('; ') + ')' : ''),
       chain: 'coloured by chain',
       plddt: 'coloured by per-residue pLDDT (very low <50 orange, low 50–70 yellow, confident 70–90 light blue, very high ≥90 dark blue)',
+      agreement: 'coloured by per-residue Cα RMSF across ' + (ensembleSpread ? ensembleSpread.count + ' aligned models' : 'the aligned models') + ' (<0.5 Å blue, 0.5–1 Å green, 1–2 Å yellow, 2–4 Å orange, ≥4 Å red; residues present in one model grey)',
       deviation: 'coloured by Cα deviation from the reference after superposition (<1 Å blue, 1–2 Å green, 2–4 Å yellow, 4–8 Å orange, ≥8 Å red; unmatched residues grey)',
       spectrum: 'coloured as a sequence spectrum from the N- to the C-terminus',
       element: 'coloured by element',
@@ -3935,6 +4093,7 @@ html>body{padding:0}</style>
     const surfaceChoice = root.querySelector('#gpv-surface').value;
     if (surfaceChoice !== 'none') colourText += ', with a ' + (surfaceChoice === 'translucent' ? 'translucent' : 'solid') + ' molecular surface in the same colours';
     if (mode === 'deviation' && !alignmentResults.length) colourText = 'shown in grey (Cα deviation colouring is selected but no alignment has been made)';
+    if (mode === 'agreement' && !ensembleSpread) colourText = 'shown in grey (model agreement colouring is selected but no models have been aligned)';
     const representation = { cartoon: 'Cartoon representation', stick: 'Stick representation', sphere: 'Space-filling representation', line: 'Line representation' }[root.querySelector('#gpv-style').value] || 'Representation';
     const sentences = [];
     sentences.push((provenance.title ? provenance.title + '. ' : '') + representation + ' of ' + (shown.length ? shown.map(displayName).join(', ') : 'the model') + (provenance.method ? ' predicted with ' + provenance.method : '') + (provenance.source ? ' (' + provenance.source + ')' : '') + ', ' + colourText + '.');
@@ -4361,6 +4520,7 @@ html>body{padding:0}</style>
 
   function restoreCoordinates(shouldRender = true) {
     structures.forEach(entry => { entry.deviations = null; });
+    ensembleSpread = null;
     structures.filter(entry => entry.model).forEach(entry => entry.atoms.forEach((atom, index) => {
       const original = entry.originalAtoms[index];
       /* originalAtoms is cleared when a model is released to reclaim memory. */
@@ -4526,6 +4686,7 @@ html>body{padding:0}</style>
     const wrap = root.querySelector('#gpv-alignment-wrap');
     wrap.hidden = alignmentResults.length === 0;
     root.querySelector('#gpv-alignment-csv').disabled = alignmentResults.length === 0;
+    root.querySelector('#gpv-rmsf-csv').disabled = !ensembleSpread;
     const body = root.querySelector('#gpv-alignment-results');
     body.replaceChildren();
     alignmentResults.forEach(result => {
@@ -4576,6 +4737,7 @@ html>body{padding:0}</style>
     });
     /* The reference is coloured by its mean deviation across the aligned models. */
     reference.deviations = new Map([...reference.deviationSamples].map(([tag, list]) => [tag, mean(list)]));
+    ensembleSpread = ensembleAgreement([reference, ...targets.filter(entry => entry !== reference && results.some(result => result.name === entry.name))]);
     reference.deviationSamples = null;
     done();
     showImportErrors(failures);
@@ -4908,7 +5070,7 @@ html>body{padding:0}</style>
     const settings = scene.settings || {};
     if (['overlay', 'single'].includes(settings.viewMode)) root.querySelector('#gpv-view-mode').value = settings.viewMode;
     if (['cartoon', 'stick', 'sphere', 'line'].includes(settings.representation)) root.querySelector('#gpv-style').value = settings.representation;
-    if (['structure', 'chain', 'plddt', 'deviation', 'domain', 'annotated', 'data', 'charge', 'hydrophobicity', 'restype', 'amino', 'ss', 'spectrum', 'element'].includes(settings.colorMode)) root.querySelector('#gpv-color-mode').value = settings.colorMode;
+    if (['structure', 'chain', 'plddt', 'deviation', 'agreement', 'domain', 'annotated', 'data', 'charge', 'hydrophobicity', 'restype', 'amino', 'ss', 'spectrum', 'element'].includes(settings.colorMode)) root.querySelector('#gpv-color-mode').value = settings.colorMode;
     if (['loaded', 'ranking', 'plddt'].includes(settings.modelOrder)) root.querySelector('#gpv-order').value = settings.modelOrder;
     if (['sequence', 'identifier'].includes(settings.alignmentMode)) root.querySelector('#gpv-alignment-mode').value = settings.alignmentMode;
     if (['perspective', 'orthographic'].includes(settings.projection)) root.querySelector('#gpv-projection').value = settings.projection;
@@ -5168,7 +5330,7 @@ html>body{padding:0}</style>
     const active = byName.get(state.activeModel); if (active) activeId = active.id;
     if (['overlay', 'single'].includes(state.viewMode)) root.querySelector('#gpv-view-mode').value = state.viewMode;
     if (['cartoon', 'stick', 'sphere', 'line'].includes(state.representation)) root.querySelector('#gpv-style').value = state.representation;
-    if (['structure', 'chain', 'plddt', 'deviation', 'domain', 'annotated', 'data', 'charge', 'hydrophobicity', 'restype', 'amino', 'ss', 'spectrum', 'element'].includes(state.colorMode)) root.querySelector('#gpv-color-mode').value = state.colorMode;
+    if (['structure', 'chain', 'plddt', 'deviation', 'agreement', 'domain', 'annotated', 'data', 'charge', 'hydrophobicity', 'restype', 'amino', 'ss', 'spectrum', 'element'].includes(state.colorMode)) root.querySelector('#gpv-color-mode').value = state.colorMode;
     if (['perspective', 'orthographic'].includes(state.projection)) root.querySelector('#gpv-projection').value = state.projection;
     if (['transparent', 'white', 'dark', 'custom'].includes(state.background)) root.querySelector('#gpv-background').value = state.background;
     if (/^#[0-9a-f]{6}$/i.test(state.backgroundColor || '')) root.querySelector('#gpv-background-color').value = state.backgroundColor;
@@ -5389,6 +5551,7 @@ html>body{padding:0}</style>
       if (!found || !found.domains.length) return { title: 'PAE domains', items: [['#9ca3af', 'none yet', 'No domains found yet — Confidence → Find domains']] };
       return { title: 'PAE domains', items: [...found.domains.slice(0, 12).map(domain => [domainColorFor(domain.id), 'D' + domain.id, 'Domain ' + domain.id + ' · ' + clipText(domainRanges(domain), 36)]), ...(found.unassigned ? [['#9ca3af', 'other', 'Unassigned']] : [])] };
     }
+    if (mode === 'agreement') return { title: 'Cα RMSF', items: [...agreementBands.map(([, color, label]) => [color, label]), ['#9ca3af', 'single', 'In one model only']] };
     if (mode === 'deviation') return { title: 'Cα deviation', items: [...deviationBands.map(([, color, label]) => [color, label]), ['#9ca3af', 'unmatched']] };
     if (mode === 'plddt') return { title: 'pLDDT', items: [['#ff7d45', '<50', 'Very low <50'], ['#ffdb13', '50–70', 'Low 50–70'], ['#65cbf3', '70–90', 'Confident 70–90'], ['#0053d6', '≥90', 'Very high ≥90']] };
     const shown = displayedEntries().filter(entry => entry.model);
@@ -6101,6 +6264,7 @@ html>body{padding:0}</style>
       domains: JSON.stringify(domainRecords.map(record => { const owner = entryById(record.entryId); return { name: record.name, color: record.color, chain: record.chain, residues: record.residues, scope: record.scope, model: owner ? owner.name : null, collection: owner ? owner.collection || '' : '' }; })),
       chainColors: JSON.stringify(Object.fromEntries([...chainOrder.keys()].map(chain => [chain, chainColor(chain)]))),
       residueThemes: JSON.stringify(residueThemeTables()),
+      residueData: JSON.stringify(residueData ? (() => { const owner = entryById(residueData.entryId); return { name: residueData.name, scale: residueData.scale, scope: residueData.scope, model: owner ? owner.name : null, collection: owner ? owner.collection || '' : '', min: dataRange().min, max: dataRange().max, stops: dataScales[residueData.scale] || dataScales.viridis, rows: [...residueData.values.entries()].map(([key, value]) => [key.split('|')[0], Number(key.split('|')[1]), value]).concat([...residueData.byResi.entries()].map(([resi, value]) => ['', resi, value])) }; })() : null),
       heteroMode: JSON.stringify(root.querySelector('#gpv-hetero').value),
       title: (provenanceValues().title || 'Protein Model Report').replace(/[<>&]/g, ''),
       structures: embed(exported),
@@ -6169,7 +6333,7 @@ kbd{font:inherit;padding:0 5px;border:1px solid currentColor;border-radius:4px;f
 <button id='previous'>Previous</button><button id='next'>Next</button><button id='play'>Play cycle</button>
 <label>Interval (seconds)<input id='interval' type='number' min='0.5' max='20' step='0.5' value='2'></label>
 <label>Representation<select id='style'><option value='cartoon'>Cartoon</option><option value='stick'>Sticks</option><option value='sphere'>Spheres</option><option value='line'>Lines</option></select></label>
-<label>Colors<select id='colors'><option value='plddt'>pLDDT</option><option value='structure'>Model color</option><option value='chain'>Chain</option><option value='charge'>Residue charge</option><option value='hydrophobicity'>Hydrophobicity</option><option value='restype'>Residue type</option><option value='amino'>Amino acid</option><option value='ss'>Secondary structure</option><option value='annotated'>Annotated domains</option><option value='spectrum'>Spectrum</option><option value='element'>Element</option></select></label>
+<label>Colors<select id='colors'><option value='plddt'>pLDDT</option><option value='structure'>Model color</option><option value='chain'>Chain</option><option value='charge'>Residue charge</option><option value='hydrophobicity'>Hydrophobicity</option><option value='restype'>Residue type</option><option value='amino'>Amino acid</option><option value='ss'>Secondary structure</option><option value='annotated'>Annotated domains</option><option value='data'>Per-residue data</option><option value='spectrum'>Spectrum</option><option value='element'>Element</option></select></label>
 <label>Ligands<select id='hetero'><option value='stick'>Sticks</option><option value='sphere'>Spheres</option><option value='hide'>Hidden</option></select></label>
 <label>Background<select id='background'><option value='dark'>Dark</option><option value='light'>Light</option><option value='white'>White</option><option value='transparent'>Transparent</option></select></label>
 <button id='spin'>Spin</button><button id='fit'>Fit</button><button id='fullscreen'>Full screen</button><button id='png'>Download PNG</button><button id='video'>Record video</button>
@@ -6188,6 +6352,7 @@ const metadata=${data.metadata};
 const initial=${data.initial};
 const chainColors=${data.chainColors};
 const domainRecords=${data.domains};
+const residueDataset=${data.residueData};
 const residueThemes=${data.residueThemes};
 const initialHetero=${data.heteroMode};
 const el = id => document.getElementById(id);
@@ -6205,7 +6370,7 @@ savedViews.forEach((v, i) => { const o = document.createElement('option'); o.val
 const panelSelect = el('panels');
 for (let n = 1; n <= Math.min(MAX_PANES, Math.max(1, structures.length)); n++) panelSelect.append(new Option(n === 1 ? '1 panel' : n + ' panels', String(n)));
 if (['cartoon', 'stick', 'sphere', 'line'].includes(initial.representation)) el('style').value = initial.representation;
-if (['plddt', 'structure', 'chain', 'charge', 'hydrophobicity', 'restype', 'amino', 'ss', 'annotated', 'spectrum', 'element'].includes(initial.colorMode)) el('colors').value = initial.colorMode;
+if (['plddt', 'structure', 'chain', 'charge', 'hydrophobicity', 'restype', 'amino', 'ss', 'annotated', 'data', 'spectrum', 'element'].includes(initial.colorMode)) el('colors').value = initial.colorMode;
 if (['stick', 'sphere', 'hide'].includes(initialHetero)) el('hetero').value = initialHetero;
 el('sync').value = initial.sync === 'full' ? 'full' : 'rotation';
 el('video').textContent = 'Record ' + initial.seconds + 's video';
@@ -6229,6 +6394,7 @@ function styleSpec(s) {
   if (mode === 'chain') options = { colorfunc: a => chainColors[a.chain || ''] || '#9ca3af' };
   if (residueThemes[mode] && mode !== 'ss') options = { colorfunc: a => residueThemes[mode][String(a.resn || '').toUpperCase()] || residueThemes.fallback };
   if (mode === 'ss') options = { colorfunc: a => residueThemes.ss[a.ss] || residueThemes.ss.c };
+  if (mode === 'data') options = { colorfunc: a => dataColorFor(s, a) };
   if (mode === 'annotated') { const lookup = domainLookupFor(s); options = { colorfunc: a => { const r = lookup.get((a.chain || '') + '|' + a.resi); return r ? r.color : '#9ca3af'; } }; }
   if (mode === 'spectrum') options = { colorscheme: 'spectrum' };
   if (mode === 'element') options = { colorscheme: 'default' };
@@ -6382,11 +6548,29 @@ function domainLookupFor(s) {
   s.domainLookup = { get: key => map.get(key) || map.get('*|' + key.split('|')[1]) };
   return s.domainLookup;
 }
+function gradientAt(stops, t) {
+  const c = Math.max(0, Math.min(1, Number.isFinite(t) ? t : 0)); const p = c * (stops.length - 1); const i = Math.min(stops.length - 2, Math.floor(p)); const f = p - i;
+  const rgb = h => { const n = parseInt(h.slice(1), 16); return [(n >> 16) & 255, (n >> 8) & 255, n & 255]; }; const a = rgb(stops[i]), b = rgb(stops[i + 1]);
+  return '#' + a.map((ch, k) => Math.round(ch + (b[k] - ch) * f).toString(16).padStart(2, '0')).join('');
+}
+function dataColorFor(s, a) {
+  if (!residueDataset || !domainAppliesTo(residueDataset, s)) return '#d1d5db';
+  if (!residueDataset.map) { residueDataset.map = new Map(); residueDataset.byResi = new Map(); residueDataset.rows.forEach(r => { if (r[0]) residueDataset.map.set(r[0] + '|' + r[1], r[2]); else residueDataset.byResi.set(Number(r[1]), r[2]); }); }
+  const key = (a.chain || '') + '|' + a.resi; const v = residueDataset.map.has(key) ? residueDataset.map.get(key) : residueDataset.byResi.get(a.resi);
+  if (v === undefined) return '#d1d5db';
+  return gradientAt(residueDataset.stops, (v - residueDataset.min) / ((residueDataset.max - residueDataset.min) || 1));
+}
 function refreshDomainLegend() {
   const host = el('domain-legend'); if (!host) return;
-  const show = el('colors').value === 'annotated';
+  const mode = el('colors').value; const show = mode === 'annotated' || mode === 'data';
   host.hidden = !show; host.replaceChildren();
   if (!show) return;
+  if (mode === 'data') {
+    if (!residueDataset) { host.textContent = 'No per-residue data in this report.'; return; }
+    const title = document.createElement('strong'); title.textContent = residueDataset.name; host.append(title);
+    [0, 0.25, 0.5, 0.75, 1].forEach(t => { const span = document.createElement('span'); const swatch = document.createElement('i'); swatch.className = 'swatch'; swatch.style.background = gradientAt(residueDataset.stops, t); const v = residueDataset.min + (residueDataset.max - residueDataset.min) * t; span.append(swatch, Math.abs(v) >= 100 ? v.toFixed(0) : Math.abs(v) >= 10 ? v.toFixed(1) : v.toFixed(2)); host.append(span); });
+    return;
+  }
   const seen = new Map(); domainRecords.forEach(r => { if (!seen.has(r.name)) seen.set(r.name, r); });
   if (!seen.size) { host.textContent = 'No annotated domains in this report.'; return; }
   [...seen.values()].forEach(r => { const span = document.createElement('span'); const swatch = document.createElement('i'); swatch.className = 'swatch'; swatch.style.background = r.color; span.append(swatch, r.name); host.append(span); });
@@ -6402,6 +6586,7 @@ function stripColor(s, a) {
   if (mode === 'chain') return chainColors[a.chain || ''] || '#9ca3af';
   if (mode === 'ss') return residueThemes.ss[a.ss] || residueThemes.ss.c;
   if (mode === 'annotated') { const r = domainLookupFor(s).get((a.chain || '') + '|' + a.resi); return r ? r.color : '#9ca3af'; }
+  if (mode === 'data') return dataColorFor(s, a);
   if (residueThemes[mode]) return residueThemes[mode][String(a.resn || '').toUpperCase()] || residueThemes.fallback;
   return s.color;
 }
@@ -7071,7 +7256,9 @@ applyBackground();
     'Help (?) → How to cite gives the viewer and 3Dmol.js references; each GitHub release is archived on Zenodo with a DOI.',
     'Annotate → Per-residue data: drop a CSV of residue and value columns — conservation, mutational scores, ΔΔG — and colour the structure by it with a gradient legend that states the range.',
     'Annotate → Selections → Near: highlight every residue within 4.5 Å of the ligands, of a chain, or of the residue you clicked, and copy the list for your methods.',
-    'Your session autosaves in the browser: reopen the page and choose Restore. Publish → Download all views (ZIP) renders every saved view at print size in one go.'
+    'Your session autosaves in the browser: reopen the page and choose Restore. Publish → Download all views (ZIP) renders every saved view at print size in one go.',
+    'After Align visible, colour by Model agreement to see where the five models of a run disagree: per-residue Cα RMSF, blue under 0.5 Å to red at 4 Å or more, with a CSV in the Compare tab.',
+    'Confidence → Ligand sites lists every ligand and ion with its contact residues, their mean pLDDT and, for AlphaFold 3, the PAE between ligand and site — the numbers that say whether a pose is trustworthy.'
   ];
   let tipIndex = Math.floor(Math.random() * tips.length);
   function renderTip() {
@@ -7091,6 +7278,9 @@ applyBackground();
   root.querySelector('#gpv-sequence-text').addEventListener('toggle', () => { writeJson(lettersKey, root.querySelector('#gpv-sequence-text').open); renderSequence(); });
   root.querySelector('#gpv-fasta').addEventListener('click', downloadFasta);
   root.querySelector('#gpv-domain-run').addEventListener('click', findDomains);
+  root.querySelector('#gpv-rmsf-csv').addEventListener('click', downloadRmsfCsv);
+  root.querySelector('#gpv-site-run').addEventListener('click', analyseLigandSites);
+  root.querySelector('#gpv-site-csv').addEventListener('click', downloadSitesCsv);
   root.querySelector('#gpv-near-run').addEventListener('click', highlightNearby);
   root.querySelector('#gpv-near-target').addEventListener('change', () => { root.querySelector('#gpv-near-chain').closest('label').hidden = root.querySelector('#gpv-near-target').value !== 'chain'; });
   root.querySelector('#gpv-near-chain').closest('label').hidden = true;

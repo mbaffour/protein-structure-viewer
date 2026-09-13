@@ -143,6 +143,11 @@ Notes on the colour schemes:
   scale. Residue type groups hydrophobic, aromatic, polar, positive, negative, Gly/Pro/Cys and
   nucleotides. Amino acid uses the RasMol colours. Secondary structure shows helix, strand and loop
   as assigned in the file or by the renderer. Each has a legend and colours the sequence strip too.
+- **Model agreement (Cα RMSF)** colours each residue by how much its Cα position varies across the
+  models you aligned with *Align visible* (Compare tab): under 0.5 Å blue, 0.5–1 Å green, 1–2 Å
+  yellow, 2–4 Å orange, 4 Å and above red; residues present in only one model are grey. Where
+  *Cα deviation* compares one model to a reference, this asks the whole run at once. **Download RMSF
+  CSV** in the Compare tab writes the values per residue with the models used.
 - **Low confidence** hides residues below pLDDT 50 or 70 — in the viewer, in every synchronized
   panel, and in every PNG and SVG export, so a figure without disordered tails takes one click. The
   sequence strip dims the hidden residues and its title says what is hidden. The setting is stored in
@@ -249,6 +254,14 @@ confidence for every displayed model that carries pLDDT — one panel per chain,
 the model's colour, the four confidence bands shaded behind, residue numbers along the axis, and a
 legend of model names. The figure title comes from *Provenance*. The SVG is fully editable; the PNG is
 rendered at twice the nominal size. Up to eight models and twelve chains are plotted.
+
+**Ligand sites.** With a model that carries ligands or ions shown, choose a contact cutoff (default
+4.5 Å) and press **Analyse ligand sites**. Each ligand or ion group gets a row: its atom count, the
+residues with a heavy atom within the cutoff, the mean pLDDT of those residues and — when the PAE
+matrix carries AlphaFold 3 ligand tokens — the mean predicted aligned error between the ligand's tokens
+and the site's residues. **Highlight** adds the site as a selection in the interface colour; **Download
+sites CSV** lists everything with the residue lists. Read the two numbers together: a site with high
+pLDDT but high ligand–site PAE is a well-folded pocket with an uncertain pose.
 
 **PAE domains.** With a model that carries a PAE matrix shown, choose a cutoff (4 Å strict, 6 Å,
 8 Å loose) and press **Find domains**. Ten-residue segments along each chain are merged greedily —

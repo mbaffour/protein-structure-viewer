@@ -2,6 +2,22 @@
 
 All notable changes to this project are recorded here.
 
+## 2.12.0
+
+Where the models of a run disagree, and whether a ligand pose deserves trust.
+
+### Added
+
+- **Model agreement.** After *Align visible*, a new colour scheme paints each residue by the
+  root-mean-square fluctuation of its Cα across the aligned models (under 0.5 Å blue, 0.5–1 green,
+  1–2 yellow, 2–4 orange, 4 Å and above red; residues present in one model only grey). The legend,
+  strip, panels and exports follow, and *Compare → Download RMSF CSV* writes the per-residue values.
+- **Ligand sites.** *Confidence → Ligand sites* lists every ligand and ion of the current model with
+  its contact residues at a chosen cutoff, the site's mean pLDDT and — when the PAE matrix carries
+  AlphaFold 3 ligand tokens — the mean predicted aligned error between ligand and site, with a
+  Highlight per site and a CSV.
+- **Reports** offer the per-residue data colour scheme with its gradient legend.
+
 ## 2.11.0
 
 Your data on the structure, and your work kept. Scenes from 2.2 onward still load; scene manifests
