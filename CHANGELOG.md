@@ -2,6 +2,14 @@
 
 All notable changes to this project are recorded here.
 
+## 2.22.1
+
+### Changed
+
+- **The tool panel sits on the left** of the 3D view in the workspace layout, the way most
+  molecular viewers place their menus; the arrows button in the header swaps the two sides, and
+  the choice is remembered. The divider drags in the natural direction on either side.
+
 ## 2.22.0
 
 The report shows what you saw.

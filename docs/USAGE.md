@@ -27,9 +27,10 @@ interpretation caveats see [`SCIENTIFIC-AUDIT.md`](../SCIENTIFIC-AUDIT.md).
 
 ## Layout
 
-**Workspace (default on screens 1100 px and wider).** The 3D view, the status line and the
-sequence strip stay pinned in the left column; the tool tabs — Models, Appearance, Annotate,
-Compare, Confidence, Publish — sit in a panel on the right that scrolls on its own. The stage
+**Workspace (default on screens 1100 px and wider).** The tool tabs — Models, Appearance, Annotate,
+Compare, Confidence, Publish — sit in a panel on the left that scrolls on its own; the 3D view, the
+status line and the sequence strip stay pinned beside it on the right. The arrows button in the header
+swaps the two sides, and the choice is remembered. The stage
 grows to fill the window height, so a colour change, a label or an alignment is visible the
 moment it is made. Drag the divider between the columns to give the panel more or less room
 (tables inside it scroll sideways when it is narrow); double-click the divider, or press Enter

@@ -125,9 +125,9 @@ produces a file that is slow to open, so narrow the selection when the report is
 
 ## Layout
 
-On a wide screen the viewer is a workspace: the 3D view, status and sequence stay pinned on
-the left while the tool tabs scroll in a panel on the right, so you see each change as you make
-it. Drag the divider to resize the panel; the header's panel button switches to the stacked
+On a wide screen the viewer is a workspace: the tool tabs scroll in a panel on the left while the
+3D view, status and sequence stay pinned on the right, so you see each change as you make it. The
+arrows button in the header swaps the sides. Drag the divider to resize the panel; the header's panel button switches to the stacked
 layout and back, and the choice is remembered. Screens narrower than 1100 px always stack.
 
 ## Colour by MSA

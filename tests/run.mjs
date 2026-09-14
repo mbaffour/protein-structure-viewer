@@ -106,12 +106,21 @@ group('layout');
 const layoutGeometry = () => page.evaluate(() => {
   const rect = selector => document.querySelector(selector).getBoundingClientRect();
   const stage = rect('#gpv-stage'); const panel = rect('#gpv-side-panel');
-  return { workspace: document.querySelector('#generic-protein-viewer').classList.contains('is-workspace'), sideBySide: panel.left >= stage.right - 1 && panel.top < stage.bottom, panelWidth: Math.round(panel.width), stageWidth: Math.round(stage.width) };
+  const panelRight = panel.left >= stage.right - 1, panelLeft = stage.left >= panel.right - 1;
+  return { workspace: document.querySelector('#generic-protein-viewer').classList.contains('is-workspace'), sideBySide: (panelRight || panelLeft) && panel.top < stage.bottom, side: panelLeft ? 'left' : panelRight ? 'right' : 'stacked', panelWidth: Math.round(panel.width), stageWidth: Math.round(stage.width) };
 });
-await step('at 1280 px the tool panel sits beside the pinned 3D view', async () => {
+await step('at 1280 px the tool panel sits on the left of the pinned 3D view', async () => {
   const geometry = await layoutGeometry();
-  if (!geometry.workspace || !geometry.sideBySide) throw new Error(JSON.stringify(geometry));
-  console.log('       stage ' + geometry.stageWidth + ' px · panel ' + geometry.panelWidth + ' px');
+  if (!geometry.workspace || !geometry.sideBySide || geometry.side !== 'left') throw new Error(JSON.stringify(geometry));
+  console.log('       panel ' + geometry.panelWidth + ' px on the ' + geometry.side + ' · stage ' + geometry.stageWidth + ' px');
+});
+await step('the arrows button moves the panel to the right and the side survives a reload', async () => {
+  await page.click('#gpv-panel-side'); await page.waitForTimeout(400);
+  if ((await layoutGeometry()).side !== 'right') throw new Error(JSON.stringify(await layoutGeometry()));
+  await page.reload(); await page.waitForTimeout(2000);
+  if ((await layoutGeometry()).side !== 'right') throw new Error('side not remembered');
+  await page.click('#gpv-panel-side'); await page.waitForTimeout(400);
+  if ((await layoutGeometry()).side !== 'left') throw new Error('could not move the panel back to the left');
 });
 await step('the panel scrolls on its own while the page and the stage stay put', async () => {
   await tab('publish');
@@ -122,7 +131,8 @@ await step('the panel scrolls on its own while the page and the stage stay put',
 await step('dragging the divider widens the panel', async () => {
   const before = (await layoutGeometry()).panelWidth;
   const box = await page.locator('#gpv-splitter').boundingBox();
-  await page.mouse.move(box.x + 5, box.y + 150); await page.mouse.down(); await page.mouse.move(box.x - 120, box.y + 150, { steps: 6 }); await page.mouse.up(); await page.waitForTimeout(300);
+  const direction = (await layoutGeometry()).side === 'right' ? -1 : 1;
+  await page.mouse.move(box.x + 5, box.y + 150); await page.mouse.down(); await page.mouse.move(box.x + 5 + direction * 120, box.y + 150, { steps: 6 }); await page.mouse.up(); await page.waitForTimeout(300);
   const after = (await layoutGeometry()).panelWidth;
   if (after < before + 80) throw new Error(before + ' -> ' + after);
   await page.dblclick('#gpv-splitter'); await page.waitForTimeout(300);

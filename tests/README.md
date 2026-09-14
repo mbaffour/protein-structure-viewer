@@ -95,7 +95,8 @@ PSV_CHROMIUM=/opt/pw-browsers/chromium/chrome-linux/chrome npm test
 - Figure finishing: outline and depth cueing switch on without errors and survive a scene round-trip; fading
   chain B lightens its colour and dims its strip row; a journal preset sets width, dpi, text size and font; the
   per-model figure downloads as a PNG three panels wide with resolution metadata.
-- Layout: at 1280 px the tool panel sits beside the pinned stage and scrolls on its own; the divider resizes it;
+- Layout: at 1280 px the tool panel sits on the left of the pinned stage; the arrows button moves it right and the
+  side survives a reload; the panel and scrolls on its own; the divider resizes it;
   the header button switches to the stacked layout and the choice survives a reload; 900 px stacks.
 - Session: reloading the page offers to restore the autosaved session; Restore brings back every model and label;
   a session file downloads as a ZIP with `session.json` and reopens every model, label and PAE matrix both through
