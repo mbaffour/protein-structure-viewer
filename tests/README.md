@@ -81,6 +81,8 @@ PSV_CHROMIUM=/opt/pw-browsers/chromium/chrome-linux/chrome npm test
   copying the PNG to the clipboard reports an outcome; the figure legend names the models,
   representation and colouring; the methods text names the Kabsch superposition, the RMSD rule, the
   dimension definitions and the software versions.
+- Composite figure: with contacts computed, the three-panel composite downloads at the 178 mm width (2102 px) with
+  resolution metadata.
 - Publication checklist: pixel export with chain colours yields at least two warnings; the two one-click fixes switch
   to print size and the Okabe–Ito palette and the warning count drops by two.
 - Contact map: chains A and B of the fixture within 6 Å yield residue pairs, two interface selections, a CSV with one

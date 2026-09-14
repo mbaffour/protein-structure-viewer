@@ -2,6 +2,19 @@
 
 All notable changes to this project are recorded here.
 
+## 2.20.0
+
+The whole figure, not just the picture.
+
+### Added
+
+- **Composite figure** (Publish tab). One lettered figure at the chosen print size: the 3D view
+  first, then the panels a paper puts beside it — the PAE heatmap, the per-residue pLDDT profile
+  and the interface contact map — each rendered fresh at output resolution, with captions under
+  every panel and the resolution written into the PNG. Tick the panels you want; panels that are
+  not available for the current model (no PAE, no scores, no computed contacts) are greyed out.
+  One to three columns.
+
 ## 2.19.0
 
 A reviewer's eye before you export.

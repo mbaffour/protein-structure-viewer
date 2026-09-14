@@ -1130,6 +1130,14 @@ html>body{padding:0}</style>
       <button class="btn" type="button" id="gpv-svg" disabled data-tooltip="Raster molecule with labels, arrows, callouts and legend as editable vector layers">Download figure SVG</button>
       <button class="btn" type="button" id="gpv-compare-image" disabled data-tooltip="Stitch every synchronized panel into one lettered figure at the chosen size">Download comparison PNG</button>
       <button class="btn" type="button" id="gpv-model-panels" disabled data-tooltip="One lettered panel per model, every panel rendered from the current camera — the five models of an AlphaFold run side by side, identically framed">Download one panel per model</button>
+    </div>
+    <div class="viz-controls gpv-composite" aria-label="Composite figure">
+      <span class="text-small text-muted">Composite figure</span>
+      <label class="form-check form-switch"><input class="form-check-input" id="gpv-composite-pae" type="checkbox" checked><span class="form-check-label">PAE heatmap</span></label>
+      <label class="form-check form-switch"><input class="form-check-input" id="gpv-composite-profile" type="checkbox" checked><span class="form-check-label">pLDDT profile</span></label>
+      <label class="form-check form-switch"><input class="form-check-input" id="gpv-composite-contacts" type="checkbox" checked><span class="form-check-label">Contact map</span></label>
+      <label class="form-label">Columns<select class="form-select" id="gpv-composite-columns"><option value="1">1</option><option value="2" selected>2</option><option value="3">3</option></select></label>
+      <button class="btn" type="button" id="gpv-composite" disabled data-tooltip="One lettered figure at the chosen print size: the 3D view first, then the confidence panels you tick — the PAE heatmap, the pLDDT profile and the contact map when they are available">Download composite figure</button>
       <button class="btn" type="button" id="gpv-compare-svg" disabled data-tooltip="The stitched comparison figure with vector captions and annotations">Download comparison SVG</button>
       <label class="form-check form-switch"><input class="form-check-input" id="gpv-export-legend" type="checkbox" checked><span class="form-check-label">Colour legend on exports</span></label>
       <label class="form-label">Video length<select class="form-select" id="gpv-video-length"><option value="5">5 seconds</option><option value="10">10 seconds</option><option value="15">15 seconds</option></select></label>
@@ -1227,6 +1235,7 @@ html>body{padding:0}</style>
       <h3>Tips for figures and reviewers</h3>
       <ul>
         <li><em>Publish → Write methods text</em> drafts a Methods paragraph stating exactly how the numbers on screen were computed (superposition, RMSD, RMSF, domains, contacts, dimensions, colour scales); every definition is cross-checked against Biopython in the repository's <code>VALIDATION.md</code>.</li>
+        <li><em>Publish → Download composite figure</em> stitches the 3D view with the PAE heatmap, the pLDDT profile and the contact map into one lettered figure at print size, each panel rendered at output resolution.</li>
         <li>The <em>Publication checklist</em> at the foot of the Publish tab lists what a journal or reviewer would flag about the current figure — no physical size, low resolution, small text, colour-blind-unsafe colours, missing legend, scale bar in perspective, unsuperposed models, no title — with one-click fixes.</li>
         <li><em>Compare → Interface contact map</em> draws every residue pair of two chains within a cutoff, closer pairs darker; hover reads the pair, a click selects both residues, <em>Highlight interface</em> colours the interface, and the map and pair list download as PNG and CSV. <em>Annotate → Label style</em> switches every label between boxed and plain text.</li>
         <li><em>Appearance → Outline</em> draws a silhouette line around every element (thin for most figures, bold for small panels) and <em>Depth cueing</em> fades the far side; both apply to panels and exports. In the composition table, <em>Faded</em> blends a chain into the background to spotlight the others. <em>Publish → Journal preset</em> sets width, resolution, text size and font from a journal's figure guide, and <em>Download one panel per model</em> renders every model from the same camera into one lettered figure.</li>
@@ -1332,6 +1341,7 @@ html>body{padding:0}</style>
   #generic-protein-viewer .gpv-check-list li.is-info > i { background: color-mix(in srgb, #2563eb 16%, transparent); color: #1d4ed8; }
   #generic-protein-viewer .gpv-check-list li.is-warn { color: var(--foreground); }
   #generic-protein-viewer .gpv-check-list button { font: inherit; color: var(--primary); background: none; border: 0; padding: 0; text-decoration: underline; cursor: pointer; }
+  #generic-protein-viewer .gpv-composite { align-items: center; }
   #generic-protein-viewer .gpv-contacts { margin-top: 14px; }
   #generic-protein-viewer .gpv-contacts > summary { cursor: pointer; font-weight: 600; margin-bottom: 8px; }
   #generic-protein-viewer .gpv-contact-canvas { display: block; max-width: 100%; height: auto; border: 1px solid var(--border); border-radius: var(--radius-md); image-rendering: pixelated; cursor: crosshair; }
@@ -1571,7 +1581,7 @@ html>body{padding:0}</style>
   let busyDepth = 0;
   let restoreMotion = null;
   const listPageSize = 60;
-  const viewerVersion = '2.19.0';
+  const viewerVersion = '2.20.0';
   const preferenceKey = 'protein-structure-viewer:preferences';
   const themeKey = 'protein-structure-viewer:theme';
   const labelColors = getComputedStyle(root);
@@ -2305,7 +2315,7 @@ html>body{padding:0}</style>
   }
 
   function updateStatus(message = 'Ready') {
-    if (!root.querySelector('[data-gpv-panel="publish"]').hidden) setTimeout(renderPublicationChecks, 0);
+    if (!root.querySelector('[data-gpv-panel="publish"]').hidden) { setTimeout(renderPublicationChecks, 0); setTimeout(renderCompositeControls, 0); }
     const visible = displayedEntries();
     root.querySelector('#gpv-count').textContent = visible.length + ' displayed / ' + structures.length + ' loaded';
     const scores = visible.flatMap(entry => entry.scores);
@@ -4466,7 +4476,7 @@ html>body{padding:0}</style>
     context.save(); context.translate(18 * scale, margin.top + n * cell / 2); context.rotate(-Math.PI / 2); context.fillText('Chain ' + (chainA || '—') + ' residue', 0, 0); context.restore();
     context.font = '600 ' + (13 * scale) + 'px ' + font; context.textAlign = 'left';
     const entry = entryById(contactResult.entryId);
-    context.fillText((entry ? displayName(entry) + ' · ' : '') + 'contacts within ' + cutoff + ' Å (' + (contactResult.mode === 'ca' ? 'Cα–Cα' : 'any heavy atom') + ') · ' + pairs.size + ' pairs', margin.left, 22 * scale);
+    context.fillText(truncateToWidth(context, (entry ? displayName(entry) + ' · ' : '') + 'contacts within ' + cutoff + ' Å (' + (contactResult.mode === 'ca' ? 'Cα–Cα' : 'any heavy atom') + ') · ' + pairs.size + ' pairs', Math.max(60, canvas.width - margin.left - margin.right - 140 * scale)), margin.left, 22 * scale);
     /* distance scale */
     const barX = canvas.width - margin.right - 120 * scale; const barY = 32 * scale; const barW = 100 * scale; const barH = 8 * scale;
     for (let x = 0; x < barW; x += 1) { context.fillStyle = mixHex(near, far, x / barW); context.fillRect(barX + x, barY, 1, barH); }
@@ -4575,6 +4585,109 @@ html>body{padding:0}</style>
     });
     const warnings = items.filter(item => item.level === 'warn').length;
     badge.textContent = warnings ? warnings + ' to fix' : 'ready';
+  }
+
+
+  /* ---------- Composite figure ----------
+     The 3D view and the confidence panels a paper puts beside it — PAE heatmap, pLDDT profile,
+     contact map — stitched into one lettered figure at the chosen print size. Each panel is
+     rendered fresh at output resolution; nothing is scaled up from the screen. */
+  function compositeAvailability() {
+    const entry = activeEntry();
+    const shown = displayedEntries().filter(item => item.model);
+    return {
+      pae: Boolean(entry && entry.confidence && Array.isArray(entry.confidence.pae) && entry.confidence.pae.length),
+      profile: shown.some(item => item.scores.length),
+      contacts: Boolean(contactResult && entry && contactResult.entryId === entry.id && contactResult.pairs.size)
+    };
+  }
+
+  function renderCompositeControls() {
+    const available = compositeAvailability();
+    [['#gpv-composite-pae', available.pae], ['#gpv-composite-profile', available.profile], ['#gpv-composite-contacts', available.contacts]].forEach(([selector, ok]) => {
+      const control = root.querySelector(selector); control.disabled = !ok; control.closest('label').title = ok ? '' : 'Not available for the current model';
+    });
+    root.querySelector('#gpv-composite').disabled = structures.length === 0;
+  }
+
+  function drawPaePanel(entry, size) {
+    const matrix = entry.confidence.pae; const n = matrix.length;
+    const canvas = document.createElement('canvas'); canvas.width = size; canvas.height = size;
+    const context = canvas.getContext('2d'); const image = context.createImageData(size, size);
+    const maximum = finiteNumber(entry.confidence.paeMaximum) || matrixMaximum(matrix);
+    for (let y = 0; y < size; y += 1) {
+      const row = matrix[Math.min(n - 1, Math.floor(y * n / size))] || [];
+      for (let x = 0; x < size; x += 1) {
+        const value = finiteNumber(row[Math.min(row.length - 1, Math.floor(x * row.length / size))]) || 0;
+        const color = paeColor(value, maximum); const offset = (y * size + x) * 4;
+        image.data[offset] = color[0]; image.data[offset + 1] = color[1]; image.data[offset + 2] = color[2]; image.data[offset + 3] = 255;
+      }
+    }
+    context.putImageData(image, 0, 0);
+    const chains = entry.confidence.tokenChainIds || [];
+    context.strokeStyle = '#111827'; context.globalAlpha = 0.7; context.lineWidth = Math.max(1, size / 600);
+    for (let index = 1; index < chains.length; index += 1) {
+      if (chains[index] === chains[index - 1]) continue;
+      const position = Math.round(index * size / n) + 0.5;
+      context.beginPath(); context.moveTo(position, 0); context.lineTo(position, size); context.moveTo(0, position); context.lineTo(size, position); context.stroke();
+    }
+    context.globalAlpha = 1;
+    return { canvas, caption: 'Predicted aligned error, ' + n + ' × ' + n + ' tokens, 0 (dark) to ' + maximum.toFixed(1) + ' Å' };
+  }
+
+  async function downloadCompositeFigure() {
+    const entry = activeEntry(); if (!entry || !entry.model) { announce('Show a model first', 'error'); return; }
+    const button = root.querySelector('#gpv-composite');
+    const requested = exportDimensions();
+    const available = compositeAvailability();
+    const wanted = {
+      pae: available.pae && root.querySelector('#gpv-composite-pae').checked,
+      profile: available.profile && root.querySelector('#gpv-composite-profile').checked,
+      contacts: available.contacts && root.querySelector('#gpv-composite-contacts').checked
+    };
+    const columns = Math.max(1, Math.min(3, Number(root.querySelector('#gpv-composite-columns').value) || 2));
+    const count = 1 + Object.values(wanted).filter(Boolean).length;
+    const rows = Math.ceil(count / columns);
+    const cell = Math.max(300, Math.floor(requested.width / columns));
+    const cellHeight = Math.round(cell / (requested.width / requested.height));
+    const captionHeight = Math.round(Math.max(28, cell * 0.08));
+    const palette = figurePalette();
+    const done = setBusy('Rendering composite…'); button.disabled = true; button.textContent = 'Rendering…';
+    await afterPaint();
+    try {
+      const panels = [];
+      /* The panel is a fraction of the figure width, so text and legend scale down with it. */
+      const panelPlan = { ...requested, width: cell, height: cellHeight, textScale: (requested.textScale || 1) * cell / requested.width };
+      const uri = await withLegend(await renderPublicationImage(null, panelPlan), panelPlan);
+      panels.push({ image: await loadImage(uri), caption: displayName(entry) + (root.querySelector('#gpv-color-mode').value !== 'structure' ? ', coloured by ' + root.querySelector('#gpv-color-mode').selectedOptions[0].textContent.toLowerCase() : '') });
+      if (wanted.pae) { const pae = drawPaePanel(entry, Math.min(cell, cellHeight)); panels.push({ image: pae.canvas, caption: pae.caption }); }
+      if (wanted.profile) {
+        const profile = plddtProfileSvg();
+        if (profile) { const image = await loadImage('data:image/svg+xml;charset=utf-8,' + encodeURIComponent(profile.svg)); panels.push({ image, caption: 'Per-residue pLDDT' + (displayedEntries().filter(item => item.scores.length).length > 1 ? ' of the displayed models' : ''), aspect: profile.width / profile.height }); }
+      }
+      if (wanted.contacts) { const canvas = document.createElement('canvas'); drawContactMap(canvas, true, Math.max(1, Math.round(cell / 600 * 2))); panels.push({ image: canvas, caption: 'Contacts between chains ' + (contactResult.chainA || '—') + ' and ' + (contactResult.chainB || '—') + ' within ' + contactResult.cutoff + ' Å' }); }
+      const canvas = document.createElement('canvas');
+      canvas.width = columns * cell; canvas.height = rows * (cellHeight + captionHeight);
+      const context = canvas.getContext('2d');
+      context.fillStyle = palette.paper; context.fillRect(0, 0, canvas.width, canvas.height);
+      panels.forEach((panel, index) => {
+        const x = (index % columns) * cell; const y = Math.floor(index / columns) * (cellHeight + captionHeight);
+        const pad = Math.round(cell * 0.03); const boxW = cell - 2 * pad; const boxH = cellHeight - 2 * pad;
+        const ratio = panel.image.width / panel.image.height; let w = boxW; let h = w / ratio; if (h > boxH) { h = boxH; w = h * ratio; }
+        context.drawImage(panel.image, x + pad + (boxW - w) / 2, y + pad + (boxH - h) / 2, w, h);
+        context.fillStyle = palette.ink; context.textBaseline = 'middle'; context.textAlign = 'left';
+        context.font = '700 ' + Math.round(captionHeight * 0.5) + 'px ' + figureFont();
+        context.fillText(String.fromCharCode(65 + index), x + pad, y + cellHeight + captionHeight / 2);
+        context.font = '400 ' + Math.round(captionHeight * 0.36) + 'px ' + figureFont();
+        context.fillText(truncateToWidth(context, panel.caption, cell - pad * 2 - Math.round(captionHeight * 0.9)), x + pad + Math.round(captionHeight * 0.9), y + cellHeight + captionHeight / 2);
+      });
+      downloadBlob(await pngWithDpi(canvas.toDataURL('image/png'), requested.dpi), 'image/png', exportFileName('protein-composite-' + panels.length + '-panels', requested, 'png'));
+      announce('Composite figure downloaded · ' + panels.length + ' panels · ' + canvas.width + ' × ' + canvas.height + (requested.dpi ? ' at ' + requested.dpi + ' dpi' : ''));
+    } catch (error) {
+      announce('Could not render the composite figure: ' + error.message, 'error');
+    } finally {
+      releaseExportViewer(); done(); button.textContent = 'Download composite figure'; button.disabled = structures.length === 0;
+    }
   }
 
   /* ---------- Go to residue ---------- */
@@ -6107,7 +6220,7 @@ html>body{padding:0}</style>
   }
 
   function updateExportEstimate() {
-    setTimeout(renderPublicationChecks, 0);
+    setTimeout(renderPublicationChecks, 0); setTimeout(renderCompositeControls, 0);
     const plan = exportDimensions();
     const printMode = root.querySelector('#gpv-export-mode').value === 'print';
     ['#gpv-export-size', '#gpv-export-scale'].forEach(selector => { root.querySelector(selector).closest('label').hidden = printMode; });
@@ -7896,7 +8009,8 @@ applyBackground();
   root.querySelector('#gpv-save-scene').addEventListener('click', saveScene);
   root.querySelector('#gpv-save-session').addEventListener('click', downloadSessionFile);
   root.querySelector('#gpv-model-panels').addEventListener('click', downloadModelPanels);
-  root.querySelector('#gpv-contact-run').addEventListener('click', computeContacts);
+  root.querySelector('#gpv-contact-run').addEventListener('click', () => { computeContacts(); renderCompositeControls(); });
+  root.querySelector('#gpv-composite').addEventListener('click', downloadCompositeFigure);
   root.querySelector('#gpv-contact-highlight').addEventListener('click', highlightContactInterface);
   root.querySelector('#gpv-contact-csv').addEventListener('click', downloadContactsCsv);
   root.querySelector('#gpv-contact-png').addEventListener('click', () => { downloadContactPng().catch(error => announce('Could not render the contact map: ' + error.message, 'error')); });
@@ -7910,7 +8024,8 @@ applyBackground();
     updateStatus(contactPairText(hit) + ' · selected');
   });
   root.querySelector('#gpv-label-style').addEventListener('change', applyStyle);
-  root.querySelector('[data-gpv-tab="publish"]').addEventListener('click', () => setTimeout(renderPublicationChecks, 0));
+  root.querySelector('[data-gpv-tab="publish"]').addEventListener('click', () => { setTimeout(renderPublicationChecks, 0); setTimeout(renderCompositeControls, 0); });
+  renderCompositeControls();
   renderPublicationChecks();
   root.querySelector('#gpv-open-session').addEventListener('change', async event => {
     const file = event.target.files[0]; if (!file) return;

@@ -249,6 +249,17 @@ await step('the contact map counts residue pairs between chains A and B and expo
   await tab('annotate'); await page.click('#gpv-clear-selections'); await page.waitForTimeout(300);
   console.log('       ' + pairs + ' pairs · ' + state.replace(/^\d+ residue pairs? within [^·]+· /, ''));
 });
+await step('the composite figure stitches the 3D view, the pLDDT profile and the contact map at print size', async () => {
+  await tab('publish'); await page.selectOption('#gpv-export-mode', 'print'); await page.selectOption('#gpv-print-width', '178'); await page.waitForTimeout(400);
+  const controls = await page.evaluate(() => ({ profile: document.querySelector('#gpv-composite-profile').disabled, contacts: document.querySelector('#gpv-composite-contacts').disabled, button: document.querySelector('#gpv-composite').disabled }));
+  if (controls.profile || controls.contacts || controls.button) throw new Error(JSON.stringify(controls));
+  const download = page.waitForEvent('download', { timeout: 180000 }); await page.click('#gpv-composite');
+  const png = await readFile(await (await download).path());
+  const width = png.readUInt32BE(16); const height = png.readUInt32BE(20);
+  if (Math.abs(width - 2102) > 6 || height < 1200 || !png.includes('pHYs')) throw new Error(width + 'x' + height + ' pHYs=' + png.includes('pHYs'));
+  await page.selectOption('#gpv-export-mode', 'pixels'); await page.waitForTimeout(200);
+  console.log('       ' + width + ' × ' + height + ' px · 3 panels at 300 dpi');
+});
 await step('the plain label style is a scene setting and the methods text names the contact rule', async () => {
   await tab('annotate'); await page.selectOption('#gpv-label-style', 'plain'); await page.waitForTimeout(300);
   const scene = await page.evaluate(() => window.__viewerDebug.sceneSettings().labelStyle);

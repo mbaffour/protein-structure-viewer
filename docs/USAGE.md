@@ -7,6 +7,7 @@ interpretation caveats see [`SCIENTIFIC-AUDIT.md`](../SCIENTIFIC-AUDIT.md).
 ## Contents
 
 - [Layout](#layout)
+- [Composite figure](#composite-figure)
 - [Publication checklist](#publication-checklist)
 - [Figure finishing](#figure-finishing)
 - [Interface contact map](#interface-contact-map)
@@ -530,6 +531,19 @@ reports and share links remain the deliberate ways to keep or hand over work.
 The choice applies to residue labels, measurements and callouts, is saved with scenes, and is
 carried into the shared report.
 
+
+
+## Composite figure
+
+In the Publish tab, under the export buttons. **Download composite figure** renders one lettered
+figure at the chosen print size and resolution: panel A is the 3D view as it stands (with the legend
+and scale bar you have chosen), followed by the panels you tick — the **PAE heatmap** of the current
+model, the **pLDDT profile** of the displayed models, and the **interface contact map** when one has
+been computed in the Compare tab. Each panel is rendered fresh at output resolution, never scaled up
+from the screen, and carries a caption; the file carries its resolution. Choose one, two or three
+columns. Panels that are not available for the current model are greyed out with the reason in their
+tooltip. The result is the confidence figure most AlphaFold papers need, assembled in one step; open
+it in Illustrator or Inkscape for the final layout if the journal needs a different arrangement.
 
 ## Publication checklist
 
