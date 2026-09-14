@@ -1237,6 +1237,7 @@ html>body{padding:0}</style>
       <h3>Tips for figures and reviewers</h3>
       <ul>
         <li><em>Publish → Write methods text</em> drafts a Methods paragraph stating exactly how the numbers on screen were computed (superposition, RMSD, RMSF, domains, contacts, dimensions, colour scales); every definition is cross-checked against Biopython in the repository's <code>VALIDATION.md</code>.</li>
+        <li>The shared report reproduces the outline, depth cueing and faded chains, and shows the contact map beside the PAE heatmap when one was computed for a model in the report.</li>
         <li><em>Confidence → Colour by MSA</em> reads the alignment inside an AlphaFold 3 archive (or an .a3m you add) and colours matching chains by conservation, identity to the query or coverage; the legend, exports and methods text follow.</li>
         <li><em>Publish → Download composite figure</em> stitches the 3D view with the PAE heatmap, the pLDDT profile and the contact map into one lettered figure at print size, each panel rendered at output resolution.</li>
         <li>The <em>Publication checklist</em> at the foot of the Publish tab lists what a journal or reviewer would flag about the current figure — no physical size, low resolution, small text, colour-blind-unsafe colours, missing legend, scale bar in perspective, unsuperposed models, no title — with one-click fixes.</li>
@@ -1584,7 +1585,7 @@ html>body{padding:0}</style>
   let busyDepth = 0;
   let restoreMotion = null;
   const listPageSize = 60;
-  const viewerVersion = '2.21.1';
+  const viewerVersion = '2.22.0';
   const preferenceKey = 'protein-structure-viewer:preferences';
   const themeKey = 'protein-structure-viewer:theme';
   const labelColors = getComputedStyle(root);
@@ -7205,14 +7206,23 @@ html>body{padding:0}</style>
       color: entry.color,
       rank: entry.rank,
       hiddenChains: entry.hiddenChains || [],
+      fadedChains: entry.fadedChains || [],
       confidence: reportConfidence(entry),
       coords: reportCoordinates(entry),
       shapes: reportShapes(entry),
       labels: labelRecords.filter(label => label.entryId === entry.id).map(label => ({ text: label.text, chain: label.chain, resi: label.resi, atom: label.atom, x: label.x, y: label.y, z: label.z, color: label.color || null, size: label.size || 12 }))
     }));
     const chosenNames = new Set(chosen.map(entry => entry.name));
+    const contactOwner = contactResult ? entryById(contactResult.entryId) : null;
     const initial = {
       labelStyle: root.querySelector('#gpv-label-style').value,
+      outline: root.querySelector('#gpv-outline').value,
+      fog: root.querySelector('#gpv-fog').checked,
+      contacts: contactOwner && chosenNames.has(contactOwner.name) && contactResult.pairs.size ? {
+        model: contactOwner.name, chainA: contactResult.chainA, chainB: contactResult.chainB, cutoff: contactResult.cutoff, mode: contactResult.mode,
+        residuesA: contactResult.rowA.residues.map(atom => atom.resi), residuesB: contactResult.rowB.residues.map(atom => atom.resi),
+        pairs: [...contactResult.pairs.entries()].map(([key, d]) => { const [i, j] = key.split('|').map(Number); return [contactResult.rowA.residues[i].resi, contactResult.rowB.residues[j].resi, Math.round(d * 1000) / 1000]; })
+      } : null,
       panels: reportPanelNames().filter(name => chosenNames.has(name)),
       sync: root.querySelector('#gpv-sync-mode').value,
       camera: typeof viewer.getView === 'function' ? viewer.getView() : null,
@@ -7285,6 +7295,7 @@ body[data-background='light'] .stage,body[data-background='white'] .stage{backgr
 .vlow{background:#ff7d45}.low{background:#ffdb13}.conf{background:#65cbf3}.vhigh{background:#0053d6}
 #caption{padding:10px 12px;font-size:1.05rem;background:rgba(51,156,255,.12);border-left:3px solid #339cff;border-radius:8px;margin-bottom:10px}
 #pae-wrap{max-width:360px;margin-top:14px}#pae{display:block;width:100%;height:auto}#pae-detail{margin-top:5px;opacity:.8}
+#contacts-wrap{max-width:360px;margin-top:14px}#contacts{display:block;width:100%;height:auto;border:1px solid rgba(148,163,184,.4);image-rendering:pixelated}#contacts-detail{margin-top:5px;opacity:.8}
 .meta{white-space:pre-wrap;opacity:.85;font-size:.9rem}
 .tips{font-size:.85rem;opacity:.7;margin-top:12px}
 kbd{font:inherit;padding:0 5px;border:1px solid currentColor;border-radius:4px;font-size:.8em}
@@ -7308,6 +7319,7 @@ kbd{font:inherit;padding:0 5px;border:1px solid currentColor;border-radius:4px;f
 <div id='view'></div>
 <div id='status'><span id='name'></span><span id='score'></span><span id='model-confidence'></span><span id='position'></span></div>
 <div id='pae-wrap' hidden><canvas id='pae' width='360' height='360' aria-label='Predicted aligned error heatmap'></canvas><div id='pae-detail'>Predicted aligned error (Å)</div></div>
+<div id='contacts-wrap' hidden><canvas id='contacts' width='360' height='360' aria-label='Residue contact map between two chains'></canvas><div id='contacts-detail'></div></div>
 <p class='tips'>Drag any panel to rotate them all · scroll to zoom · click a panel to focus it for the readout and PAE · <kbd>←</kbd> <kbd>→</kbd> step every panel · <kbd>Space</kbd> plays · <kbd>F</kbd> fits · <kbd>S</kbd> spins</p>
 ${data.library}
 <script>
@@ -7352,6 +7364,22 @@ function layout() {
   panes.forEach(p => { p.stage.style.height = height; });
   requestAnimationFrame(() => panes.forEach(p => { p.viewer.resize(); p.viewer.render(); }));
 }
+function mixHex(color, target, amount) {
+  const parse = v => { const m = /^#([0-9a-f]{6})$/i.exec(String(v || '').trim()); return m ? [0, 2, 4].map(o => parseInt(m[1].slice(o, o + 2), 16)) : null; };
+  const a = parse(color), b = parse(target); if (!a || !b) return color;
+  return '#' + a.map((ch, i) => Math.round(ch + (b[i] - ch) * amount).toString(16).padStart(2, '0')).join('');
+}
+function luminance(hex) { const m = /^#([0-9a-f]{6})$/i.exec(hex || ''); if (!m) return 1; const [r, g, b] = [0, 2, 4].map(o => parseInt(m[1].slice(o, o + 2), 16) / 255); return 0.2126 * r + 0.7152 * g + 0.0722 * b; }
+function paperColor() { const bg = backgroundFor(el('background').value); return bg.alpha === 0 ? '#ffffff' : bg.color; }
+/* Silhouette outline and depth cueing as set in the viewer when the report was made. */
+function applyViewStyle(v) {
+  if (!v || typeof v.setViewStyle !== 'function') return;
+  const mode = initial.outline, dark = luminance(paperColor()) < 0.45;
+  try {
+    v.setViewStyle(mode === 'thin' || mode === 'bold' ? { style: 'outline', color: dark ? '#f8fafc' : '#111827', width: mode === 'bold' ? 0.12 : 0.06 } : { style: 'none' });
+    if (typeof v.enableFog === 'function') v.enableFog(Boolean(initial.fog));
+  } catch (e) { /* older engines keep the plain view */ }
+}
 function styleSpec(s) {
   const rep = el('style').value, mode = el('colors').value;
   let options = { color: s.color };
@@ -7363,8 +7391,23 @@ function styleSpec(s) {
   if (mode === 'annotated') { const lookup = domainLookupFor(s); options = { colorfunc: a => { const r = lookup.get((a.chain || '') + '|' + a.resi); return r ? r.color : '#9ca3af'; } }; }
   if (mode === 'spectrum') options = { colorscheme: 'spectrum' };
   if (mode === 'element') options = { colorscheme: 'default' };
+  if (Array.isArray(s.fadedChains) && s.fadedChains.length) {
+    const paper = paperColor(), colorOf = options.colorfunc ? options.colorfunc : options.color ? (() => options.color) : null;
+    if (colorOf) options = { colorfunc: a => s.fadedChains.includes(a.chain || '') ? mixHex(colorOf(a), paper, 0.72) : colorOf(a) };
+  }
   if (rep === 'line') options.linewidth = 2;
   const spec = {}; spec[rep] = options; return spec;
+}
+function drawContacts(s) {
+  const wrap = el('contacts-wrap'), c = initial.contacts;
+  if (!c || c.model !== s.name || !Array.isArray(c.pairs)) { wrap.hidden = true; return; }
+  wrap.hidden = false;
+  const canvas = el('contacts'), ctx = canvas.getContext('2d'), size = 360, n = Math.max(1, c.residuesA.length), m = Math.max(1, c.residuesB.length);
+  const light = luminance(paperColor()) >= 0.45;
+  ctx.fillStyle = light ? '#ffffff' : '#1f2937'; ctx.fillRect(0, 0, size, size);
+  const ia = new Map(c.residuesA.map((r, i) => [r, i])), ib = new Map(c.residuesB.map((r, i) => [r, i])), cw = size / m, ch = size / n;
+  c.pairs.forEach(([a, b, d]) => { const i = ia.get(a), j = ib.get(b); if (i === undefined || j === undefined) return; ctx.fillStyle = mixHex('#1e3a8a', light ? '#bfdbfe' : '#93c5fd', Math.max(0, Math.min(1, d / c.cutoff))); ctx.fillRect(j * cw, i * ch, Math.max(1, cw), Math.max(1, ch)); });
+  el('contacts-detail').textContent = 'Contacts · chain ' + (c.chainA || '—') + ' (rows) against chain ' + (c.chainB || '—') + ' (columns) · ' + c.pairs.length + ' residue pairs within ' + c.cutoff + ' Å (' + (c.mode === 'ca' ? 'Cα–Cα' : 'any heavy atom') + '); closer pairs darker';
 }
 function copyView(source, target) {
   const mode = el('sync').value; if (mode === 'off') return;
@@ -7429,7 +7472,7 @@ function describe(pane) {
   el('score').textContent = pane.plddt === null ? 'Mean pLDDT —' : 'Mean pLDDT ' + pane.plddt.toFixed(1);
   el('model-confidence').textContent = 'pTM ' + metric(c.ptm) + ' · ipTM ' + metric(c.iptm) + ' · ranking ' + metric(c.rankingScore) + (c.hasClash ? ' · clash warning' : '');
   el('position').textContent = (pane.index + 1) + ' / ' + structures.length + (panes.length > 1 ? ' · panel ' + (panes.indexOf(pane) + 1) : '');
-  drawPae(s);
+  drawPae(s); drawContacts(s);
 }
 function focusPane(pane) {
   if (!pane) return;
@@ -7479,7 +7522,7 @@ function addPane(index) {
     const sel = { resi: hit.atom.resi }; if (hit.chain) sel.chain = hit.chain;
     pane.viewer.zoomTo(sel); pane.viewer.render(); focusPane(pane);
   });
-  const bg = backgroundFor(el('background').value); viewer.setBackgroundColor(bg.color, bg.alpha);
+  const bg = backgroundFor(el('background').value); viewer.setBackgroundColor(bg.color, bg.alpha); applyViewStyle(viewer);
   select.addEventListener('change', () => { stop(); pane.index = Number(select.value); show(pane, true); focusPane(pane); });
   stage.addEventListener('pointerdown', () => focusPane(pane));
   new ResizeObserver(() => { viewer.resize(); drawStrip(pane, structures[pane.index]); }).observe(stage);
@@ -7567,7 +7610,7 @@ function drawStrip(pane, s) {
   const hidden = s.hiddenChains || [];
   rows.forEach((row, r) => {
     const cell = width / row.atoms.length; const y = r * (STRIP_ROW + STRIP_GAP);
-    ctx.globalAlpha = hidden.includes(row.chain) ? 0.25 : 1;
+    ctx.globalAlpha = hidden.includes(row.chain) ? 0.25 : (s.fadedChains || []).includes(row.chain) ? 0.45 : 1;
     row.atoms.forEach((a, i) => { ctx.fillStyle = stripColor(s, a); ctx.fillRect(i * cell, y, Math.max(0.5, cell - (cell > 3 ? 1 : 0)), STRIP_ROW); });
     ctx.globalAlpha = 1;
   });
@@ -7593,8 +7636,10 @@ function applySpin() {
 function fit() { panes.forEach(p => { p.viewer.zoomTo(); p.viewer.render(); }); syncNow(panes[0]); }
 function applyBackground() {
   const mode = el('background').value, bg = backgroundFor(mode);
-  panes.forEach(p => { p.viewer.setBackgroundColor(bg.color, bg.alpha); p.viewer.render(); });
   document.body.dataset.background = mode;
+  panes.forEach(p => { p.viewer.setBackgroundColor(bg.color, bg.alpha); applyViewStyle(p.viewer); p.viewer.render(); });
+  if (structures.some(s => Array.isArray(s.fadedChains) && s.fadedChains.length)) refreshAll();
+  if (panes[focused]) describe(panes[focused]);
 }
 function guide(i) {
   const v = savedViews[Number(i)]; if (!v) return; stop();

@@ -489,6 +489,11 @@ the browser autosave is automatic but stays on this machine and skips coordinate
 matrices over 1 500 tokens; scene JSON is small and reproducible but expects the original files
 alongside it.
 
+**What the report carries.** Beyond models, coordinates after alignment, labels, selections,
+measurements, callouts, named domains and per-residue data, the report reproduces the silhouette
+outline and depth cueing you had on, draws faded chains the same way, and shows the interface
+contact map beside the PAE heatmap when one was computed for a model that is in the report.
+
 **Share links.** **Copy share link** builds a URL that reopens the current scene in the viewer:
 the models that were fetched by identifier, plus the camera, representation, colours, projection,
 background, synchronized panels, labels, selections, measurements, figure annotations, and title.

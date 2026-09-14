@@ -955,6 +955,11 @@ await step('an offline report embeds the rendering library', async () => {
 
 let reportPath = null;
 await step('an HTML report downloads', async () => {
+  /* Give the report something to carry: outline, depth cueing, a faded chain and a contact map. */
+  await tab('appearance'); await page.selectOption('#gpv-outline', 'bold'); await page.check('#gpv-fog');
+  await tab('models'); await page.locator('#gpv-chain-rows input[aria-label="Fade chain B"]').check(); await page.waitForTimeout(300);
+  await tab('compare'); await page.fill('#gpv-contact-cutoff', '6'); await page.click('#gpv-contact-run'); await page.waitForTimeout(500);
+  await tab('publish');
   const download = page.waitForEvent('download', { timeout: 120000 });
   await page.click('#gpv-report');
   reportPath = join(work, 'report.html');
@@ -962,6 +967,9 @@ await step('an HTML report downloads', async () => {
   const html = await readFile(reportPath, 'utf8');
   if (!/cdnjs\.cloudflare\.com\/ajax\/libs\/3Dmol/.test(html)) throw new Error('report lost its 3Dmol tag');
   await writeFile(join(work, 'report-local.html'), html.replace(/https:\/\/cdnjs\.cloudflare\.com\/ajax\/libs\/3Dmol\/[^']+/, 'vendor/3Dmol-min.js'));
+
+  await tab('appearance'); await page.selectOption('#gpv-outline', 'none'); await page.uncheck('#gpv-fog');
+  await tab('models'); await page.locator('#gpv-chain-rows input[aria-label="Fade chain B"]').uncheck(); await page.waitForTimeout(300);
 });
 
 group('interface');
@@ -1018,6 +1026,13 @@ if (reportPath) {
   await step('the report carries the provenance title', async () => {
     const title = await report.locator('#project-title').textContent();
     if (title !== 'Test figure') throw new Error('got ' + title);
+  });
+  await step('the report carries the outline, depth cueing, the faded chain and the contact map', async () => {
+    const state = await report.evaluate(() => ({ outline: initial.outline, fog: initial.fog, faded: structures.some(s => (s.fadedChains || []).includes('B')), contacts: initial.contacts ? initial.contacts.pairs.length : 0, wrapHidden: document.querySelector('#contacts-wrap').hidden, detail: document.querySelector('#contacts-detail').textContent }));
+    if (state.outline !== 'bold' || !state.fog || !state.faded || state.contacts < 1 || state.wrapHidden || !/residue pairs/.test(state.detail)) throw new Error(JSON.stringify(state));
+    await report.selectOption('#background', 'white'); await report.waitForTimeout(600);
+    if (await report.evaluate(() => document.querySelector('#contacts-wrap').hidden)) throw new Error('contact panel vanished on background change');
+    console.log('       ' + state.contacts + ' pairs · outline ' + state.outline + ' · fog · chain B faded');
   });
   await step('the report canvas stays inside its container', async () => {
     /* Regression: with a statically positioned #view, 3Dmol laid its absolutely

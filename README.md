@@ -140,6 +140,11 @@ Publish → *Download composite figure* stitches the 3D view with the PAE heatma
 and the interface contact map into one lettered figure at the chosen print size, each panel rendered
 at output resolution with a caption. Tick the panels you want; unavailable ones are greyed out.
 
+## What the report carries
+
+The shared HTML report reproduces the outline, depth cueing and faded chains, and shows the
+interface contact map beside the PAE heatmap when one was computed for a model in the report.
+
 ## Publication checklist
 
 The Publish tab lists what a journal or a reviewer would flag about the current figure — pixel

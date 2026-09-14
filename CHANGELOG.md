@@ -2,6 +2,18 @@
 
 All notable changes to this project are recorded here.
 
+## 2.22.0
+
+The report shows what you saw.
+
+### Added
+
+- **Report parity.** The shared HTML report now carries the silhouette outline and depth cueing,
+  draws faded chains the same way, and shows the interface contact map beside the PAE heatmap
+  when one was computed for a model in the report, with the same rows-against-columns layout,
+  closer pairs darker, and the pair count and cutoff spelled out. Switching the report's
+  background recolours the outline and the fade to match.
+
 ## 2.21.1
 
 ### Added

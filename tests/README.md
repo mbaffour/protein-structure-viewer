@@ -81,6 +81,8 @@ PSV_CHROMIUM=/opt/pw-browsers/chromium/chrome-linux/chrome npm test
   copying the PNG to the clipboard reports an outcome; the figure legend names the models,
   representation and colouring; the methods text names the Kabsch superposition, the RMSD rule, the
   dimension definitions and the software versions.
+- Report parity: a report made with outline, depth cueing, a faded chain and computed contacts carries all four; the
+  contact panel is visible with the pair count, and stays so after the background switches.
 - MSA: a synthetic .a3m colours both fixture chains; the varied column scores below the half-varied and the invariant
   one, coverage counts 9 and 7, and the methods text gains the alignment sentence.
 - Composite figure: with contacts computed, the three-panel composite downloads at the 178 mm width (2102 px) with
