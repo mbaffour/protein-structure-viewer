@@ -1142,9 +1142,15 @@ html>body{padding:0}</style>
       <label class="form-label">Columns<select class="form-select" id="gpv-composite-columns"><option value="1">1</option><option value="2" selected>2</option><option value="3">3</option></select></label>
       <button class="btn" type="button" id="gpv-composite" disabled data-tooltip="One lettered figure at the chosen print size: the 3D view first, then the confidence panels you tick — the PAE heatmap, the pLDDT profile and the contact map when they are available">Download composite figure</button>
       <button class="btn" type="button" id="gpv-compare-svg" disabled data-tooltip="The stitched comparison figure with vector captions and annotations">Download comparison SVG</button>
-      <label class="form-check form-switch"><input class="form-check-input" id="gpv-export-legend" type="checkbox" checked><span class="form-check-label">Colour legend on exports</span></label>
+      <label class="form-check form-switch"><input class="form-check-input" id="gpv-export-legend" type="checkbox" checked><span class="form-check-label">Colour legend on exports</span></label><button class="btn" type="button" id="gpv-labels-edit" data-tooltip="Rename the legend title and entries as they will read on the figure — domain, entity, chain or model names — without changing the data">Edit figure labels</button>
       <label class="form-label">Video length<select class="form-select" id="gpv-video-length"><option value="5">5 seconds</option><option value="10">10 seconds</option><option value="15">15 seconds</option></select></label>
       <button class="btn" type="button" id="gpv-video" disabled data-tooltip="Record the viewport spinning once, as a WebM file">Record spin video</button>
+    </div>
+    <div id="gpv-labels-wrap" hidden>
+      <h3 class="gpv-subheading">Figure labels</h3>
+      <p class="text-muted text-small gpv-hint">The legend title and entries as they will read on screen, on every export and in the figure legend text. Blank keeps the default. A name changes only what the legend says — "N-lobe" instead of "D1" — never the data behind it; the renamed entries keep their residue ranges. Labels belong to the colour scheme and travel with the scene, session and share link.</p>
+      <table class="table table-sm gpv-labels-table" aria-label="Figure labels"><thead><tr><th scope="col">Default</th><th scope="col">Reads as</th></tr></thead><tbody id="gpv-labels-rows"></tbody></table>
+      <div class="viz-controls"><button class="btn btn-ghost" type="button" id="gpv-labels-reset" disabled>Reset labels</button><span class="text-muted text-small" id="gpv-labels-state"></span></div>
     </div>
     <div class="viz-controls">
       <label class="form-label gpv-current-label">Report contents<select class="form-select" id="gpv-report-scope"><option value="visible">Models currently shown</option><option value="all">Every loaded model</option></select></label>
@@ -1237,6 +1243,7 @@ html>body{padding:0}</style>
       </ul>
       <h3>Tips for figures and reviewers</h3>
       <ul>
+        <li><em>Edit labels</em> on the colour legend (or <em>Publish → Edit figure labels</em>) renames the legend title and entries as they will read on the figure — "N-lobe" for a PAE domain, a protein name for an entity — on screen, on every PNG, TIFF and SVG export and in the generated legend text; the data are untouched and the names travel with the scene.</li>
         <li><em>Publish → Write methods text</em> drafts a Methods paragraph stating exactly how the numbers on screen were computed (superposition, RMSD, RMSF, domains, contacts, dimensions, colour scales); every definition is cross-checked against Biopython in the repository's <code>VALIDATION.md</code>.</li>
         <li>The shared report reproduces the outline, depth cueing and faded chains, and shows the contact map beside the PAE heatmap when one was computed for a model in the report.</li>
         <li><em>Confidence → Colour by MSA</em> reads the alignment inside an AlphaFold 3 archive (or an .a3m you add) and colours matching chains by conservation (Henikoff position-based sequence weights by default, switchable), identity to the query or coverage; the legend, exports and methods text follow.</li>
@@ -1398,6 +1405,9 @@ html>body{padding:0}</style>
   #generic-protein-viewer .gpv-legend-text { flex: 1 1 100%; font-size: var(--font-size-small); line-height: 1.5; }
   #generic-protein-viewer .gpv-history .gpv-selected-state { flex: 1; min-width: 200px; }
   #generic-protein-viewer .gpv-legend strong { color: var(--card-foreground); }
+  #generic-protein-viewer .gpv-legend .gpv-legend-edit { padding: 0 6px; min-height: 22px; font-size: var(--font-size-small); color: var(--muted-foreground); }
+  #generic-protein-viewer .gpv-labels-table th[scope="row"] { font-weight: 500; white-space: nowrap; }
+  #generic-protein-viewer .gpv-labels-table input { min-width: 160px; }
   #generic-protein-viewer .gpv-status > :last-child { margin-left: auto; text-align: right; }
   #generic-protein-viewer .gpv-export-surface { position: absolute; left: -100000px; top: 0; overflow: hidden; }
 

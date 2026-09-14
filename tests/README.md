@@ -88,6 +88,9 @@ PSV_CHROMIUM=/opt/pw-browsers/chromium/chrome-linux/chrome npm test
   changes the varied column's value, keeps the ordering, and the dataset name, the debug hook and the methods text say
   "unweighted"; switching them back on puts "Henikoff & Henikoff, 1994" in the methods text.
 - PAE domains: the panel state and the figure legend call the segmentation a heuristic.
+- Figure labels: the legend's Edit button opens the Publish editor listing the title and both domains; renaming the title
+  and D1 changes the on-screen legend (ranges kept), the scene settings, the generated legend text and the SVG export;
+  Reset restores the defaults and empties the scene's labels.
 - Composite figure: with contacts computed, the three-panel composite downloads at the 178 mm width (2102 px) with
   resolution metadata.
 - Publication checklist: pixel export with chain colours yields at least two warnings; the two one-click fixes switch

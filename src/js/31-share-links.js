@@ -136,6 +136,7 @@
     if (['none', 'thin', 'bold'].includes(settings.outline)) root.querySelector('#gpv-outline').value = settings.outline;
     if (typeof settings.fog === 'boolean') root.querySelector('#gpv-fog').checked = settings.fog;
     if (['boxed', 'plain'].includes(settings.labelStyle)) root.querySelector('#gpv-label-style').value = settings.labelStyle;
+    setFigureLabels(settings.figureLabels);
     if ([0, 50, 70].includes(Number(settings.hideBelow))) root.querySelector('#gpv-hide-below').value = String(Number(settings.hideBelow));
     if (['stick', 'sphere', 'hide'].includes(settings.hetero)) root.querySelector('#gpv-hetero').value = settings.hetero;
     if (['none', 'translucent', 'opaque'].includes(settings.surface)) root.querySelector('#gpv-surface').value = settings.surface;
@@ -605,10 +606,81 @@
   }
 
   const legendChainLimit = 12;
+  /* Figure labels: what the legend's title and entries read as on screen and on every
+     export, keyed by colour scheme and default entry text ('domain|D1', 'entity|α ×2',
+     'chain|title'). Renaming changes nothing in the data — only the words in the legend —
+     and is part of the scene, so scenes, sessions and share links carry it. */
+  let figureLabels = {};
+  const figureLabelLimit = 80;
+  function legendItems(kind = 'figure') {
+    const legend = defaultLegendItems(kind); if (!legend) return null;
+    const mode = root.querySelector('#gpv-color-mode').value;
+    const title = figureLabels[mode + '|title'];
+    const items = legend.items.map(([color, short, long]) => {
+      const custom = figureLabels[mode + '|' + short];
+      if (!custom) return [color, short, long];
+      const detail = long && long.includes(' · ') ? long.slice(long.indexOf(' · ')) : '';
+      return [color, custom, custom + detail];
+    });
+    return { title: title || legend.title, items, defaults: legend };
+  }
+  function figureLabelsCustomised(legend = legendItems('figure')) {
+    return Boolean(legend && (legend.title !== legend.defaults.title || legend.items.some((item, index) => item[1] !== legend.defaults.items[index][1])));
+  }
+  function setFigureLabels(next) {
+    figureLabels = {};
+    Object.entries(next && typeof next === 'object' ? next : {}).slice(0, 200).forEach(([key, value]) => {
+      if (typeof key !== 'string' || !key.includes('|') || typeof value !== 'string') return;
+      const text = value.trim().slice(0, figureLabelLimit); if (text) figureLabels[key.slice(0, figureLabelLimit * 2)] = text;
+    });
+  }
+  /* The editor lists the current colour scheme's legend: one row for the title, one per entry. */
+  function renderFigureLabels() {
+    const wrap = root.querySelector('#gpv-labels-wrap'); const body = root.querySelector('#gpv-labels-rows'); const state = root.querySelector('#gpv-labels-state');
+    if (wrap.hidden) return;
+    if (wrap.contains(document.activeElement)) return;
+    body.replaceChildren();
+    const legend = legendItems('figure'); const mode = root.querySelector('#gpv-color-mode').value;
+    if (!legend) { state.textContent = 'This colour scheme draws no legend, so there is nothing to rename. Choose a scheme with a legend — chains, entities, domains, models or per-residue data.'; return; }
+    const row = (key, fallback, swatch) => {
+      const tr = document.createElement('tr'); const th = document.createElement('th'); th.scope = 'row';
+      if (swatch) { const i = document.createElement('i'); i.className = 'gpv-swatch'; i.style.background = swatch; th.append(i, ' '); }
+      th.append(fallback); tr.append(th);
+      const td = document.createElement('td'); const input = document.createElement('input'); input.className = 'form-control'; input.type = 'text'; input.maxLength = figureLabelLimit;
+      input.dataset.gpvLabelKey = key; input.placeholder = fallback; input.value = figureLabels[key] || ''; input.setAttribute('aria-label', 'Label for ' + fallback);
+      input.addEventListener('input', () => { const text = input.value.trim().slice(0, figureLabelLimit); if (text) figureLabels[key] = text; else delete figureLabels[key]; applyFigureLabels(false); });
+      input.addEventListener('change', () => { remember('figure labels'); setTimeout(renderFigureLabels, 0); });
+      td.append(input); tr.append(td); body.append(tr);
+    };
+    row(mode + '|title', legend.defaults.title, null);
+    legend.defaults.items.forEach(item => row(mode + '|' + item[1], item[1], item[0]));
+    renderFigureLabelsState();
+  }
+  function renderFigureLabelsState() {
+    const mode = root.querySelector('#gpv-color-mode').value;
+    const count = Object.keys(figureLabels).filter(key => key.startsWith(mode + '|')).length;
+    root.querySelector('#gpv-labels-state').textContent = count ? count + ' custom label' + (count === 1 ? '' : 's') + ' for this colour scheme · they appear on screen, on every export and in the figure legend text' : 'Blank keeps the default. Names change only what the legend says, never the data.';
+    root.querySelector('#gpv-labels-reset').disabled = !count;
+  }
+  function applyFigureLabels(rebuild = true) {
+    renderScreenLegend(); if (typeof renderPublicationChecks === 'function') renderPublicationChecks();
+    if (rebuild) renderFigureLabels(); else renderFigureLabelsState();
+  }
+  function openFigureLabels() {
+    root.querySelector('[data-gpv-tab="publish"]').click();
+    root.querySelector('#gpv-labels-wrap').hidden = false; renderFigureLabels();
+    const first = root.querySelector('#gpv-labels-rows input'); if (first) { first.focus(); first.scrollIntoView({ block: 'center' }); }
+  }
+  root.querySelector('#gpv-labels-edit').addEventListener('click', () => { const wrap = root.querySelector('#gpv-labels-wrap'); wrap.hidden = !wrap.hidden; if (!wrap.hidden) renderFigureLabels(); });
+  root.querySelector('#gpv-labels-reset').addEventListener('click', () => {
+    const mode = root.querySelector('#gpv-color-mode').value; remember('figure labels');
+    Object.keys(figureLabels).filter(key => key.startsWith(mode + '|')).forEach(key => delete figureLabels[key]);
+    applyFigureLabels(); announce('Legend labels reset to their defaults for this colour scheme');
+  });
   /* What a colour legend should list for the current colour scheme, or null when
      the scheme has nothing worth naming. kind is 'figure', 'comparison' (each panel
      already names its model, so no model legend), or 'screen'. */
-  function legendItems(kind = 'figure') {
+  function defaultLegendItems(kind = 'figure') {
     const mode = root.querySelector('#gpv-color-mode').value;
     if (residueLegends[mode]) return residueLegends[mode](kind);
     if (mode === 'data') {
@@ -670,6 +742,10 @@
       swatch.className = 'gpv-swatch'; swatch.style.background = color;
       item.append(swatch, long || short); host.append(item);
     });
+    const edit = document.createElement('button'); edit.type = 'button'; edit.className = 'btn btn-ghost gpv-legend-edit'; edit.id = 'gpv-legend-edit';
+    edit.textContent = figureLabelsCustomised(legend) ? 'Edit labels ·' : 'Edit labels'; edit.title = 'Rename the legend title and entries for figures (Publish → Figure labels)';
+    edit.addEventListener('click', openFigureLabels); host.append(edit);
+    renderFigureLabels();
   }
 
   function drawPlddtLegend(context, x, y, scale, palette, kind = 'figure') {

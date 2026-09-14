@@ -798,6 +798,34 @@ await step('PAE domains are found from a block-diagonal matrix', async () => {
   if ((await page.locator('#gpv-selection-list .gpv-entry').count()) !== before + 2) throw new Error('highlight all did not add two selections');
   await tab('appearance'); await page.selectOption('#gpv-color-mode', 'plddt'); await page.waitForTimeout(300); await tab('confidence');
 });
+await step('figure labels rename the legend on screen, in the SVG, in the legend text and in the scene', async () => {
+  await tab('appearance'); await page.selectOption('#gpv-color-mode', 'domain'); await page.waitForTimeout(400);
+  await page.click('#gpv-legend-edit'); await page.waitForTimeout(400);
+  if (await page.locator('[data-gpv-panel="publish"]').isHidden()) throw new Error('the legend button did not open the Publish tab');
+  if (await page.locator('#gpv-labels-wrap').isHidden()) throw new Error('the labels editor is hidden');
+  const defaults = await page.locator('#gpv-labels-rows th').allTextContents();
+  if (defaults.length !== 3 || !/PAE domains \(heuristic\)/.test(defaults[0]) || defaults[1].trim() !== 'D1' || defaults[2].trim() !== 'D2') throw new Error('rows: ' + JSON.stringify(defaults));
+  await page.fill('#gpv-labels-rows input[data-gpv-label-key="domain|title"]', 'Lobes');
+  await page.fill('#gpv-labels-rows input[data-gpv-label-key="domain|D1"]', 'N-lobe'); await page.locator('#gpv-labels-rows input[data-gpv-label-key="domain|D1"]').blur(); await page.waitForTimeout(300);
+  const legend = (await page.locator('#gpv-plddt-legend').textContent()) || '';
+  if (!/Lobes/.test(legend) || !/N-lobe · A:1–30/.test(legend) || !/Domain 2 · /.test(legend) || /Domain 1 · /.test(legend)) throw new Error('screen legend: ' + legend);
+  const state = (await page.locator('#gpv-labels-state').textContent()) || '';
+  if (!/2 custom labels/.test(state)) throw new Error('state: ' + state);
+  const scene = await page.evaluate(() => window.__viewerDebug.sceneSettings().figureLabels);
+  if (!scene || scene['domain|D1'] !== 'N-lobe' || scene['domain|title'] !== 'Lobes') throw new Error('scene labels: ' + JSON.stringify(scene));
+  await page.click('#gpv-figure-legend'); await page.waitForTimeout(300);
+  const text = await page.inputValue('#gpv-legend-text');
+  if (!/legend: Lobes — N-lobe, D2/.test(text)) throw new Error('legend text lacks the custom names: ' + text.slice(0, 200));
+  const download = page.waitForEvent('download', { timeout: 120000 }); await page.click('#gpv-svg');
+  const svg = await readFile(await (await download).path(), 'utf8');
+  if (!/>Lobes</.test(svg) || !/>N-lobe</.test(svg) || />D1</.test(svg)) throw new Error('SVG legend did not use the custom labels');
+  await page.click('#gpv-labels-reset'); await page.waitForTimeout(300);
+  const restored = (await page.locator('#gpv-plddt-legend').textContent()) || '';
+  if (!/PAE domains \(heuristic\)/.test(restored) || !/Domain 1 · A:1–30/.test(restored) || /N-lobe/.test(restored)) throw new Error('reset did not restore the defaults: ' + restored);
+  if (await page.evaluate(() => Object.keys(window.__viewerDebug.sceneSettings().figureLabels).length)) throw new Error('scene still carries labels after reset');
+  await page.click('#gpv-labels-edit'); await tab('appearance'); await page.selectOption('#gpv-color-mode', 'plddt'); await page.waitForTimeout(300); await tab('confidence');
+  console.log('       title Lobes · D1 → N-lobe · SVG, legend text and scene followed · reset restored the defaults');
+});
 await step('an AlphaFold 3 full_data file is scanned byte by byte: PAE kept as Float32 rows, contact matrix skipped', async () => {
   const size = 60;
   const pae = Array.from({ length: size }, (_, i) => Array.from({ length: size }, (_, j) => Math.round(Math.abs(i - j) * 37) / 100));

@@ -35,6 +35,8 @@
       data: residueData ? 'coloured by ' + residueData.name + ' (' + ({ viridis: 'viridis', diverging: 'blue–white–red diverging', heat: 'white–red' })[residueData.scale] + ' scale from ' + formatDataValue(dataRange().min) + ' to ' + formatDataValue(dataRange().max) + '; residues without a value grey)' : 'coloured by per-residue data (none loaded)',
       annotated: 'coloured by annotated domains (' + (domainRecords.length ? [...new Map(domainRecords.map(record => [record.name, record])).values()].map(record => record.name + ' ' + domainRecordRanges(record) + ' ' + record.color).join('; ') : 'none defined') + '; other residues grey)'
     }[mode] || 'coloured per model';
+    const legend = legendItems('figure');
+    if (figureLabelsCustomised(legend)) colourText += '; legend: ' + legend.title + ' — ' + legend.items.map(item => item[1]).join(', ');
     const surfaceChoice = root.querySelector('#gpv-surface').value;
     if (surfaceChoice !== 'none') colourText += ', with a ' + (surfaceChoice === 'translucent' ? 'translucent' : 'solid') + ' molecular surface in the same colours';
     if (mode === 'deviation' && !alignmentResults.length) colourText = 'shown in grey (Cα deviation colouring is selected but no alignment has been made)';

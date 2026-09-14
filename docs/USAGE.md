@@ -425,6 +425,19 @@ figure goes into a slide or a manuscript draft without a file in between. Chrome
 image clipboard writes; Firefox and Safari may refuse, in which case the viewer says so and the
 download remains.
 
+**Figure labels.** The colour legend carries an **Edit labels** button (also *Publish → Edit figure
+labels*). It opens a table with the legend's title and each entry in the current colour scheme —
+"PAE domains (heuristic)", "D1", "D2"; "Entity", "α ×2"; "Chain", "A" — and a text field beside each.
+Type the name the figure should use: "N-lobe" for a domain, the protein's name for an entity, the
+subunit for a chain. The legend under the viewport, every PNG, TIFF and SVG export, the composite and
+comparison figures and the generated figure legend text ("legend: Lobes — N-lobe, D2") all use the new
+names; renamed entries keep their residue ranges on screen, and nothing in the data changes. Blank
+keeps the default. Labels are keyed by colour scheme and default entry, so a name given to "D1" in PAE
+domain colouring does not touch the chain legend, and they are part of the scene: scenes, session files
+and share links carry them, undo covers them, and **Reset labels** clears the current scheme's names.
+Model names in the *Model* legend come from the display name set in the Models tab; annotated domains
+are named where they are defined, in Annotate → Domains.
+
 **Comparison figure.** With the synchronized multi-view on, **Download comparison PNG** renders every
 panel at the chosen size and stitches them into one lettered figure with each model's name and mean
 pLDDT in a caption strip. The total is capped at roughly 24 megapixels, so six panels at a large

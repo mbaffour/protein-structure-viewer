@@ -172,7 +172,10 @@ that stay legible at column width; both apply everywhere the scene is drawn. The
 table can **fade** a chain into the background to spotlight the others. Publish has **journal
 presets** (Nature, Science, Cell Press, PNAS, PLOS, eLife) that set width, resolution, text
 size and font, and **one panel per model**, which renders the models of a run from one camera
-into a lettered figure.
+into a lettered figure. **Edit labels** on the colour legend renames the legend's title and entries
+as they should read on the figure ("N-lobe" for a PAE domain, the protein's name for an entity);
+the names apply on screen, on every export and in the generated legend text, change nothing in the
+data, and travel with the scene.
 
 ## Your work is kept
 

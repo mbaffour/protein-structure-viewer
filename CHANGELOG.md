@@ -2,6 +2,16 @@
 
 All notable changes to this project are recorded here.
 
+## 2.25.0
+
+- **Editable figure labels.** *Edit labels* on the colour legend (or *Publish → Edit figure labels*) opens a table of
+  the current legend's title and entries with a text field beside each: rename "D1" to "N-lobe", an entity's Greek
+  letter to the protein's name, a chain letter to its subunit. The names apply on screen, on every PNG, TIFF and SVG
+  export, in the composite and comparison figures and in the generated figure legend text ("legend: Lobes — N-lobe,
+  D2"); renamed entries keep their residue ranges, and the data are untouched. Labels belong to the colour scheme and
+  are part of the scene, so scenes, sessions and share links carry them; *Reset labels* clears them for that scheme.
+  The SVG export already wrote the legend as text, so it stays editable in Illustrator or Inkscape as well.
+
 ## 2.24.1
 
 - **Fixed: the Confidence tab collapsed inside the side panel.** In the workspace layout the tab kept its
