@@ -619,6 +619,30 @@
     return { paper: background.alpha ? background.color : '#ffffff', ink: dark ? '#f8fafc' : '#111827' };
   }
 
+  /* The five models of one run share a long file-name stem, and five identical truncations name
+     nothing. Drop what every name has in common, at a word boundary, and keep the rest — unless
+     that leaves too little to read, in which case the full names are clipped as before. */
+  function distinguishingNames(names) {
+    const clipped = names.map(name => clipText(name, 28));
+    if (names.length < 2 || new Set(names).size !== names.length) return clipped;
+    const boundary = /[ ._\-/|:]/;
+    const backToBoundary = value => { let out = value; while (out && !boundary.test(out[out.length - 1])) out = out.slice(0, -1); return out; };
+    let prefix = names[0];
+    names.forEach(name => { let index = 0; while (index < prefix.length && index < name.length && prefix[index] === name[index]) index += 1; prefix = prefix.slice(0, index); });
+    prefix = backToBoundary(prefix);
+    let suffix = names[0];
+    names.forEach(name => { let index = 0; while (index < suffix.length && index < name.length && suffix[suffix.length - 1 - index] === name[name.length - 1 - index]) index += 1; suffix = suffix.slice(suffix.length - index); });
+    while (suffix && !boundary.test(suffix[0])) suffix = suffix.slice(1);
+    /* The shared stem can swallow the part that names the model — every file ends `model_N` — so
+       the prefix is given back one boundary at a time until what is left reads on its own. */
+    for (;;) {
+      const trimmed = names.map(name => name.slice(prefix.length, name.length - suffix.length).trim());
+      if (trimmed.every(name => name.length >= 3) && new Set(trimmed).size === trimmed.length) return trimmed.map(name => clipText(name, 28));
+      if (!prefix) return clipped;
+      prefix = backToBoundary(prefix.slice(0, -1));
+    }
+  }
+
   const legendChainLimit = 12;
   /* Figure labels: what the legend's title and entries read as on screen and on every
      export, keyed by colour scheme and default entry text ('domain|D1', 'entity|α ×2',
@@ -734,7 +758,8 @@
     }
     if (mode === 'structure' && kind !== 'comparison') {
       if (shown.length < 2 || shown.length > 8) return null;
-      return { title: 'Model', items: shown.map(entry => [entry.color, clipText(displayName(entry), 28)]) };
+      const names = distinguishingNames(shown.map(displayName));
+      return { title: 'Model', items: shown.map((entry, index) => [entry.color, names[index], displayName(entry)]) };
     }
     return null;
   }

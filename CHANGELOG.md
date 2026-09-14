@@ -2,6 +2,14 @@
 
 All notable changes to this project are recorded here.
 
+## 2.29.1
+
+- **The Model legend names the models again.** Overlaying the five models of one AlphaFold run gave a legend of five
+  identical truncations, because every file starts with the same long stem. What all the names share is now dropped at
+  a word boundary — `fold_m13_virion_round_tip_model_0.cif` and its siblings read as `model_0` … `model_4` — while
+  names that would become too short, or that would collide, are clipped in full as before. The long name stays in the
+  on-screen legend's tooltip text, and *Edit labels* still overrides everything.
+
 ## 2.29.0
 
 - **Superpose on part of the structure.** *Compare → Fit on* takes **All matched residues** (as before), **a chain or

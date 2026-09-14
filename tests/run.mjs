@@ -520,6 +520,22 @@ await step('identifier alignment mode also runs', async () => {
   if ((await page.locator('#gpv-alignment-results tr').count()) < 2) throw new Error('no rows');
   await page.selectOption('#gpv-alignment-mode', 'sequence');
 });
+await step('the model legend drops the shared part of long run file names', async () => {
+  const cases = await page.evaluate(() => {
+    const shorten = window.__viewerDebug.distinguishingNames;
+    return {
+      run: shorten(['fold_m13_virion_round_tip_model_0.cif', 'fold_m13_virion_round_tip_model_1.cif', 'fold_m13_virion_round_tip_model_4.cif']),
+      mixed: shorten(['4hhb.cif', 'AF-P69905-F1.cif']),
+      tiny: shorten(['model_a.pdb', 'model_b.pdb']),
+      single: shorten(['fold_only_model_0.cif'])
+    };
+  });
+  if (cases.run.join('|') !== 'model_0|model_1|model_4') throw new Error('run names: ' + JSON.stringify(cases.run));
+  if (cases.mixed.join('|') !== '4hhb|AF-P69905-F1') throw new Error('mixed names: ' + JSON.stringify(cases.mixed));
+  if (cases.tiny.join('|') !== 'model_a|model_b') throw new Error('short names should keep enough to read: ' + JSON.stringify(cases.tiny));
+  if (cases.single.join('|') !== 'fold_only_model_0.cif') throw new Error('a single name should be left alone: ' + JSON.stringify(cases.single));
+  console.log('       ' + cases.run.join(', ') + ' · ' + cases.mixed.join(', '));
+});
 await step('the superposition can be fitted on one region, reporting that RMSD beside the overall one', async () => {
   await tab('compare');
   /* However this ends, leave the tab and the fit scope as the later steps expect them. */

@@ -88,6 +88,8 @@ PSV_CHROMIUM=/opt/pw-browsers/chromium/chrome-linux/chrome npm test
   changes the varied column's value, keeps the ordering, and the dataset name, the debug hook and the methods text say
   "unweighted"; switching them back on puts "Henikoff & Henikoff, 1994" in the methods text.
 - PAE domains: the panel state and the figure legend call the segmentation a heuristic.
+- Model legend names: a run's file names reduce to model_0 … model_4 (the stem is given back a boundary at a time when
+  it would leave only a digit), two unrelated names lose only the shared extension, and a lone name is left whole.
 - Fitting on a region: fitting on `A:1-12` keeps the matched pair count, reports exactly 12 Cα in the fitted-on cell, a
   fitted RMSD at or below the overall one, both in the CSV header and row, and the region in the methods text; with
   nothing selected the selection scope says so.
