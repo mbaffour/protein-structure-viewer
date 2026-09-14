@@ -2,7 +2,7 @@
 
 Every quantity the viewer reports was compared with an independent implementation on three real
 AlphaFold 3 runs. This file records the method, the results and the limits of the check, and how to
-rerun it on your own run. Last run: 2026-09-13, viewer 2.21.0.
+rerun it on your own run. Last run: 2026-09-14, viewer 2.23.0.
 
 ## Method
 
@@ -20,6 +20,12 @@ rerun it on your own run. Last run: 2026-09-13, viewer 2.21.0.
   one chain, hetero groups excluded;
 - the inter-chain contact map of two chains on model 0: every residue pair with a heavy-atom pair
   within the cutoff, with the closest such distance (the Compare tab's *Interface contact map*);
+- the buried surface area of every chain pair in contact on model 0, with `Bio.PDB.SASA.ShrakeRupley`
+  set to the viewer's parameters — probe radius 1.4 Å, 92 sphere points per atom, Bondi radii (C 1.70,
+  N 1.55, O 1.52, S 1.80 Å; Biopython's defaults are identical for every element these runs contain),
+  every non-hydrogen atom of the chain included — as
+  BSA(A,B) = SASA(A alone) + SASA(B alone) − SASA(A and B together), **not** halved and floored at
+  zero, which is exactly what the Confidence tab's interface table reports;
 - per-column statistics of every unpaired `.a3m` in the run — conservation (1 − H/log₂20, gaps and X
   excluded), identity to the query and coverage — with lowercase insertions dropped, exactly as the
   viewer's *Colour by MSA* defines them.
@@ -27,8 +33,9 @@ rerun it on your own run. Last run: 2026-09-13, viewer 2.21.0.
 `tests/validate.mjs` then opens the same files in the real viewer (headless Chromium via Playwright),
 runs *Align visible* in identifier mode with model 0 as reference, reads the same quantities through the
 `?debug=1` hook, and compares. Tolerances: 0.01 for pLDDT, 0.001 Å for every distance, exact match for
-the residue set. The reference values are rounded to four decimals, so differences of a few 10⁻⁵ Å are
-the rounding of the reference, not of the viewer.
+the residue set, 2 % on a solvent-accessible area and 5 % on a buried surface area (why those two are
+loose is explained under *Buried surface area* below). The reference values are rounded to four
+decimals, so differences of a few 10⁻⁵ Å are the rounding of the reference, not of the viewer.
 
 The runs are the author's own predictions of phage assemblies and are not committed; the scripts run on
 any AlphaFold 3 archive.
@@ -129,8 +136,9 @@ PAE domains at 6 Å on model 0: 6 domains, 50 residues unassigned (heuristic; ru
 
 PAE domains at 6 Å on model 0: 4 domains, 10 residues unassigned (heuristic; run without error, not compared). Console errors: 0.
 
-**All 105 comparisons agree within tolerance** (72 from the 2.14.0 pass, 12 for the contact map added in 2.18.1, 21 for the MSA statistics added in 2.21.0). RMSD, RMSF, radius of gyration and extent agree to
-better than 5 × 10⁻⁵ Å; contact residue sets are identical; mean pLDDT agrees to 4 × 10⁻⁴.
+**All 123 comparisons agree within tolerance** (72 from the 2.14.0 pass, 12 for the contact map added in 2.18.1, 21 for the MSA statistics added in 2.21.0, 18 for buried surface area added in 2.23.0). RMSD, RMSF, radius of gyration and extent agree to
+better than 5 × 10⁻⁵ Å; contact residue sets are identical; mean pLDDT agrees to 4 × 10⁻⁴; buried
+surface areas agree to 2.7 % of two independently sampled Shrake–Rupley calculations.
 
 ## What the check found
 
@@ -165,8 +173,12 @@ errors. Rendering cost 0.5, 1.9 and 3.1 ms per frame under software rendering.
 - **PAE domains.** A heuristic (greedy merge of ten-residue segments below a mean-PAE cutoff, minimum
   twenty residues). It is checked only to run on real matrices without error. It is not the clustering
   used by the AlphaFold Protein Structure Database and will cut differently.
-- **Buried surface area** (Confidence tab) and **ligand-site PAE** are not yet in the reference script. The
-  Compare tab's contact map is (below); the Confidence tab's interface table uses the same distance rule.
+- **Ligand-site PAE** (Confidence tab's ligand-site table) is **not validated**: none of the three runs
+  contains a ligand or an ion, so there is nothing to compare against and no synthetic structure has
+  been substituted for one. The reference is written down under *Ligand-site PAE* below and can be run
+  the day a ligand-bearing prediction exists.
+- **Buried surface area** *is* cross-validated since 2.23.0 (below), but only to a few per cent: both
+  implementations sample the sphere at 92 points and the two point sets differ.
 - **Residue colour themes** are lookups (formal charge at neutral pH, Kyte–Doolittle hydrophobicity,
   RasMol amino colours); nothing to compute, but state the scale when you use one.
 - Anything **drawn** — cartoons, surfaces, the PAE heatmap — is 3Dmol.js's or the canvas's rendering
@@ -204,13 +216,71 @@ conservation and identity, exact for coverage.
 Differences are the six-decimal rounding of the reference. Note the single-sequence alignment for the
 M13 α entity: its "conservation" of 1 everywhere is a statement about the alignment, not the protein.
 
+## Buried surface area (added 2.23.0)
+
+Same chain pair as the contact map above. The viewer computes the Shrake–Rupley area of each chain
+alone and of the two together over all non-hydrogen atoms (probe 1.4 Å, 92 golden-spiral points,
+Bondi radii) and reports BSA = SASA(A) + SASA(B) − SASA(A+B), not halved. `tests/reference.py` does
+the same with `Bio.PDB.SASA.ShrakeRupley(probe_radius=1.4, n_points=92)`, whose default radii match
+the viewer's table for every element present. The number of chain pairs found in contact and the sum
+of BSA over all of them were compared as well as the named pair.
+
+| run | chains | SASA A (viewer / ref, Å²) | SASA B (viewer / ref, Å²) | SASA A+B (viewer / ref, Å²) | BSA (viewer / ref, Å²) | rel. diff. | pairs | total BSA (viewer / ref, Å²) | |
+|---|---|---:|---:|---:|---:|---:|---:|---:|:--:|
+| A — M13 virion tip | K–F | 7 271.8 / 7 223.4 | 3 290.1 / 3 258.2 | 9 537.9 / 9 429.7 | 1 024.0 / 1 051.9 | 2.7 % | 34 / 34 | 22 246 / 22 089 | ✓ |
+| B — MS2 maturation protein–coat | A–B | 22 101.3 / 22 134.0 | 9 554.0 / 9 556.0 | 30 585.4 / 30 628.7 | 1 069.9 / 1 061.4 | 0.8 % | 3 / 3 | 7 668 / 7 588 | ✓ |
+| C — phiX174 F–G | A–B | 23 907.2 / 23 893.5 | 9 757.0 / 9 760.8 | 32 954.8 / 32 956.1 | 709.5 / 698.1 | 1.6 % | 1 / 1 | 710 / 698 | ✓ |
+
+**Why the tolerance is per cent and not 10⁻⁵.** Shrake–Rupley is a sampling method: it counts how many
+of a fixed set of points on each atom's expanded sphere escape every neighbour. The viewer and
+Biopython both use 92 points laid out by a golden-angle spiral, but not the *same* 92 points (the
+viewer spans the poles, `y = 1 − 2i/91`; Biopython offsets by half a step, `z = 1 − 1/n − 2i/n`), so
+the two estimators differ by their sampling error even though their definitions are identical. That
+they *are* identical was checked directly: recomputing both at 960 points brings them to within 0.2 %
+of each other (run A: BSA 1 030.3 by the viewer's point set, 1 032.7 by Biopython's; run C: 709.4 and
+710.2), so the per-cent gaps at 92 points are noise, not a disagreement about what BSA means.
+
+The measured spread at 92 points is up to 1.2 % on a per-chain SASA — worst for run A, whose chains
+are 250–540 atoms, against 0.06 % for run C's 3 000-atom chain — and up to 2.7 % on a BSA, which is a
+difference of three numbers twenty times its own size, so only the interface atoms survive the
+cancellation and the noise does not shrink with it. The check therefore allows 2 % on a SASA and 5 %
+on a BSA: above the observed sampling spread, and far below what any real difference in definition
+(halving the area, excluding hetero atoms, a different radii table, a different probe) would produce —
+each of those is a 50–100 % effect.
+
+A consequence for users: the viewer's BSA is worth about two significant figures. The table rounds it
+to whole Å², which over-states the precision by roughly an order of magnitude; read 1 024 Å² as
+"about 1 000 Å²".
+
+## Ligand-site PAE — not validated
+
+The viewer's ligand-site table reports, for each ligand or ion group, the mean of the symmetrised PAE
+(½(PAE[i][j] + PAE[j][i])) over every ligand token *i* against every token of every site residue *j*,
+the site being the residues with a heavy atom within the cutoff (default 4.5 Å) of any ligand atom,
+with ligand tokens found through the AlphaFold 3 `token_chain_ids` / `token_res_ids` arrays.
+
+**None of the three validation runs contains a ligand or an ion** — all three are protein-only
+predictions, with no `HETATM` record and no ligand in the job request; the validator now prints this
+for each run. No comparison is therefore possible and none is claimed. Building a synthetic
+ligand-bearing structure would validate the arithmetic against itself, not the viewer against an
+independent reading of a real AlphaFold 3 file, so it was not done.
+
+When a ligand-bearing run exists, the reference is: parse `*_full_data_*.json`, read `pae`,
+`token_chain_ids`, `token_res_ids`; take the ligand's tokens as every index whose chain and residue id
+match the ligand group (AlphaFold 3 gives one token per ligand *atom*, all sharing the residue id);
+take the site with Biopython — residues with any heavy atom within the cutoff of any ligand heavy
+atom, water excluded — and map each to its tokens by chain and residue id; report
+mean over (i, j) of ½(PAE[i][j] + PAE[j][i]). Tolerance 10⁻³ Å, since this is an exact mean over a
+matrix read from disk, not a sampled quantity. The site residue set should be compared as a set, as
+the contact residue set already is.
+
 ## Rerunning
 
 ```
 cd tests && npm install && npm test            # once; installs Playwright and verifies the vendored libraries
 mkdir run && unzip -d run fold_x.zip -x "templates/*" "msas/*paired*"   # keep the unpaired .a3m for the MSA check
 python3 reference.py run K 6                    # chain K, 6 Å; needs biopython and numpy
-python3 reference.py run K 6 K F                # optionally name the two chains for the contact map
+python3 reference.py run K 6 K F                # optionally name the two chains for the contact map and BSA
 node validate.mjs run                           # or: node validate.mjs run fold_x.zip
 ```
 

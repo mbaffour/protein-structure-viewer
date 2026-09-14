@@ -1590,7 +1590,7 @@ html>body{padding:0}</style>
   let busyDepth = 0;
   let restoreMotion = null;
   const listPageSize = 60;
-  const viewerVersion = '2.22.1';
+  const viewerVersion = '2.23.0';
   const preferenceKey = 'protein-structure-viewer:preferences';
   const themeKey = 'protein-structure-viewer:theme';
   const labelColors = getComputedStyle(root);
@@ -1798,6 +1798,10 @@ html>body{padding:0}</style>
 
   function associationKey(path) {
     const stem = fileStem(path).toLowerCase();
+    /* AlphaFold DB downloads: AF-P69905-F1-model_v6 and AF-P69905-F1-predicted_aligned_error_v6
+       (or -confidence_v6) belong together; the version suffix carries no model index. */
+    const database = stem.replace(/-(model|predicted_aligned_error|confidence)_v\d+$/, '');
+    if (database !== stem) return database;
     return stem.replace(/_(summary_confidences|confidences|full_data|model)(?:_(\d+))?$/, (_, marker, index) => index ? '_' + index : '');
   }
 
@@ -8481,7 +8485,7 @@ applyBackground();
   offerSessionRestore();
   /* ?debug=1 exposes a few internals for the regression suite and for bug reports;
      it has no effect otherwise. */
-  if (new URLSearchParams(location.search).has('debug')) window.__viewerDebug = { viewer, pickAtomAt, displayedEntries, activeEntry, colorOptions, sceneSettings, contactResult: () => contactResult, residueData: () => residueData, msaAssets: () => msaAssets, entries: () => structures, nearbyResidues, assemblyDimensions, paeDomains, parseConfidenceBytes, methodsText, alignmentResults: () => alignmentResults, ensembleSpread: () => ensembleSpread, siteResults: () => siteResults };
+  if (new URLSearchParams(location.search).has('debug')) window.__viewerDebug = { viewer, pickAtomAt, displayedEntries, activeEntry, colorOptions, sceneSettings, contactResult: () => contactResult, residueData: () => residueData, msaAssets: () => msaAssets, entries: () => structures, nearbyResidues, assemblyDimensions, paeDomains, parseConfidenceBytes, methodsText, alignmentResults: () => alignmentResults, ensembleSpread: () => ensembleSpread, siteResults: () => siteResults, interfaceResults: () => interfaceResults, solventAccessibleArea, heavyAtoms, ligandGroups };
   applyTheme(readJson(themeKey, 'system'));
   selectToolTab('models');
   applyAppearance();

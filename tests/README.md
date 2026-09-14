@@ -101,6 +101,11 @@ PSV_CHROMIUM=/opt/pw-browsers/chromium/chrome-linux/chrome npm test
 - Session: reloading the page offers to restore the autosaved session; Restore brings back every model and label;
   a session file downloads as a ZIP with `session.json` and reopens every model, label and PAE matrix both through
   *Open session file* and when dropped as a structure file.
+- AlphaFold DB entry: a real, committed download for human haemoglobin alpha (UniProt P69905,
+  `fixtures/alphafold-db/`) loads from disk as a 142-residue, 1000+-atom entry with one pLDDT score
+  per residue; fetching the same accession (routed to the same two files instead of the network)
+  attaches the real 142×142 PAE matrix, and PAE domains, assembly dimensions, the confidence
+  summary and pLDDT colouring all run against it.
 - Share links: a model fetched by ID (served from a stubbed RCSB response) enables *Copy share
   link*; opening the link in a fresh page refetches the model and restores its corner text.
 
@@ -125,9 +130,11 @@ is committed; point the scripts at your own.
 
 ## Notes
 
-- Fixtures are synthetic (`fixtures.mjs`) — two-chain poly-alanine helices with
+- Most fixtures are synthetic (`fixtures.mjs`) — two-chain poly-alanine helices with
   pLDDT-like B-factors, generated from a seeded PRNG so runs are reproducible. No
-  structure data is committed.
+  synthetic structure data is committed. The one exception is
+  `fixtures/alphafold-db/`, a real AlphaFold Protein Structure Database download
+  (CC-BY-4.0, see its README) used by the "AlphaFold DB entry" group.
 - Timings assume software rendering. A supersampled export takes roughly 18 seconds
   under SwiftShader and under a second on a real GPU, so the render-blocking assertion
   is skipped when nothing blocks for more than 300 ms.
@@ -141,3 +148,16 @@ screenshot and print picking diagnostics at the start of the Annotate group.
 The validation harness (`reference.py` + `validate.mjs`) also compares the Compare tab's contact map with
 Biopython: `python3 reference.py <folder> <chain> <cutoff> [chainA chainB]` chooses the second chain with the
 most contacts when it is not given.
+
+## Continuous integration
+
+`.github/workflows/tests.yml` runs on every push and pull request to `main`. A `playwright` job runs this
+suite as a matrix over the three engines (`chromium`, `firefox`, `webkit`) — each runs `npm ci` and
+`npx playwright install --with-deps <engine>` in `tests/`, then `npm test` with `PSV_BROWSER` set to that
+engine. The three engines run in parallel and independently (`fail-fast: false`), so one engine failing
+does not cancel the others; a superseded run on the same branch or PR is cancelled automatically. A
+separate `validate-scripts` job does a quick sanity check that `fixtures.mjs` imports cleanly and that
+`reference.py` compiles, without installing Playwright or Biopython. To read a failure, open the failed
+job's log: each regression step prints its own name followed by `FAIL` when it fails, and the run ends with
+a summary — look for `failed steps: none` (success) versus a list of the failing step names, plus any
+`console error` lines the suite captured from the page.

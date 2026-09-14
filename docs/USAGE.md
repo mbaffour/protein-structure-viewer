@@ -40,6 +40,10 @@ expands the 3D view alone. Screens narrower than 1100 px always use the stacked 
 
 ## Getting structures in
 
+Files downloaded from the AlphaFold Database pair up on their names: drop `AF-P69905-F1-model_v6.cif`
+together with `AF-P69905-F1-predicted_aligned_error_v6.json` and the PAE is attached, exactly as when
+you fetch the accession.
+
 **Drag and drop.** Drop files anywhere on the page — the drop target is the whole window, not just
 the upload card. Several archives can be dropped together.
 

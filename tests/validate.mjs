@@ -6,7 +6,8 @@
 
    Compared: mean Cα pLDDT per model, Kabsch RMSD of every model onto model 0 (Cα paired by chain and
    residue id), per-residue Cα RMSF across the superposed models, radius of gyration and exact Cα extent,
-   and the residue set within <cutoff> Å of <chain>. Exits non-zero when any value disagrees beyond
+   the residue set within <cutoff> Å of <chain>, and the
+   buried surface area of the chain interfaces (Shrake–Rupley, against Bio.PDB.SASA). Exits non-zero when any value disagrees beyond
    the tolerances below. Requires the suite's node_modules and vendor/ (run npm test once). */
 import { chromium } from 'playwright';
 import { createServer } from 'node:http';
@@ -96,6 +97,56 @@ if (reference.contact_map) {
   }
 }
 
+/* buried surface area of the chain interfaces on model 0 (Confidence tab → Interfaces).
+   Shrake–Rupley is a sampling method: the viewer's 92 golden-spiral points and Biopython's 92 points
+   are different quasi-uniform sets, so the two agree only to the sampling error of the point count.
+   Raising both to 960 points makes them agree to 0.2 %, so the two differ only in sampling, not in
+   definition. At 92 points the spread measured over these runs is up to 1.2 % on a per-chain SASA
+   (worst for a 250-atom chain; 0.06 % for a 3 000-atom one) and up to 2.7 % on a BSA, which is a
+   difference of three large numbers in which only the interface atoms survive the cancellation.
+   Hence 2 % on SASA and 5 % on BSA: comfortably above the sampling spread, far below what a
+   disagreement in definition would produce. */
+if (reference.bsa && Number.isFinite(reference.bsa.bsa)) {
+  const bs = reference.bsa; const relBsa = 0.05; const relSasa = 0.02;
+  await page.click('[data-gpv-tab="confidence"]');
+  await page.evaluate(cut => {
+    const entry = window.__viewerDebug.entries().find(item => /_model_0\./.test(item.name));
+    const select = document.querySelector('#gpv-interface-model'); select.value = String(entry.id); select.dispatchEvent(new Event('change', { bubbles: true }));
+    const slider = document.querySelector('#gpv-interface-cutoff'); slider.value = String(cut); slider.dispatchEvent(new Event('input', { bubbles: true }));
+  }, bs.cutoff);
+  await page.click('#gpv-interface-run');
+  let interfaces = null;
+  for (let i = 0; i < 600; i += 1) {
+    await page.waitForTimeout(500);
+    interfaces = await page.evaluate(() => { const r = window.__viewerDebug.interfaceResults(); return r ? { cutoff: r.cutoff, rows: r.rows.map(row => ({ chains: row.chains, contacts: row.contacts, bsa: row.bsa })) } : null; });
+    if (interfaces) break;
+  }
+  if (!interfaces) { rows.push({ label: 'buried surface area ' + bs.chains.join('–'), viewer: NaN, reference: bs.bsa, delta: NaN, ok: false }); failed += 1; }
+  else {
+    const key = pair => pair.slice().sort().join('|');
+    check('interface chain pairs in contact at ' + bs.cutoff + ' Å', interfaces.rows.length, bs.pairs, 0);
+    const viewerRow = interfaces.rows.find(row => key(row.chains) === key(bs.chains));
+    if (!viewerRow) { rows.push({ label: 'buried surface area ' + bs.chains.join('–'), viewer: NaN, reference: bs.bsa, delta: NaN, ok: false }); failed += 1; }
+    else check('buried surface area ' + bs.chains.join('–') + ' (Å², ' + (relBsa * 100) + ' % band)', viewerRow.bsa, bs.bsa, bs.bsa * relBsa);
+    const total = interfaces.rows.reduce((sum, row) => sum + (Number.isFinite(row.bsa) ? row.bsa : NaN), 0);
+    check('total buried surface area over ' + bs.pairs + ' pairs (Å²)', total, bs.total_bsa, bs.total_bsa * relBsa);
+  }
+  /* the same Shrake–Rupley helper the BSA subtraction is built from, chain by chain */
+  const sasa = await page.evaluate(chains => {
+    const d = window.__viewerDebug; const entry = d.entries().find(item => /_model_0\./.test(item.name));
+    const heavy = d.heavyAtoms(entry); const pick = list => heavy.filter(atom => list.includes(atom.chain || ''));
+    return { a: d.solventAccessibleArea(pick([chains[0]])), b: d.solventAccessibleArea(pick([chains[1]])), ab: d.solventAccessibleArea(pick(chains)) };
+  }, bs.chains);
+  check('SASA of chain ' + bs.chains[0] + ' alone (Å², 2 % band)', sasa.a, bs.sasa_a, bs.sasa_a * relSasa);
+  check('SASA of chain ' + bs.chains[1] + ' alone (Å², 2 % band)', sasa.b, bs.sasa_b, bs.sasa_b * relSasa);
+  check('SASA of ' + bs.chains.join('+') + ' together (Å², 2 % band)', sasa.ab, bs.sasa_ab, bs.sasa_ab * relSasa);
+}
+
+/* ligand sites: report whether this run carries any ligand or ion at all. Ligand–site PAE cannot be
+   cross-validated on a run without ligands, and no synthetic structure is substituted for one. */
+const ligands = await page.evaluate(() => { const d = window.__viewerDebug; const entry = d.entries().find(item => /_model_0\./.test(item.name)); return d.ligandGroups(entry).map(group => group.resn + ' ' + group.chain + ':' + group.resi); });
+console.log('ligand or ion groups on model 0: ' + (ligands.length ? ligands.join(', ') : 'none — ligand–site PAE not exercised by this run'));
+
 /* MSA statistics: the viewer's per-residue values against the reference per-column values, for every
    alignment, on the first chain whose sequence contains the query */
 for (const msa of (reference.msa || [])) {
@@ -158,6 +209,6 @@ console.log('| quantity | viewer | reference | abs. difference | |\n|---|---:|--
 rows.forEach(row => console.log('| ' + row.label + ' | ' + format(row.viewer) + ' | ' + format(row.reference) + ' | ' + (Number.isFinite(row.delta) ? row.delta.toExponential(1) : 'set differs') + ' | ' + (row.ok ? '✓' : '✗') + ' |'));
 console.log('\nconsole errors: ' + errors.length + (errors.length ? ' :: ' + errors[0].slice(0, 160) : ''));
 console.log(failed ? 'FAILED ' + failed + ' comparison' + (failed === 1 ? '' : 's') : 'all ' + rows.length + ' comparisons within tolerance');
-await writeFile(join(folder, 'validation.json'), JSON.stringify({ run: basename(folder), models: expected, atoms: plddt[0].atoms, rows, domains, errors }, null, 1));
+await writeFile(join(folder, 'validation.json'), JSON.stringify({ run: basename(folder), models: expected, atoms: plddt[0].atoms, rows, domains, ligands, errors }, null, 1));
 await browser.close(); server.close();
 process.exit(failed || errors.length ? 1 : 0);

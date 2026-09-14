@@ -1249,6 +1249,113 @@ await step('a session file saves everything and reopens it, by the picker and by
   console.log('       ' + (bytes.length / 1024).toFixed(0) + ' KB · ' + models + ' models, ' + labels + ' labels, ' + withPae + ' PAE matrices restored twice');
 });
 
+group('AlphaFold DB entry');
+/* A real, committed download from the AlphaFold Protein Structure Database (EMBL-EBI /
+   DeepMind, CC-BY-4.0): human haemoglobin subunit alpha, UniProt P69905 — 142 residues
+   including the initiator methionine that AlphaFold's UniProt-based model retains (not
+   141, the length of the mature, Met-cleaved chain). See fixtures/alphafold-db/README.md
+   for the source URLs, licence, and download date. */
+const afdbDir = join(here, 'fixtures', 'alphafold-db');
+const afdbCif = join(afdbDir, 'AF-P69905-F1-model_v6.cif');
+const afdbPae = join(afdbDir, 'AF-P69905-F1-predicted_aligned_error_v6.json');
+
+await step('the downloaded model and PAE file load from disk as a new entry with a Cα score per residue', async () => {
+  const before = await page.locator('#gpv-list [data-entry-id]').count();
+  await tab('models');
+  await page.setInputFiles('#gpv-files', [afdbCif, afdbPae]); await page.waitForTimeout(2000);
+  const after = await page.locator('#gpv-list [data-entry-id]').count();
+  if (after !== before + 1) throw new Error('model count ' + before + ' -> ' + after);
+  const info = await page.evaluate(() => {
+    const entry = window.__viewerDebug.entries().find(e => /P69905/.test(e.name));
+    return entry ? { name: entry.name, atoms: entry.atoms.length, scores: entry.scores.length, hasPae: Boolean(entry.confidence && entry.confidence.pae) } : null;
+  });
+  if (!info) throw new Error('no entry named for P69905 after loading the fixture files');
+  if (info.atoms <= 1000) throw new Error('atoms=' + info.atoms);
+  if (info.scores !== 142) throw new Error('scores=' + info.scores + ' (P69905 is 142 residues, including the initiator Met)');
+  if (!info.hasPae) throw new Error('the PAE file was not paired with the model on drop (AlphaFold DB -model_vN / -predicted_aligned_error_vN names)');
+  console.log('       ' + info.name + ' · ' + info.atoms + ' atoms · ' + info.scores + ' Cα scores · PAE attached on drop');
+});
+await step('that entry is removed again so later steps see the same models as before', async () => {
+  const id = await page.evaluate(() => { const entry = window.__viewerDebug.entries().find(e => /P69905/.test(e.name)); return entry ? entry.id : null; });
+  if (id === null) throw new Error('no P69905 entry to remove');
+  await page.click('#gpv-list [data-entry-id="' + id + '"] button:has-text("Remove")'); await page.waitForTimeout(300);
+  if (await page.evaluate(() => window.__viewerDebug.entries().some(e => /P69905/.test(e.name)))) throw new Error('entry still present after Remove');
+});
+
+/* AlphaFold DB attaches PAE for a *fetched* entry directly (see fetchIdentifier /
+   resolveAlphafold in index.html) rather than through the local file-name heuristic
+   above. Route the same two real, committed fixture files as the network responses,
+   so the Fetch workflow — and the domain / colour / geometry checks that need a real
+   PAE matrix — run against the genuine AlphaFold DB payload with no network access. */
+const afdbCifBytes = await readFile(afdbCif, 'utf8');
+const afdbPaeBytes = await readFile(afdbPae, 'utf8');
+const afdbListing = JSON.stringify([{
+  modelEntityId: 'AF-P69905-F1',
+  cifUrl: 'https://alphafold.ebi.ac.uk/files/AF-P69905-F1-model_v6.cif',
+  paeDocUrl: 'https://alphafold.ebi.ac.uk/files/AF-P69905-F1-predicted_aligned_error_v6.json'
+}]);
+await page.route('https://alphafold.ebi.ac.uk/api/prediction/P69905', route => route.fulfill({ status: 200, contentType: 'application/json', body: afdbListing }));
+await page.route('https://alphafold.ebi.ac.uk/files/AF-P69905-F1-model_v6.cif', route => route.fulfill({ status: 200, contentType: 'chemical/x-mmcif', body: afdbCifBytes }));
+await page.route('https://alphafold.ebi.ac.uk/files/AF-P69905-F1-predicted_aligned_error_v6.json', route => route.fulfill({ status: 200, contentType: 'application/json', body: afdbPaeBytes }));
+
+await step('fetching P69905 from AlphaFold DB attaches the real 142×142 PAE matrix', async () => {
+  await page.fill('#gpv-fetch-id', 'P69905'); await page.click('#gpv-fetch'); await page.waitForTimeout(2500);
+  const info = await page.evaluate(() => {
+    const entry = window.__viewerDebug.entries().find(e => /P69905/.test(e.name));
+    return entry ? { atoms: entry.atoms.length, scores: entry.scores.length, pae: entry.confidence && entry.confidence.pae ? entry.confidence.pae.length : null } : null;
+  });
+  if (!info) throw new Error('no P69905 entry after fetch');
+  if (info.atoms <= 1000) throw new Error('atoms=' + info.atoms);
+  if (info.scores !== 142) throw new Error('scores=' + info.scores);
+  if (info.pae !== 142) throw new Error('pae rows=' + info.pae);
+});
+await step('#gpv-current selects it and the mean pLDDT is reported', async () => {
+  await page.evaluate(() => {
+    const select = document.querySelector('#gpv-current');
+    const option = [...select.options].find(item => /P69905/.test(item.textContent));
+    select.value = option.value; select.dispatchEvent(new Event('change', { bubbles: true }));
+  });
+  await page.waitForTimeout(600);
+  const text = await page.locator('#gpv-confidence').textContent();
+  if (!/Mean pLDDT \d/.test(text)) throw new Error(text);
+  const mean = Number(/Mean pLDDT ([\d.]+)/.exec(text)[1]);
+  if (!(mean >= 60 && mean <= 100)) throw new Error('mean=' + mean);
+  console.log('       ' + text.trim());
+});
+await step('PAE domains at 6 Å and assembly dimensions run without error on the real matrix', async () => {
+  const result = await page.evaluate(() => {
+    const d = window.__viewerDebug;
+    const entry = d.entries().find(e => /P69905/.test(e.name));
+    const domains = d.paeDomains(entry, 6);
+    const size = d.assemblyDimensions(entry);
+    return { domains: domains ? domains.domains.length : null, size };
+  });
+  if (!result.domains || result.domains < 1) throw new Error('domains=' + JSON.stringify(result));
+  if (!result.size || result.size.extent < 20 || result.size.extent > 80 || result.size.exact !== true) throw new Error('size=' + JSON.stringify(result.size));
+  console.log('       ' + result.domains + ' domain(s) · extent ' + result.size.extent.toFixed(1) + ' Å (exact)');
+});
+await step('plddt colour mode paints a CA atom', async () => {
+  await tab('appearance');
+  await page.selectOption('#gpv-color-mode', 'plddt'); await page.waitForTimeout(300);
+  const colour = await page.evaluate(() => {
+    const d = window.__viewerDebug; const entry = d.entries().find(e => /P69905/.test(e.name));
+    const atom = entry.atoms.find(a => a.atom === 'CA');
+    return d.colorOptions(entry).colorfunc(atom);
+  });
+  if (!colour) throw new Error('no colour returned');
+  await page.selectOption('#gpv-color-mode', 'structure'); await page.waitForTimeout(200);
+});
+await step('the fetched entry is removed so later groups see the same models as before', async () => {
+  await tab('models');
+  const id = await page.evaluate(() => { const entry = window.__viewerDebug.entries().find(e => /P69905/.test(e.name)); return entry ? entry.id : null; });
+  if (id === null) throw new Error('no P69905 entry to remove');
+  await page.click('#gpv-list [data-entry-id="' + id + '"] button:has-text("Remove")'); await page.waitForTimeout(300);
+  if (await page.evaluate(() => window.__viewerDebug.entries().some(e => /P69905/.test(e.name)))) throw new Error('entry still present after Remove');
+  await page.unroute('https://alphafold.ebi.ac.uk/api/prediction/P69905');
+  await page.unroute('https://alphafold.ebi.ac.uk/files/AF-P69905-F1-model_v6.cif');
+  await page.unroute('https://alphafold.ebi.ac.uk/files/AF-P69905-F1-predicted_aligned_error_v6.json');
+});
+
 group('share links');
 /* A minimal mmCIF built from the first fixture stands in for files.rcsb.org, so the
    fetch path and the share link round-trip run without network access. */

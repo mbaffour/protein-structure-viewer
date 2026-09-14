@@ -2,6 +2,30 @@
 
 All notable changes to this project are recorded here.
 
+## 2.23.0
+
+Built to be maintained.
+
+### Added
+
+- **Continuous integration.** `.github/workflows/tests.yml` runs the regression suite in Chromium,
+  Firefox and WebKit on every push and pull request, checks that `index.html` is built from `src/`
+  without drift, and compiles the validation scripts.
+- **A source tree.** `index.html` is now generated from `src/` (one file per section of the
+  application) by `node scripts/build.mjs`, byte for byte; the shipped artefact is still one HTML
+  file. Edits belong in `src/`.
+- **A real fixture.** The suite loads a committed AlphaFold Database entry (human haemoglobin α,
+  P69905, CC-BY-4.0) from disk and through the fetch path, and checks its PAE, domains, extent and
+  colouring.
+- **Buried surface area is cross-validated** against Biopython's Shrake–Rupley on the three real
+  runs (18 new comparisons; 123 in total). Ligand-site PAE remains unvalidated for want of a
+  ligand-bearing run; VALIDATION.md states the reference to compute.
+
+### Fixed
+
+- Files downloaded from AlphaFold DB (`AF-…-model_v6.cif` with `…-predicted_aligned_error_v6.json`)
+  now pair up when dropped in; before, only fetching by accession attached the PAE.
+
 ## 2.22.1
 
 ### Changed

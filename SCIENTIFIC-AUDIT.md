@@ -240,3 +240,33 @@ sequence weighting or pseudocounts are applied, so redundant sequences inflate c
 numbers describe the alignment AlphaFold saw. All three statistics are cross-validated column by column
 against an independent Python implementation on seven real alignments (VALIDATION.md). Columns are mapped to chains by exact or substring
 match of the one-letter sequence, so residue renumbering in the model does not affect the mapping.
+
+
+## Buried surface area (2.23.0)
+
+The Confidence tab's interface table reports, per chain pair, BSA = SASA(A alone) + SASA(B alone) −
+SASA(A and B together), by Shrake–Rupley with a 1.4 Å probe, 92 golden-spiral points per atom and
+Bondi radii (C 1.70, N 1.55, O 1.52, S 1.80 Å), over every non-hydrogen atom of the two chains. It is
+the total area buried on both partners — it is **not** halved into "per side", and it is floored at
+zero. It is cross-validated since 2.23.0 against `Bio.PDB.SASA.ShrakeRupley` configured identically,
+on the same three runs: the number of chain pairs in contact matches exactly, and the areas agree to
+1.2 % (per-chain SASA) and 2.7 % (BSA). That residual is sampling, not definition — both
+implementations use 92 points but not the same 92, and recomputing each at 960 points brings them to
+within 0.2 % (VALIDATION.md). The practical consequence is that the viewer's BSA carries about two
+significant figures; the table's whole-Å² display is finer than the number deserves, and a BSA should
+be quoted as "about 1 000 Å²", not "1 024 Å²". Comparing BSA values between two models of the same
+complex is sounder than quoting one in isolation, since the sampling bias largely cancels.
+
+## Ligand-site PAE — still unvalidated (2.23.0)
+
+The ligand-site table's PAE column is the mean of the symmetrised PAE over every ligand token against
+every token of every site residue, the site being residues with a heavy atom within the cutoff of any
+ligand atom. It remains **not cross-validated**: all three validation runs are protein-only, with no
+hetero group in any model and no ligand in any job request, so there is no real data to check it
+against. A synthetic ligand was deliberately not fabricated — it would test the arithmetic against
+itself rather than the viewer against an independent reading of a real AlphaFold 3 file. VALIDATION.md
+records the reference to compute (tokens from `token_chain_ids` / `token_res_ids`, site by heavy-atom
+distance in Biopython, mean of ½(PAE[i][j] + PAE[j][i]), tolerance 10⁻³ Å) so the check can be run
+unchanged the day a ligand-bearing prediction is available. Until then the column should be read as
+untested code, and the site residue list beside it — which follows the same distance rule as the
+validated contact map — trusted further than the PAE mean itself.

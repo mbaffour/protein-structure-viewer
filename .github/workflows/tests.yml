@@ -1,0 +1,65 @@
+name: tests
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+concurrency:
+  group: tests-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  playwright:
+    name: playwright (${{ matrix.browser }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    strategy:
+      fail-fast: false
+      matrix:
+        browser: [chromium, firefox, webkit]
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: tests/package-lock.json
+
+      - name: Install dependencies
+        working-directory: tests
+        run: npm ci
+
+      - name: Install Playwright browser (${{ matrix.browser }})
+        working-directory: tests
+        run: npx playwright install --with-deps ${{ matrix.browser }}
+
+      - name: Run regression suite
+        working-directory: tests
+        env:
+          PSV_BROWSER: ${{ matrix.browser }}
+        run: npm test
+
+  validate-scripts:
+    name: validate scripts
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Check fixtures.mjs loads
+        run: node --input-type=module -e "await import('./tests/fixtures.mjs')"
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.x'
+
+      - name: Compile reference.py
+        run: python3 -m py_compile tests/reference.py

@@ -1,6 +1,7 @@
 # Protein Structure Viewer
 
 [![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.22741487.svg)](https://doi.org/10.5281/zenodo.22741487)
+[![Tests](https://github.com/mbaffour/protein-structure-viewer/actions/workflows/tests.yml/badge.svg)](https://github.com/mbaffour/protein-structure-viewer/actions/workflows/tests.yml)
 
 A single-file, browser-based viewer for predicted and experimental protein structures. It is built
 for the everyday work around a structure prediction run: look at the models, compare them, check
@@ -217,8 +218,9 @@ computes, with Biopython and numpy, the mean Cα pLDDT, the Kabsch RMSD of each 
 per-residue Cα RMSF across the superposed models, radius of gyration, exact Cα extent and the residue
 set within a cutoff of one chain; `tests/validate.mjs` drives the real viewer on the same files and
 compares. On three AlphaFold 3 runs (an M13 virion tip, an MS2 maturation-protein–coat complex and a
-phiX174 F–G complex) all 105 comparisons — including the interface contact map and the MSA
-statistics — agree to within the rounding of the reference (5 × 10⁻⁵ Å for distances).
+phiX174 F–G complex) all 123 comparisons — including the interface contact map, the MSA statistics and
+buried surface area — agree within tolerance (rounding of the reference for distances; 5 % for
+buried surface area, which two 92-point Shrake–Rupley samplings cannot match more closely).
 [`VALIDATION.md`](VALIDATION.md) has the tables, what is and is not covered, and how to rerun the check on
 your own run. The viewer also loads a five-model, 4 410-token assembly with 175 MB of confidence JSON per
 model in under eight seconds and a fraction of a gigabyte of memory.
@@ -231,7 +233,8 @@ For GitHub Pages: repository **Settings → Pages**, deploy from the `main` bran
 
 ## Development
 
-There is nothing to build or install — edit `index.html` and reload the page.
+There is nothing to install, and nothing to build in order to *use* the viewer — open `index.html` and
+reload the page. Edits, though, belong in `src/`: see [Building from source](#building-from-source).
 
 A headless regression suite lives in [`tests/`](tests/):
 
@@ -262,6 +265,41 @@ file, the SVG keeps text as text in the chosen figure font, and a scale bar can 
 **Colour-blind-safe palette** (Okabe–Ito) covers chains and domains, and **Write figure legend**
 drafts the legend including the colour bands, cut-offs, alignment statistics, print settings and a
 rendering credit. See [`docs/USAGE.md`](docs/USAGE.md#publishing-a-figure) for the checklist.
+
+## Building from source
+
+`index.html` stays the shipped artefact: one self-contained HTML file, committed to the repository, that
+needs no build step to open. It is *generated*, though, from the parts in [`src/`](src/), so that work can
+happen in files small enough to read:
+
+```
+src/00-head.html      doctype, head, styles and markup, up to the main script's `(() => {`
+src/js/00-preamble.js the start of the application IIFE
+src/js/NN-<name>.js   one file per section of the IIFE, in order
+src/99-tail.html      the closing `})();` and everything after it
+```
+
+Edits belong in `src/`, never in `index.html` directly. Then regenerate:
+
+```
+node scripts/build.mjs
+```
+
+The build is a plain concatenation of the parts in lexical order — no dependencies, no transform, no
+reformatting — so the generated file is byte-identical to the sum of its sources. Commit `index.html`
+along with the `src/` change.
+
+To check that the two have not drifted apart:
+
+```
+node scripts/build.mjs --check
+```
+
+It exits non-zero and names the first differing line if `index.html` was edited directly or `src/` was
+edited without rebuilding. CI runs this check on every change.
+
+`scripts/split.mjs` is the one-off that produced `src/` from `index.html` in the first place. It is kept,
+and is idempotent, so the split can be re-derived and audited rather than taken on trust.
 
 ## How to cite
 

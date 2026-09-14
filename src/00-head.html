@@ -1,0 +1,1516 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="referrer" content="no-referrer">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self' 'unsafe-inline' 'unsafe-eval' 'wasm-unsafe-eval' blob: https://cdnjs.cloudflare.com https://cdn.jsdelivr.net; style-src 'self' 'unsafe-inline'; img-src 'self' blob: data:; font-src 'self' data:; media-src 'self' blob: data:; connect-src 'self' blob: data: https://files.rcsb.org https://alphafold.ebi.ac.uk https://cdnjs.cloudflare.com https://cdn.jsdelivr.net; worker-src blob:; frame-src 'none'; object-src 'none'; base-uri 'none'; form-action 'none'">
+<title>Protein Structure Viewer</title>
+<meta name="description" content="A single-file, offline-capable browser viewer for AlphaFold and experimental protein structures: overlay, align, measure, inspect confidence, and export publication figures without uploading anything.">
+<meta name="color-scheme" content="light dark">
+<link rel="icon" type="image/svg+xml" href="data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' rx='7' fill='%23339cff'/><path d='M9 24c0-9 14-7 14-16' stroke='%23fff' stroke-width='2.6' stroke-linecap='round' fill='none'/><path d='M9 8c0 9 14 7 14 16' stroke='%23fff' stroke-width='2.6' stroke-linecap='round' fill='none' opacity='.55'/><circle cx='16' cy='16' r='2.6' fill='%23fff'/></svg>">
+<style>:root {
+  color-scheme: light dark;
+  background-color: var(--background) !important;
+
+  /* Agent-facing contract; keep in sync with SKILL.md. */
+  --background: light-dark(rgb(255 255 255), rgb(24 24 24));
+  --foreground: light-dark(rgb(26 28 31), rgb(255 255 255));
+  --card: color-mix(in oklab, var(--foreground) 5%, transparent);
+  --card-foreground: var(--foreground);
+  --popover: light-dark(rgb(255 255 255), rgb(45 45 45));
+  --popover-foreground: var(--foreground);
+  --primary: light-dark(rgb(51 156 255), rgb(131 195 255));
+  --primary-foreground: light-dark(rgb(255 255 255), rgb(13 13 13));
+  --secondary: light-dark(rgb(255 255 255 / 96%), rgb(54 54 54 / 96%));
+  --secondary-foreground: var(--foreground);
+  --muted: color-mix(in srgb, var(--foreground) 10%, transparent);
+  --muted-foreground: light-dark(
+    rgb(26 28 31 / 49.4%),
+    rgb(255 255 255 / 49.8%)
+  );
+  --accent: light-dark(rgb(229 242 255), rgb(13 39 63));
+  --accent-foreground: var(--primary);
+  --destructive: light-dark(rgb(226 85 7), rgb(255 133 73));
+  --border: light-dark(rgb(26 28 31 / 8%), rgb(255 255 255 / 8.2%));
+  --input: light-dark(
+    rgb(26 28 31 / 11.8%),
+    color-mix(in oklab, rgb(0 0 0) 10%, transparent)
+  );
+  --ring: light-dark(rgb(51 156 255), rgb(131 195 255 / 76%));
+  --font-size-base: 14px;
+  --viz-series-1: var(--primary);
+  --viz-series-2: light-dark(rgb(243 136 59), rgb(245 154 86));
+  --viz-series-3: light-dark(rgb(93 201 119), rgb(116 213 139));
+  --viz-series-4: light-dark(rgb(235 119 177), rgb(240 143 192));
+  --viz-series-5: light-dark(rgb(155 121 236), rgb(170 145 239));
+  --viz-series-6: light-dark(rgb(58 185 177), rgb(90 203 194));
+
+  /* Internal implementation variables; not part of the agent contract. */
+  --font-sans: -apple-system, system-ui, "Segoe UI", sans-serif;
+  --font-mono:
+    ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, "Liberation Mono",
+    monospace;
+  --font-size-normal: max(11px, var(--font-size-base));
+  --font-size-tooltip: calc(var(--font-size-base) - 1px);
+  --font-size-small: max(11px, calc(var(--font-size-base) - 2px));
+  --font-size-h1: calc(var(--font-size-normal) * 1.7142857143);
+  --font-size-h2: calc(var(--font-size-normal) * 1.4285714286);
+  --font-size-h3: calc(var(--font-size-normal) * 1.2857142857);
+  --font-weight-normal: 430;
+  --font-weight-medium: 500;
+  --line-height-normal: calc(var(--font-size-normal) * 1.5);
+  --line-height-tooltip: calc(var(--font-size-tooltip) * 1.4285714286);
+  --line-height-small: calc(var(--font-size-small) + 4px);
+  --radius: 12.5px;
+  --radius-sm: calc(var(--radius) * 0.6);
+  --radius-md: calc(var(--radius) * 0.8);
+  --radius-lg: var(--radius);
+  --radius-2xl: calc(var(--radius) * 1.6);
+  --radius-full: 9999px;
+  --shadow-sm: 0 1px 2px -1px rgb(0 0 0 / 8%);
+  --checkmark-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 17 17'%3E%3Cpath d='M12.8961 3.64101C13.1297 3.41418 13.4984 3.37523 13.7779 3.56581C14.0571 3.75635 14.1554 4.11331 14.0299 4.41347L13.9615 4.53847L7.71151 13.7045C7.59411 13.8767 7.4063 13.9877 7.19881 14.0072C6.99136 14.0267 6.78564 13.9533 6.63826 13.806L2.88826 10.056L2.79842 9.9457C2.6192 9.67407 2.64927 9.30496 2.88826 9.06581C3.12738 8.82669 3.49647 8.79676 3.76815 8.97597L3.8785 9.06581L7.03084 12.2182L12.8053 3.74941L12.8961 3.64101Z'/%3E%3C/svg%3E");
+
+  /* Legacy aliases; not part of the current agent contract. */
+  --viz-bg: transparent;
+  --viz-panel: var(--card);
+  --viz-border: var(--border);
+  --viz-text: var(--foreground);
+  --viz-muted: var(--muted-foreground);
+  --viz-accent: var(--primary);
+  --viz-accent-text: var(--primary-foreground);
+  --viz-accent-bg: var(--accent);
+  --viz-font-size: var(--font-size-base);
+  --viz-warning: var(--destructive);
+  --color-background-primary: var(--background);
+  --color-text-primary: var(--foreground);
+  --color-border-secondary: var(--border);
+}
+
+:root[data-theme="light"] {
+  color-scheme: light;
+}
+
+:root[data-theme="dark"] {
+  color-scheme: dark;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html > body {
+  margin: 0;
+  padding: 5px;
+  color: var(--foreground);
+  background: transparent !important;
+  font-family: var(--font-sans);
+  font-size: var(--font-size-normal);
+  font-weight: var(--font-weight-normal);
+  line-height: var(--line-height-normal);
+}
+
+a {
+  color: color-mix(in srgb, var(--viz-accent) 80%, var(--viz-text) 20%);
+  cursor: pointer;
+  font-weight: var(--viz-font-weight-medium);
+  text-decoration: none;
+  text-underline-offset: 2px;
+}
+
+a:is(:hover, :focus-visible) {
+  text-decoration-line: underline;
+  text-decoration-style: dashed;
+  text-decoration-thickness: 0.5px;
+}
+
+h1,
+h2,
+h3,
+h4,
+h5,
+h6,
+p {
+  margin-block: 0;
+}
+
+h1 {
+  font-size: var(--font-size-h1);
+  font-weight: var(--font-weight-medium);
+  line-height: 1.25;
+}
+
+h2 {
+  font-size: var(--font-size-h2);
+  font-weight: var(--font-weight-medium);
+  line-height: 1.25;
+}
+
+h3,
+h4,
+h5,
+h6 {
+  font-size: var(--font-size-h3);
+  font-weight: var(--font-weight-medium);
+  line-height: 1.3;
+}
+
+b,
+strong,
+th {
+  font-weight: var(--font-weight-medium);
+}
+
+code:not(pre code) {
+  display: inline;
+  padding: 1px 6px;
+  border-radius: var(--radius-sm);
+  corner-shape: superellipse(1.5);
+  background: var(--muted);
+  font-family: var(--font-mono);
+  font-size: 0.92em;
+  overflow-wrap: anywhere;
+  -webkit-box-decoration-break: clone;
+  box-decoration-break: clone;
+  word-break: break-word;
+}
+
+.table-responsive {
+  width: 100%;
+  overflow-x: auto;
+  scrollbar-width: thin;
+}
+
+.table {
+  width: 100%;
+  border-collapse: collapse;
+  color: var(--foreground);
+  font: inherit;
+  text-align: start;
+}
+
+.table :is(th, td) {
+  padding-block: 10px;
+  padding-inline: 0 24px;
+  overflow-wrap: anywhere;
+  border-bottom: 1px solid var(--border);
+  text-align: start;
+  vertical-align: top;
+}
+
+.table-responsive > .table :is(th, td) {
+  overflow-wrap: break-word;
+}
+
+.table :is(th, td):last-child {
+  padding-inline-end: 0;
+}
+
+.table :is(caption, thead th) {
+  font-weight: 600;
+}
+
+.table thead th {
+  padding-block: 8px;
+  border-bottom-color: color-mix(in srgb, var(--foreground) 16%, transparent);
+}
+
+.table tbody tr:last-child :is(th, td) {
+  border-bottom: 0;
+}
+
+.table.table-sm :is(th, td) {
+  padding-block: 6px;
+}
+
+.table.table-sm :is(th, td):not(:last-child) {
+  padding-inline-end: 16px;
+}
+
+.table :is(.text-end, [align="right"]) {
+  text-align: end;
+  font-variant-numeric: tabular-nums;
+}
+
+.table :is(.text-center, [align="center"]) {
+  text-align: center;
+}
+
+.table .text-nowrap {
+  white-space: nowrap;
+}
+
+#widget {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  width: 100%;
+  padding: 0;
+  background: transparent !important;
+}
+
+.card {
+  min-width: 0;
+  padding: 12px;
+  overflow: hidden;
+  overflow-wrap: break-word;
+  border-radius: var(--radius-2xl);
+  corner-shape: superellipse(1.5);
+  color: var(--card-foreground);
+  background: var(--card);
+}
+
+#widget > :not(.card) {
+  width: 100% !important;
+  max-width: none !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  border: 0 !important;
+  border-radius: 0 !important;
+  background: transparent !important;
+  box-shadow: none !important;
+}
+
+.tooltip {
+  position: fixed;
+  z-index: 50;
+  top: 0;
+  left: 0;
+  width: max-content;
+  max-width: min(
+    20rem,
+    var(--tooltip-available-width, calc(100vw - 10px)),
+    calc(100vw - 10px)
+  );
+  max-height: min(
+    var(--tooltip-available-height, calc(100vh - 10px)),
+    calc(100vh - 10px)
+  );
+  padding: 4px 8px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  corner-shape: superellipse(1.5);
+  color: var(--popover-foreground);
+  background: var(--popover);
+  box-shadow: none;
+  font-size: var(--font-size-tooltip);
+  line-height: var(--line-height-tooltip);
+  overflow-wrap: break-word;
+  white-space: normal;
+  pointer-events: none;
+  user-select: none;
+}
+
+.viz-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(max(180px, 24%), 1fr));
+  gap: 10px;
+}
+
+.viz-stat {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.viz-stat-value {
+  font-size: var(--font-size-h2);
+  font-weight: var(--font-weight-medium);
+  line-height: 1.25;
+}
+
+.viz-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+}
+
+.viz-badge {
+  padding: 3px 8px;
+  border-radius: var(--radius-full);
+  color: var(--accent-foreground);
+  background: var(--accent);
+  font-weight: var(--font-weight-medium);
+}
+
+small,
+.text-small,
+.viz-badge {
+  font-size: var(--font-size-small);
+  line-height: var(--line-height-small);
+}
+
+.text-muted {
+  color: var(--muted-foreground);
+}
+
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+.viz-controls {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.viz-controls > .form-label {
+  display: grid;
+  min-width: min(100%, 260px);
+  flex: 1 1 280px;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: baseline;
+  gap: 2px 12px;
+  margin-bottom: 0;
+}
+
+.viz-controls > .form-label > :is(.form-control, .form-range, .form-select) {
+  grid-column: 1 / -1;
+}
+
+.btn,
+.form-check-input,
+.form-control,
+.form-range,
+.form-select {
+  font: inherit;
+}
+
+.btn {
+  appearance: button;
+  display: inline-flex;
+  inline-size: fit-content;
+  max-inline-size: 100%;
+  min-height: 28px;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  margin: 0;
+  padding: 0 8px;
+  -webkit-app-region: no-drag;
+  border: 1px solid var(--input);
+  border-radius: var(--radius-lg);
+  corner-shape: superellipse(1.5);
+  color: var(--secondary-foreground);
+  background: var(--secondary);
+  cursor: var(--cursor-interaction, pointer);
+  text-align: center;
+  text-decoration: none;
+  white-space: nowrap;
+  user-select: none;
+  -webkit-font-smoothing: antialiased;
+}
+
+.btn:is(.btn-block, .viz-tile) {
+  inline-size: 100%;
+}
+
+.btn.viz-tile {
+  min-width: 0;
+  overflow-wrap: anywhere;
+  white-space: normal;
+}
+
+a.btn {
+  cursor: pointer;
+  text-decoration: none;
+}
+
+.btn:not(:disabled):hover {
+  background: color-mix(in srgb, var(--foreground) 6%, var(--secondary));
+}
+
+.btn-primary {
+  border-color: transparent;
+  color: var(--primary-foreground);
+  background: var(--foreground);
+  background-clip: padding-box;
+}
+
+.btn-primary .text-muted {
+  color: color-mix(in srgb, var(--primary-foreground) 50%, transparent);
+}
+
+.btn-primary:not(:disabled):hover {
+  background: color-mix(in srgb, var(--foreground) 80%, transparent);
+  background-clip: padding-box;
+}
+
+.btn-ghost {
+  border-color: transparent;
+  color: var(--muted-foreground);
+  background: transparent;
+}
+
+.btn-ghost:not(:disabled):hover {
+  color: var(--foreground);
+  background: color-mix(in srgb, var(--foreground) 6%, var(--secondary));
+}
+
+.btn:disabled {
+  cursor: not-allowed;
+  opacity: 0.4;
+}
+
+[data-icon] {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: center;
+}
+
+[data-icon] svg {
+  stroke-width: 1.6;
+}
+
+.form-label {
+  display: block;
+  margin-bottom: 6px;
+  color: var(--foreground);
+}
+
+.form-control {
+  display: block;
+  width: 100%;
+  min-height: 28px;
+  padding: 0 8px;
+  outline: none;
+  border: 1px solid var(--input);
+  border-radius: var(--radius-lg);
+  corner-shape: superellipse(1.5);
+  color: var(--foreground);
+  background: var(--secondary);
+}
+
+.form-control::placeholder {
+  color: var(--muted-foreground);
+}
+
+.form-control[type="file"] {
+  padding: 0;
+  overflow: hidden;
+  cursor: var(--cursor-interaction, pointer);
+}
+
+.form-control[type="file"]::file-selector-button {
+  min-height: 26px;
+  margin-right: 8px;
+  padding: 0 8px;
+  border: 0;
+  border-right: 1px solid var(--input);
+  color: var(--secondary-foreground);
+  background: var(--secondary);
+  cursor: inherit;
+  font: inherit;
+}
+
+.form-control[type="file"]:not(:disabled):hover::file-selector-button {
+  background: color-mix(in srgb, var(--foreground) 6%, var(--secondary));
+}
+
+.form-control-color[type="color"] {
+  width: 40px;
+  height: 28px;
+  padding: 3px;
+  cursor: var(--cursor-interaction, pointer);
+}
+
+.form-control-color[type="color"]::-webkit-color-swatch-wrapper {
+  padding: 0;
+}
+
+.form-control-color[type="color"]::-webkit-color-swatch {
+  border: 0;
+  border-radius: calc(var(--radius-lg) - 4px);
+  corner-shape: superellipse(1.5);
+}
+
+textarea.form-control {
+  height: auto;
+  min-height: 72px;
+  padding: 8px 10px;
+  resize: vertical;
+}
+
+.form-control:focus-visible {
+  border-color: var(--ring);
+  box-shadow: inset 0 0 0 1px var(--ring);
+}
+
+.form-control:disabled,
+.form-select:disabled {
+  cursor: not-allowed;
+  opacity: 0.4;
+}
+
+.form-select {
+  appearance: none;
+  display: block;
+  width: 100%;
+  min-height: 28px;
+  margin: 0;
+  padding: 0 32px 0 8px;
+  outline: none;
+  border: 1px solid var(--input);
+  border-radius: var(--radius-lg);
+  corner-shape: superellipse(1.5);
+  color: var(--foreground);
+  background-color: var(--secondary);
+  background-image:
+    linear-gradient(45deg, transparent 50%, var(--muted-foreground) 50%),
+    linear-gradient(135deg, var(--muted-foreground) 50%, transparent 50%);
+  background-position:
+    calc(100% - 14px) 50%,
+    calc(100% - 10px) 50%;
+  background-repeat: no-repeat;
+  background-size: 4px 4px;
+  cursor: var(--cursor-interaction, default);
+}
+
+.form-select:not(:disabled):hover {
+  background-color: color-mix(in srgb, var(--foreground) 6%, var(--secondary));
+}
+
+.form-select:focus-visible {
+  border-color: var(--ring);
+  box-shadow: inset 0 0 0 1px var(--ring);
+}
+
+.form-check {
+  display: flex;
+  min-height: 20px;
+  align-items: center;
+  gap: 6px;
+}
+
+.form-check-input {
+  appearance: none;
+  width: 14px;
+  height: 14px;
+  flex: 0 0 auto;
+  margin: 0;
+  border: 1px solid var(--input);
+  color: var(--primary-foreground);
+  background-color: transparent;
+  cursor: var(--cursor-interaction, default);
+  transition:
+    background-color 150ms,
+    border-color 150ms,
+    box-shadow 150ms;
+}
+
+.form-check:not(.form-switch) .form-check-input[type="checkbox"] {
+  border-color: var(--input);
+  border-radius: var(--radius-sm);
+  corner-shape: superellipse(1.5);
+  background-color: var(--secondary);
+  box-shadow: var(--shadow-sm);
+}
+
+.form-check:not(.form-switch)
+  .form-check-input:not(:disabled):not(:checked):hover {
+  background-color: var(--card);
+}
+
+.form-check:not(.form-switch) .form-check-input[type="checkbox"]:checked {
+  border-color: var(--primary);
+  background-color: var(--primary);
+}
+
+.form-check:not(.form-switch)
+  .form-check-input[type="checkbox"]:checked::before {
+  display: block;
+  width: 100%;
+  height: 100%;
+  background: var(--primary-foreground);
+  content: "";
+  mask: var(--checkmark-image) center / 12px 12px no-repeat;
+}
+
+.form-check-input[type="radio"] {
+  width: 14px;
+  height: 14px;
+  border-radius: var(--radius-full);
+}
+
+.form-check-input[type="radio"]:checked {
+  border: 2px solid var(--primary);
+  background:
+    radial-gradient(circle, var(--primary-foreground) 0 2.5px, transparent 3px),
+    var(--primary);
+}
+
+.form-check:not(.form-switch) .form-check-input:focus-visible {
+  outline: 2px solid var(--ring);
+  outline-offset: 2px;
+}
+
+.form-check:not(.form-switch) .form-check-input:disabled {
+  cursor: not-allowed;
+  pointer-events: none;
+}
+
+.form-check:not(.form-switch) .form-check-input:disabled + .form-check-label {
+  cursor: not-allowed;
+}
+
+.form-switch .form-check-input:disabled,
+.form-switch .form-check-input:disabled + .form-check-label {
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+
+.form-check-label {
+  color: var(--foreground);
+  cursor: var(--cursor-interaction, default);
+}
+
+.form-switch .form-check-input {
+  position: relative;
+  width: 32px;
+  height: 20px;
+  border: 0;
+  border-radius: var(--radius-full);
+  background: var(--muted);
+  box-shadow: none;
+  transition: background-color 200ms cubic-bezier(0, 0, 0.2, 1);
+}
+
+.form-switch .form-check-input::before {
+  position: absolute;
+  top: 50%;
+  left: 0;
+  width: 16px;
+  height: 16px;
+  box-sizing: border-box;
+  border: 1px solid light-dark(var(--primary-foreground), var(--foreground));
+  border-radius: var(--radius-full);
+  background: light-dark(var(--primary-foreground), var(--foreground));
+  box-shadow: var(--shadow-sm);
+  content: "";
+  transform: translate(2px, -50%);
+  transition: transform 200ms cubic-bezier(0, 0, 0.2, 1);
+}
+
+.form-switch .form-check-input:checked {
+  background: var(--primary);
+}
+
+.form-switch .form-check-input:checked::before {
+  transform: translate(14px, -50%);
+}
+
+.form-switch .form-check-input:focus-visible {
+  box-shadow: 0 0 0 2px var(--ring);
+}
+
+.form-range {
+  appearance: none;
+  display: block;
+  width: 100%;
+  height: 28px;
+  flex: 1;
+  margin: 0;
+  padding: 0;
+  outline: none;
+  border: 0;
+  accent-color: var(--primary);
+  background: linear-gradient(
+      color-mix(in srgb, var(--foreground) 7%, transparent),
+      color-mix(in srgb, var(--foreground) 7%, transparent)
+    )
+    center / 100% 2px no-repeat;
+}
+
+.form-range::-webkit-slider-runnable-track {
+  height: 28px;
+  background: transparent;
+}
+
+.form-range::-webkit-slider-thumb {
+  appearance: none;
+  width: 20px;
+  height: 20px;
+  margin-top: 4px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-full);
+  background: light-dark(var(--primary-foreground), var(--foreground));
+}
+
+.form-range:focus-visible::-webkit-slider-thumb {
+  border-color: var(--ring);
+  box-shadow: inset 0 0 0 1px var(--ring);
+}
+
+.form-range::-moz-range-track {
+  height: 28px;
+  background: transparent;
+}
+
+.form-range::-moz-range-thumb {
+  width: 20px;
+  height: 20px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-full);
+  background: light-dark(var(--primary-foreground), var(--foreground));
+}
+
+.form-range:focus-visible::-moz-range-thumb {
+  border-color: var(--ring);
+  box-shadow: inset 0 0 0 1px var(--ring);
+}
+
+.form-range:disabled {
+  cursor: not-allowed;
+  opacity: 0.4;
+}
+
+.btn:not(.btn-primary, .viz-tile):is(
+    [aria-pressed="true"],
+    [aria-selected="true"],
+    .is-selected
+  ) {
+  border-color: var(--primary);
+  color: var(--primary-foreground);
+  background: var(--primary);
+}
+
+.btn.viz-tile:is([aria-pressed="true"], [aria-selected="true"], .is-selected) {
+  border-color: var(--primary);
+  box-shadow: inset 0 0 0 1px var(--primary);
+}
+
+.btn:focus-visible {
+  outline: 2px solid var(--ring);
+  outline-offset: 2px;
+}
+
+svg {
+  display: block;
+  max-width: 100%;
+  height: auto;
+}
+
+#widget > svg {
+  width: 100%;
+}
+
+.text-warning,
+.text-destructive {
+  color: var(--destructive);
+}
+
+html>body{padding:0}</style>
+</head>
+<body>
+<div id="generic-protein-viewer">
+  <header class="gpv-header">
+    <div class="gpv-brand">
+      <span class="gpv-brand-mark" aria-hidden="true"><i data-icon="orbit"></i></span>
+      <span class="gpv-brand-copy">
+        <strong>Protein Structure Viewer</strong>
+        <span class="text-muted text-small">Compare, annotate, and publish predicted and experimental structures — entirely in your browser</span>
+      </span>
+    </div>
+    <div class="gpv-header-actions">
+      <button class="btn btn-ghost gpv-icon-btn" type="button" id="gpv-layout" data-tooltip="Switch between the side-panel workspace and the stacked layout" aria-label="Layout: side panel" aria-pressed="true"><i data-icon="panel-right" aria-hidden="true"></i></button>
+      <button class="btn btn-ghost gpv-icon-btn" type="button" id="gpv-panel-side" data-tooltip="Swap the tool panel and the 3D view between left and right" aria-label="Tool panel on the left: click to move it right"><i data-icon="arrow-left-right" aria-hidden="true"></i></button>
+      <button class="btn btn-ghost gpv-icon-btn" type="button" id="gpv-theme" data-tooltip="Switch between system, light, and dark appearance" aria-label="Appearance: follow system"><i data-icon="monitor" aria-hidden="true"></i><span class="gpv-theme-text">System</span></button>
+      <button class="btn btn-ghost gpv-icon-btn" type="button" id="gpv-help-open" data-tooltip="Keyboard shortcuts and quick help (?)" aria-label="Open help"><i data-icon="circle-help" aria-hidden="true"></i><span class="gpv-hide-narrow">Help</span></button>
+    </div>
+  </header>
+
+  <div class="card gpv-drop" id="gpv-drop">
+    <span class="gpv-drop-icon" aria-hidden="true"><i data-icon="folder-up"></i></span>
+    <strong>Add structures or AlphaFold result ZIPs</strong>
+    <span class="text-muted">Drop files anywhere on this page, or choose PDB, CIF/mmCIF, JSON, CSV, A3M and ZIP files</span>
+    <span class="gpv-drop-badges"><span class="viz-badge">Multiple ZIPs</span><span class="viz-badge">Local processing</span><span class="viz-badge">No upload</span></span>
+    <div class="gpv-drop-actions">
+      <input class="form-control gpv-file-input" id="gpv-files" aria-label="Choose model files" type="file" accept=".pdb,.cif,.mmcif,.json,.csv,.zip,.a3m" multiple>
+      <form class="gpv-fetch" id="gpv-fetch-form">
+        <input class="form-control gpv-fetch-field" id="gpv-fetch-id" type="text" autocomplete="off" spellcheck="false" aria-label="Structure identifier to fetch" placeholder="or fetch an ID: 1ubq, P69905">
+        <button class="btn" type="submit" id="gpv-fetch" data-tooltip="Download a PDB entry from RCSB, or an AlphaFold DB model from EMBL-EBI"><i data-icon="cloud-download" aria-hidden="true"></i>Fetch</button>
+      </form>
+    </div>
+    <span class="text-muted text-small gpv-fetch-note">Fetching contacts <code>files.rcsb.org</code> or <code>alphafold.ebi.ac.uk</code>. Files you open locally are never sent anywhere.</span>
+  </div>
+  <div class="gpv-import-state" id="gpv-import-state" hidden aria-live="polite">
+    <progress id="gpv-import-progress" value="0" max="1"></progress>
+    <span class="text-small" id="gpv-import-label">Preparing files…</span>
+  </div>
+  <div class="text-destructive text-small" id="gpv-import-errors" hidden role="alert"></div>
+
+  <div class="gpv-workspace" id="gpv-workspace">
+  <div class="gpv-stage-column" id="gpv-stage-column">
+  <div class="viz-controls gpv-primary" aria-label="Primary viewer controls">
+    <label class="form-label gpv-current-label">Current model
+      <select class="form-select" id="gpv-current" disabled><option>No models loaded</option></select>
+    </label>
+    <button class="btn" type="button" id="gpv-previous" disabled data-tooltip="Previous model (left arrow)"><i data-icon="chevron-left" aria-hidden="true"></i>Previous</button>
+    <button class="btn" type="button" id="gpv-next" disabled data-tooltip="Next model (right arrow)">Next<i data-icon="chevron-right" aria-hidden="true"></i></button>
+    <button class="btn" type="button" id="gpv-fit" data-tooltip="Recentre and zoom to everything on screen (F)"><i data-icon="scan" aria-hidden="true"></i>Fit</button>
+    <span class="gpv-orient" role="group" aria-label="Rotate the view in 90 degree steps"><button class="btn" type="button" id="gpv-rotate-x" data-tooltip="Rotate 90° about the horizontal axis (X; Shift reverses)">↻ X</button><button class="btn" type="button" id="gpv-rotate-y" data-tooltip="Rotate 90° about the vertical axis (Y; Shift reverses)">↻ Y</button><button class="btn" type="button" id="gpv-rotate-z" data-tooltip="Rotate 90° in the screen plane (Z; Shift reverses)">↻ Z</button><button class="btn btn-ghost" type="button" id="gpv-orient-reset" data-tooltip="Back to the orientation of the file itself (Shift + R)">Reset</button></span>
+    <button class="btn" type="button" id="gpv-fullscreen" data-tooltip="Expand the 3D view to fill the screen (Shift + F)"><i data-icon="maximize" aria-hidden="true"></i>Full screen</button>
+    <button class="btn btn-primary" type="button" id="gpv-report" disabled data-tooltip="Download a self-contained interactive HTML report"><i data-icon="share-2" aria-hidden="true"></i>Share report</button>
+  </div>
+
+  <div class="gpv-restore text-small" id="gpv-session-banner" hidden role="status"><span id="gpv-session-text"></span><button class="btn btn-primary" type="button" id="gpv-session-yes">Restore</button><button class="btn btn-ghost" type="button" id="gpv-session-no">Not now</button><button class="btn btn-ghost" type="button" id="gpv-session-forget">Forget it</button></div>
+  <div class="gpv-view-grid" id="gpv-view-grid">
+    <div class="gpv-view-pane">
+      <span class="viz-badge gpv-view-label" id="gpv-left-label" hidden>Primary</span>
+      <div class="card gpv-stage" id="gpv-stage" tabindex="0" role="application" aria-label="Interactive three-dimensional protein structure viewer. Drag to rotate, scroll to zoom, click an atom to inspect it."></div>
+      <div class="gpv-stage-empty" id="gpv-stage-empty"><i data-icon="orbit" aria-hidden="true"></i><strong>No structure loaded yet</strong><span class="text-muted">Drop a PDB, CIF, or AlphaFold ZIP anywhere on this page, or fetch an ID above</span><button class="btn" type="button" id="gpv-demo"><i data-icon="cloud-download" aria-hidden="true"></i>Load an example (PDB 1ubq)</button></div>
+      <div class="gpv-scalebar text-small" id="gpv-scalebar" hidden aria-hidden="true"><span id="gpv-scalebar-label"></span><i id="gpv-scalebar-line"></i></div>
+      <div class="gpv-busy" id="gpv-busy" hidden aria-hidden="true"><span class="gpv-spinner"></span><span id="gpv-busy-label">Working…</span></div>
+    </div>
+  </div>
+  <div class="gpv-status text-small">
+    <span id="gpv-count">0 structures</span>
+    <span id="gpv-confidence">Mean pLDDT —</span>
+    <span id="gpv-state" aria-live="polite">Ready</span>
+    <span id="gpv-hover" class="gpv-hover" aria-hidden="true"></span>
+  </div>
+  <div class="gpv-sequence" id="gpv-sequence" hidden>
+    <div class="gpv-sequence-head text-small">
+      <strong id="gpv-sequence-title">Sequence</strong>
+      <span class="text-muted" id="gpv-sequence-hint">Hover to read a residue · click to select it for a label · drag to pick a range · double-click to zoom</span>
+      <button class="btn btn-ghost" type="button" id="gpv-sequence-toggle" aria-expanded="true" aria-controls="gpv-sequence-rows">Hide sequence</button>
+    </div>
+    <div class="gpv-sequence-rows" id="gpv-sequence-rows"></div>
+    <details class="gpv-sequence-text" id="gpv-sequence-text"><summary class="text-small">Sequence letters</summary><div id="gpv-sequence-letters"></div></details>
+  </div>
+  <div class="gpv-tip text-small" id="gpv-tip" hidden><i data-icon="info" aria-hidden="true"></i><span id="gpv-tip-text"></span><button class="btn btn-ghost" type="button" id="gpv-tip-next">Next tip</button><button class="btn btn-ghost gpv-icon-btn" type="button" id="gpv-tip-hide" aria-label="Hide tips"><i data-icon="x" aria-hidden="true"></i></button></div>
+
+  <div class="gpv-legend text-small" id="gpv-plddt-legend" hidden aria-label="Colour legend"></div>
+  </div>
+  <div class="gpv-splitter" id="gpv-splitter" role="separator" aria-orientation="vertical" aria-label="Resize the tool panel" tabindex="0" title="Drag to resize the tool panel"></div>
+  <aside class="gpv-side-panel" id="gpv-side-panel" aria-label="Tool panel">
+
+  <div class="viz-controls gpv-tabs" role="tablist" aria-label="Viewer tools">
+    <button class="btn" type="button" role="tab" aria-selected="true" data-gpv-tab="models"><i data-icon="layers-3" aria-hidden="true"></i>Models</button>
+    <button class="btn" type="button" role="tab" aria-selected="false" data-gpv-tab="appearance"><i data-icon="palette" aria-hidden="true"></i>Appearance</button>
+    <button class="btn" type="button" role="tab" aria-selected="false" data-gpv-tab="annotate"><i data-icon="mouse-pointer-2" aria-hidden="true"></i>Annotate</button>
+    <button class="btn" type="button" role="tab" aria-selected="false" data-gpv-tab="compare"><i data-icon="columns-2" aria-hidden="true"></i>Compare</button>
+    <button class="btn" type="button" role="tab" aria-selected="false" data-gpv-tab="confidence"><i data-icon="chart-no-axes-column-increasing" aria-hidden="true"></i>Confidence</button>
+    <button class="btn" type="button" role="tab" aria-selected="false" data-gpv-tab="publish"><i data-icon="image-down" aria-hidden="true"></i>Publish</button>
+  </div>
+
+  <section class="gpv-tool-panel" data-gpv-panel="models">
+    <div class="viz-controls">
+      <label class="form-label gpv-current-label">Source<select class="form-select" id="gpv-source-filter"><option value="all">All loaded sources</option></select></label>
+      <label class="form-label gpv-current-label">Find models<input class="form-control" id="gpv-model-search" type="search" placeholder="Filter by name or stoichiometry"></label>
+      <label class="form-label">View mode<select class="form-select" id="gpv-view-mode"><option value="overlay">Overlay selected</option><option value="single">One at a time</option></select></label>
+      <label class="form-label">Model order<select class="form-select" id="gpv-order"><option value="loaded">As loaded</option><option value="ranking">Ranking score</option><option value="plddt">Mean pLDDT</option></select></label>
+      <button class="btn" type="button" id="gpv-cycle" disabled data-tooltip="Step through the filtered models automatically (C)"><i data-icon="play" aria-hidden="true"></i>Cycle models</button>
+      <label class="form-label gpv-slider-label">Interval <span id="gpv-cycle-value">2.0 s</span><input class="form-range" id="gpv-cycle-speed" type="range" min="0.5" max="10" value="2" step="0.5"></label>
+      <button class="btn" type="button" id="gpv-show-all" data-tooltip="Show every model that matches the current filter"><i data-icon="eye" aria-hidden="true"></i>Show all</button>
+      <button class="btn" type="button" id="gpv-hide-all" data-tooltip="Hide every model that matches the current filter"><i data-icon="eye-off" aria-hidden="true"></i>Hide all</button>
+      <button class="btn" type="button" id="gpv-fasta" disabled data-tooltip="Download the sequences of the displayed models as FASTA, one record per chain"><i data-icon="download" aria-hidden="true"></i>Download FASTA</button>
+      <button class="btn btn-ghost" type="button" id="gpv-clear" data-tooltip="Remove all models, annotations, and saved views"><i data-icon="trash-2" aria-hidden="true"></i>Clear all</button>
+    </div>
+    <div class="gpv-list" id="gpv-list" aria-label="Loaded structures"></div>
+    <details class="gpv-composition" id="gpv-composition" open hidden><summary class="text-small">Composition of the current model</summary>
+      <div class="table-responsive"><table class="table table-sm" aria-label="Chains of the current model"><thead><tr><th>Chain</th><th class="text-end">Residues</th><th>Range</th><th class="text-end">Mean pLDDT</th><th>Shown</th><th data-tooltip="Blend the chain most of the way into the background to spotlight the others; kept in panels, exports and the sequence strip">Faded</th></tr></thead><tbody id="gpv-chain-rows"></tbody></table></div>
+      <div class="text-small text-muted" id="gpv-assembly-summary"></div>
+      <div class="viz-controls"><span class="text-small text-muted" id="gpv-hetero-summary"></span><button class="btn btn-ghost" type="button" id="gpv-chains-all" data-tooltip="Show every chain of the current model again">Show all chains</button></div>
+    </details>
+    <div class="viz-controls gpv-list-more" id="gpv-list-more" hidden>
+      <span class="text-muted text-small" id="gpv-list-more-label"></span>
+      <button class="btn btn-ghost" type="button" id="gpv-show-more"><i data-icon="chevron-down" aria-hidden="true"></i>Show more</button>
+    </div>
+    <div class="gpv-empty text-muted" id="gpv-empty">Load one or more structures to begin.</div>
+  </section>
+
+  <section class="gpv-tool-panel" data-gpv-panel="appearance" hidden>
+    <div class="viz-controls gpv-presets"><span class="text-small text-muted">Presets</span><button class="btn" type="button" id="gpv-preset-thesis" data-tooltip="White background, orthographic cartoon, legend on exports, 1800 × 1200 at 2×">Thesis figure</button><button class="btn" type="button" id="gpv-preset-slide" data-tooltip="Dark background, perspective cartoon, colour by chain">Dark slide</button><button class="btn" type="button" id="gpv-preset-review" data-tooltip="pLDDT colouring with the legend, every residue shown, ligands as sticks">Confidence review</button></div>
+    <div class="viz-controls">
+      <label class="form-label">Representation<select class="form-select" id="gpv-style"><option value="cartoon">Cartoon</option><option value="stick">Sticks</option><option value="sphere">Spheres</option><option value="line">Lines</option></select></label>
+      <label class="form-label">Color scheme<select class="form-select" id="gpv-color-mode"><option value="structure">Per structure</option><option value="chain">Per chain</option><option value="entity">Per entity (identical sequences)</option><option value="plddt">pLDDT confidence</option><option value="deviation">Cα deviation after alignment</option><option value="agreement">Model agreement (Cα RMSF)</option><option value="domain">PAE domains</option><option value="annotated">Annotated domains</option><option value="data">Per-residue data</option><option value="charge">Residue charge</option><option value="hydrophobicity">Hydrophobicity (Kyte–Doolittle)</option><option value="restype">Residue type</option><option value="amino">Amino acid</option><option value="ss">Secondary structure</option><option value="spectrum">Sequence spectrum</option><option value="element">Element</option></select></label>
+      <label class="form-label">Low confidence<select class="form-select" id="gpv-hide-below" data-tooltip="Hide residues whose pLDDT is below the threshold — in the viewer, every panel and every export"><option value="0">Show every residue</option><option value="50">Hide pLDDT below 50</option><option value="70">Hide pLDDT below 70</option></select></label>
+      <label class="form-label">Ligands and ions<select class="form-select" id="gpv-hetero" data-tooltip="How hetero groups — ligands, cofactors, ions, glycans — are drawn; water is never shown"><option value="stick">Sticks and spheres</option><option value="sphere">Spheres</option><option value="hide">Hidden</option></select></label>
+      <label class="form-check form-switch"><input class="form-check-input" id="gpv-safe-palette" type="checkbox"><span class="form-check-label">Colour-blind-safe palette (Okabe–Ito) for chains and domains</span></label>
+      <label class="form-label">Surface<select class="form-select" id="gpv-surface" data-tooltip="Molecular surface coloured by the current scheme — charge or hydrophobicity on a surface reads like an electrostatics view"><option value="none">None</option><option value="translucent">Translucent surface</option><option value="opaque">Opaque surface</option></select></label>
+      <label class="form-label">Projection<select class="form-select" id="gpv-projection"><option value="perspective">Perspective</option><option value="orthographic">Orthographic</option></select></label>
+      <label class="form-label">Outline<select class="form-select" id="gpv-outline" data-tooltip="Silhouette line around every element — the ink-drawing look that keeps overlapping chains legible in print; drawn in every panel and export"><option value="none">None</option><option value="thin">Thin</option><option value="bold">Bold</option></select></label>
+      <label class="form-check form-switch"><input class="form-check-input" id="gpv-fog" type="checkbox"><span class="form-check-label">Depth cueing (distant parts fade)</span></label>
+      <label class="form-label">Background<select class="form-select" id="gpv-background"><option value="transparent">Transparent</option><option value="white">White</option><option value="dark">Dark</option><option value="custom">Custom</option></select></label>
+      <label class="form-label">Custom background<input class="form-control form-control-color" id="gpv-background-color" type="color" value="#ffffff"></label>
+      <label class="form-label">Motion<select class="form-select" id="gpv-motion"><option value="off">Off</option><option value="spin">Spin</option><option value="rock">Rock</option></select></label>
+      <label class="form-label gpv-slider-label">Speed <span id="gpv-speed-value">1.0×</span><input class="form-range" id="gpv-speed" type="range" min="0.25" max="2.5" value="1" step="0.25"></label>
+    </div>
+  </section>
+
+  <section class="gpv-tool-panel" data-gpv-panel="annotate" hidden>
+    <div class="viz-controls gpv-history"><div class="gpv-selected-state" id="gpv-residue">Click a residue in the viewer or in the sequence strip to inspect it.</div><label class="form-label gpv-goto">Go to<input class="form-control" id="gpv-goto" type="text" placeholder="B:45 or 45" aria-label="Residue to go to, optionally with its chain"></label><button class="btn" type="button" id="gpv-goto-run" data-tooltip="Select the residue and zoom to it">Go</button><button class="btn btn-ghost" type="button" id="gpv-undo" disabled data-tooltip="Undo the last label, selection, measurement or annotation change (Ctrl/⌘ + Z)">Undo</button><button class="btn btn-ghost" type="button" id="gpv-redo" disabled data-tooltip="Redo (Ctrl/⌘ + Shift + Z)">Redo</button></div>
+    <div class="viz-controls">
+      <label class="form-label">Residue label<input class="form-control" id="gpv-label-text" type="text" placeholder="Custom label"></label>
+      <button class="btn" type="button" id="gpv-add-label" disabled>Add or update</button>
+      <label class="form-check form-switch"><input class="form-check-input" id="gpv-all-labels" type="checkbox"><span class="form-check-label">Label every residue</span></label>
+      <label class="form-label">Label style<select class="form-select" id="gpv-label-style" data-tooltip="Boxed labels read on any background; plain text suits clean figures where the box would hide the model"><option value="boxed">Boxed</option><option value="plain">Plain text</option></select></label>
+      <button class="btn btn-ghost" type="button" id="gpv-clear-labels">Clear labels</button>
+    </div>
+    <div class="gpv-list" id="gpv-label-list" aria-label="Residue labels"></div>
+    <div class="viz-controls">
+      <label class="form-label gpv-current-label">Selection model<select class="form-select" id="gpv-selection-model" disabled><option>No models loaded</option></select></label>
+      <label class="form-label">Chain<input class="form-control" id="gpv-selection-chain" type="text" placeholder="A"></label>
+      <label class="form-label">Residues<input class="form-control" id="gpv-selection-range" type="text" placeholder="20-45 or 20,24,31"></label>
+      <label class="form-label">Action<select class="form-select" id="gpv-selection-action"><option value="highlight">Highlight</option><option value="hide">Hide</option></select></label>
+      <label class="form-label">Highlight color<input class="form-control form-control-color" id="gpv-selection-color" type="color" value="#f97316"></label>
+      <button class="btn" type="button" id="gpv-add-selection" disabled>Add selection</button>
+      <button class="btn btn-ghost" type="button" id="gpv-clear-selections">Clear selections</button>
+    </div>
+    <div class="viz-controls">
+      <label class="form-label">Near<select class="form-select" id="gpv-near-target"><option value="hetero">Ligands and ions</option><option value="chain">A chain…</option><option value="residue">The selected residue</option></select></label>
+      <label class="form-label">Chain<input class="form-control" id="gpv-near-chain" type="text" placeholder="B" maxlength="4"></label>
+      <label class="form-label">Within (Å)<input class="form-control" id="gpv-near-cutoff" type="number" min="2" max="12" step="0.5" value="4.5"></label>
+      <button class="btn" type="button" id="gpv-near-run" disabled data-tooltip="Highlight residues of the current model with any heavy atom within the cutoff of the target, in the highlight colour above">Highlight nearby residues</button>
+      <button class="btn btn-ghost" type="button" id="gpv-near-copy" disabled data-tooltip="Copy the nearby residue list to the clipboard">Copy residue list</button>
+    </div>
+    <div class="viz-controls">
+      <label class="form-label">Sequence motif<input class="form-control" id="gpv-motif" type="text" placeholder="N[^P][ST]  or  RGD  or  C.{2,4}C" maxlength="80" aria-label="Sequence motif as a regular expression over one-letter codes"></label>
+      <button class="btn" type="button" id="gpv-motif-run" disabled data-tooltip="Highlight every match of the pattern in every chain of the current model, in the highlight colour above">Highlight motif</button>
+      <span class="text-muted text-small" id="gpv-motif-state">Regular expression over one-letter codes; X stands for unknown residues.</span>
+    </div>
+    <div class="gpv-list" id="gpv-selection-list" aria-label="Structure selections"></div>
+    <h3 class="gpv-subheading">Domains</h3>
+    <p class="text-muted text-small gpv-hint">Name a region, give it a colour, and choose how far it applies: this model only, every model from the same source (an AlphaFold run), or every loaded model. Colour by annotated domains paints them and lists them by name in the legend.</p>
+    <div class="viz-controls">
+      <label class="form-label">Domain name<input class="form-control" id="gpv-domain-name" type="text" placeholder="N-lobe" maxlength="60"></label>
+      <label class="form-label">Chain<input class="form-control" id="gpv-domain-chain" type="text" placeholder="all" maxlength="4"></label>
+      <label class="form-label">Residues<input class="form-control" id="gpv-domain-range" type="text" placeholder="1-75 or 1-75,120-140"></label>
+      <label class="form-label">Colour<input class="form-control form-control-color" id="gpv-domain-colour" type="color" value="#2563eb"></label>
+      <label class="form-label">Applies to<select class="form-select" id="gpv-domain-scope"><option value="source" selected>Every model from the same source</option><option value="model">This model only</option><option value="all">Every loaded model</option></select></label>
+      <button class="btn" type="button" id="gpv-add-domain" disabled>Add domain</button>
+      <button class="btn" type="button" id="gpv-domain-adopt" disabled data-tooltip="Turn the PAE domains found in the Confidence tab into named, editable domains">Adopt PAE domains</button>
+      <button class="btn" type="button" id="gpv-domain-paint" disabled data-tooltip="Switch the colour scheme to annotated domains">Colour by annotated domains</button>
+      <button class="btn btn-ghost" type="button" id="gpv-clear-domains">Clear domains</button>
+    </div>
+    <div class="gpv-list" id="gpv-domain-list" aria-label="Annotated domains"></div>
+    <h3 class="gpv-subheading">Per-residue data</h3>
+    <p class="text-muted text-small gpv-hint">Map your own numbers onto the structure — conservation, deep mutational scores, ΔΔG, coverage. A table with residue and value columns (chain optional) as CSV or TSV, chosen or pasted. Colour by per-residue data paints the values with a gradient legend, and the sequence strip follows.</p>
+    <div class="viz-controls">
+      <label class="form-label">Table file<input class="form-control gpv-file-input" id="gpv-data-file" type="file" accept=".csv,.tsv,.txt"></label>
+      <label class="form-label">Or paste<textarea class="form-control" id="gpv-data-text" rows="2" placeholder="chain,resi,value&#10;A,12,0.83"></textarea></label>
+      <label class="form-label">Name<input class="form-control" id="gpv-data-name" type="text" placeholder="Conservation" maxlength="40"></label>
+      <label class="form-label">Colour scale<select class="form-select" id="gpv-data-scale"><option value="viridis" selected>Viridis (sequential)</option><option value="diverging">Blue – white – red (diverging, centred on 0)</option><option value="heat">White – red (sequential)</option></select></label>
+      <label class="form-label">Applies to<select class="form-select" id="gpv-data-scope"><option value="source" selected>Every model from the same source</option><option value="model">This model only</option><option value="all">Every loaded model</option></select></label>
+      <button class="btn" type="button" id="gpv-data-apply" disabled>Load values</button>
+      <button class="btn" type="button" id="gpv-data-paint" disabled data-tooltip="Switch the colour scheme to per-residue data">Colour by data</button>
+      <button class="btn" type="button" id="gpv-data-csv" disabled data-tooltip="The loaded per-residue values as chain, residue, name, value">Download data CSV</button>
+      <button class="btn btn-ghost" type="button" id="gpv-data-clear">Clear data</button>
+      <span class="text-muted text-small" id="gpv-data-state">No per-residue data loaded.</span>
+    </div>
+    <div class="viz-controls">
+      <label class="form-label">Measurement<select class="form-select" id="gpv-measure-type"><option value="distance">Distance (2 atoms)</option><option value="angle">Angle (3 atoms)</option></select></label>
+      <button class="btn" type="button" id="gpv-measure">Start measuring</button>
+      <button class="btn btn-ghost" type="button" id="gpv-clear-measurements">Clear measurements</button>
+      <span class="text-muted" id="gpv-measure-state">Measurement mode is off.</span>
+    </div>
+    <div class="gpv-list" id="gpv-measurement-list" aria-label="Measurements"></div>
+    <h3 class="gpv-subheading">Figure annotations</h3>
+    <p class="text-muted text-small gpv-hint">Arrows, lines, markers and callouts are anchored to atoms, so they follow rotation and alignment and appear in PNG exports, comparison panels, and the shared report.</p>
+    <div class="viz-controls">
+      <label class="form-label">Tool<select class="form-select" id="gpv-annotation-type"><option value="arrow">Arrow · click 2 atoms</option><option value="line">Line · click 2 atoms</option><option value="marker">Residue marker · click 1 atom</option><option value="callout">Text callout · click 1 atom</option></select></label>
+      <label class="form-label gpv-current-label">Text<input class="form-control" id="gpv-annotation-text" type="text" placeholder="Optional label, e.g. active site"></label>
+      <label class="form-label">Colour<input class="form-control form-control-color" id="gpv-annotation-color" type="color" value="#f97316"></label>
+      <label class="form-label gpv-slider-label">Size <span id="gpv-annotation-size-value">1×</span><input class="form-range" id="gpv-annotation-size" type="range" min="0.5" max="3" value="1" step="0.25"></label>
+      <label class="form-check form-switch"><input class="form-check-input" id="gpv-annotation-dashed" type="checkbox"><span class="form-check-label">Dashed</span></label>
+      <button class="btn" type="button" id="gpv-annotate" disabled><i data-icon="mouse-pointer-2" aria-hidden="true"></i>Start drawing</button>
+      <span class="text-muted" id="gpv-annotation-state">Pick a tool, start drawing, then click atoms in the main viewer.</span>
+    </div>
+    <div class="viz-controls">
+      <label class="form-label gpv-current-label">Screen text<input class="form-control" id="gpv-screen-text" type="text" placeholder="Panel title, e.g. A · Round tip"></label>
+      <label class="form-label">Corner<select class="form-select" id="gpv-screen-corner"><option value="top-left">Top left</option><option value="top-right">Top right</option><option value="bottom-left">Bottom left</option><option value="bottom-right">Bottom right</option></select></label>
+      <button class="btn" type="button" id="gpv-add-screen-text" disabled>Add screen text</button>
+      <button class="btn btn-ghost" type="button" id="gpv-clear-annotations">Clear annotations</button>
+    </div>
+    <div class="gpv-list" id="gpv-annotation-list" aria-label="Figure annotations"></div>
+  </section>
+
+  <section class="gpv-tool-panel" data-gpv-panel="compare" hidden>
+    <div class="viz-controls">
+      <label class="form-label gpv-current-label">Alignment reference<select class="form-select" id="gpv-reference" disabled><option>No models loaded</option></select></label>
+      <label class="form-label">Residue mapping<select class="form-select" id="gpv-alignment-mode"><option value="sequence">Sequence-aware</option><option value="identifier">Chain and residue IDs</option></select></label>
+      <button class="btn" type="button" id="gpv-align" disabled>Align visible</button>
+      <button class="btn" type="button" id="gpv-restore" disabled>Restore coordinates</button>
+      <button class="btn" type="button" id="gpv-alignment-csv" disabled>Download RMSD CSV</button>
+      <button class="btn" type="button" id="gpv-rmsf-csv" disabled data-tooltip="Per-residue Cα spread (RMSF) across the aligned models — the ensemble agreement the colour scheme shows">Download RMSF CSV</button>
+    </div>
+    <div class="table-responsive" id="gpv-alignment-wrap" hidden><table class="table table-sm" aria-label="Structural alignment results"><thead><tr><th>Model</th><th>Reference</th><th class="text-end">Cα pairs</th><th class="text-end">Identity</th><th class="text-end">RMSD (Å)</th><th>Mapping</th></tr></thead><tbody id="gpv-alignment-results"></tbody></table></div>
+    <div class="viz-controls">
+      <label class="form-check form-switch"><input class="form-check-input" id="gpv-side-by-side" type="checkbox"><span class="form-check-label">Synchronized multi-view</span></label>
+      <label class="form-label">Camera sync<select class="form-select" id="gpv-sync-mode"><option value="rotation">Rotation only</option><option value="full">Rotation and zoom</option></select></label>
+      <label class="form-label gpv-current-label">Primary panel<select class="form-select" id="gpv-left-model" disabled><option>No models loaded</option></select></label>
+      <button class="btn" type="button" id="gpv-add-panel" disabled data-tooltip="Add another synchronized viewport — up to six in total"><i data-icon="columns-2" aria-hidden="true"></i>Add panel</button>
+      <button class="btn btn-ghost" type="button" id="gpv-clear-panels" disabled>Remove all panels</button>
+    </div>
+    <p class="text-muted text-small gpv-hint">Every panel follows the others as you drag, spin, or rock. <strong>Rotation only</strong> keeps each model framed on its own centre, which suits assemblies of different size. <strong>Rotation and zoom</strong> locks the cameras completely, which suits superposed models of the same target after <em>Align visible</em>.</p>
+    <div class="gpv-list" id="gpv-compare-panels" aria-label="Comparison panels"></div>
+    <details class="gpv-contacts" id="gpv-contacts" open>
+      <summary>Interface contact map</summary>
+      <div class="viz-controls">
+        <label class="form-label">Chain<select class="form-select" id="gpv-contact-a" aria-label="First chain"></select></label>
+        <label class="form-label">against chain<select class="form-select" id="gpv-contact-b" aria-label="Second chain"></select></label>
+        <label class="form-label">Atoms<select class="form-select" id="gpv-contact-atoms"><option value="heavy">Any heavy atom</option><option value="ca">Cα only</option></select></label>
+        <label class="form-label">Cutoff (Å)<input class="form-control" id="gpv-contact-cutoff" type="number" min="3" max="15" step="0.5" value="4.5"></label>
+        <button class="btn" type="button" id="gpv-contact-run" disabled data-tooltip="Residue pairs of the two chains with atoms closer than the cutoff, as a map: rows are the first chain, columns the second">Compute contacts</button>
+        <button class="btn" type="button" id="gpv-contact-highlight" disabled data-tooltip="Highlight every interface residue of both chains in the 3D view">Highlight interface</button>
+        <button class="btn" type="button" id="gpv-contact-png" disabled data-tooltip="Contact map with axes and title at 300 dpi">Download map PNG</button>
+        <button class="btn" type="button" id="gpv-contact-csv" disabled data-tooltip="One row per residue pair with the closest atom distance">Download contacts CSV</button>
+      </div>
+      <p class="text-small text-muted" id="gpv-contact-state">Show a model with two or more chains.</p>
+      <div id="gpv-contact-wrap" hidden>
+        <canvas class="gpv-contact-canvas" id="gpv-contact-canvas" width="560" height="560" role="img" aria-label="Residue contact map"></canvas>
+        <div class="text-small text-muted" id="gpv-contact-readout">Hover a cell to read the residue pair · click a contact to select both residues and zoom to them</div>
+      </div>
+    </details>
+  </section>
+
+  <section class="gpv-tool-panel" data-gpv-panel="confidence" hidden>
+    <div class="gpv-confidence-layout" id="gpv-confidence-panel" hidden>
+      <div><div class="viz-controls gpv-msa" aria-label="Multiple sequence alignment"><span class="text-small text-muted">MSA</span><label class="form-label">Colour by<select class="form-select" id="gpv-msa-metric"><option value="conservation">Conservation (1 − normalised entropy)</option><option value="identity">Identity to the query</option><option value="depth">Coverage (sequences per column)</option></select></label><button class="btn" type="button" id="gpv-msa-paint" disabled data-tooltip="Read the unpaired MSA that AlphaFold 3 used (the .a3m in the archive) and colour each chain it covers by the chosen per-column statistic">Colour by MSA</button><span class="text-muted text-small" id="gpv-msa-state">No alignment loaded. AlphaFold 3 archives carry one per entity; an .a3m can also be added on its own.</span></div>
+      <div class="viz-controls"><button class="btn" type="button" id="gpv-confidence-csv">Download confidence CSV</button><button class="btn" type="button" id="gpv-profile-svg" disabled data-tooltip="Per-residue pLDDT plot of the displayed models, one panel per chain, as editable SVG">pLDDT profile SVG</button><button class="btn" type="button" id="gpv-profile-png" disabled data-tooltip="The same pLDDT profile rendered at 2× as PNG">pLDDT profile PNG</button></div><div class="table-responsive"><table class="table table-sm" aria-label="AlphaFold model confidence metrics"><thead><tr><th>Model</th><th class="text-end">Mean pLDDT</th><th class="text-end">pTM</th><th class="text-end">ipTM</th><th class="text-end">Ranking score</th><th class="text-end">Rank</th><th>Clash</th></tr></thead><tbody id="gpv-metrics"></tbody></table></div></div>
+      <div class="gpv-pae-panel" id="gpv-pae-panel" hidden><div id="gpv-pae-plot" hidden><div class="viz-controls"><button class="btn" type="button" id="gpv-pae-png">Download PAE PNG</button></div><canvas id="gpv-pae" width="420" height="420" role="img" aria-label="Predicted aligned error heatmap"></canvas><div class="gpv-pae-legend text-small"><span>Low error</span><span>PAE (Å)</span><span>High error</span></div><div class="text-small" id="gpv-pae-detail">Move over the heatmap to inspect a residue pair.</div></div><div class="table-responsive" id="gpv-interface-wrap" hidden><table class="table table-sm" aria-label="Chain-pair interface confidence"><thead><tr><th>Chain pair</th><th class="text-end">ipTM</th><th class="text-end">Min PAE (Å)</th></tr></thead><tbody id="gpv-interface-metrics"></tbody></table></div></div>
+    </div>
+    <h3 class="gpv-subheading">PAE domains</h3>
+    <p class="text-muted text-small gpv-hint">Residues whose predicted aligned error to one another is low are placed together in the prediction. Ten-residue segments are merged greedily while the mean PAE between groups stays below the cutoff. This reads the PAE matrix; it is not a structural domain assignment, and it says nothing about whether the placement is right.</p>
+    <div class="viz-controls">
+      <label class="form-label">PAE cutoff<select class="form-select" id="gpv-domain-cutoff"><option value="4">4 Å (strict)</option><option value="6" selected>6 Å</option><option value="8">8 Å (loose)</option></select></label>
+      <button class="btn" type="button" id="gpv-domain-run" disabled>Find domains</button>
+      <button class="btn" type="button" id="gpv-domain-color" disabled data-tooltip="Switch the colour scheme to PAE domains">Colour by domains</button>
+      <button class="btn" type="button" id="gpv-domain-highlight" disabled data-tooltip="Add one highlight selection per domain, in the domain colours">Highlight all</button>
+      <span class="text-muted text-small" id="gpv-domain-state">Show a model with a PAE matrix, then find its domains.</span>
+    </div>
+    <div class="table-responsive" id="gpv-domain-wrap" hidden><table class="table table-sm" aria-label="PAE-derived domains of the current model"><thead><tr><th>Domain</th><th>Residues</th><th class="text-end">Count</th><th class="text-end">Mean PAE within (Å)</th><th></th></tr></thead><tbody id="gpv-domain-rows"></tbody></table></div>
+    <h3 class="gpv-subheading">Ligand sites</h3>
+    <p class="text-muted text-small gpv-hint">For each ligand or ion of the current model: the residues with a heavy atom within the cutoff, their mean pLDDT, and — when the PAE matrix carries ligand tokens (AlphaFold 3) — the mean predicted aligned error between the ligand and its site. A low site pLDDT or a high ligand–site PAE says the pose is not to be trusted, whatever it looks like.</p>
+    <div class="viz-controls">
+      <label class="form-label">Contact cutoff (Å)<input class="form-control" id="gpv-site-cutoff" type="number" min="2" max="8" step="0.5" value="4.5"></label>
+      <button class="btn" type="button" id="gpv-site-run" disabled>Analyse ligand sites</button>
+      <button class="btn" type="button" id="gpv-site-csv" disabled>Download sites CSV</button>
+      <span class="text-muted text-small" id="gpv-site-state">Show a model with ligands or ions.</span>
+    </div>
+    <div class="table-responsive" id="gpv-site-wrap" hidden><table class="table table-sm" aria-label="Ligand binding sites of the current model"><thead><tr><th>Ligand</th><th class="text-end">Atoms</th><th class="text-end">Site residues</th><th class="text-end">Site mean pLDDT</th><th class="text-end">Ligand–site PAE (Å)</th><th></th></tr></thead><tbody id="gpv-site-rows"></tbody></table></div>
+    <h3 class="gpv-subheading">Interfaces</h3>
+    <p class="text-muted text-small gpv-hint">Geometry of the model as loaded: inter-chain heavy-atom contacts and buried surface area (Shrake–Rupley, 1.4 Å probe, 92 points per atom). A predicted interface is a hypothesis about an interaction, not evidence of one — read it next to the chain-pair ipTM and PAE above.</p>
+    <div class="viz-controls">
+      <label class="form-label gpv-current-label">Model<select class="form-select" id="gpv-interface-model" disabled><option>No models loaded</option></select></label>
+      <label class="form-label gpv-slider-label">Contact cutoff <span id="gpv-interface-cutoff-value">4.0 Å</span><input class="form-range" id="gpv-interface-cutoff" type="range" min="3" max="6" step="0.5" value="4"></label>
+      <button class="btn" type="button" id="gpv-interface-run" disabled><i data-icon="crosshair" aria-hidden="true"></i>Analyse interfaces</button>
+      <button class="btn" type="button" id="gpv-interface-csv" disabled>Download interface CSV</button>
+      <label class="form-label">Highlight colour<input class="form-control form-control-color" id="gpv-interface-color" type="color" value="#e11d48"></label>
+      <span class="text-muted text-small" id="gpv-interface-state"></span>
+    </div>
+    <div class="table-responsive" id="gpv-contacts-wrap" hidden><table class="table table-sm" aria-label="Inter-chain interface geometry"><thead><tr><th>Chain pair</th><th class="text-end">Atom contacts</th><th class="text-end">Residue pairs</th><th class="text-end">Interface residues</th><th class="text-end">Buried surface (Å²)</th><th></th></tr></thead><tbody id="gpv-contacts-rows"></tbody></table></div>
+  </section>
+
+  <section class="gpv-tool-panel" data-gpv-panel="publish" hidden>
+    <div class="viz-controls">
+      <label class="form-label">Image size<select class="form-select" id="gpv-export-size"><option value="1200x1200">Square · 1200 × 1200</option><option value="1800x1200" selected>Landscape · 1800 × 1200</option><option value="1200x1800">Portrait · 1200 × 1800</option><option value="2400x1600">Large landscape · 2400 × 1600</option></select></label>
+      <label class="form-label">Scale<select class="form-select" id="gpv-export-scale"><option value="1">1×</option><option value="2" selected>2×</option><option value="4">4×</option></select></label>
+      <label class="form-label">Output<select class="form-select" id="gpv-export-mode" data-tooltip="Print size states a physical width and resolution and writes the resolution into the file; text is sized in points at that width"><option value="print" selected>Print size (mm at dpi)</option><option value="pixels">Pixels (size × scale)</option></select></label>
+      <label class="form-label">Journal preset<select class="form-select" id="gpv-journal" data-tooltip="Sets the printed width, resolution, text size and font from the journal's figure guide; check the current guide before submitting"><option value="">Choose a journal…</option><option value="89|300|7">Nature · single column · 89 mm</option><option value="183|300|7">Nature · double column · 183 mm</option><option value="55|300|7">Science · one column · 55 mm</option><option value="121|300|7">Science · two columns · 121 mm</option><option value="184|300|7">Science · three columns · 184 mm</option><option value="85|300|7">Cell Press · one column · 85 mm</option><option value="114|300|7">Cell Press · 1.5 columns · 114 mm</option><option value="174|300|7">Cell Press · two columns · 174 mm</option><option value="87|300|7">PNAS · one column · 87 mm</option><option value="178|300|7">PNAS · two columns · 178 mm</option><option value="190|300|8">PLOS · full width · 190 mm</option><option value="85|300|8">eLife · one column · 85 mm</option><option value="170|300|8">eLife · full width · 170 mm</option></select></label>
+      <label class="form-label">Figure width<select class="form-select" id="gpv-print-width"><option value="85">85 mm · single column</option><option value="114">114 mm · 1.5 columns</option><option value="178" selected>178 mm · double column</option><option value="custom">Custom…</option></select></label>
+      <label class="form-label">Custom width (mm)<input class="form-control" id="gpv-print-custom" type="number" min="20" max="400" step="1" value="120"></label>
+      <label class="form-label">Aspect<select class="form-select" id="gpv-print-aspect"><option value="1.5" selected>3 : 2</option><option value="1">1 : 1</option><option value="0.75">3 : 4</option><option value="1.7778">16 : 9</option></select></label>
+      <label class="form-label">Resolution<select class="form-select" id="gpv-print-dpi"><option value="300" selected>300 dpi</option><option value="600">600 dpi</option></select></label>
+      <label class="form-label">Text size<select class="form-select" id="gpv-print-text" data-tooltip="Point size of labels, callouts, measurements and the legend at the printed width"><option value="6">6 pt</option><option value="7">7 pt</option><option value="8" selected>8 pt</option><option value="10">10 pt</option></select></label>
+      <label class="form-label">Figure font<select class="form-select" id="gpv-figure-font"><option value="Arial, Helvetica, sans-serif" selected>Arial / Helvetica</option><option value="'Times New Roman', Times, serif">Times</option><option value="system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif">System default</option></select></label>
+      <label class="form-label">Scale bar<select class="form-select" id="gpv-scale-bar" data-tooltip="Bar of known length at the model centre, bottom right of the figure; exact in orthographic projection"><option value="0" selected>None</option><option value="10">10 Å</option><option value="20">20 Å</option><option value="50">50 Å</option><option value="100">100 Å</option></select></label>
+      <span class="text-muted text-small" id="gpv-export-estimate"></span>
+      <button class="btn" type="button" id="gpv-image" disabled>Download publication PNG</button>
+      <button class="btn" type="button" id="gpv-copy-image" disabled data-tooltip="Render the publication PNG and put it on the clipboard, ready to paste into slides or a document">Copy PNG to clipboard</button>
+      <button class="btn" type="button" id="gpv-tiff" disabled data-tooltip="Uncompressed RGB TIFF with the resolution written into the file, for journals that require TIFF">Download publication TIFF</button>
+      <button class="btn" type="button" id="gpv-svg" disabled data-tooltip="Raster molecule with labels, arrows, callouts and legend as editable vector layers">Download figure SVG</button>
+      <button class="btn" type="button" id="gpv-compare-image" disabled data-tooltip="Stitch every synchronized panel into one lettered figure at the chosen size">Download comparison PNG</button>
+      <button class="btn" type="button" id="gpv-model-panels" disabled data-tooltip="One lettered panel per model, every panel rendered from the current camera — the five models of an AlphaFold run side by side, identically framed">Download one panel per model</button>
+    </div>
+    <div class="viz-controls gpv-composite" aria-label="Composite figure">
+      <span class="text-small text-muted">Composite figure</span>
+      <label class="form-check form-switch"><input class="form-check-input" id="gpv-composite-pae" type="checkbox" checked><span class="form-check-label">PAE heatmap</span></label>
+      <label class="form-check form-switch"><input class="form-check-input" id="gpv-composite-profile" type="checkbox" checked><span class="form-check-label">pLDDT profile</span></label>
+      <label class="form-check form-switch"><input class="form-check-input" id="gpv-composite-contacts" type="checkbox" checked><span class="form-check-label">Contact map</span></label>
+      <label class="form-label">Columns<select class="form-select" id="gpv-composite-columns"><option value="1">1</option><option value="2" selected>2</option><option value="3">3</option></select></label>
+      <button class="btn" type="button" id="gpv-composite" disabled data-tooltip="One lettered figure at the chosen print size: the 3D view first, then the confidence panels you tick — the PAE heatmap, the pLDDT profile and the contact map when they are available">Download composite figure</button>
+      <button class="btn" type="button" id="gpv-compare-svg" disabled data-tooltip="The stitched comparison figure with vector captions and annotations">Download comparison SVG</button>
+      <label class="form-check form-switch"><input class="form-check-input" id="gpv-export-legend" type="checkbox" checked><span class="form-check-label">Colour legend on exports</span></label>
+      <label class="form-label">Video length<select class="form-select" id="gpv-video-length"><option value="5">5 seconds</option><option value="10">10 seconds</option><option value="15">15 seconds</option></select></label>
+      <button class="btn" type="button" id="gpv-video" disabled data-tooltip="Record the viewport spinning once, as a WebM file">Record spin video</button>
+    </div>
+    <div class="viz-controls">
+      <label class="form-label gpv-current-label">Report contents<select class="form-select" id="gpv-report-scope"><option value="visible">Models currently shown</option><option value="all">Every loaded model</option></select></label>
+      <label class="form-label">PAE in report<select class="form-select" id="gpv-report-pae"><option value="full">Full detail</option><option value="compact">Compact</option><option value="none">Omit heatmaps</option></select></label>
+      <label class="form-check form-switch"><input class="form-check-input" id="gpv-report-offline" type="checkbox"><span class="form-check-label">Embed 3Dmol.js for offline use</span></label>
+      <span class="text-muted text-small" id="gpv-report-size">Load models to estimate the report size.</span>
+    </div>
+    <div class="viz-controls">
+      <button class="btn" type="button" id="gpv-share-link" disabled data-tooltip="Copy a link that reopens the models fetched by ID with this camera, colours, labels and annotations">Copy share link</button>
+      <input class="form-control gpv-share-url" id="gpv-share-url" type="text" readonly hidden aria-label="Share link">
+      <span class="text-muted text-small" id="gpv-share-note">Links carry only models fetched by ID (PDB, UniProt, AlphaFold DB). Files opened from your computer stay there.</span>
+    </div>
+    <div class="viz-controls">
+      <button class="btn" type="button" id="gpv-figure-legend" disabled data-tooltip="Write a figure legend from the scene: models, colouring, alignment, labels, measurements and annotations">Write figure legend</button>
+      <textarea class="form-control gpv-legend-text" id="gpv-legend-text" rows="5" hidden aria-label="Generated figure legend"></textarea>
+    </div>
+    <div class="viz-controls">
+      <button class="btn" type="button" id="gpv-methods-text" disabled data-tooltip="Draft a methods paragraph that states exactly how the numbers on screen were computed: superposition, RMSD, RMSF, domains, contacts, dimensions and colour scales">Write methods text</button>
+      <textarea class="form-control gpv-legend-text" id="gpv-methods-field" rows="6" hidden aria-label="Generated methods text"></textarea>
+    </div>
+    <details class="gpv-checklist" id="gpv-checklist" open>
+      <summary>Publication checklist <span class="viz-badge" id="gpv-check-badge"></span></summary>
+      <ul class="gpv-check-list" id="gpv-check-list" aria-live="polite"></ul>
+    </details>
+    <div class="viz-controls">
+      <label class="form-label">View name<input class="form-control" id="gpv-view-name" type="text" placeholder="Overview, interface, pore…"></label>
+      <label class="form-label gpv-current-label">Caption<input class="form-control" id="gpv-view-caption" type="text" placeholder="Short panel caption"></label>
+      <button class="btn" type="button" id="gpv-save-view" disabled>Save current view</button>
+      <label class="form-label">Panel columns<select class="form-select" id="gpv-panel-columns"><option value="1">1</option><option value="2" selected>2</option><option value="3">3</option></select></label>
+      <button class="btn" type="button" id="gpv-contact-sheet" disabled>Download figure panels</button>
+      <button class="btn" type="button" id="gpv-views-zip" disabled data-tooltip="Render every saved view as a publication PNG at the current output settings and download them together with the captions">Download all views (ZIP)</button>
+      <button class="btn" type="button" id="gpv-captions" disabled>Download captions</button>
+    </div>
+    <div class="gpv-list" id="gpv-saved-views" aria-label="Saved publication views"></div>
+    <details class="gpv-provenance" open><summary>Provenance and reproducible scene</summary><div class="viz-controls"><label class="form-label">Figure or project title<input class="form-control" id="gpv-project-title" type="text"></label><label class="form-label">Model source or run<input class="form-control" id="gpv-project-source" type="text" placeholder="Job, accession, or run ID"></label><label class="form-label">Method and version<input class="form-control" id="gpv-project-method" type="text" placeholder="For example AlphaFold 3"></label><label class="form-label">Notes<textarea class="form-control" id="gpv-project-notes" rows="2"></textarea></label></div><div class="viz-controls"><button class="btn" type="button" id="gpv-save-scene" disabled>Download scene JSON</button><label class="form-label">Restore scene JSON<input class="form-control" id="gpv-load-scene" type="file" accept=".json"></label></div><div class="viz-controls"><button class="btn" type="button" id="gpv-save-session" disabled data-tooltip="Save everything — models, confidence data, alignment, annotations, domains, views and settings — as one ZIP you can reopen later or on another computer">Save session file</button><label class="form-label">Open session file<input class="form-control" id="gpv-open-session" type="file" accept=".zip"></label><span class="text-muted text-small" id="gpv-session-note">A session file carries the models themselves, so it reopens with no other files. Scene JSON is the light alternative that expects the original files.</span></div></details>
+  </section>
+
+  </aside>
+  </div>
+
+  <div class="gpv-toasts" id="gpv-toasts" aria-live="polite" aria-atomic="false"></div>
+
+  <dialog class="gpv-dialog" id="gpv-help">
+    <form method="dialog" class="gpv-dialog-head">
+      <h2>Help and keyboard shortcuts</h2>
+      <button class="btn btn-ghost gpv-icon-btn" value="close" aria-label="Close help"><i data-icon="x" aria-hidden="true"></i></button>
+    </form>
+    <div class="gpv-dialog-body">
+      <h3>Getting structures in</h3>
+      <ul>
+        <li>Drop <code>.pdb</code>, <code>.cif</code>, <code>.mmcif</code>, or whole AlphaFold result <code>.zip</code> archives anywhere on the page.</li>
+        <li>Add AlphaFold <code>*_confidences.json</code>, <code>*_summary_confidences.json</code>, <code>ranking_debug.json</code>, or <code>ranking_scores.csv</code> to attach pTM, ipTM, ranking scores, and PAE to matching models.</li>
+        <li>Type an identifier to fetch it: a four-character PDB ID (<code>1ubq</code>), a UniProt accession (<code>P69905</code>), or an AlphaFold DB name (<code>AF-P0DTC2-F1</code>).</li>
+      </ul>
+      <h3>In the 3D view</h3>
+      <ul>
+        <li>Drag to rotate, scroll to zoom, right-drag or two-finger drag to pan.</li>
+        <li>Click any atom to inspect its residue, chain, and pLDDT, and to place a label.</li>
+        <li>Use <strong>Figure annotations</strong> in the Annotate tab to draw arrows, lines, residue markers, and text callouts by clicking atoms, and to add corner titles. They follow rotation and alignment and are included in PNG exports and reports.</li>
+        <li>Turn on <strong>Synchronized multi-view</strong> in the Compare tab to show up to six models in linked viewports. Dragging, spinning, or rocking any one of them moves them all.</li>
+      </ul>
+      <h3>Keyboard</h3>
+      <table class="table table-sm gpv-shortcuts">
+        <tbody>
+          <tr><th><kbd>←</kbd> <kbd>→</kbd></th><td>Previous / next model</td></tr>
+          <tr><th><kbd>C</kbd></th><td>Start or pause automatic cycling</td></tr>
+          <tr><th><kbd>F</kbd></th><td>Fit every panel to what it displays</td></tr>
+          <tr><th><kbd>S</kbd></th><td>Start or stop spinning</td></tr>
+          <tr><th><kbd>X</kbd> <kbd>Y</kbd> <kbd>Z</kbd></th><td>Rotate 90° about that axis (<kbd>Shift</kbd> reverses); <kbd>Shift</kbd> + <kbd>R</kbd> resets orientation</td></tr>
+          <tr><th><kbd>Shift</kbd> + <kbd>F</kbd></th><td>Toggle full screen</td></tr>
+          <tr><th><kbd>1</kbd> – <kbd>6</kbd></th><td>Jump to a tool tab</td></tr>
+          <tr><th><kbd>Ctrl</kbd>/<kbd>⌘</kbd> + <kbd>Z</kbd></th><td>Undo the last label, selection, measurement or annotation change; add <kbd>Shift</kbd> to redo</td></tr>
+          <tr><th><kbd>?</kbd></th><td>Open this help</td></tr>
+          <tr><th><kbd>Esc</kbd></th><td>Close help, leave full screen, stop measuring</td></tr>
+        </tbody>
+      </table>
+      <h3>Your work is kept</h3>
+      <p>The open models, annotations, domains, views and settings are saved in this browser a moment after every change. Reopening the page offers to restore them; <em>Forget it</em> discards the copy. Nothing leaves the browser. For anything you must keep, download scene JSON or a report.</p>
+      <h3>How to cite</h3>
+      <p>Cite the viewer and the rendering library it builds on. Each GitHub release is archived on Zenodo with its own DOI; the repository's <code>CITATION.cff</code> carries the current metadata.</p>
+      <ul>
+        <li>Awuah, M. B. (2026). <em>Protein Structure Viewer</em>, version <span id="gpv-cite-version"></span> [software]. Zenodo. <a href="https://doi.org/10.5281/zenodo.22741487" target="_blank" rel="noopener">doi:10.5281/zenodo.22741487</a> (all versions; the release you used has its own DOI on Zenodo). <code>github.com/mbaffour/protein-structure-viewer</code>.</li>
+        <li>Rego, N. &amp; Koes, D. (2015). 3Dmol.js: molecular visualization with WebGL. <em>Bioinformatics</em> 31(8), 1322–1324. doi:10.1093/bioinformatics/btu829.</li>
+      </ul>
+      <h3>Reading the numbers</h3>
+      <ul>
+        <li><strong>pLDDT</strong> is per-residue local confidence. High pLDDT does not mean the relative placement of chains is right.</li>
+        <li><strong>PAE</strong> and <strong>ipTM</strong> are what to read for interfaces and domain placement in complexes.</li>
+        <li><strong>RMSD</strong> from the Compare tab is a visual-comparison aid. Always report the alignment method, chain mapping, and aligned Cα count alongside it.</li>
+      </ul>
+      <h3>Tips for figures and reviewers</h3>
+      <ul>
+        <li><em>Publish → Write methods text</em> drafts a Methods paragraph stating exactly how the numbers on screen were computed (superposition, RMSD, RMSF, domains, contacts, dimensions, colour scales); every definition is cross-checked against Biopython in the repository's <code>VALIDATION.md</code>.</li>
+        <li>The shared report reproduces the outline, depth cueing and faded chains, and shows the contact map beside the PAE heatmap when one was computed for a model in the report.</li>
+        <li><em>Confidence → Colour by MSA</em> reads the alignment inside an AlphaFold 3 archive (or an .a3m you add) and colours matching chains by conservation, identity to the query or coverage; the legend, exports and methods text follow.</li>
+        <li><em>Publish → Download composite figure</em> stitches the 3D view with the PAE heatmap, the pLDDT profile and the contact map into one lettered figure at print size, each panel rendered at output resolution.</li>
+        <li>The <em>Publication checklist</em> at the foot of the Publish tab lists what a journal or reviewer would flag about the current figure — no physical size, low resolution, small text, colour-blind-unsafe colours, missing legend, scale bar in perspective, unsuperposed models, no title — with one-click fixes.</li>
+        <li><em>Compare → Interface contact map</em> draws every residue pair of two chains within a cutoff, closer pairs darker; hover reads the pair, a click selects both residues, <em>Highlight interface</em> colours the interface, and the map and pair list download as PNG and CSV. <em>Annotate → Label style</em> switches every label between boxed and plain text.</li>
+        <li><em>Appearance → Outline</em> draws a silhouette line around every element (thin for most figures, bold for small panels) and <em>Depth cueing</em> fades the far side; both apply to panels and exports. In the composition table, <em>Faded</em> blends a chain into the background to spotlight the others. <em>Publish → Journal preset</em> sets width, resolution, text size and font from a journal's figure guide, and <em>Download one panel per model</em> renders every model from the same camera into one lettered figure.</li>
+        <li>The <em>layout</em> button in the header (panel icon) switches between the side-panel workspace, where the 3D view stays pinned while you work in the scrolling tool panel, and the stacked layout. The tool panel sits on the left; the arrows button beside it swaps the two sides. Drag the divider between them to give tables more room; double-click it to reset. Screens narrower than 1100 px always stack.</li>
+        <li><em>Publish → Save session file</em> writes one ZIP with the models, confidence data, alignment, annotations, domains, views and settings; open it later with <em>Open session file</em> or by dropping it on the page, on any computer, with no other files. Scene JSON remains the light option that expects the original files.</li>
+        <li>Large AlphaFold 3 archives open whole: the confidence files are scanned byte by byte, the unused contact matrix is skipped and the PAE is kept compactly, so a five-model, 4 400-token assembly stays well under a gigabyte of memory.</li>
+        <li>Colour by <strong>pLDDT confidence</strong> and switch to <strong>orthographic</strong> projection for publication panels; perspective exaggerates whatever is closest to the camera.</li>
+        <li>Run <strong>Align visible</strong>, then enable multi-view with <em>Rotation and zoom</em> to inspect a superposition panel by panel. The shared report carries the aligned coordinates.</li>
+        <li>Save named views with captions in <strong>Publish</strong>: they become lettered figure panels, a caption file, and a guided tour inside the report.</li>
+        <li><strong>Rename</strong> a model in the Models list to give it the name a caption should carry; file names stay as identifiers underneath.</li>
+        <li><strong>Download comparison PNG</strong> stitches the current panels into one lettered figure at the export size you chose; the <strong>SVG</strong> variants keep labels, arrows, captions, and the legend as editable vector layers over the rendered molecule.</li>
+        <li>Every residue label and annotation is editable in its list row — text, colour, and size — and can be nudged with the arrow buttons; it moves in screen space and stays put when the model turns. Callouts also take a leader length.</li>
+        <li><strong>Interfaces</strong> in the Confidence tab counts inter-chain contacts and buried surface area for a model, and can highlight the interface residues. Read it next to ipTM and PAE; a predicted contact is not an observed one.</li>
+        <li>Tick <em>Embed 3Dmol.js for offline use</em> before sharing a report that must open without internet; drop the PAE detail to <em>Compact</em> or <em>Omit</em> to keep it small.</li>
+        <li>Keep <em>Report contents</em> on <em>Models currently shown</em> for a small file reviewers can open on a laptop; switch to <em>Every loaded model</em> for an archive.</li>
+      </ul>
+      <div class="viz-controls"><button class="btn btn-ghost" type="button" id="gpv-tips-reset"><i data-icon="info" aria-hidden="true"></i>Show the tips bar again</button></div>
+      <p class="text-muted text-small">Everything runs locally. Structure files you open are read in the browser and are never uploaded.</p>
+    </div>
+  </dialog>
+</div>
+
+<style>
+  #generic-protein-viewer { width: 100%; color: var(--foreground); }
+  #generic-protein-viewer .viz-controls { margin-bottom: 12px; align-items: end; }
+  #generic-protein-viewer .form-label { min-width: 126px; flex: 1 1 138px; }
+  #generic-protein-viewer .gpv-current-label { flex: 3 1 280px; }
+  #generic-protein-viewer .gpv-drop { display: grid; gap: 6px; justify-items: center; text-align: center; margin-bottom: 10px; }
+  #generic-protein-viewer .gpv-drop-icon { color: var(--primary); }
+  #generic-protein-viewer .gpv-drop-badges { display: flex; justify-content: center; gap: 6px; flex-wrap: wrap; }
+  #generic-protein-viewer .gpv-drop-actions { display: flex; align-items: center; justify-content: center; gap: 8px; flex-wrap: wrap; max-width: 100%; }
+  #generic-protein-viewer .gpv-file-input { width: auto; max-width: 100%; flex: 0 1 auto; }
+  #generic-protein-viewer .gpv-drop.is-dragging { outline: 2px solid var(--ring); outline-offset: 2px; }
+  /* Once structures are loaded the card shrinks to a single toolbar row so the
+     3D view keeps as much of the viewport as possible. */
+  #generic-protein-viewer .gpv-drop.is-compact { display: flex; align-items: center; justify-items: stretch; gap: 8px; flex-wrap: wrap; text-align: left; }
+  #generic-protein-viewer .gpv-drop.is-compact > strong { margin-right: auto; }
+  #generic-protein-viewer .gpv-drop.is-compact .gpv-drop-actions { justify-content: flex-end; }
+  #generic-protein-viewer .gpv-drop.is-compact > .text-muted, #generic-protein-viewer .gpv-drop.is-compact > .gpv-drop-badges { display: none; }
+  #generic-protein-viewer .gpv-import-state[hidden] { display: none; }
+  #generic-protein-viewer .gpv-import-state { display: grid; grid-template-columns: minmax(120px, 1fr) auto; gap: 10px; align-items: center; margin-bottom: 10px; }
+  #generic-protein-viewer .gpv-import-state progress { width: 100%; accent-color: var(--primary); }
+  #generic-protein-viewer .gpv-primary { margin-bottom: 8px; }
+  #generic-protein-viewer .form-range { width: 100%; }
+  #generic-protein-viewer .gpv-slider-label { flex: 0 1 170px; min-width: 120px; }
+  #generic-protein-viewer .gpv-list { display: grid; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); gap: 8px; margin: 0 0 10px; }
+  #generic-protein-viewer .gpv-entry { display: flex; align-items: center; gap: 8px; min-width: 0; padding: 8px 0; border-bottom: 1px solid var(--border); }
+  #generic-protein-viewer .gpv-entry-copy { display: grid; flex: 1; min-width: 0; gap: 2px; }
+  #generic-protein-viewer .gpv-entry-name { min-width: 0; overflow-wrap: anywhere; }
+  #generic-protein-viewer .gpv-entry-source { color: var(--muted-foreground); overflow-wrap: anywhere; }
+  #generic-protein-viewer .gpv-entry.is-active { background: var(--accent); color: var(--accent-foreground); }
+  #generic-protein-viewer .gpv-entry-score { color: var(--muted-foreground); white-space: nowrap; }
+  #generic-protein-viewer .gpv-entry .form-control-color { flex: 0 0 auto; }
+  #generic-protein-viewer .gpv-empty { margin: 0 0 10px; }
+  #generic-protein-viewer .gpv-view-grid { display: grid; grid-template-columns: minmax(0, 1fr); gap: 8px; }
+  #generic-protein-viewer .gpv-view-grid.is-comparing { grid-template-columns: repeat(var(--gpv-columns, 2), minmax(0, 1fr)); }
+  #generic-protein-viewer .gpv-view-grid[data-panes="5"] .gpv-stage, #generic-protein-viewer .gpv-view-grid[data-panes="6"] .gpv-stage { height: 380px; }
+  #generic-protein-viewer .gpv-view-pane { position: relative; min-width: 0; min-height: 0; }
+  #generic-protein-viewer .gpv-view-label { position: absolute; z-index: 2; top: 8px; left: 8px; pointer-events: none; max-width: calc(100% - 16px); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  #generic-protein-viewer .gpv-panel-row .form-select { flex: 1 1 200px; min-width: 0; }
+  #generic-protein-viewer .gpv-entry .form-control:not(.form-control-color) { flex: 1 1 160px; min-width: 0; }
+  #generic-protein-viewer #gpv-annotation-list .gpv-entry, #generic-protein-viewer #gpv-label-list .gpv-entry { flex-wrap: wrap; }
+  #generic-protein-viewer .gpv-edit-copy { display: grid; flex: 1 1 220px; min-width: 0; gap: 4px; }
+  #generic-protein-viewer .gpv-edit-copy .form-control { width: 100%; }
+  #generic-protein-viewer .gpv-edit-tools { display: inline-flex; gap: 6px; align-items: center; flex: 0 0 auto; }
+  #generic-protein-viewer .gpv-edit-tools .form-select { width: auto; padding-right: 26px; }
+  #generic-protein-viewer .gpv-edit-tools .form-control-color { width: 34px; padding: 2px; }
+  #generic-protein-viewer .gpv-edit-tools input[type=number] { width: 68px; padding: 2px 6px; }
+  #generic-protein-viewer #gpv-annotation-list .gpv-entry-name { flex: 1 1 220px; }
+  #generic-protein-viewer .gpv-nudge { display: inline-flex; gap: 2px; align-items: center; flex: 0 0 auto; }
+  #generic-protein-viewer .gpv-nudge .btn { padding: 2px 8px; }
+  #generic-protein-viewer .gpv-nudge .form-control { width: 64px; flex: 0 0 auto; padding: 2px 6px; }
+  #generic-protein-viewer .gpv-hint { margin: -2px 0 10px; }
+  #generic-protein-viewer .gpv-subheading { font-size: 0.95rem; margin: 14px 0 4px; }
+  #generic-protein-viewer .gpv-stage.is-drawing { outline: 2px dashed var(--primary); outline-offset: -2px; cursor: crosshair; }
+  #generic-protein-viewer .gpv-tip { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin: 0 0 10px; padding: 8px 10px; border: 1px dashed var(--border); border-radius: 10px; color: var(--muted-foreground); }
+  #generic-protein-viewer .gpv-tip[hidden] { display: none; }
+  #generic-protein-viewer .gpv-tip > i { color: var(--primary); display: inline-flex; }
+  #generic-protein-viewer .gpv-tip > span { flex: 1 1 240px; }
+  #generic-protein-viewer .gpv-stage-empty button { pointer-events: auto; margin-top: 8px; }
+  #generic-protein-viewer .gpv-stage-empty { position: absolute; inset: 0; display: grid; place-content: center; justify-items: center; gap: 6px; pointer-events: none; text-align: center; }
+  #generic-protein-viewer .gpv-stage-empty[hidden] { display: none; }
+  #generic-protein-viewer .gpv-stage-empty > i { color: var(--primary); }
+  #generic-protein-viewer .gpv-tabs { margin-top: 14px; overflow-x: auto; flex-wrap: nowrap; padding-bottom: 2px; }
+  #generic-protein-viewer .gpv-tool-panel { padding-top: 4px; }
+  #generic-protein-viewer .gpv-tool-panel[hidden] { display: none; }
+  #generic-protein-viewer .gpv-selected-state { padding: 10px 0; margin-bottom: 8px; border-bottom: 1px solid var(--border); }
+  #generic-protein-viewer .gpv-confidence-layout { display: grid; grid-template-columns: minmax(0, 1fr) minmax(240px, 420px); gap: 16px; align-items: start; margin: 0 0 12px; }
+  #generic-protein-viewer .gpv-confidence-layout[hidden], #generic-protein-viewer .gpv-pae-panel[hidden], #generic-protein-viewer #gpv-pae-plot[hidden], #generic-protein-viewer #gpv-interface-wrap[hidden], #generic-protein-viewer #gpv-contacts-wrap[hidden], #generic-protein-viewer #gpv-alignment-wrap[hidden] { display: none; }
+  #generic-protein-viewer .gpv-pae-panel { min-width: 0; }
+  #generic-protein-viewer .gpv-pae-panel canvas { display: block; width: 100%; height: auto; max-width: 420px; background: var(--muted); }
+  #generic-protein-viewer .gpv-pae-legend { display: flex; justify-content: space-between; gap: 8px; margin-top: 4px; color: var(--muted-foreground); }
+  #generic-protein-viewer .gpv-provenance { margin: 0 0 12px; }
+  #generic-protein-viewer .gpv-provenance summary { cursor: pointer; margin-bottom: 10px; }
+  #generic-protein-viewer .gpv-legend[hidden] { display: none; }
+  #generic-protein-viewer .gpv-checklist { margin: 6px 0 14px; }
+  #generic-protein-viewer .gpv-checklist > summary { cursor: pointer; font-weight: 600; display: flex; align-items: center; gap: 8px; }
+  #generic-protein-viewer .gpv-check-list { list-style: none; margin: 8px 0 0; padding: 0; display: grid; gap: 6px; font-size: var(--font-size-small); }
+  #generic-protein-viewer .gpv-check-list li { display: grid; grid-template-columns: 18px 1fr; gap: 8px; align-items: start; color: var(--muted-foreground); }
+  #generic-protein-viewer .gpv-check-list li > i { display: inline-grid; place-items: center; width: 18px; height: 18px; border-radius: 50%; font-size: 11px; font-weight: 700; font-style: normal; }
+  #generic-protein-viewer .gpv-check-list li.is-ok > i { background: color-mix(in srgb, #16a34a 18%, transparent); color: #15803d; }
+  #generic-protein-viewer .gpv-check-list li.is-warn > i { background: color-mix(in srgb, #f97316 22%, transparent); color: #c2410c; }
+  #generic-protein-viewer .gpv-check-list li.is-info > i { background: color-mix(in srgb, #2563eb 16%, transparent); color: #1d4ed8; }
+  #generic-protein-viewer .gpv-check-list li.is-warn { color: var(--foreground); }
+  #generic-protein-viewer .gpv-check-list button { font: inherit; color: var(--primary); background: none; border: 0; padding: 0; text-decoration: underline; cursor: pointer; }
+  #generic-protein-viewer .gpv-composite { align-items: center; }
+  #generic-protein-viewer .gpv-contacts { margin-top: 14px; }
+  #generic-protein-viewer .gpv-contacts > summary { cursor: pointer; font-weight: 600; margin-bottom: 8px; }
+  #generic-protein-viewer .gpv-contact-canvas { display: block; max-width: 100%; height: auto; border: 1px solid var(--border); border-radius: var(--radius-md); image-rendering: pixelated; cursor: crosshair; }
+  #generic-protein-viewer .gpv-legend { display: flex; gap: 14px; flex-wrap: wrap; margin: 0 0 10px; color: var(--muted-foreground); }
+  #generic-protein-viewer .gpv-legend span { display: inline-flex; align-items: center; gap: 5px; }
+  #generic-protein-viewer .gpv-swatch { width: 12px; height: 12px; display: inline-block; border-radius: 2px; margin-right: 5px; vertical-align: -1px; }
+  #generic-protein-viewer .gpv-vlow { background: #ff7d45; }
+  #generic-protein-viewer .gpv-low { background: #ffdb13; }
+  #generic-protein-viewer .gpv-confident { background: #65cbf3; }
+  #generic-protein-viewer .gpv-vhigh { background: #0053d6; }
+  #generic-protein-viewer .gpv-stage { position: relative; width: 100%; height: 480px; min-height: 320px; overflow: hidden; }
+  #generic-protein-viewer .gpv-stage canvas { display: block; }
+  #generic-protein-viewer .gpv-status { display: flex; gap: 16px; flex-wrap: wrap; margin-top: 8px; color: var(--muted-foreground); }
+  #generic-protein-viewer .gpv-hover { margin-left: auto; font-variant-numeric: tabular-nums; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%; }
+  #generic-protein-viewer .gpv-sequence { margin-top: 10px; }
+  #generic-protein-viewer .gpv-sequence-head { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; margin-bottom: 6px; color: var(--muted-foreground); }
+  #generic-protein-viewer .gpv-sequence-head button { margin-left: auto; }
+  #generic-protein-viewer .gpv-sequence-rows { display: grid; gap: 6px; }
+  #generic-protein-viewer .gpv-sequence-row { display: grid; grid-template-columns: 5.5em minmax(0, 1fr); gap: 8px; align-items: center; }
+  #generic-protein-viewer .gpv-sequence-rows.is-multi .gpv-sequence-row { grid-template-columns: 11em minmax(0, 1fr); }
+  #generic-protein-viewer .gpv-sequence-row canvas { display: block; width: 100%; height: 30px; border-radius: 4px; cursor: crosshair; touch-action: none; }
+  #generic-protein-viewer .gpv-sequence-chain { font-family: var(--font-mono); font-size: var(--font-size-small); color: var(--muted-foreground); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  #generic-protein-viewer .gpv-share-url { font-family: var(--font-mono); font-size: var(--font-size-small); min-width: min(100%, 320px); }
+  #generic-protein-viewer .gpv-history { align-items: center; }
+  #generic-protein-viewer .gpv-orient { display: inline-flex; gap: 4px; }
+  #generic-protein-viewer .gpv-restore { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; padding: 10px 12px; margin-bottom: 10px; border: 1px solid var(--border); border-radius: 8px; background: var(--muted); }
+  #generic-protein-viewer .gpv-restore span { flex: 1 1 200px; }
+  #generic-protein-viewer .gpv-restore[hidden] { display: none; }
+  #generic-protein-viewer .form-label[hidden], #generic-protein-viewer .form-check[hidden] { display: none; }
+  #generic-protein-viewer .gpv-scalebar { position: absolute; right: 16px; bottom: 14px; pointer-events: none; display: grid; justify-items: center; gap: 3px; color: var(--card-foreground); text-shadow: 0 0 3px var(--card); }
+  #generic-protein-viewer .gpv-scalebar i { display: block; height: 3px; background: currentColor; border-radius: 1px; }
+  #generic-protein-viewer .gpv-composition { margin-top: 10px; }
+  #generic-protein-viewer .gpv-composition summary { cursor: pointer; color: var(--muted-foreground); }
+  #generic-protein-viewer .gpv-composition .gpv-swatch { margin-right: 6px; }
+  #generic-protein-viewer .gpv-chain-switch { margin: 0; min-height: 0; }
+  #generic-protein-viewer .gpv-goto { max-width: 11em; }
+  #generic-protein-viewer .gpv-goto .form-control { min-width: 7em; }
+  #generic-protein-viewer .gpv-sequence-text { margin-top: 8px; }
+  #generic-protein-viewer .gpv-sequence-text summary { cursor: pointer; color: var(--muted-foreground); }
+  #generic-protein-viewer .gpv-seq-block { margin: 8px 0 4px; }
+  #generic-protein-viewer .gpv-seq-head { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; margin-bottom: 4px; }
+  #generic-protein-viewer .gpv-seq-head button { margin-left: auto; }
+  #generic-protein-viewer .gpv-seq-lines { margin: 0; font-family: var(--font-mono); font-size: 12px; line-height: 1.9; overflow-x: auto; white-space: pre; }
+  #generic-protein-viewer .gpv-seq-gutter { display: inline-block; width: 5ch; margin-right: 1ch; color: var(--muted-foreground); text-align: right; }
+  #generic-protein-viewer .gpv-aa { display: inline-block; width: 1.05ch; text-align: center; border-radius: 2px; cursor: pointer; }
+  #generic-protein-viewer .gpv-aa:hover { outline: 2px solid var(--card-foreground); outline-offset: -1px; }
+  #generic-protein-viewer .gpv-aa.is-hidden { opacity: 0.3; }
+  #generic-protein-viewer .gpv-presets { align-items: center; }
+  #generic-protein-viewer .gpv-legend-text { flex: 1 1 100%; font-size: var(--font-size-small); line-height: 1.5; }
+  #generic-protein-viewer .gpv-history .gpv-selected-state { flex: 1; min-width: 200px; }
+  #generic-protein-viewer .gpv-legend strong { color: var(--card-foreground); }
+  #generic-protein-viewer .gpv-status > :last-child { margin-left: auto; text-align: right; }
+  #generic-protein-viewer .gpv-export-surface { position: absolute; left: -100000px; top: 0; overflow: hidden; }
+
+  /* ---- Header ---- */
+  #generic-protein-viewer .gpv-header { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; margin-bottom: 12px; }
+  #generic-protein-viewer .gpv-brand { display: flex; align-items: center; gap: 10px; min-width: 0; }
+  #generic-protein-viewer .gpv-brand-mark { display: grid; place-items: center; width: 32px; height: 32px; flex: 0 0 auto; border-radius: var(--radius-md); color: var(--primary-foreground); background: var(--primary); }
+  #generic-protein-viewer .gpv-brand-copy { display: grid; gap: 1px; min-width: 0; }
+  #generic-protein-viewer .gpv-brand-copy > strong { font-size: var(--font-size-h3); }
+  #generic-protein-viewer .gpv-header-actions { display: flex; gap: 6px; flex: 0 0 auto; }
+  #generic-protein-viewer .gpv-icon-btn { gap: 6px; }
+
+  /* ---- Import ---- */
+  #generic-protein-viewer .gpv-fetch { display: flex; align-items: center; gap: 6px; flex: 0 1 auto; min-width: 0; }
+  #generic-protein-viewer .gpv-fetch-field { width: 250px; max-width: 100%; min-width: 0; }
+  #generic-protein-viewer .gpv-drop.is-compact > .gpv-fetch-note { display: none; }
+  #generic-protein-viewer .gpv-drop.is-dragging { outline-width: 2px; background: var(--accent); }
+
+  /* ---- Stage overlays ---- */
+  #generic-protein-viewer .gpv-stage:focus-visible { outline: 2px solid var(--ring); outline-offset: 2px; }
+  #generic-protein-viewer .gpv-busy { position: absolute; inset: auto 8px 8px auto; display: flex; align-items: center; gap: 8px; padding: 6px 10px; border-radius: var(--radius-md); color: var(--popover-foreground); background: var(--popover); border: 1px solid var(--border); font-size: var(--font-size-small); }
+  #generic-protein-viewer .gpv-busy[hidden] { display: none; }
+  #generic-protein-viewer .gpv-spinner { width: 13px; height: 13px; border-radius: 50%; border: 2px solid var(--border); border-top-color: var(--primary); animation: gpv-spin 0.8s linear infinite; }
+  @keyframes gpv-spin { to { transform: rotate(360deg); } }
+  @media (prefers-reduced-motion: reduce) { #generic-protein-viewer .gpv-spinner { animation-duration: 2.4s; } }
+
+  /* ---- Full screen ---- */
+  #generic-protein-viewer .gpv-view-grid.is-fullscreen { position: fixed; inset: 0; z-index: 40; padding: 8px; gap: 8px; background: var(--background); grid-auto-rows: minmax(0, 1fr); }
+  #generic-protein-viewer .gpv-view-grid.is-fullscreen .gpv-stage { height: 100%; }
+  #generic-protein-viewer .gpv-view-grid.is-fullscreen .gpv-view-pane { height: 100%; }
+
+  /* ---- Lists ---- */
+  #generic-protein-viewer .gpv-list-more { justify-content: center; align-items: center; margin-bottom: 10px; }
+  #generic-protein-viewer .gpv-list-more[hidden] { display: none; }
+  #generic-protein-viewer .gpv-entry.is-active { border-radius: var(--radius-sm); padding-inline: 6px; }
+  #generic-protein-viewer .gpv-entry-score { font-variant-numeric: tabular-nums; }
+
+  /* ---- Toasts ---- */
+  #generic-protein-viewer .gpv-toasts { position: fixed; z-index: 60; bottom: 12px; right: 12px; display: grid; gap: 6px; justify-items: end; pointer-events: none; max-width: min(440px, calc(100vw - 24px)); }
+  #generic-protein-viewer .gpv-toast { pointer-events: none; padding: 7px 12px; border-radius: var(--radius-full); border: 1px solid var(--border); color: var(--popover-foreground); background: var(--popover); box-shadow: 0 6px 20px -8px rgb(0 0 0 / 35%); font-size: var(--font-size-small); animation: gpv-toast-in 0.18s ease-out; }
+  #generic-protein-viewer .gpv-toast.is-error { color: var(--destructive); border-color: color-mix(in srgb, var(--destructive) 40%, var(--border)); }
+  #generic-protein-viewer .gpv-toast.is-leaving { opacity: 0; transition: opacity 0.25s ease-in; }
+  @keyframes gpv-toast-in { from { opacity: 0; transform: translateY(6px); } }
+  @media (prefers-reduced-motion: reduce) { #generic-protein-viewer .gpv-toast { animation: none; } }
+
+  /* ---- Help dialog ---- */
+  #generic-protein-viewer .gpv-dialog { width: min(680px, calc(100vw - 32px)); max-height: min(84vh, 780px); padding: 0; border: 1px solid var(--border); border-radius: var(--radius-lg); color: var(--foreground); background: var(--popover); overflow: hidden; }
+  #generic-protein-viewer .gpv-dialog::backdrop { background: rgb(0 0 0 / 45%); }
+  #generic-protein-viewer .gpv-dialog-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 12px 16px; border-bottom: 1px solid var(--border); }
+  #generic-protein-viewer .gpv-dialog-head h2 { margin: 0; font-size: var(--font-size-h3); }
+  #generic-protein-viewer .gpv-dialog-body { padding: 4px 16px 18px; overflow-y: auto; max-height: calc(min(84vh, 780px) - 52px); }
+  #generic-protein-viewer .gpv-dialog-body h3 { margin: 16px 0 6px; font-size: var(--font-size-normal); }
+  #generic-protein-viewer .gpv-dialog-body ul { margin: 0; padding-left: 18px; display: grid; gap: 4px; }
+  #generic-protein-viewer .gpv-dialog-body code { font-family: var(--font-mono); font-size: var(--font-size-small); padding: 1px 4px; border-radius: var(--radius-sm); background: var(--muted); }
+  #generic-protein-viewer .gpv-shortcuts th { white-space: nowrap; width: 1%; }
+  #generic-protein-viewer kbd { font-family: var(--font-mono); font-size: var(--font-size-small); padding: 1px 5px; border: 1px solid var(--border); border-bottom-width: 2px; border-radius: var(--radius-sm); background: var(--muted); }
+
+  @media (max-width: 680px) { #generic-protein-viewer .gpv-confidence-layout, #generic-protein-viewer .gpv-view-grid.is-comparing, #generic-protein-viewer .gpv-import-state, #generic-protein-viewer .gpv-drop.is-compact { grid-template-columns: 1fr; } }
+  @media (max-width: 560px) { #generic-protein-viewer .gpv-hide-narrow { display: none; } #generic-protein-viewer .gpv-header-actions { gap: 4px; } }
+
+  /* ---------- Workspace layout ----------
+     Wide screens: the 3D view, status and sequence stay pinned in the left column while
+     the tool panel scrolls on the right, so a change is seen the moment it is made.
+     Below 1100px, or when the user picks the stacked layout, the columns stack. */
+  #generic-protein-viewer .gpv-splitter { display: none; }
+  #generic-protein-viewer.is-workspace .gpv-workspace { display: grid; grid-template-columns: minmax(300px, var(--gpv-panel-width, 420px)) 10px minmax(0, 1fr); gap: 0 8px; align-items: start; }
+  #generic-protein-viewer.is-workspace .gpv-side-panel { order: 1; } #generic-protein-viewer.is-workspace .gpv-splitter { order: 2; } #generic-protein-viewer.is-workspace .gpv-stage-column { order: 3; }
+  #generic-protein-viewer.is-workspace.is-panel-right .gpv-workspace { grid-template-columns: minmax(0, 1fr) 10px minmax(300px, var(--gpv-panel-width, 420px)); }
+  #generic-protein-viewer.is-workspace.is-panel-right .gpv-side-panel { order: 3; } #generic-protein-viewer.is-workspace.is-panel-right .gpv-stage-column { order: 1; }
+  #generic-protein-viewer.is-workspace .gpv-stage-column { position: sticky; top: 8px; min-width: 0; }
+  #generic-protein-viewer.is-workspace .gpv-side-panel { position: sticky; top: 8px; max-height: calc(100vh - 16px); overflow-y: auto; overflow-x: hidden; min-width: 0; padding: 0 4px 16px 2px; scrollbar-gutter: stable; }
+  #generic-protein-viewer.is-workspace.is-panel-right .gpv-side-panel { padding: 0 2px 16px 4px; }
+  #generic-protein-viewer.is-workspace .gpv-side-panel .gpv-tabs { position: sticky; top: 0; z-index: 3; margin-top: 0; padding: 6px 0 8px; background: var(--background); flex-wrap: wrap; overflow: visible; row-gap: 6px; }
+  #generic-protein-viewer.is-workspace .gpv-side-panel .gpv-tool-panel { padding-top: 0; }
+  #generic-protein-viewer.is-workspace .gpv-side-panel .form-label { flex: 1 1 150px; }
+  #generic-protein-viewer.is-workspace .gpv-side-panel table { display: block; overflow-x: auto; max-width: 100%; }
+  #generic-protein-viewer.is-workspace .gpv-splitter { display: block; align-self: stretch; width: 10px; cursor: col-resize; border-radius: 5px; background: transparent; position: relative; }
+  #generic-protein-viewer.is-workspace .gpv-splitter::after { content: ''; position: absolute; left: 4px; top: 12px; bottom: 12px; width: 2px; border-radius: 1px; background: var(--border); transition: background 0.15s; }
+  #generic-protein-viewer.is-workspace .gpv-splitter:hover::after, #generic-protein-viewer.is-workspace .gpv-splitter.is-dragging::after, #generic-protein-viewer.is-workspace .gpv-splitter:focus-visible::after { background: var(--primary); }
+  #generic-protein-viewer.is-workspace .gpv-stage { height: var(--gpv-stage-height, 540px); }
+  #generic-protein-viewer.is-workspace .gpv-view-grid[data-panes="5"] .gpv-stage, #generic-protein-viewer.is-workspace .gpv-view-grid[data-panes="6"] .gpv-stage { height: calc(var(--gpv-stage-height, 540px) / 2 - 4px); }
+  #generic-protein-viewer.is-workspace .gpv-view-grid.is-comparing .gpv-stage { height: calc(var(--gpv-stage-height, 540px) / var(--gpv-rows, 1) - 4px); }
+  #generic-protein-viewer.is-workspace .gpv-sequence-rows { max-height: 18vh; overflow-y: auto; }
+  /* Text that changes on hover must not change height, or the pinned stage would resize under the pointer. */
+  #generic-protein-viewer.is-workspace .gpv-sequence-head { flex-wrap: nowrap; }
+  #generic-protein-viewer.is-workspace #gpv-sequence-hint { flex: 1 1 auto; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  #generic-protein-viewer.is-workspace .gpv-status { flex-wrap: nowrap; white-space: nowrap; overflow: hidden; }
+  #generic-protein-viewer.is-workspace .gpv-status > span { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+  #generic-protein-viewer.is-workspace #gpv-state { flex: 0 1 auto; }
+  #generic-protein-viewer.is-workspace .gpv-hover { flex: 1 1 auto; }
+  #generic-protein-viewer.is-workspace .gpv-view-grid.is-fullscreen .gpv-stage { height: 100%; }
+  #generic-protein-viewer.is-dragging-splitter, #generic-protein-viewer.is-dragging-splitter * { cursor: col-resize !important; user-select: none; }
+  @media (max-width: 1099px) { #generic-protein-viewer.is-workspace .gpv-workspace { display: block; } #generic-protein-viewer.is-workspace .gpv-stage-column, #generic-protein-viewer.is-workspace .gpv-side-panel { position: static; max-height: none; overflow: visible; padding: 0; } #generic-protein-viewer.is-workspace .gpv-splitter { display: none; } #generic-protein-viewer.is-workspace .gpv-stage { height: 480px; } #generic-protein-viewer.is-workspace .gpv-side-panel .gpv-tabs { position: static; margin-top: 14px; } #generic-protein-viewer.is-workspace .gpv-sequence-rows { max-height: none; } }
+  @media (max-width: 520px) { #generic-protein-viewer .gpv-stage { height: 380px; } }
+</style>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/3Dmol/2.4.2/3Dmol-min.js" integrity="sha512-hMLvWa58N20AYqzvAVgf4Utdz0jGshnzaknHRzQSm3I7TUeN6ehikRsICUbDB8JIt625tPV3a3s6I9BMrxT0Gg==" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js" integrity="sha512-XMVd28F1oH/O71fzwBnV7HucLxVwtxf26XV8P4wPk26EDxuGZ91N8bsOttmnomcCD3CS5ZMRL50H0GgOHvegtg==" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/numeric/1.2.6/numeric.min.js" integrity="sha512-BK/c8SKG4PMGMg8wo/56FdGMkgQFJgFl8rnVdF1wqIZW73Vw6M/Tde9GmwibV8MoBSBJcwurXGg6B9yvd/Fvcw==" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
+<script>
+/* cdnjs and jsDelivr serve byte-identical files for these three versions (same SHA-512), so a
+   blocked or unreachable cdnjs falls back to jsDelivr under the very same integrity check. */
+(() => {
+  const fallbacks = [
+    ['$3Dmol', 'https://cdn.jsdelivr.net/npm/3dmol@2.4.2/build/3Dmol-min.js', 'sha512-hMLvWa58N20AYqzvAVgf4Utdz0jGshnzaknHRzQSm3I7TUeN6ehikRsICUbDB8JIt625tPV3a3s6I9BMrxT0Gg=='],
+    ['JSZip', 'https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js', 'sha512-XMVd28F1oH/O71fzwBnV7HucLxVwtxf26XV8P4wPk26EDxuGZ91N8bsOttmnomcCD3CS5ZMRL50H0GgOHvegtg=='],
+    ['numeric', 'https://cdn.jsdelivr.net/npm/numeric@1.2.6/numeric-1.2.6.min.js', 'sha512-BK/c8SKG4PMGMg8wo/56FdGMkgQFJgFl8rnVdF1wqIZW73Vw6M/Tde9GmwibV8MoBSBJcwurXGg6B9yvd/Fvcw==']
+  ];
+  fallbacks.forEach(([name, src, integrity]) => {
+    if (typeof window[name] !== 'undefined') return;
+    document.write('<script src="' + src + '" integrity="' + integrity + '" crossorigin="anonymous" referrerpolicy="no-referrer"><\/script>');
+  });
+})();
+</script>
+<script>
+(() => {

@@ -2,8 +2,10 @@
 Mirrors the viewer's definitions: Cα pairs matched by chain|resi, Kabsch superposition
 onto model 0, RMSF around the mean Cα position across all superposed models, Rg over Cα,
 exact maximum Cα–Cα distance, heavy-atom residue contacts within a cutoff of one chain, and the
-inter-chain residue contact map (pairs with closest heavy-atom distance) for two chains."""
+inter-chain residue contact map (pairs with closest heavy-atom distance) for two chains, and the
+buried surface area of every contacting chain pair by Shrake-Rupley (Bio.PDB.SASA)."""
 import sys, json, glob, re, warnings
+import Bio
 import numpy as np
 from Bio.PDB.MMCIFParser import MMCIFParser
 from Bio.SVDSuperimposer import SVDSuperimposer
@@ -73,6 +75,49 @@ for a in chain_atoms(map_a):
         if key not in pairs or pairs[key] > d: pairs[key] = d
 out['contact_map'] = {'chains': [map_a, map_b], 'cutoff': cutoff, 'pairs': len(pairs), 'residues_a': len({k[0] for k in pairs}), 'residues_b': len({k[1] for k in pairs}),
     'all_pairs': [[k[0], k[1], round(v, 4)] for k, v in sorted(pairs.items())], 'chain_pair_counts': pair_counts}
+
+# Buried surface area of every chain pair in contact, on model 0, with Biopython's Shrake–Rupley
+# (Bio.PDB.SASA) configured to the viewer's parameters: probe 1.4 Å, 92 sphere points, Bondi radii
+# (C 1.70, N 1.55, O 1.52, S 1.80 … — identical to Biopython's defaults for every element present),
+# every non-hydrogen atom of the chain included (the viewer excludes only H and D, not hetero or
+# water). BSA = SASA(A alone) + SASA(B alone) − SASA(A+B together), not halved, floored at zero.
+# Shrake–Rupley is a sampling method: Biopython's 92 points and the viewer's 92 points are different
+# quasi-uniform sets, so the two agree only to the sampling error of the point count (see VALIDATION.md).
+from Bio.PDB.SASA import ShrakeRupley
+SASA_PROBE, SASA_POINTS = 1.4, 92
+sasa_engine = ShrakeRupley(probe_radius=SASA_PROBE, n_points=SASA_POINTS)
+def sasa_of(chain_ids):
+    model = parser.get_structure('sasa', files[0])[0]
+    for cid in [c.id for c in model]:
+        if cid not in chain_ids: model.detach_child(cid)
+    for ch in model:
+        for res in ch:
+            for aid in [a.get_id() for a in res if a.element in ('H', 'D')]: res.detach_child(aid)
+    sasa_engine.compute(model, level='M')
+    return float(model.sasa)
+solo_sasa = {}
+def solo(chain_id):
+    if chain_id not in solo_sasa: solo_sasa[chain_id] = sasa_of([chain_id])
+    return solo_sasa[chain_id]
+bsa_pairs = []
+for key in sorted(pair_counts):
+    a, b = key.split('|')
+    together = sasa_of([a, b])
+    bsa_pairs.append({'chains': [a, b], 'sasa_a': round(solo(a), 4), 'sasa_b': round(solo(b), 4),
+                      'sasa_ab': round(together, 4), 'bsa': round(max(0.0, solo(a) + solo(b) - together), 4)})
+primary = next((p for p in bsa_pairs if sorted(p['chains']) == sorted([map_a, map_b])), None)
+if primary is not None:  # report the primary pair in the order [map_a, map_b], whichever way it was stored
+    primary = {'chains': [map_a, map_b], 'sasa_a': round(solo(map_a), 4), 'sasa_b': round(solo(map_b), 4),
+               'sasa_ab': primary['sasa_ab'], 'bsa': primary['bsa']}
+out['bsa'] = {'chains': [map_a, map_b], 'probe_radius': SASA_PROBE, 'n_points': SASA_POINTS,
+    'cutoff': cutoff, 'implementation': 'Bio.PDB.SASA.ShrakeRupley ' + Bio.__version__,
+    'radii': 'Biopython Bondi defaults (C 1.70, N 1.55, O 1.52, S 1.80, P 1.80, SE 1.90, F 1.47, CL 1.75, BR 1.85, I 1.98)',
+    'definition': 'BSA(A,B) = SASA(A) + SASA(B) - SASA(A+B), Shrake-Rupley, probe 1.4 A, 92 points, all non-hydrogen atoms, not halved, floored at 0',
+    'sasa_a': primary['sasa_a'] if primary else None, 'sasa_b': primary['sasa_b'] if primary else None,
+    'sasa_ab': primary['sasa_ab'] if primary else None, 'bsa': primary['bsa'] if primary else None,
+    'pairs': len(bsa_pairs), 'total_bsa': round(sum(p['bsa'] for p in bsa_pairs), 4),
+    'chain_sasa': {k: round(v, 4) for k, v in sorted(solo_sasa.items())}, 'all_pairs': bsa_pairs}
+print('bsa', out['bsa']['chains'], out['bsa']['bsa'], 'A^2 over', out['bsa']['pairs'], 'contacting pairs; total', out['bsa']['total_bsa'])
 
 # MSA statistics per unpaired .a3m in the folder: conservation = 1 - H/log2(20) over the twenty amino
 # acids (gaps and X excluded), identity to the query, coverage; lowercase insertions dropped.
