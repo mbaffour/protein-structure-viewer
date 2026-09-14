@@ -2,6 +2,15 @@
 
 All notable changes to this project are recorded here.
 
+## 2.26.1
+
+- **Legend and scale bar no longer collide on narrow exports.** The legend is shrunk (never below 55 %) when it would
+  not fit the export's width, and the scale bar is lifted above it when the two would still overlap — on every PNG and
+  SVG export, single or multi-panel. Builder captions wrap onto a second line instead of being cut, and the caption strip
+  is as tall as the longest caption in the figure needs.
+- **Fixed: the figure builder's include switches were invisible.** The theme only draws a checkbox inside a
+  `.form-check` label; the builder rendered bare inputs, which worked but could not be seen. They are wrapped now.
+
 ## 2.26.0
 
 - **Figure builder.** Saved views are now the panels of a figure. Under *Publish → Figure builder* each saved view has

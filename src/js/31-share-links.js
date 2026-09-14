@@ -758,7 +758,7 @@
     renderFigureLabels();
   }
 
-  function drawPlddtLegend(context, x, y, scale, palette, kind = 'figure') {
+  function drawPlddtLegend(context, x, y, scale, palette, kind = 'figure', measureOnly = false) {
     const legend = legendItems(kind);
     if (!legend) return 0;
     const swatch = Math.round(14 * scale); const gap = Math.round(6 * scale); const font = Math.round(13 * scale);
@@ -768,6 +768,7 @@
     const title = legend.title; const titleWidth = context.measureText(title).width + gap * 2;
     const widths = items.map(item => swatch + gap + context.measureText(item[1]).width + gap * 2);
     const total = titleWidth + widths.reduce((sum, width) => sum + width, 0);
+    if (measureOnly) { context.restore(); return total; }
     context.fillStyle = palette.paper; context.globalAlpha = 0.88;
     context.fillRect(x - gap, y - swatch, total + gap, swatch * 2); context.globalAlpha = 1;
     let cursor = x;
@@ -781,6 +782,29 @@
     return total;
   }
 
+  /* Legend bottom-left, scale bar bottom-right. The legend is drawn at the figure's text scale
+     but shrunk (never below 55 %) when it would not fit the width, and the bar is lifted above
+     the legend band when the two would still collide — in the narrow panels of a multi-panel
+     figure they otherwise print on top of each other. Used by every PNG and SVG export. */
+  const furnitureMeasure = document.createElement('canvas').getContext('2d');
+  function furnitureLayout(width, height, scale, bar, palette, wanted = legendWanted()) {
+    const margin = Math.round(24 * scale);
+    let legendScale = scale; let legendWidth = 0;
+    if (wanted) {
+      legendWidth = drawPlddtLegend(furnitureMeasure, 0, 0, scale, palette, 'figure', true);
+      const available = width - margin * 2;
+      if (legendWidth > available) { legendScale = Math.max(scale * 0.55, scale * available / legendWidth); legendWidth = drawPlddtLegend(furnitureMeasure, 0, 0, legendScale, palette, 'figure', true); }
+    }
+    let barLift = 0;
+    if (bar && wanted && margin + legendWidth + margin / 2 > width - margin - bar.pixels - margin / 3) barLift = Math.round(Math.max(0, 40 * legendScale - 14 * scale));
+    return { legendX: margin, legendY: height - Math.round(26 * legendScale), legendScale, barLift };
+  }
+  function drawFurniture(context, width, height, scale, bar, palette, wanted = legendWanted()) {
+    const layout = furnitureLayout(width, height, scale, bar, palette, wanted);
+    if (wanted) drawPlddtLegend(context, layout.legendX, layout.legendY, layout.legendScale, palette);
+    if (bar) { context.save(); context.translate(0, -layout.barLift); drawScaleBar(context, bar, scale, palette); context.restore(); }
+    return layout;
+  }
   async function withLegend(uri, plan) {
     const bar = scaleBarSpec(exportViewer, plan);
     if (!legendWanted() && !bar) return uri;
@@ -789,9 +813,7 @@
     const canvas = document.createElement('canvas'); canvas.width = width; canvas.height = height;
     const context = canvas.getContext('2d');
     context.drawImage(imageValue, 0, 0, width, height);
-    const scale = figureScale(plan);
-    if (legendWanted()) drawPlddtLegend(context, Math.round(24 * scale), height - Math.round(26 * scale), scale, figurePalette());
-    if (bar) drawScaleBar(context, bar, scale, figurePalette());
+    drawFurniture(context, width, height, figureScale(plan), bar, figurePalette());
     return canvas.toDataURL('image/png');
   }
 

@@ -66,6 +66,14 @@
     return { markup: parts.join(''), width: total };
   }
 
+  function svgFurniture(width, height, scale, bar, palette, wanted = legendWanted()) {
+    const layout = furnitureLayout(width, height, scale, bar, palette, wanted);
+    const parts = [];
+    if (wanted) parts.push(svgLegend(layout.legendX, layout.legendY, layout.legendScale, palette).markup);
+    if (bar) parts.push(layout.barLift ? '<g transform="translate(0 ' + f(-layout.barLift) + ')">' + scaleBarSvg(bar, scale, palette) + '</g>' : scaleBarSvg(bar, scale, palette));
+    return parts.join('');
+  }
+
   function svgScreenText(record, dimensions, scale, palette) {
     const fontSize = 16 * record.size * scale; const margin = 16 * scale;
     const right = record.corner.endsWith('right'); const bottom = record.corner.startsWith('bottom');
@@ -133,7 +141,7 @@
       const target = exportViewer;
       const overlay = overlaySvg(target, new Set(displayedEntries().map(entry => entry.id)), requested, true);
       const scale = figureScale(requested);
-      const legend = (legendWanted() ? svgLegend(24 * scale, requested.height - 26 * scale, scale, figurePalette()).markup : '') + scaleBarSvg(scaleBarSpec(target, requested), scale, figurePalette());
+      const legend = svgFurniture(requested.width, requested.height, scale, scaleBarSpec(target, requested), figurePalette());
       const background = backgroundSpec();
       const svg = svgDocument(requested.width, requested.height, background.alpha ? background.color : null, svgImage(uri, 0, 0, requested.width, requested.height) + '\n<g id="overlay">\n' + overlay + '\n' + legend + '</g>');
       downloadBlob(svg, 'image/svg+xml', 'protein-figure-' + requested.width + 'x' + requested.height + '.svg');
@@ -321,16 +329,25 @@
     if (typeof options.letters === 'boolean') root.querySelector('#gpv-builder-letters').checked = options.letters;
     if (typeof options.legends === 'boolean') root.querySelector('#gpv-builder-legends').checked = options.legends;
   }
-  function figureLayout(count) {
+  function figureLayout(count, panels = []) {
     const requested = exportDimensions(); const options = builderOptions(); const total = Math.max(1, count);
     const columns = Math.max(1, Math.min(total, options.columns === 'auto' ? panelColumns(total) : Number(options.columns) || 2));
     const rows = Math.ceil(total / columns);
     const cellWidth = Math.floor(requested.width / columns);
     const cellHeight = Math.max(1, Math.floor(cellWidth * requested.height / Math.max(1, requested.width)));
     const fontPx = Math.max(10, Math.round(requested.dpi ? requested.points / 72 * requested.dpi : 12 * figureScale(requested)));
-    const captionHeight = options.letters || options.captions !== 'none' ? Math.round(fontPx * 2.4) : Math.round(fontPx * 0.5);
+    /* Captions wrap onto a second line when they do not fit beside the letter; the strip is as
+       tall as the longest caption in the figure needs, so every row lines up. */
+    const inset = Math.round(cellWidth * 0.025);
+    furnitureMeasure.font = '700 ' + Math.round(fontPx * 1.3) + 'px ' + figureFont();
+    const letterWidth = options.letters ? furnitureMeasure.measureText('W').width + fontPx * 0.8 : 0;
+    const captionWidth = cellWidth - inset - letterWidth - fontPx;
+    furnitureMeasure.font = '500 ' + fontPx + 'px ' + figureFont();
+    const captionLines = view => { const wrapped = wrapText(furnitureMeasure, builderCaption(view, options), captionWidth); return wrapped.length > 2 ? [wrapped[0], truncateToWidth(furnitureMeasure, wrapped.slice(1).join(' '), captionWidth)] : wrapped; };
+    const lines = Math.max(1, ...panels.map(view => captionLines(view).length));
+    const captionHeight = options.letters || options.captions !== 'none' ? Math.round(fontPx * (0.9 + 1.3 * lines)) : Math.round(fontPx * 0.5);
     const cellPlan = { width: cellWidth, height: cellHeight, dpi: requested.dpi, points: requested.points, textScale: requested.textScale, mm: requested.mm ? requested.mm / columns : undefined };
-    return { requested, options, columns, rows, cellWidth, cellHeight, fontPx, captionHeight, width: columns * cellWidth, height: rows * (cellHeight + captionHeight), cellPlan };
+    return { requested, options, columns, rows, cellWidth, cellHeight, fontPx, inset, letterWidth, captionWidth, captionLines, lines, captionHeight, width: columns * cellWidth, height: rows * (cellHeight + captionHeight), cellPlan };
   }
   function builderCaption(view, options) {
     const name = String(view.name || ''); const caption = String(view.caption || '');
@@ -345,7 +362,8 @@
       const tr = document.createElement('tr');
       const inCell = document.createElement('td'); const tick = document.createElement('input'); tick.type = 'checkbox'; tick.className = 'form-check-input'; tick.checked = included; tick.setAttribute('aria-label', 'Include ' + view.name + ' in the figure');
       tick.addEventListener('change', () => { remember('figure panels'); view.inFigure = tick.checked; renderFigureBuilder(); });
-      inCell.append(tick); tr.append(inCell);
+      /* The theme draws checkboxes only inside a .form-check label; a bare input is invisible. */
+      const tickLabel = document.createElement('label'); tickLabel.className = 'form-check'; tickLabel.append(tick); inCell.append(tickLabel); tr.append(inCell);
       const letterCell = document.createElement('td'); letterCell.className = 'gpv-builder-letter'; letterCell.textContent = included ? String.fromCharCode(65 + letter) : '—'; if (included) letter += 1; tr.append(letterCell);
       const nameCell = document.createElement('th'); nameCell.scope = 'row'; nameCell.textContent = view.name; tr.append(nameCell);
       const captionCell = document.createElement('td'); const caption = document.createElement('input'); caption.type = 'text'; caption.className = 'form-control'; caption.value = view.caption || ''; caption.placeholder = 'Panel caption'; caption.maxLength = 200; caption.setAttribute('aria-label', 'Caption for ' + view.name);
@@ -362,14 +380,14 @@
     root.querySelector('#gpv-contact-sheet').disabled = !panels.length; root.querySelector('#gpv-builder-svg').disabled = !panels.length;
     if (!savedViews.length) { estimate.textContent = 'Save a view above to start a figure.'; return; }
     if (!panels.length) { estimate.textContent = 'No view is ticked.'; return; }
-    const layout = figureLayout(panels.length);
+    const layout = figureLayout(panels.length, panels);
     estimate.textContent = panels.length + ' panel' + (panels.length === 1 ? '' : 's') + ' · ' + layout.columns + ' column' + (layout.columns === 1 ? '' : 's') + ' · ' + layout.width + ' × ' + layout.height + ' px' + (layout.requested.dpi ? ' · ' + layout.requested.mm + ' mm wide at ' + layout.requested.dpi + ' dpi · text ' + layout.requested.points + ' pt' : '') + ' · each panel ' + layout.cellWidth + ' × ' + layout.cellHeight + ' px';
   }
   async function downloadFigure(kind) {
     const panels = figurePanelsSelected();
     const button = root.querySelector(kind === 'svg' ? '#gpv-builder-svg' : '#gpv-contact-sheet'); const idle = button.textContent;
     if (!panels.length) { announce('Tick at least one saved view for the figure', 'error'); return; }
-    const layout = figureLayout(panels.length); const options = layout.options; const palette = figurePalette();
+    const layout = figureLayout(panels.length, panels); const options = layout.options; const palette = figurePalette();
     const done = setBusy('Rendering figure…'); button.disabled = true; button.textContent = 'Rendering…'; await afterPaint();
     const restore = captureViewState();
     const canvas = kind === 'png' ? document.createElement('canvas') : null; let context = null;
@@ -382,27 +400,23 @@
         applyViewState(panels[index], { panels: false });
         const x = (index % layout.columns) * layout.cellWidth; const y = Math.floor(index / layout.columns) * (layout.cellHeight + layout.captionHeight);
         const uri = await renderPublicationImage(null, layout.cellPlan, kind === 'png');
-        const legend = options.legends ? legendItems('figure') : null; const bar = options.legends ? scaleBarSpec(exportViewer, layout.cellPlan) : null;
-        const letter = String.fromCharCode(65 + index); const caption = builderCaption(panels[index], options);
-        const cy = y + layout.cellHeight + layout.captionHeight / 2; let cursor = x + Math.round(layout.cellWidth * 0.025);
+        const wanted = options.legends && legendItems('figure') !== null; const bar = options.legends ? scaleBarSpec(exportViewer, layout.cellPlan) : null;
+        const letter = String.fromCharCode(65 + index); const captionLines = layout.captionLines(panels[index]);
+        const firstLine = y + layout.cellHeight + Math.round(layout.fontPx * 1.1); const lineStep = Math.round(layout.fontPx * 1.3);
+        const textX = x + layout.inset + layout.letterWidth;
         if (kind === 'png') {
           context.drawImage(await loadImage(uri), x, y, layout.cellWidth, layout.cellHeight);
-          context.save(); context.translate(x, y);
-          if (legend) drawPlddtLegend(context, Math.round(24 * scale), layout.cellHeight - Math.round(26 * scale), scale, palette);
-          if (bar) drawScaleBar(context, bar, scale, palette);
-          context.restore();
+          context.save(); context.translate(x, y); drawFurniture(context, layout.cellWidth, layout.cellHeight, scale, bar, palette, wanted); context.restore();
           context.fillStyle = palette.ink; context.textBaseline = 'middle';
-          if (options.letters) { context.font = '700 ' + Math.round(layout.fontPx * 1.3) + 'px ' + figureFont(); context.fillText(letter, cursor, cy); cursor += context.measureText(letter).width + layout.fontPx * 0.8; }
-          if (caption) { context.font = '500 ' + layout.fontPx + 'px ' + figureFont(); context.fillText(truncateToWidth(context, caption, x + layout.cellWidth - cursor - layout.fontPx), cursor, cy); }
+          if (options.letters) { context.font = '700 ' + Math.round(layout.fontPx * 1.3) + 'px ' + figureFont(); context.fillText(letter, x + layout.inset, firstLine); }
+          context.font = '500 ' + layout.fontPx + 'px ' + figureFont();
+          captionLines.forEach((line, lineIndex) => context.fillText(line, textX, firstLine + lineIndex * lineStep));
         } else {
           parts.push(svgImage(uri, x, y, layout.cellWidth, layout.cellHeight));
           const overlay = overlaySvg(exportViewer, new Set(displayedEntries().map(entry => entry.id)), layout.cellPlan, false);
-          const inCell = [overlay];
-          if (legend) inCell.push(svgLegend(24 * scale, layout.cellHeight - 26 * scale, scale, palette).markup);
-          if (bar) inCell.push(scaleBarSvg(bar, scale, palette));
-          parts.push('<g transform="translate(' + f(x) + ' ' + f(y) + ')">' + inCell.join('') + '</g>');
-          if (options.letters) { parts.push(svgText(cursor, cy, layout.fontPx * 1.3, 700, letter)); svgMeasure.font = '700 ' + Math.round(layout.fontPx * 1.3) + 'px ' + svgFont; cursor += svgMeasure.measureText(letter).width + layout.fontPx * 0.8; }
-          if (caption) { svgMeasure.font = '500 ' + layout.fontPx + 'px ' + svgFont; parts.push(svgText(cursor, cy, layout.fontPx, 500, truncateToWidth(svgMeasure, caption, x + layout.cellWidth - cursor - layout.fontPx))); }
+          parts.push('<g transform="translate(' + f(x) + ' ' + f(y) + ')">' + overlay + svgFurniture(layout.cellWidth, layout.cellHeight, scale, bar, palette, wanted) + '</g>');
+          if (options.letters) parts.push(svgText(x + layout.inset, firstLine, layout.fontPx * 1.3, 700, letter));
+          captionLines.forEach((line, lineIndex) => parts.push(svgText(textX, firstLine + lineIndex * lineStep, layout.fontPx, 500, line)));
         }
         /* Back to the on-screen state after each panel, so views with synchronized panels do not
            leave a WebGL context behind per panel (browsers drop the oldest context past their limit). */
