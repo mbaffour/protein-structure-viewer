@@ -11,7 +11,11 @@ set -euo pipefail
 cd "$(dirname "$0")/.."
 
 doi="${1:-}"; concept="${2:-$doi}"
-if [[ ! "$doi" =~ ^10\.[0-9]{4,9}/ ]]; then echo "usage: scripts/set-doi.sh <release DOI> [concept DOI]" >&2; exit 1; fi
+for value in "$doi" "$concept"; do
+  if [[ ! "$value" =~ ^10\.[0-9]{4,9}/zenodo\.[0-9]+$ ]]; then
+    echo "usage: scripts/set-doi.sh <release DOI> [concept DOI]   (e.g. 10.5281/zenodo.22741488; placeholders like zenodo.NEW are refused)" >&2; exit 1
+  fi
+done
 
 # CITATION.cff: add or replace the doi field (version-level DOI).
 if grep -q '^doi: ' CITATION.cff; then
