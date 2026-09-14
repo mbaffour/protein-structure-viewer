@@ -1,5 +1,7 @@
 # Protein Structure Viewer
 
+[![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.22741487.svg)](https://doi.org/10.5281/zenodo.22741487)
+
 A single-file, browser-based viewer for predicted and experimental protein structures. It is built
 for the everyday work around a structure prediction run: look at the models, compare them, check
 what the confidence numbers actually say, annotate what matters, and get a figure or a shareable
@@ -265,7 +267,7 @@ rendering credit. See [`docs/USAGE.md`](docs/USAGE.md#publishing-a-figure) for t
 
 Awuah, M. B. (2026). *Protein Structure Viewer* (version 2.10.0) [software].
 https://github.com/mbaffour/protein-structure-viewer — each GitHub release is archived on Zenodo
-with a DOI; cite the DOI of the release you used. Metadata for reference managers is in
+with a DOI; cite the DOI of the release you used (this release: https://doi.org/10.5281/zenodo.22741488; all versions: https://doi.org/10.5281/zenodo.22741487). Metadata for reference managers is in
 [`CITATION.cff`](CITATION.cff). Please also cite the rendering library: Rego, N. & Koes, D. (2015).
 3Dmol.js: molecular visualization with WebGL. *Bioinformatics* 31(8), 1322–1324.
 doi:10.1093/bioinformatics/btu829.
