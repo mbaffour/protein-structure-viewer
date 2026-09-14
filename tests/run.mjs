@@ -635,6 +635,34 @@ await step('a residue label is added by clicking and edited from its list row', 
   await page.click('#gpv-label-list .gpv-entry button:has-text("Remove")'); await page.waitForTimeout(300);
   if (await page.locator('#gpv-label-list .gpv-entry').count()) throw new Error('label was not removed');
 });
+await step('a label is dragged with the mouse, keeps a model-space offset, and resets back onto its residue', async () => {
+  await tapStageCentre();
+  await page.fill('#gpv-label-text', 'Drag me'); await page.click('#gpv-add-label'); await page.waitForTimeout(400);
+  const read = () => page.evaluate(() => {
+    const d = window.__viewerDebug; const label = d.labelRecords()[0];
+    const screen = d.viewer.modelToScreen(d.labelPosition(label));
+    return { x: screen.x, y: screen.y, offset: label.offset || null, view: d.viewer.getView().slice(0, 8), scrollX, scrollY };
+  });
+  const before = await read();
+  await page.mouse.move(before.x - before.scrollX, before.y - before.scrollY); await page.waitForTimeout(300);
+  const hint = (await page.locator('#gpv-hover').textContent()) || '';
+  if (!/Drag to move/.test(hint)) throw new Error('the pointer over a label does not offer to move it: ' + hint);
+  await page.mouse.down();
+  await page.mouse.move(before.x - before.scrollX + 70, before.y - before.scrollY - 45, { steps: 10 });
+  await page.mouse.up(); await page.waitForTimeout(400);
+  const after = await read();
+  const dx = after.x - before.x; const dy = after.y - before.y;
+  if (Math.abs(dx - 70) > 14 || Math.abs(dy + 45) > 14) throw new Error('the label moved ' + dx.toFixed(0) + ', ' + dy.toFixed(0) + ' px for a drag of 70, -45');
+  if (!after.offset || Math.hypot(after.offset.x, after.offset.y, after.offset.z) < 1) throw new Error('the drag left no model-space offset: ' + JSON.stringify(after.offset));
+  /* The camera must not have moved: dragging a label is not dragging the scene. */
+  if (after.view.some((value, index) => Math.abs(value - before.view[index]) > 1e-6)) throw new Error('the camera moved during the label drag');
+  const reset = page.locator('#gpv-label-list .gpv-entry button:has-text("Reset")');
+  if (await reset.isDisabled()) throw new Error('Reset stayed disabled after a drag');
+  await reset.click(); await page.waitForTimeout(300);
+  if (await page.evaluate(() => window.__viewerDebug.labelRecords()[0].offset)) throw new Error('Reset did not put the label back on its residue');
+  await page.click('#gpv-label-list .gpv-entry button:has-text("Remove")'); await page.waitForTimeout(200);
+  console.log('       dragged ' + dx.toFixed(0) + ', ' + dy.toFixed(0) + ' px · offset kept in model space · camera still · reset');
+});
 await step('the sequence strip shows both chains and selects a residue on click', async () => {
   await tab('models'); await page.selectOption('#gpv-view-mode', 'single'); await tab('annotate'); await page.waitForTimeout(500);
   const canvases = page.locator('#gpv-sequence-rows canvas');
@@ -1294,6 +1322,31 @@ await step('the TIFF export is a baseline RGB TIFF with the resolution set', asy
   const dpi = tiff.readUInt32LE(tags[282].value) / tiff.readUInt32LE(tags[282].value + 4);
   if (dpi !== 300 || tags[296].value !== 2) throw new Error('resolution ' + dpi + ' unit ' + tags[296].value);
   console.log('       TIFF ' + tags[256].value + ' × ' + tags[257].value + ' at ' + dpi + ' dpi · ' + (tiff.length / 1048576).toFixed(1) + ' MB');
+});
+await step('the legend sits where the figure asks: a bottom row, or a stack down one side', async () => {
+  await tab('appearance'); const mode = await page.inputValue('#gpv-color-mode');
+  await page.selectOption('#gpv-color-mode', 'plddt'); await page.waitForTimeout(400);
+  await tab('publish');
+  const legendOf = async () => {
+    const download = page.waitForEvent('download', { timeout: 120000 }); await page.click('#gpv-svg');
+    const svg = await readFile(await (await download).path(), 'utf8');
+    const group = (svg.match(/<g id="legend">[\s\S]*?<\/g>/) || [''])[0];
+    if (!group) throw new Error('the SVG carries no legend group');
+    const rows = [...new Set([...group.matchAll(/<text[^>]*\sy="([-\d.]+)"/g)].map(match => Number(match[1])))];
+    return { rows, x: Number((group.match(/<rect x="([-\d.]+)"/) || [])[1]) };
+  };
+  await page.selectOption('#gpv-legend-position', 'bottom-left'); await page.waitForTimeout(200);
+  const bottom = await legendOf();
+  if (bottom.rows.length !== 1) throw new Error('the bottom legend is not a single row: ' + JSON.stringify(bottom.rows));
+  await page.selectOption('#gpv-legend-position', 'right'); await page.waitForTimeout(200);
+  const side = await legendOf();
+  if (side.rows.length < 3) throw new Error('the side legend did not stack: ' + JSON.stringify(side.rows));
+  if (!(side.x > bottom.x + 100)) throw new Error('the right-hand legend is not on the right: x ' + side.x + ' against ' + bottom.x);
+  const scene = await page.evaluate(() => window.__viewerDebug.sceneSettings().legendPosition);
+  if (scene !== 'right') throw new Error('the scene does not carry the legend position: ' + scene);
+  await page.selectOption('#gpv-legend-position', 'bottom-left'); await page.waitForTimeout(200);
+  await tab('appearance'); await page.selectOption('#gpv-color-mode', mode); await page.waitForTimeout(300); await tab('publish');
+  console.log('       one row at y ' + bottom.rows[0].toFixed(0) + ' · stacked over ' + side.rows.length + ' rows on the right');
 });
 await step('a scale bar of known length appears in the figure SVG', async () => {
   await page.selectOption('#gpv-scale-bar', '20'); await page.waitForTimeout(400);

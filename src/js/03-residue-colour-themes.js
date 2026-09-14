@@ -569,19 +569,37 @@
       const show = document.createElement('button'); show.className = 'btn btn-ghost'; show.type = 'button'; show.textContent = 'Show';
       show.title = 'Zoom to this residue';
       show.addEventListener('click', () => { if (!entry || !entry.model) return; const selection = { model: entry.model.getID(), resi: label.resi }; if (label.chain) selection.chain = label.chain; viewer.zoomTo(selection); viewer.render(); syncViewsFrom(viewer); });
+      const reset = document.createElement('button'); reset.className = 'btn btn-ghost'; reset.type = 'button'; reset.textContent = 'Reset';
+      reset.title = 'Put the label back on its residue'; reset.disabled = labelOffsetLength(label) === 0;
+      reset.addEventListener('click', () => { remember('label position'); label.offset = null; renderLabelList(); rebuildOverlays(); updateStatus('Label put back on its residue'); });
       const remove = document.createElement('button'); remove.className = 'btn btn-ghost'; remove.type = 'button'; remove.textContent = 'Remove';
       remove.addEventListener('click', () => { remember('label removal'); labelRecords = labelRecords.filter(item => item !== label); renderLabelList(); rebuildOverlays(); updateStatus('Label removed'); });
-      tools.append(size, color, show, remove);
+      tools.append(size, color, show, reset, remove);
       row.append(copy, tools); list.append(row);
     });
   }
 
+  /* A label belongs to its residue: that is its anchor. Dragging it stores `offset`, a
+     model-space vector, so the text keeps its place against the structure as the camera moves,
+     and a thin leader line is drawn back to the residue once it has moved a clear distance. */
+  function labelAnchor(label, byId = entriesById()) {
+    const entry = byId.get(label.entryId);
+    const atom = entry && entry.atoms.find(item => (item.chain || '') === label.chain && item.resi === label.resi && (item.atom === 'CA' || item.atom === label.atom));
+    return atom ? { x: atom.x, y: atom.y, z: atom.z } : { x: label.x, y: label.y, z: label.z };
+  }
+  function labelOffsetLength(label) {
+    const offset = label && label.offset;
+    return offset ? Math.hypot(offset.x || 0, offset.y || 0, offset.z || 0) : 0;
+  }
+  function labelPosition(label, byId = entriesById()) { return shiftBy(labelAnchor(label, byId), label.offset); }
+  const leaderMinimum = 0.75;
+  function leaderColor() { return labelColors.getPropertyValue('--muted-foreground').trim() || '#94a3b8'; }
   function drawLabels(target, shownIds, scale = 1) {
     const byId = entriesById();
     labelRecords.filter(label => shownIds.has(label.entryId)).forEach(label => {
-      const entry = byId.get(label.entryId);
-      const atom = entry && entry.atoms.find(item => (item.chain || '') === label.chain && item.resi === label.resi && (item.atom === 'CA' || item.atom === label.atom));
-      const position = atom ? { x: atom.x, y: atom.y, z: atom.z } : { x: label.x, y: label.y, z: label.z };
+      const anchor = labelAnchor(label, byId);
+      const position = shiftBy(anchor, label.offset);
+      if (labelOffsetLength(label) > leaderMinimum) target.addLine({ start: anchor, end: position, color: label.color || leaderColor(), linewidth: Math.max(1, Math.round(scale)) });
       target.addLabel(label.text, labelStyle(position, { color: label.color, size: label.size, scale }));
     });
     if (root.querySelector('#gpv-all-labels').checked) {

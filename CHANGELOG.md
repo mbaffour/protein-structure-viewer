@@ -2,6 +2,19 @@
 
 All notable changes to this project are recorded here.
 
+## 2.28.0
+
+- **Labels can be dragged.** Pick up any label in the 3D view with the mouse — a residue label, a callout, a
+  measurement value, a corner title — and put it where the figure needs it. A residue label keeps a thin leader line
+  back to its residue once it has moved, in the label's colour, drawn on screen, in every PNG and SVG export, in the
+  composite and built figures and in the shared report. The move is stored as a model-space offset, so it holds its
+  place against the structure as the camera turns, travels with scenes, sessions and share links, and is undone with
+  ⌘Z; *Reset* in the label's row puts it back on its residue. The pointer shows a grab cursor and the readout says
+  which label it would move, and the drag never moves the camera. Touch is untouched: a finger drag still rotates.
+- **Legend position.** *Publish → Legend position* puts the colour legend in any corner of the figure, or stacks it as
+  a column down the left or right side. It applies to every PNG, TIFF and SVG export, to each panel of a built figure,
+  and travels with the scene; the scale bar is lifted clear wherever the two would meet.
+
 ## 2.27.1
 
 - **Architecture bar: one name per domain, no piled-up numbers.** A domain that the PAE segmentation splits into several

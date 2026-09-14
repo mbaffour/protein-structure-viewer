@@ -254,10 +254,125 @@
     return best;
   }
 
+  /* ---- Dragging a label ----
+     Every piece of text in the view can be picked up with the mouse: residue labels and the text
+     of callouts, measurements and corner titles. The drag is stored where that kind of text keeps
+     its position — a model-space offset for anything attached to the structure, screen pixels for
+     a corner title — so the figure survives a camera move. Touch is left alone: on a touchscreen a
+     drag rotates the model. */
+  const labelMeasure = document.createElement('canvas').getContext('2d');
+  function draggableLabels() {
+    const shown = new Set(displayedEntries().map(entry => entry.id));
+    const byId = entriesById();
+    const stage = root.querySelector('#gpv-stage');
+    const items = [];
+    labelRecords.filter(label => shown.has(label.entryId)).forEach(label => {
+      items.push({ kind: 'label', record: label, position: labelPosition(label, byId), text: label.text, size: label.size || 12 });
+    });
+    annotationRecords.forEach(record => {
+      if (!annotationHasLabel(record)) return;
+      if (record.type === 'screen') {
+        const margin = 16; const fontSize = 16 * record.size;
+        const right = record.corner.endsWith('right'); const bottom = record.corner.startsWith('bottom');
+        const x = Math.max(0, Math.min(stage.clientWidth, (right ? stage.clientWidth - margin : margin) + (record.dx || 0)));
+        const y = Math.max(0, Math.min(stage.clientHeight, (bottom ? stage.clientHeight - margin : margin) + (record.dy || 0))) + (bottom ? -fontSize * 0.8 : fontSize * 0.8);
+        items.push({ kind: 'screen', record, screen: { x, y }, anchor: right ? 'end' : 'start', text: record.text, size: fontSize });
+        return;
+      }
+      if (!record.points.every(point => shown.has(point.entryId))) return;
+      const points = record.points.map(resolvePoint); if (points.some(point => !point)) return;
+      const position = record.type === 'callout'
+        ? calloutAnchor(points[0], record)
+        : shiftBy(points.length > 1 ? midpoint(points[0], points[1]) : points[0], record.offset);
+      items.push({ kind: 'annotation', record, position, text: record.text || pointName(record.points[0]), size: 13 * record.size });
+    });
+    return items;
+  }
+
+  function labelHitAt(pageX, pageY) {
+    if (typeof viewer.modelToScreen !== 'function') return null;
+    const rect = root.querySelector('#gpv-stage').getBoundingClientRect();
+    let best = null; let bestDistance = Infinity;
+    draggableLabels().forEach(item => {
+      const screen = item.screen ? { x: rect.left + scrollX + item.screen.x, y: rect.top + scrollY + item.screen.y } : viewer.modelToScreen(item.position);
+      if (!screen) return;
+      labelMeasure.font = '500 ' + item.size + 'px ' + figureFont();
+      const halfWidth = Math.max(10, labelMeasure.measureText(String(item.text || '')).width / 2 + item.size * 0.45);
+      const halfHeight = item.size * 0.95;
+      const centre = item.anchor === 'end' ? { x: screen.x - halfWidth, y: screen.y } : item.anchor === 'start' ? { x: screen.x + halfWidth, y: screen.y } : screen;
+      const dx = Math.abs(pageX - centre.x); const dy = Math.abs(pageY - centre.y);
+      if (dx > halfWidth || dy > halfHeight) return;
+      const distance = Math.hypot(dx, dy);
+      if (distance < bestDistance) { bestDistance = distance; best = item; }
+    });
+    return best;
+  }
+
+  let labelDrag = null;
+  function startLabelDrag(item, event) {
+    remember('label position');
+    labelDrag = { item, x: event.pageX, y: event.pageY, perAngstrom: pixelsPerAngstrom(viewer) || 20, moved: false };
+    root.querySelector('#gpv-stage').style.cursor = 'grabbing';
+  }
+  function moveLabelDrag(event) {
+    const drag = labelDrag; if (!drag) return;
+    const dx = event.pageX - drag.x; const dy = event.pageY - drag.y;
+    if (!dx && !dy) return;
+    drag.x = event.pageX; drag.y = event.pageY; drag.moved = true;
+    const record = drag.item.record;
+    if (drag.item.kind === 'screen') {
+      record.dx = (record.dx || 0) + dx; record.dy = (record.dy || 0) + dy;
+    } else {
+      const view = typeof viewer.getView === 'function' ? viewer.getView() : [0, 0, 0, 0, 0, 0, 0, 1];
+      const right = screenAxisInModelSpace(view, { x: 1, y: 0, z: 0 });
+      const up = screenAxisInModelSpace(view, { x: 0, y: 1, z: 0 });
+      const step = 1 / drag.perAngstrom;
+      const offset = record.offset || { x: 0, y: 0, z: 0 };
+      record.offset = {
+        x: offset.x + (right.x * dx - up.x * dy) * step,
+        y: offset.y + (right.y * dx - up.y * dy) * step,
+        z: offset.z + (right.z * dx - up.z * dy) * step
+      };
+    }
+    rebuildOverlays();
+  }
+  function endLabelDrag() {
+    const drag = labelDrag; labelDrag = null;
+    root.querySelector('#gpv-stage').style.cursor = '';
+    if (!drag) return;
+    if (drag.item.kind === 'label') renderLabelList(); else renderAnnotationList();
+    if (drag.moved) updateStatus('Label moved · drag it again, or Reset in its row to put it back');
+  }
+
   let pointerStart = null;
   function watchStageClicks() {
     const stage = root.querySelector('#gpv-stage');
-    stage.addEventListener('pointerdown', event => { if (event.button === 0) pointerStart = { x: event.pageX, y: event.pageY, time: Date.now() }; });
+    stage.addEventListener('pointerdown', event => {
+      if (event.button !== 0) return;
+      if (event.pointerType !== 'touch') {
+        const hit = labelHitAt(event.pageX, event.pageY);
+        if (hit) {
+          /* Capture phase: stopping here keeps the click away from 3Dmol, so the camera
+             stays put while the label moves. */
+          event.preventDefault(); event.stopPropagation();
+          try { stage.setPointerCapture(event.pointerId); } catch { /* capture is optional */ }
+          startLabelDrag(hit, event);
+          return;
+        }
+      }
+      pointerStart = { x: event.pageX, y: event.pageY, time: Date.now() };
+    }, true);
+    stage.addEventListener('pointermove', event => {
+      if (!labelDrag) return;
+      event.preventDefault(); event.stopPropagation();
+      moveLabelDrag(event);
+    }, true);
+    stage.addEventListener('pointerup', event => {
+      if (!labelDrag) return;
+      event.preventDefault(); event.stopPropagation();
+      endLabelDrag();
+    }, true);
+    stage.addEventListener('pointercancel', () => { if (labelDrag) endLabelDrag(); }, true);
     stage.addEventListener('pointerup', event => {
       const start = pointerStart; pointerStart = null;
       if (!start || event.button !== 0 || Math.hypot(event.pageX - start.x, event.pageY - start.y) > 4 || Date.now() - start.time > 700) return;
@@ -275,6 +390,9 @@
       hoverFrame = requestAnimationFrame(() => {
         hoverFrame = 0;
         if (!hoverAt) return;
+        const overLabel = labelHitAt(hoverAt.x, hoverAt.y);
+        stage.style.cursor = overLabel ? 'grab' : '';
+        if (overLabel) { readout.textContent = 'Drag to move “' + clipText(String(overLabel.text || ''), 40) + '”'; return; }
         const hit = pickAtomAt(hoverAt.x, hoverAt.y, true);
         readout.textContent = hit ? describeResidue(hit.entry, hit.atom) + (displayedEntries().length > 1 ? ' · ' + displayName(hit.entry) : '') : '';
         const next = hit ? { entryId: hit.entry.id, chain: hit.atom.chain || '', resi: hit.atom.resi } : null;

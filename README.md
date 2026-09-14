@@ -150,6 +150,14 @@ at output resolution with a caption. Tick the panels you want; unavailable ones 
 The shared HTML report reproduces the outline, depth cueing and faded chains, and shows the
 interface contact map beside the PAE heatmap when one was computed for a model in the report.
 
+## Moving labels and placing the legend
+
+Labels are draggable: pick one up in the 3D view and put it where the figure needs it. A residue
+label keeps a leader line back to its residue and stores its move against the structure, so the
+camera can turn without losing the arrangement; *Reset* in its row puts it back. **Legend position**
+in Publish puts the colour legend in any corner or stacks it down the left or right side of the
+figure, on every export and on each panel of a built figure.
+
 ## Domain figures
 
 Colour by annotated or PAE domains, then **Label domains** writes each domain's name on the

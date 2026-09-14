@@ -88,6 +88,10 @@ PSV_CHROMIUM=/opt/pw-browsers/chromium/chrome-linux/chrome npm test
   changes the varied column's value, keeps the ordering, and the dataset name, the debug hook and the methods text say
   "unweighted"; switching them back on puts "Henikoff & Henikoff, 1994" in the methods text.
 - PAE domains: the panel state and the figure legend call the segmentation a heuristic.
+- Dragging a label: hovering the label offers to move it, a 70 × −45 px drag moves it by the same amount on screen,
+  leaves a model-space offset of more than 1 Å, does not move the camera, and Reset clears it.
+- Legend position: the same figure SVG carries the legend as one row at the bottom left, and as a stack of three or more
+  rows on the right when the position is changed; the scene records the choice.
 - Domain labels and architecture: on the block-diagonal PAE model, Label domains adds exactly two labels, D1 and D2, at
   the domain centroids; the architecture model reads two chains with one domain run each; the SVG carries the chain rows,
   names and residue numbers, the PNG is as wide as the export estimate says; the composite offers the panel, the builder

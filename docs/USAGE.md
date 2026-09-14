@@ -425,6 +425,24 @@ figure goes into a slide or a manuscript draft without a file in between. Chrome
 image clipboard writes; Firefox and Safari may refuse, in which case the viewer says so and the
 download remains.
 
+**Moving labels.** Every piece of text in the 3D view can be dragged with the mouse: residue labels,
+callout and measurement text, and corner titles. Hover one and the pointer becomes a grab cursor while
+the readout names the label; drag it where the figure needs it. The camera stays put during the drag,
+and on a touchscreen a finger drag still rotates the model, so nothing is lost on a tablet. A residue
+label that has moved keeps a thin leader line back to its residue in the label's colour — on screen and
+in every export, the composite and built figures and the shared report — so a reader can still tell what
+is being named. The move is kept as a model-space offset, which means it holds its place against the
+structure as the camera turns rather than sliding across the screen, and it travels with scenes,
+sessions and share links and is undone with ⌘Z. **Reset** in the label's row puts it back on its
+residue; the arrow buttons in an annotation's row nudge its text by small steps for fine work.
+
+**Legend position.** The **Legend position** control in Publish decides where the colour legend is drawn
+on exports: any of the four corners, or stacked as a column down the **left** or **right** side, which
+is what a tall single-panel figure usually wants. It applies to the publication PNG and TIFF, the figure
+SVG, each panel of a figure built from saved views, and the composite figure, and it is part of the
+scene. Wherever the legend and the scale bar would meet, the bar is lifted clear; a legend too wide for
+the figure is shrunk, to 55 % of the figure's text size at most.
+
 **Domain labels and the architecture bar.** With domains defined (Annotate → Domains) or found
 (Confidence → PAE domains), **Label domains** writes each domain's name on the structure: one residue
 label at the Cα nearest the domain's centroid, in the domain colour, using the legend's names — so a

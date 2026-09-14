@@ -283,7 +283,7 @@
       confidence: reportConfidence(entry),
       coords: reportCoordinates(entry),
       shapes: reportShapes(entry),
-      labels: labelRecords.filter(label => label.entryId === entry.id).map(label => ({ text: label.text, chain: label.chain, resi: label.resi, atom: label.atom, x: label.x, y: label.y, z: label.z, color: label.color || null, size: label.size || 12 }))
+      labels: labelRecords.filter(label => label.entryId === entry.id).map(label => ({ text: label.text, chain: label.chain, resi: label.resi, atom: label.atom, ...labelPosition(label), color: label.color || null, size: label.size || 12 }))
     }));
     const chosenNames = new Set(chosen.map(entry => entry.name));
     const contactOwner = contactResult ? entryById(contactResult.entryId) : null;

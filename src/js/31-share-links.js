@@ -137,6 +137,7 @@
     if (typeof settings.fog === 'boolean') root.querySelector('#gpv-fog').checked = settings.fog;
     if (['boxed', 'plain'].includes(settings.labelStyle)) root.querySelector('#gpv-label-style').value = settings.labelStyle;
     setFigureLabels(settings.figureLabels);
+    if (['bottom-left', 'bottom-right', 'top-left', 'top-right', 'left', 'right'].includes(settings.legendPosition)) root.querySelector('#gpv-legend-position').value = settings.legendPosition;
     applyBuilderOptions(settings.figureBuilder);
     if ([0, 50, 70].includes(Number(settings.hideBelow))) root.querySelector('#gpv-hide-below').value = String(Number(settings.hideBelow));
     if (['stick', 'sphere', 'hide'].includes(settings.hetero)) root.querySelector('#gpv-hetero').value = settings.hetero;
@@ -151,7 +152,7 @@
       if (!entry) return null;
       const atom = entry.atoms.find(item => (item.chain || '') === (label.chain || '') && item.resi === label.resi && (item.atom === label.atom || item.atom === 'CA'));
       if (!atom) return null;
-      return { entryId: entry.id, chain: label.chain || '', resi: label.resi, atom: label.atom || 'CA', resn: atom.resn, x: atom.x, y: atom.y, z: atom.z, key: residueKey(entry.id, label.chain, label.resi), ...(label.kind === 'domain' ? { kind: 'domain' } : {}), text: label.text, color: /^#[0-9a-f]{6}$/i.test(label.color || '') ? label.color : undefined, size: labelSizes.some(([value]) => value === Number(label.size)) ? Number(label.size) : undefined };
+      return { entryId: entry.id, chain: label.chain || '', resi: label.resi, atom: label.atom || 'CA', resn: atom.resn, x: atom.x, y: atom.y, z: atom.z, key: residueKey(entry.id, label.chain, label.resi), ...(label.kind === 'domain' ? { kind: 'domain' } : {}), ...(label.offset && Number.isFinite(Number(label.offset.x)) ? { offset: { x: Number(label.offset.x), y: Number(label.offset.y), z: Number(label.offset.z) } } : {}), text: label.text, color: /^#[0-9a-f]{6}$/i.test(label.color || '') ? label.color : undefined, size: labelSizes.some(([value]) => value === Number(label.size)) ? Number(label.size) : undefined };
     }).filter(Boolean);
     selectionRecords = (scene.selections || []).map(record => {
       const entry = byName.get(record.model); if (!entry) return null;
@@ -758,28 +759,51 @@
     renderFigureLabels();
   }
 
-  function drawPlddtLegend(context, x, y, scale, palette, kind = 'figure', measureOnly = false) {
-    const legend = legendItems(kind);
-    if (!legend) return 0;
+  /* The legend is a row — (x, y) is its left edge and centre line — or, when the figure puts it
+     down one side, a stack whose (x, y) is its top-left corner. One set of metrics serves the
+     canvas and the SVG so a PNG and an SVG of the same figure agree to the pixel. */
+  function legendMetrics(context, scale, kind, vertical) {
+    const legend = legendItems(kind); if (!legend) return null;
     const swatch = Math.round(14 * scale); const gap = Math.round(6 * scale); const font = Math.round(13 * scale);
+    context.font = '500 ' + font + 'px ' + figureFont();
+    const titleWidth = context.measureText(legend.title).width;
+    if (vertical) {
+      const step = Math.round(swatch * 1.7);
+      const width = Math.max(titleWidth, ...legend.items.map(item => swatch + gap + context.measureText(item[1]).width)) + gap * 2;
+      return { legend, swatch, gap, font, step, vertical: true, width, height: step * (legend.items.length + 1) + gap * 2 };
+    }
+    const widths = legend.items.map(item => swatch + gap + context.measureText(item[1]).width + gap * 2);
+    return { legend, swatch, gap, font, widths, titleWidth, vertical: false, width: titleWidth + gap * 2 + widths.reduce((sum, value) => sum + value, 0), height: swatch * 2 };
+  }
+  function drawPlddtLegend(context, x, y, scale, palette, kind = 'figure', measureOnly = false, vertical = false) {
     context.save();
-    context.font = '500 ' + font + 'px ' + figureFont(); context.textBaseline = 'middle';
-    const items = legend.items;
-    const title = legend.title; const titleWidth = context.measureText(title).width + gap * 2;
-    const widths = items.map(item => swatch + gap + context.measureText(item[1]).width + gap * 2);
-    const total = titleWidth + widths.reduce((sum, width) => sum + width, 0);
-    if (measureOnly) { context.restore(); return total; }
+    const metrics = legendMetrics(context, scale, kind, vertical);
+    if (!metrics) { context.restore(); return 0; }
+    if (measureOnly) { context.restore(); return metrics.width; }
+    const { legend, swatch, gap } = metrics;
+    context.textBaseline = 'middle'; context.textAlign = 'left';
     context.fillStyle = palette.paper; context.globalAlpha = 0.88;
-    context.fillRect(x - gap, y - swatch, total + gap, swatch * 2); context.globalAlpha = 1;
+    if (vertical) {
+      context.fillRect(x - gap, y, metrics.width, metrics.height); context.globalAlpha = 1;
+      context.fillStyle = palette.ink; context.fillText(legend.title, x, y + gap + metrics.step / 2);
+      legend.items.forEach((item, index) => {
+        const rowY = y + gap + metrics.step * (index + 1) + metrics.step / 2;
+        context.fillStyle = item[0]; context.fillRect(x, rowY - swatch / 2, swatch, swatch);
+        context.fillStyle = palette.ink; context.fillText(item[1], x + swatch + gap, rowY);
+      });
+      context.restore();
+      return metrics.width;
+    }
+    context.fillRect(x - gap, y - swatch, metrics.width + gap, swatch * 2); context.globalAlpha = 1;
     let cursor = x;
-    context.fillStyle = palette.ink; context.fillText(title, cursor, y); cursor += titleWidth;
-    items.forEach((item, index) => {
+    context.fillStyle = palette.ink; context.fillText(legend.title, cursor, y); cursor += metrics.titleWidth + gap * 2;
+    legend.items.forEach((item, index) => {
       context.fillStyle = item[0]; context.fillRect(cursor, y - swatch / 2, swatch, swatch);
       context.fillStyle = palette.ink; context.fillText(item[1], cursor + swatch + gap, y);
-      cursor += widths[index];
+      cursor += metrics.widths[index];
     });
     context.restore();
-    return total;
+    return metrics.width;
   }
 
   /* Legend bottom-left, scale bar bottom-right. The legend is drawn at the figure's text scale
@@ -787,21 +811,45 @@
      the legend band when the two would still collide — in the narrow panels of a multi-panel
      figure they otherwise print on top of each other. Used by every PNG and SVG export. */
   const furnitureMeasure = document.createElement('canvas').getContext('2d');
+  function legendPlacement() {
+    const control = root.querySelector('#gpv-legend-position');
+    const value = control ? control.value : 'bottom-left';
+    return { value, vertical: value === 'left' || value === 'right', right: /right$/.test(value) || value === 'right', top: value.startsWith('top') };
+  }
+  /* Legend where the figure asks for it, scale bar bottom-right, and never one over the other:
+     the legend shrinks (to 55 % at most) if it would not fit, and the bar is lifted clear when
+     the two rectangles still meet. */
   function furnitureLayout(width, height, scale, bar, palette, wanted = legendWanted()) {
     const margin = Math.round(24 * scale);
-    let legendScale = scale; let legendWidth = 0;
+    const place = legendPlacement();
+    let legendScale = scale; let metrics = null;
     if (wanted) {
-      legendWidth = drawPlddtLegend(furnitureMeasure, 0, 0, scale, palette, 'figure', true);
-      const available = width - margin * 2;
-      if (legendWidth > available) { legendScale = Math.max(scale * 0.55, scale * available / legendWidth); legendWidth = drawPlddtLegend(furnitureMeasure, 0, 0, legendScale, palette, 'figure', true); }
+      metrics = legendMetrics(furnitureMeasure, legendScale, 'figure', place.vertical);
+      const available = place.vertical ? Math.max(1, width * 0.45) : width - margin * 2;
+      if (metrics && metrics.width > available) {
+        legendScale = Math.max(scale * 0.55, scale * available / metrics.width);
+        metrics = legendMetrics(furnitureMeasure, legendScale, 'figure', place.vertical);
+      }
     }
+    const legendWidth = metrics ? metrics.width : 0;
+    const legendX = place.right ? Math.round(width - margin - legendWidth) : margin;
+    const legendY = place.vertical
+      ? Math.round((height - (metrics ? metrics.height : 0)) / 2)
+      : place.top ? margin + Math.round(13 * legendScale) : height - Math.round(26 * legendScale);
     let barLift = 0;
-    if (bar && wanted && margin + legendWidth + margin / 2 > width - margin - bar.pixels - margin / 3) barLift = Math.round(Math.max(0, 40 * legendScale - 14 * scale));
-    return { legendX: margin, legendY: height - Math.round(26 * legendScale), legendScale, barLift };
+    if (bar && metrics) {
+      const barMargin = Math.round(24 * scale); const thickness = Math.max(2, Math.round(3 * scale)); const barFont = Math.round(13 * scale);
+      const barLeft = bar.width - barMargin - bar.pixels;
+      const barRect = { left: barLeft - barMargin / 3, right: barLeft + bar.pixels + barMargin / 3, top: bar.height - barMargin - barFont - thickness - barMargin / 3, bottom: bar.height - barMargin + thickness + barMargin / 6 };
+      const legendRect = { left: legendX - metrics.gap, right: legendX + legendWidth, top: place.vertical ? legendY : legendY - metrics.swatch, bottom: place.vertical ? legendY + metrics.height : legendY + metrics.swatch };
+      const meet = legendRect.left < barRect.right && barRect.left < legendRect.right && legendRect.top < barRect.bottom && barRect.top < legendRect.bottom;
+      if (meet) barLift = Math.round(barRect.bottom - legendRect.top + 10 * scale);
+    }
+    return { legendX, legendY, legendScale, barLift, vertical: place.vertical, position: place.value };
   }
   function drawFurniture(context, width, height, scale, bar, palette, wanted = legendWanted()) {
     const layout = furnitureLayout(width, height, scale, bar, palette, wanted);
-    if (wanted) drawPlddtLegend(context, layout.legendX, layout.legendY, layout.legendScale, palette);
+    if (wanted) drawPlddtLegend(context, layout.legendX, layout.legendY, layout.legendScale, palette, 'figure', false, layout.vertical);
     if (bar) { context.save(); context.translate(0, -layout.barLift); drawScaleBar(context, bar, scale, palette); context.restore(); }
     return layout;
   }

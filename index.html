@@ -1149,7 +1149,7 @@ html>body{padding:0}</style>
       <label class="form-label">Columns<select class="form-select" id="gpv-composite-columns"><option value="1">1</option><option value="2" selected>2</option><option value="3">3</option></select></label>
       <button class="btn" type="button" id="gpv-composite" disabled data-tooltip="One lettered figure at the chosen print size: the 3D view first, then the confidence panels you tick — the PAE heatmap, the pLDDT profile and the contact map when they are available">Download composite figure</button>
       <button class="btn" type="button" id="gpv-compare-svg" disabled data-tooltip="The stitched comparison figure with vector captions and annotations">Download comparison SVG</button>
-      <label class="form-check form-switch"><input class="form-check-input" id="gpv-export-legend" type="checkbox" checked><span class="form-check-label">Colour legend on exports</span></label><button class="btn" type="button" id="gpv-labels-edit" data-tooltip="Rename the legend title and entries as they will read on the figure — domain, entity, chain or model names — without changing the data">Edit figure labels</button>
+      <label class="form-check form-switch"><input class="form-check-input" id="gpv-export-legend" type="checkbox" checked><span class="form-check-label">Colour legend on exports</span></label><label class="form-label">Legend position<select class="form-select" id="gpv-legend-position" data-tooltip="Where the legend sits on exports and on each panel of a built figure; the side positions stack it as a column"><option value="bottom-left" selected>Bottom left</option><option value="bottom-right">Bottom right</option><option value="top-left">Top left</option><option value="top-right">Top right</option><option value="left">Left side, stacked</option><option value="right">Right side, stacked</option></select></label><button class="btn" type="button" id="gpv-labels-edit" data-tooltip="Rename the legend title and entries as they will read on the figure — domain, entity, chain or model names — without changing the data">Edit figure labels</button>
       <label class="form-label">Video length<select class="form-select" id="gpv-video-length"><option value="5">5 seconds</option><option value="10">10 seconds</option><option value="15">15 seconds</option></select></label>
       <button class="btn" type="button" id="gpv-video" disabled data-tooltip="Record the viewport spinning once, as a WebM file">Record spin video</button>
     </div>
@@ -1261,6 +1261,7 @@ html>body{padding:0}</style>
       </ul>
       <h3>Tips for figures and reviewers</h3>
       <ul>
+        <li>Labels are draggable: pick up any label, callout or corner title in the 3D view with the mouse and put it where the figure needs it. A residue label keeps a thin leader line back to its residue, and <em>Reset</em> in its row puts it back. <em>Publish → Legend position</em> moves the colour legend to any corner, or stacks it down the left or right side.</li>
         <li><em>Label domains</em> (Annotate → Domains, or beside the PAE domains) writes each domain's name on the structure at its centroid, in the domain colour and with the legend's names; <em>Download architecture PNG/SVG</em> draws the linear domain diagram — one row per chain, coloured boxes with names and boundary residue numbers — which is also a composite-figure panel and an optional row under the panels of the figure builder.</li>
         <li><em>Publish → Figure builder</em> turns saved views into the panels of one lettered figure: tick the views to include, order them, caption each, choose the columns, and download PNG or SVG at the output width and resolution — each panel rendered from its own camera and colour scheme at the same text size, with its legend and scale bar. The figure is as wide as the chosen figure width however many panels it has.</li>
         <li><em>Edit labels</em> on the colour legend (or <em>Publish → Edit figure labels</em>) renames the legend title and entries as they will read on the figure — "N-lobe" for a PAE domain, a protein name for an entity — on screen, on every PNG, TIFF and SVG export and in the generated legend text; the data are untouched and the names travel with the scene.</li>
@@ -1629,7 +1630,7 @@ html>body{padding:0}</style>
   let busyDepth = 0;
   let restoreMotion = null;
   const listPageSize = 60;
-  const viewerVersion = '2.27.1';
+  const viewerVersion = '2.28.0';
   const preferenceKey = 'protein-structure-viewer:preferences';
   const themeKey = 'protein-structure-viewer:theme';
   const labelColors = getComputedStyle(root);
@@ -2790,19 +2791,37 @@ html>body{padding:0}</style>
       const show = document.createElement('button'); show.className = 'btn btn-ghost'; show.type = 'button'; show.textContent = 'Show';
       show.title = 'Zoom to this residue';
       show.addEventListener('click', () => { if (!entry || !entry.model) return; const selection = { model: entry.model.getID(), resi: label.resi }; if (label.chain) selection.chain = label.chain; viewer.zoomTo(selection); viewer.render(); syncViewsFrom(viewer); });
+      const reset = document.createElement('button'); reset.className = 'btn btn-ghost'; reset.type = 'button'; reset.textContent = 'Reset';
+      reset.title = 'Put the label back on its residue'; reset.disabled = labelOffsetLength(label) === 0;
+      reset.addEventListener('click', () => { remember('label position'); label.offset = null; renderLabelList(); rebuildOverlays(); updateStatus('Label put back on its residue'); });
       const remove = document.createElement('button'); remove.className = 'btn btn-ghost'; remove.type = 'button'; remove.textContent = 'Remove';
       remove.addEventListener('click', () => { remember('label removal'); labelRecords = labelRecords.filter(item => item !== label); renderLabelList(); rebuildOverlays(); updateStatus('Label removed'); });
-      tools.append(size, color, show, remove);
+      tools.append(size, color, show, reset, remove);
       row.append(copy, tools); list.append(row);
     });
   }
 
+  /* A label belongs to its residue: that is its anchor. Dragging it stores `offset`, a
+     model-space vector, so the text keeps its place against the structure as the camera moves,
+     and a thin leader line is drawn back to the residue once it has moved a clear distance. */
+  function labelAnchor(label, byId = entriesById()) {
+    const entry = byId.get(label.entryId);
+    const atom = entry && entry.atoms.find(item => (item.chain || '') === label.chain && item.resi === label.resi && (item.atom === 'CA' || item.atom === label.atom));
+    return atom ? { x: atom.x, y: atom.y, z: atom.z } : { x: label.x, y: label.y, z: label.z };
+  }
+  function labelOffsetLength(label) {
+    const offset = label && label.offset;
+    return offset ? Math.hypot(offset.x || 0, offset.y || 0, offset.z || 0) : 0;
+  }
+  function labelPosition(label, byId = entriesById()) { return shiftBy(labelAnchor(label, byId), label.offset); }
+  const leaderMinimum = 0.75;
+  function leaderColor() { return labelColors.getPropertyValue('--muted-foreground').trim() || '#94a3b8'; }
   function drawLabels(target, shownIds, scale = 1) {
     const byId = entriesById();
     labelRecords.filter(label => shownIds.has(label.entryId)).forEach(label => {
-      const entry = byId.get(label.entryId);
-      const atom = entry && entry.atoms.find(item => (item.chain || '') === label.chain && item.resi === label.resi && (item.atom === 'CA' || item.atom === label.atom));
-      const position = atom ? { x: atom.x, y: atom.y, z: atom.z } : { x: label.x, y: label.y, z: label.z };
+      const anchor = labelAnchor(label, byId);
+      const position = shiftBy(anchor, label.offset);
+      if (labelOffsetLength(label) > leaderMinimum) target.addLine({ start: anchor, end: position, color: label.color || leaderColor(), linewidth: Math.max(1, Math.round(scale)) });
       target.addLabel(label.text, labelStyle(position, { color: label.color, size: label.size, scale }));
     });
     if (root.querySelector('#gpv-all-labels').checked) {
@@ -3196,10 +3215,125 @@ html>body{padding:0}</style>
     return best;
   }
 
+  /* ---- Dragging a label ----
+     Every piece of text in the view can be picked up with the mouse: residue labels and the text
+     of callouts, measurements and corner titles. The drag is stored where that kind of text keeps
+     its position — a model-space offset for anything attached to the structure, screen pixels for
+     a corner title — so the figure survives a camera move. Touch is left alone: on a touchscreen a
+     drag rotates the model. */
+  const labelMeasure = document.createElement('canvas').getContext('2d');
+  function draggableLabels() {
+    const shown = new Set(displayedEntries().map(entry => entry.id));
+    const byId = entriesById();
+    const stage = root.querySelector('#gpv-stage');
+    const items = [];
+    labelRecords.filter(label => shown.has(label.entryId)).forEach(label => {
+      items.push({ kind: 'label', record: label, position: labelPosition(label, byId), text: label.text, size: label.size || 12 });
+    });
+    annotationRecords.forEach(record => {
+      if (!annotationHasLabel(record)) return;
+      if (record.type === 'screen') {
+        const margin = 16; const fontSize = 16 * record.size;
+        const right = record.corner.endsWith('right'); const bottom = record.corner.startsWith('bottom');
+        const x = Math.max(0, Math.min(stage.clientWidth, (right ? stage.clientWidth - margin : margin) + (record.dx || 0)));
+        const y = Math.max(0, Math.min(stage.clientHeight, (bottom ? stage.clientHeight - margin : margin) + (record.dy || 0))) + (bottom ? -fontSize * 0.8 : fontSize * 0.8);
+        items.push({ kind: 'screen', record, screen: { x, y }, anchor: right ? 'end' : 'start', text: record.text, size: fontSize });
+        return;
+      }
+      if (!record.points.every(point => shown.has(point.entryId))) return;
+      const points = record.points.map(resolvePoint); if (points.some(point => !point)) return;
+      const position = record.type === 'callout'
+        ? calloutAnchor(points[0], record)
+        : shiftBy(points.length > 1 ? midpoint(points[0], points[1]) : points[0], record.offset);
+      items.push({ kind: 'annotation', record, position, text: record.text || pointName(record.points[0]), size: 13 * record.size });
+    });
+    return items;
+  }
+
+  function labelHitAt(pageX, pageY) {
+    if (typeof viewer.modelToScreen !== 'function') return null;
+    const rect = root.querySelector('#gpv-stage').getBoundingClientRect();
+    let best = null; let bestDistance = Infinity;
+    draggableLabels().forEach(item => {
+      const screen = item.screen ? { x: rect.left + scrollX + item.screen.x, y: rect.top + scrollY + item.screen.y } : viewer.modelToScreen(item.position);
+      if (!screen) return;
+      labelMeasure.font = '500 ' + item.size + 'px ' + figureFont();
+      const halfWidth = Math.max(10, labelMeasure.measureText(String(item.text || '')).width / 2 + item.size * 0.45);
+      const halfHeight = item.size * 0.95;
+      const centre = item.anchor === 'end' ? { x: screen.x - halfWidth, y: screen.y } : item.anchor === 'start' ? { x: screen.x + halfWidth, y: screen.y } : screen;
+      const dx = Math.abs(pageX - centre.x); const dy = Math.abs(pageY - centre.y);
+      if (dx > halfWidth || dy > halfHeight) return;
+      const distance = Math.hypot(dx, dy);
+      if (distance < bestDistance) { bestDistance = distance; best = item; }
+    });
+    return best;
+  }
+
+  let labelDrag = null;
+  function startLabelDrag(item, event) {
+    remember('label position');
+    labelDrag = { item, x: event.pageX, y: event.pageY, perAngstrom: pixelsPerAngstrom(viewer) || 20, moved: false };
+    root.querySelector('#gpv-stage').style.cursor = 'grabbing';
+  }
+  function moveLabelDrag(event) {
+    const drag = labelDrag; if (!drag) return;
+    const dx = event.pageX - drag.x; const dy = event.pageY - drag.y;
+    if (!dx && !dy) return;
+    drag.x = event.pageX; drag.y = event.pageY; drag.moved = true;
+    const record = drag.item.record;
+    if (drag.item.kind === 'screen') {
+      record.dx = (record.dx || 0) + dx; record.dy = (record.dy || 0) + dy;
+    } else {
+      const view = typeof viewer.getView === 'function' ? viewer.getView() : [0, 0, 0, 0, 0, 0, 0, 1];
+      const right = screenAxisInModelSpace(view, { x: 1, y: 0, z: 0 });
+      const up = screenAxisInModelSpace(view, { x: 0, y: 1, z: 0 });
+      const step = 1 / drag.perAngstrom;
+      const offset = record.offset || { x: 0, y: 0, z: 0 };
+      record.offset = {
+        x: offset.x + (right.x * dx - up.x * dy) * step,
+        y: offset.y + (right.y * dx - up.y * dy) * step,
+        z: offset.z + (right.z * dx - up.z * dy) * step
+      };
+    }
+    rebuildOverlays();
+  }
+  function endLabelDrag() {
+    const drag = labelDrag; labelDrag = null;
+    root.querySelector('#gpv-stage').style.cursor = '';
+    if (!drag) return;
+    if (drag.item.kind === 'label') renderLabelList(); else renderAnnotationList();
+    if (drag.moved) updateStatus('Label moved · drag it again, or Reset in its row to put it back');
+  }
+
   let pointerStart = null;
   function watchStageClicks() {
     const stage = root.querySelector('#gpv-stage');
-    stage.addEventListener('pointerdown', event => { if (event.button === 0) pointerStart = { x: event.pageX, y: event.pageY, time: Date.now() }; });
+    stage.addEventListener('pointerdown', event => {
+      if (event.button !== 0) return;
+      if (event.pointerType !== 'touch') {
+        const hit = labelHitAt(event.pageX, event.pageY);
+        if (hit) {
+          /* Capture phase: stopping here keeps the click away from 3Dmol, so the camera
+             stays put while the label moves. */
+          event.preventDefault(); event.stopPropagation();
+          try { stage.setPointerCapture(event.pointerId); } catch { /* capture is optional */ }
+          startLabelDrag(hit, event);
+          return;
+        }
+      }
+      pointerStart = { x: event.pageX, y: event.pageY, time: Date.now() };
+    }, true);
+    stage.addEventListener('pointermove', event => {
+      if (!labelDrag) return;
+      event.preventDefault(); event.stopPropagation();
+      moveLabelDrag(event);
+    }, true);
+    stage.addEventListener('pointerup', event => {
+      if (!labelDrag) return;
+      event.preventDefault(); event.stopPropagation();
+      endLabelDrag();
+    }, true);
+    stage.addEventListener('pointercancel', () => { if (labelDrag) endLabelDrag(); }, true);
     stage.addEventListener('pointerup', event => {
       const start = pointerStart; pointerStart = null;
       if (!start || event.button !== 0 || Math.hypot(event.pageX - start.x, event.pageY - start.y) > 4 || Date.now() - start.time > 700) return;
@@ -3217,6 +3351,9 @@ html>body{padding:0}</style>
       hoverFrame = requestAnimationFrame(() => {
         hoverFrame = 0;
         if (!hoverAt) return;
+        const overLabel = labelHitAt(hoverAt.x, hoverAt.y);
+        stage.style.cursor = overLabel ? 'grab' : '';
+        if (overLabel) { readout.textContent = 'Drag to move “' + clipText(String(overLabel.text || ''), 40) + '”'; return; }
         const hit = pickAtomAt(hoverAt.x, hoverAt.y, true);
         readout.textContent = hit ? describeResidue(hit.entry, hit.atom) + (displayedEntries().length > 1 ? ' · ' + displayName(hit.entry) : '') : '';
         const next = hit ? { entryId: hit.entry.id, chain: hit.atom.chain || '', resi: hit.atom.resi } : null;
@@ -5878,6 +6015,7 @@ html>body{padding:0}</style>
       outline: root.querySelector('#gpv-outline').value,
       fog: root.querySelector('#gpv-fog').checked,
       labelStyle: root.querySelector('#gpv-label-style').value,
+      legendPosition: root.querySelector('#gpv-legend-position').value,
       figureLabels: { ...figureLabels },
       figureBuilder: builderOptions(),
       background: root.querySelector('#gpv-background').value,
@@ -5900,7 +6038,7 @@ html>body{padding:0}</style>
     const keptPoints = record => record.points.every(point => keep(point.entryId));
     const point = item => ({ model: nameOf(item.entryId), chain: item.chain, resi: item.resi, atom: item.atom, index: item.index });
     return {
-      labels: labelRecords.filter(kept).map(label => ({ model: nameOf(label.entryId), chain: label.chain, resi: label.resi, atom: label.atom, text: label.text, color: label.color, size: label.size, ...(label.kind === 'domain' ? { kind: 'domain' } : {}) })),
+      labels: labelRecords.filter(kept).map(label => ({ model: nameOf(label.entryId), chain: label.chain, resi: label.resi, atom: label.atom, text: label.text, color: label.color, size: label.size, ...(label.kind === 'domain' ? { kind: 'domain' } : {}), ...(labelOffsetLength(label) ? { offset: label.offset } : {}) })),
       selections: selectionRecords.filter(kept).map(record => ({ model: nameOf(record.entryId), chain: record.chain, residues: record.residues, action: record.action, color: record.color })),
       measurements: measurementRecords.filter(keptPoints).map(record => ({ type: record.type, points: record.points.map(point) })),
       residueData: residueData && (residueData.scope === 'all' || keep(residueData.entryId)) ? { name: residueData.name, scale: residueData.scale, scope: residueData.scope, model: nameOf(residueData.entryId), rows: [...residueData.values.entries()].map(([key, value]) => [key.split('|')[0], Number(key.split('|')[1]), value]).concat([...residueData.byResi.entries()].map(([resi, value]) => ['', resi, value])) } : null,
@@ -6075,6 +6213,7 @@ html>body{padding:0}</style>
     if (typeof settings.fog === 'boolean') root.querySelector('#gpv-fog').checked = settings.fog;
     if (['boxed', 'plain'].includes(settings.labelStyle)) root.querySelector('#gpv-label-style').value = settings.labelStyle;
     setFigureLabels(settings.figureLabels);
+    if (['bottom-left', 'bottom-right', 'top-left', 'top-right', 'left', 'right'].includes(settings.legendPosition)) root.querySelector('#gpv-legend-position').value = settings.legendPosition;
     applyBuilderOptions(settings.figureBuilder);
     if ([0, 50, 70].includes(Number(settings.hideBelow))) root.querySelector('#gpv-hide-below').value = String(Number(settings.hideBelow));
     if (['stick', 'sphere', 'hide'].includes(settings.hetero)) root.querySelector('#gpv-hetero').value = settings.hetero;
@@ -6089,7 +6228,7 @@ html>body{padding:0}</style>
       if (!entry) return null;
       const atom = entry.atoms.find(item => (item.chain || '') === (label.chain || '') && item.resi === label.resi && (item.atom === label.atom || item.atom === 'CA'));
       if (!atom) return null;
-      return { entryId: entry.id, chain: label.chain || '', resi: label.resi, atom: label.atom || 'CA', resn: atom.resn, x: atom.x, y: atom.y, z: atom.z, key: residueKey(entry.id, label.chain, label.resi), ...(label.kind === 'domain' ? { kind: 'domain' } : {}), text: label.text, color: /^#[0-9a-f]{6}$/i.test(label.color || '') ? label.color : undefined, size: labelSizes.some(([value]) => value === Number(label.size)) ? Number(label.size) : undefined };
+      return { entryId: entry.id, chain: label.chain || '', resi: label.resi, atom: label.atom || 'CA', resn: atom.resn, x: atom.x, y: atom.y, z: atom.z, key: residueKey(entry.id, label.chain, label.resi), ...(label.kind === 'domain' ? { kind: 'domain' } : {}), ...(label.offset && Number.isFinite(Number(label.offset.x)) ? { offset: { x: Number(label.offset.x), y: Number(label.offset.y), z: Number(label.offset.z) } } : {}), text: label.text, color: /^#[0-9a-f]{6}$/i.test(label.color || '') ? label.color : undefined, size: labelSizes.some(([value]) => value === Number(label.size)) ? Number(label.size) : undefined };
     }).filter(Boolean);
     selectionRecords = (scene.selections || []).map(record => {
       const entry = byName.get(record.model); if (!entry) return null;
@@ -6696,28 +6835,51 @@ html>body{padding:0}</style>
     renderFigureLabels();
   }
 
-  function drawPlddtLegend(context, x, y, scale, palette, kind = 'figure', measureOnly = false) {
-    const legend = legendItems(kind);
-    if (!legend) return 0;
+  /* The legend is a row — (x, y) is its left edge and centre line — or, when the figure puts it
+     down one side, a stack whose (x, y) is its top-left corner. One set of metrics serves the
+     canvas and the SVG so a PNG and an SVG of the same figure agree to the pixel. */
+  function legendMetrics(context, scale, kind, vertical) {
+    const legend = legendItems(kind); if (!legend) return null;
     const swatch = Math.round(14 * scale); const gap = Math.round(6 * scale); const font = Math.round(13 * scale);
+    context.font = '500 ' + font + 'px ' + figureFont();
+    const titleWidth = context.measureText(legend.title).width;
+    if (vertical) {
+      const step = Math.round(swatch * 1.7);
+      const width = Math.max(titleWidth, ...legend.items.map(item => swatch + gap + context.measureText(item[1]).width)) + gap * 2;
+      return { legend, swatch, gap, font, step, vertical: true, width, height: step * (legend.items.length + 1) + gap * 2 };
+    }
+    const widths = legend.items.map(item => swatch + gap + context.measureText(item[1]).width + gap * 2);
+    return { legend, swatch, gap, font, widths, titleWidth, vertical: false, width: titleWidth + gap * 2 + widths.reduce((sum, value) => sum + value, 0), height: swatch * 2 };
+  }
+  function drawPlddtLegend(context, x, y, scale, palette, kind = 'figure', measureOnly = false, vertical = false) {
     context.save();
-    context.font = '500 ' + font + 'px ' + figureFont(); context.textBaseline = 'middle';
-    const items = legend.items;
-    const title = legend.title; const titleWidth = context.measureText(title).width + gap * 2;
-    const widths = items.map(item => swatch + gap + context.measureText(item[1]).width + gap * 2);
-    const total = titleWidth + widths.reduce((sum, width) => sum + width, 0);
-    if (measureOnly) { context.restore(); return total; }
+    const metrics = legendMetrics(context, scale, kind, vertical);
+    if (!metrics) { context.restore(); return 0; }
+    if (measureOnly) { context.restore(); return metrics.width; }
+    const { legend, swatch, gap } = metrics;
+    context.textBaseline = 'middle'; context.textAlign = 'left';
     context.fillStyle = palette.paper; context.globalAlpha = 0.88;
-    context.fillRect(x - gap, y - swatch, total + gap, swatch * 2); context.globalAlpha = 1;
+    if (vertical) {
+      context.fillRect(x - gap, y, metrics.width, metrics.height); context.globalAlpha = 1;
+      context.fillStyle = palette.ink; context.fillText(legend.title, x, y + gap + metrics.step / 2);
+      legend.items.forEach((item, index) => {
+        const rowY = y + gap + metrics.step * (index + 1) + metrics.step / 2;
+        context.fillStyle = item[0]; context.fillRect(x, rowY - swatch / 2, swatch, swatch);
+        context.fillStyle = palette.ink; context.fillText(item[1], x + swatch + gap, rowY);
+      });
+      context.restore();
+      return metrics.width;
+    }
+    context.fillRect(x - gap, y - swatch, metrics.width + gap, swatch * 2); context.globalAlpha = 1;
     let cursor = x;
-    context.fillStyle = palette.ink; context.fillText(title, cursor, y); cursor += titleWidth;
-    items.forEach((item, index) => {
+    context.fillStyle = palette.ink; context.fillText(legend.title, cursor, y); cursor += metrics.titleWidth + gap * 2;
+    legend.items.forEach((item, index) => {
       context.fillStyle = item[0]; context.fillRect(cursor, y - swatch / 2, swatch, swatch);
       context.fillStyle = palette.ink; context.fillText(item[1], cursor + swatch + gap, y);
-      cursor += widths[index];
+      cursor += metrics.widths[index];
     });
     context.restore();
-    return total;
+    return metrics.width;
   }
 
   /* Legend bottom-left, scale bar bottom-right. The legend is drawn at the figure's text scale
@@ -6725,21 +6887,45 @@ html>body{padding:0}</style>
      the legend band when the two would still collide — in the narrow panels of a multi-panel
      figure they otherwise print on top of each other. Used by every PNG and SVG export. */
   const furnitureMeasure = document.createElement('canvas').getContext('2d');
+  function legendPlacement() {
+    const control = root.querySelector('#gpv-legend-position');
+    const value = control ? control.value : 'bottom-left';
+    return { value, vertical: value === 'left' || value === 'right', right: /right$/.test(value) || value === 'right', top: value.startsWith('top') };
+  }
+  /* Legend where the figure asks for it, scale bar bottom-right, and never one over the other:
+     the legend shrinks (to 55 % at most) if it would not fit, and the bar is lifted clear when
+     the two rectangles still meet. */
   function furnitureLayout(width, height, scale, bar, palette, wanted = legendWanted()) {
     const margin = Math.round(24 * scale);
-    let legendScale = scale; let legendWidth = 0;
+    const place = legendPlacement();
+    let legendScale = scale; let metrics = null;
     if (wanted) {
-      legendWidth = drawPlddtLegend(furnitureMeasure, 0, 0, scale, palette, 'figure', true);
-      const available = width - margin * 2;
-      if (legendWidth > available) { legendScale = Math.max(scale * 0.55, scale * available / legendWidth); legendWidth = drawPlddtLegend(furnitureMeasure, 0, 0, legendScale, palette, 'figure', true); }
+      metrics = legendMetrics(furnitureMeasure, legendScale, 'figure', place.vertical);
+      const available = place.vertical ? Math.max(1, width * 0.45) : width - margin * 2;
+      if (metrics && metrics.width > available) {
+        legendScale = Math.max(scale * 0.55, scale * available / metrics.width);
+        metrics = legendMetrics(furnitureMeasure, legendScale, 'figure', place.vertical);
+      }
     }
+    const legendWidth = metrics ? metrics.width : 0;
+    const legendX = place.right ? Math.round(width - margin - legendWidth) : margin;
+    const legendY = place.vertical
+      ? Math.round((height - (metrics ? metrics.height : 0)) / 2)
+      : place.top ? margin + Math.round(13 * legendScale) : height - Math.round(26 * legendScale);
     let barLift = 0;
-    if (bar && wanted && margin + legendWidth + margin / 2 > width - margin - bar.pixels - margin / 3) barLift = Math.round(Math.max(0, 40 * legendScale - 14 * scale));
-    return { legendX: margin, legendY: height - Math.round(26 * legendScale), legendScale, barLift };
+    if (bar && metrics) {
+      const barMargin = Math.round(24 * scale); const thickness = Math.max(2, Math.round(3 * scale)); const barFont = Math.round(13 * scale);
+      const barLeft = bar.width - barMargin - bar.pixels;
+      const barRect = { left: barLeft - barMargin / 3, right: barLeft + bar.pixels + barMargin / 3, top: bar.height - barMargin - barFont - thickness - barMargin / 3, bottom: bar.height - barMargin + thickness + barMargin / 6 };
+      const legendRect = { left: legendX - metrics.gap, right: legendX + legendWidth, top: place.vertical ? legendY : legendY - metrics.swatch, bottom: place.vertical ? legendY + metrics.height : legendY + metrics.swatch };
+      const meet = legendRect.left < barRect.right && barRect.left < legendRect.right && legendRect.top < barRect.bottom && barRect.top < legendRect.bottom;
+      if (meet) barLift = Math.round(barRect.bottom - legendRect.top + 10 * scale);
+    }
+    return { legendX, legendY, legendScale, barLift, vertical: place.vertical, position: place.value };
   }
   function drawFurniture(context, width, height, scale, bar, palette, wanted = legendWanted()) {
     const layout = furnitureLayout(width, height, scale, bar, palette, wanted);
-    if (wanted) drawPlddtLegend(context, layout.legendX, layout.legendY, layout.legendScale, palette);
+    if (wanted) drawPlddtLegend(context, layout.legendX, layout.legendY, layout.legendScale, palette, 'figure', false, layout.vertical);
     if (bar) { context.save(); context.translate(0, -layout.barLift); drawScaleBar(context, bar, scale, palette); context.restore(); }
     return layout;
   }
@@ -6964,30 +7150,37 @@ html>body{padding:0}</style>
       + '<text x="' + f(x + width / 2) + '" y="' + f(position.y) + '" text-anchor="middle" dominant-baseline="central" font-family="' + svgFont + '" font-size="' + f(fontSize) + '" font-weight="500" fill="' + color + '">' + svgEscape(text) + '</text></g>';
   }
 
-  function svgLegend(x, y, scale, palette, kind = 'figure') {
-    const legend = legendItems(kind);
-    if (!legend) return { markup: '', width: 0 };
-    const swatch = 14 * scale; const gap = 6 * scale; const fontSize = 13 * scale;
-    svgMeasure.font = '500 ' + fontSize + 'px ' + svgFont;
-    const items = legend.items;
-    const titleWidth = svgMeasure.measureText(legend.title).width + gap * 2;
-    const widths = items.map(item => swatch + gap + svgMeasure.measureText(item[1]).width + gap * 2);
-    const total = titleWidth + widths.reduce((sum, width) => sum + width, 0);
-    const parts = ['<g id="legend"><rect x="' + f(x - gap) + '" y="' + f(y - swatch) + '" width="' + f(total + gap) + '" height="' + f(swatch * 2) + '" fill="' + palette.paper + '" fill-opacity="0.88"/>'];
-    const text = (tx, value) => '<text x="' + f(tx) + '" y="' + f(y) + '" dominant-baseline="central" font-family="' + svgFont + '" font-size="' + f(fontSize) + '" font-weight="500" fill="' + palette.ink + '">' + svgEscape(value) + '</text>';
-    let cursor = x; parts.push(text(cursor, legend.title)); cursor += titleWidth;
-    items.forEach((item, index) => {
+  function svgLegend(x, y, scale, palette, kind = 'figure', vertical = false) {
+    const metrics = legendMetrics(svgMeasure, scale, kind, vertical);
+    if (!metrics) return { markup: '', width: 0, height: 0 };
+    const { legend, swatch, gap, font } = metrics;
+    const text = (tx, ty, value) => '<text x="' + f(tx) + '" y="' + f(ty) + '" dominant-baseline="central" font-family="' + svgFont + '" font-size="' + f(font) + '" font-weight="500" fill="' + palette.ink + '">' + svgEscape(value) + '</text>';
+    const parts = [];
+    if (vertical) {
+      parts.push('<g id="legend"><rect x="' + f(x - gap) + '" y="' + f(y) + '" width="' + f(metrics.width) + '" height="' + f(metrics.height) + '" fill="' + palette.paper + '" fill-opacity="0.88"/>');
+      parts.push(text(x, y + gap + metrics.step / 2, legend.title));
+      legend.items.forEach((item, index) => {
+        const rowY = y + gap + metrics.step * (index + 1) + metrics.step / 2;
+        parts.push('<rect x="' + f(x) + '" y="' + f(rowY - swatch / 2) + '" width="' + f(swatch) + '" height="' + f(swatch) + '" fill="' + item[0] + '"/>');
+        parts.push(text(x + swatch + gap, rowY, item[1]));
+      });
+      parts.push('</g>');
+      return { markup: parts.join(''), width: metrics.width, height: metrics.height };
+    }
+    parts.push('<g id="legend"><rect x="' + f(x - gap) + '" y="' + f(y - swatch) + '" width="' + f(metrics.width + gap) + '" height="' + f(swatch * 2) + '" fill="' + palette.paper + '" fill-opacity="0.88"/>');
+    let cursor = x; parts.push(text(cursor, y, legend.title)); cursor += metrics.titleWidth + gap * 2;
+    legend.items.forEach((item, index) => {
       parts.push('<rect x="' + f(cursor) + '" y="' + f(y - swatch / 2) + '" width="' + f(swatch) + '" height="' + f(swatch) + '" fill="' + item[0] + '"/>');
-      parts.push(text(cursor + swatch + gap, item[1])); cursor += widths[index];
+      parts.push(text(cursor + swatch + gap, y, item[1])); cursor += metrics.widths[index];
     });
     parts.push('</g>');
-    return { markup: parts.join(''), width: total };
+    return { markup: parts.join(''), width: metrics.width, height: metrics.height };
   }
 
   function svgFurniture(width, height, scale, bar, palette, wanted = legendWanted()) {
     const layout = furnitureLayout(width, height, scale, bar, palette, wanted);
     const parts = [];
-    if (wanted) parts.push(svgLegend(layout.legendX, layout.legendY, layout.legendScale, palette).markup);
+    if (wanted) parts.push(svgLegend(layout.legendX, layout.legendY, layout.legendScale, palette, 'figure', layout.vertical).markup);
     if (bar) parts.push(layout.barLift ? '<g transform="translate(0 ' + f(-layout.barLift) + ')">' + scaleBarSvg(bar, scale, palette) + '</g>' : scaleBarSvg(bar, scale, palette));
     return parts.join('');
   }
@@ -7006,9 +7199,10 @@ html>body{padding:0}</style>
     const palette = figurePalette(); const byId = entriesById(); const parts = [];
     const ink = labelColors.getPropertyValue('--card-foreground').trim() || '#111827';
     labelRecords.filter(label => shownIds.has(label.entryId)).forEach(label => {
-      const entry = byId.get(label.entryId);
-      const atom = entry && entry.atoms.find(item => (item.chain || '') === label.chain && item.resi === label.resi && (item.atom === 'CA' || item.atom === label.atom));
-      parts.push(svgLabel(project(atom || label), label.text, (label.size || 12) * scale, label.color || ink, palette));
+      const anchor = labelAnchor(label, byId);
+      const position = shiftBy(anchor, label.offset);
+      if (labelOffsetLength(label) > 0.75) parts.push(svgLine(project(anchor), project(position), label.color || '#94a3b8', Math.max(1, scale), false));
+      parts.push(svgLabel(project(position), label.text, (label.size || 12) * scale, label.color || ink, palette));
     });
     measurementRecords.forEach(record => {
       if (!record.points.every(point => shownIds.has(point.entryId))) return;
@@ -7515,7 +7709,7 @@ html>body{padding:0}</style>
       confidence: reportConfidence(entry),
       coords: reportCoordinates(entry),
       shapes: reportShapes(entry),
-      labels: labelRecords.filter(label => label.entryId === entry.id).map(label => ({ text: label.text, chain: label.chain, resi: label.resi, atom: label.atom, x: label.x, y: label.y, z: label.z, color: label.color || null, size: label.size || 12 }))
+      labels: labelRecords.filter(label => label.entryId === entry.id).map(label => ({ text: label.text, chain: label.chain, resi: label.resi, atom: label.atom, ...labelPosition(label), color: label.color || null, size: label.size || 12 }))
     }));
     const chosenNames = new Set(chosen.map(entry => entry.name));
     const contactOwner = contactResult ? entryById(contactResult.entryId) : null;
@@ -8365,7 +8559,7 @@ applyBackground();
 
   const persistedControls = [
     '#gpv-style', '#gpv-color-mode', '#gpv-projection', '#gpv-outline', '#gpv-label-style', '#gpv-background', '#gpv-background-color', '#gpv-hetero',
-    '#gpv-export-mode', '#gpv-print-width', '#gpv-print-aspect', '#gpv-print-dpi', '#gpv-print-text', '#gpv-figure-font', '#gpv-scale-bar',
+    '#gpv-export-mode', '#gpv-print-width', '#gpv-print-aspect', '#gpv-print-dpi', '#gpv-print-text', '#gpv-figure-font', '#gpv-scale-bar', '#gpv-legend-position',
     '#gpv-view-mode', '#gpv-order', '#gpv-alignment-mode', '#gpv-export-size', '#gpv-export-scale',
     '#gpv-panel-columns', '#gpv-video-length', '#gpv-cycle-speed', '#gpv-speed', '#gpv-report-scope'
   ];
@@ -8869,6 +9063,7 @@ applyBackground();
     'Annotate → Domains: name a region, pick its colour, and apply it to every model from the same AlphaFold run. Colour by annotated domains paints them and the legend lists them by name — in the viewer, every export and the report.',
     'Publish → Print size exports at a stated width (85 or 178 mm) and resolution (300 or 600 dpi), writes the dpi into the PNG or TIFF, and sizes labels in points — what a journal checks.',
     'Appearance → Colour-blind-safe palette switches chains and domains to Okabe–Ito colours; a scale bar of 10–100 Å goes bottom-right of every export from Publish → Scale bar.',
+    'Drag any label in the 3D view to move it: a residue label keeps a leader line back to its residue, and Reset in its row puts it back. Publish → Legend position puts the colour legend in any corner or down one side.',
     'Annotate → Domains → Label domains writes each domain\'s name on the structure at its centroid; Download architecture PNG/SVG draws the linear domain diagram that goes under it.',
     'Publish → Figure builder: save a few views — overview, interface, a zoom — tick them, order them, caption them, and download one lettered figure at the journal width as PNG or SVG.',
     'Edit labels on the colour legend renames the legend title and entries for your figure — "N-lobe" instead of "D1" — on screen, on every export and in the legend text, without touching the data.',
@@ -8948,7 +9143,7 @@ applyBackground();
   offerSessionRestore();
   /* ?debug=1 exposes a few internals for the regression suite and for bug reports;
      it has no effect otherwise. */
-  if (new URLSearchParams(location.search).has('debug')) window.__viewerDebug = { viewer, pickAtomAt, displayedEntries, activeEntry, colorOptions, sceneSettings, contactResult: () => contactResult, residueData: () => residueData, msaAssets: () => msaAssets, entries: () => structures, nearbyResidues, assemblyDimensions, paeDomains, parseConfidenceBytes, methodsText, alignmentResults: () => alignmentResults, ensembleSpread: () => ensembleSpread, siteResults: () => siteResults, interfaceResults: () => interfaceResults, solventAccessibleArea, heavyAtoms, ligandGroups, architectureModel, domainSets };
+  if (new URLSearchParams(location.search).has('debug')) window.__viewerDebug = { viewer, pickAtomAt, displayedEntries, activeEntry, colorOptions, sceneSettings, contactResult: () => contactResult, residueData: () => residueData, msaAssets: () => msaAssets, entries: () => structures, nearbyResidues, assemblyDimensions, paeDomains, parseConfidenceBytes, methodsText, alignmentResults: () => alignmentResults, ensembleSpread: () => ensembleSpread, siteResults: () => siteResults, interfaceResults: () => interfaceResults, solventAccessibleArea, heavyAtoms, ligandGroups, architectureModel, domainSets, labelRecords: () => labelRecords, labelPosition, labelHitAt };
   applyTheme(readJson(themeKey, 'system'));
   selectToolTab('models');
   applyAppearance();
