@@ -237,5 +237,6 @@ insertions (dropped), `-` = gap. Conservation is 1 − H/log₂20 with H the Sha
 twenty amino acids at the column, gaps and X excluded; identity is the fraction of aligned sequences
 carrying the query residue; coverage is the number of sequences with a residue at the column. No
 sequence weighting or pseudocounts are applied, so redundant sequences inflate conservation; the
-numbers describe the alignment AlphaFold saw. Columns are mapped to chains by exact or substring
+numbers describe the alignment AlphaFold saw. All three statistics are cross-validated column by column
+against an independent Python implementation on seven real alignments (VALIDATION.md). Columns are mapped to chains by exact or substring
 match of the one-letter sequence, so residue renumbering in the model does not affect the mapping.
