@@ -275,6 +275,10 @@ await step('an a3m alignment colours both chains by conservation, identity or co
   if (!(depth.gapped === 7 && depth.full === 9)) throw new Error(JSON.stringify(depth));
   await tab('publish'); await page.click('#gpv-methods-text'); await page.waitForTimeout(300);
   if (!/multiple sequence alignment/.test(await page.inputValue('#gpv-methods-field'))) throw new Error('methods text lacks the MSA sentence');
+  await tab('annotate');
+  const csvDownload = page.waitForEvent('download', { timeout: 60000 }); await page.click('#gpv-data-csv');
+  const csv = (await readFile(await (await csvDownload).path(), 'utf8')).split('\n');
+  if (!/^"?chain"?,"?resi"?,"?resn"?,/.test(csv[0]) || csv.length - 1 !== 60 || !/"A","11","ALA","7"/.test(csv.find(line => /"A","11",/.test(line)) || '')) throw new Error('data csv: ' + csv.slice(0, 3).join(' | '));
   await tab('annotate'); await page.click('#gpv-data-clear'); await tab('appearance'); await page.selectOption('#gpv-color-mode', 'structure'); await page.waitForTimeout(200);
   console.log('       conservation varied ' + painted.varied.toFixed(2) + ' · half ' + painted.half.toFixed(2) + ' · conserved ' + painted.conserved.toFixed(2) + ' · coverage 9 / 7');
 });

@@ -382,7 +382,8 @@ column with gaps and X excluded (1 = one residue everywhere, 0 = uniform); **ide
 query**, the fraction of aligned sequences carrying the query residue; **coverage**, the number of
 sequences with a residue at the column. The result is loaded as a per-residue dataset named for the
 statistic, so it behaves like any pasted table: the viridis legend, the sequence strip, exports, the
-shared report and the methods text all follow, and *Clear data* removes it. Lowercase letters in the
+shared report and the methods text all follow, **Download data CSV** writes it as `chain,resi,resn,value`, and
+*Clear data* removes it. Lowercase letters in the
 `.a3m` are insertions relative to the query and are dropped; sequences whose match-column length
 differs from the query are skipped. Conservation reflects the alignment AlphaFold used, not a curated
 family alignment, so read the coverage first: a column supported by eleven sequences says little.

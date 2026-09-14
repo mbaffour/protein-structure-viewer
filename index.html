@@ -1004,6 +1004,7 @@ html>body{padding:0}</style>
       <label class="form-label">Applies to<select class="form-select" id="gpv-data-scope"><option value="source" selected>Every model from the same source</option><option value="model">This model only</option><option value="all">Every loaded model</option></select></label>
       <button class="btn" type="button" id="gpv-data-apply" disabled>Load values</button>
       <button class="btn" type="button" id="gpv-data-paint" disabled data-tooltip="Switch the colour scheme to per-residue data">Colour by data</button>
+      <button class="btn" type="button" id="gpv-data-csv" disabled data-tooltip="The loaded per-residue values as chain, residue, name, value">Download data CSV</button>
       <button class="btn btn-ghost" type="button" id="gpv-data-clear">Clear data</button>
       <span class="text-muted text-small" id="gpv-data-state">No per-residue data loaded.</span>
     </div>
@@ -1583,7 +1584,7 @@ html>body{padding:0}</style>
   let busyDepth = 0;
   let restoreMotion = null;
   const listPageSize = 60;
-  const viewerVersion = '2.21.0';
+  const viewerVersion = '2.21.1';
   const preferenceKey = 'protein-structure-viewer:preferences';
   const themeKey = 'protein-structure-viewer:theme';
   const labelColors = getComputedStyle(root);
@@ -3629,10 +3630,24 @@ html>body{padding:0}</style>
   function renderDataState() {
     const state = root.querySelector('#gpv-data-state');
     root.querySelector('#gpv-data-paint').disabled = !residueData;
+    root.querySelector('#gpv-data-csv').disabled = !residueData;
     root.querySelector('#gpv-data-apply').disabled = !activeEntry();
     if (!residueData) { state.textContent = 'No per-residue data loaded.'; return; }
     const owner = entryById(residueData.entryId);
     state.textContent = residueData.name + ' · ' + residueData.count + ' values · ' + formatDataValue(residueData.min) + ' to ' + formatDataValue(residueData.max) + ' · ' + ({ viridis: 'viridis', diverging: 'diverging', heat: 'white–red' })[residueData.scale] + ' · ' + scopeNames[residueData.scope] + (owner ? ' (' + displayName(owner) + ')' : '');
+  }
+
+  function downloadResidueDataCsv() {
+    if (!residueData) return;
+    const owner = entryById(residueData.entryId); const entry = (owner && owner.model) ? owner : activeEntry();
+    const names = new Map(); if (entry) entry.atoms.forEach(atom => { if (atom.atom === 'CA') names.set((atom.chain || '') + '|' + atom.resi, atom.resn || ''); });
+    const rows = [['chain', 'resi', 'resn', residueData.name.replace(/[^\w()\-. ]+/g, ' ').trim() || 'value']];
+    const sortKey = (a, b) => compareChains(a[0], b[0]) || a[1] - b[1];
+    const entries = [...residueData.values.entries()].map(([key, value]) => { const [chain, resi] = key.split('|'); return [chain, Number(resi), value]; });
+    residueData.byResi.forEach((value, resi) => entries.push(['', Number(resi), value]));
+    entries.sort(sortKey).forEach(([chain, resi, value]) => rows.push([chain, resi, names.get(chain + '|' + resi) || '', Number.isInteger(value) ? String(value) : value.toFixed(6)]));
+    downloadBlob(rows.map(row => row.map(csvCell).join(',')).join('\n'), 'text/csv', (residueData.name || 'residue-data').replace(/[^\w.-]+/g, '_').replace(/^_+|_+$/g, '').slice(0, 40) + '.csv');
+    updateStatus('Per-residue data CSV downloaded · ' + (rows.length - 1) + ' rows');
   }
 
   function loadPastedData() {
@@ -8114,6 +8129,7 @@ applyBackground();
   root.querySelector('#gpv-contact-run').addEventListener('click', () => { computeContacts(); renderCompositeControls(); });
   root.querySelector('#gpv-composite').addEventListener('click', downloadCompositeFigure);
   root.querySelector('#gpv-msa-paint').addEventListener('click', paintByMsa);
+  root.querySelector('#gpv-data-csv').addEventListener('click', downloadResidueDataCsv);
   root.querySelector('#gpv-contact-highlight').addEventListener('click', highlightContactInterface);
   root.querySelector('#gpv-contact-csv').addEventListener('click', downloadContactsCsv);
   root.querySelector('#gpv-contact-png').addEventListener('click', () => { downloadContactPng().catch(error => announce('Could not render the contact map: ' + error.message, 'error')); });

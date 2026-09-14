@@ -2,6 +2,14 @@
 
 All notable changes to this project are recorded here.
 
+## 2.21.1
+
+### Added
+
+- **Download data CSV** (Annotate → Per-residue data): the loaded dataset — a pasted table, a CSV,
+  or the MSA statistics — as `chain,resi,resn,value` with the dataset name in the header, so the
+  conservation or coverage behind a figure can be tabulated in the supplement.
+
 ## 2.21.0
 
 What the alignment knew.
@@ -15,6 +23,11 @@ What the alignment knew.
   dataset, so the viridis legend, the sequence strip, exports, the report and the methods text all
   follow, and the CSV of values downloads from the Annotate tab. An `.a3m` can also be added on
   its own for models from any source.
+
+### Validated
+
+- The three statistics are compared column by column with an independent Python implementation on
+  the seven alignments of the three real runs (21 new comparisons; 105 in total). See VALIDATION.md.
 
 ## 2.20.0
 
