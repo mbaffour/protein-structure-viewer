@@ -1077,18 +1077,18 @@ html>body{padding:0}</style>
 
   <section class="gpv-tool-panel" data-gpv-panel="confidence" hidden>
     <div class="gpv-confidence-layout" id="gpv-confidence-panel" hidden>
-      <div><div class="viz-controls gpv-msa" aria-label="Multiple sequence alignment"><span class="text-small text-muted">MSA</span><label class="form-label">Colour by<select class="form-select" id="gpv-msa-metric"><option value="conservation">Conservation (1 − normalised entropy)</option><option value="identity">Identity to the query</option><option value="depth">Coverage (sequences per column)</option></select></label><button class="btn" type="button" id="gpv-msa-paint" disabled data-tooltip="Read the unpaired MSA that AlphaFold 3 used (the .a3m in the archive) and colour each chain it covers by the chosen per-column statistic">Colour by MSA</button><span class="text-muted text-small" id="gpv-msa-state">No alignment loaded. AlphaFold 3 archives carry one per entity; an .a3m can also be added on its own.</span></div>
+      <div><div class="viz-controls gpv-msa" aria-label="Multiple sequence alignment"><span class="text-small text-muted">MSA</span><label class="form-label">Colour by<select class="form-select" id="gpv-msa-metric"><option value="conservation">Conservation (1 − normalised entropy)</option><option value="identity">Identity to the query</option><option value="depth">Coverage (sequences per column)</option></select></label><label class="form-check form-switch"><input class="form-check-input" id="gpv-msa-weights" type="checkbox" checked><span class="form-check-label">Henikoff weights</span></label><button class="btn" type="button" id="gpv-msa-paint" disabled data-tooltip="Read the unpaired MSA that AlphaFold 3 used (the .a3m in the archive) and colour each chain it covers by the chosen per-column statistic">Colour by MSA</button><span class="text-muted text-small" id="gpv-msa-state">No alignment loaded. AlphaFold 3 archives carry one per entity; an .a3m can also be added on its own.</span></div>
       <div class="viz-controls"><button class="btn" type="button" id="gpv-confidence-csv">Download confidence CSV</button><button class="btn" type="button" id="gpv-profile-svg" disabled data-tooltip="Per-residue pLDDT plot of the displayed models, one panel per chain, as editable SVG">pLDDT profile SVG</button><button class="btn" type="button" id="gpv-profile-png" disabled data-tooltip="The same pLDDT profile rendered at 2× as PNG">pLDDT profile PNG</button></div><div class="table-responsive"><table class="table table-sm" aria-label="AlphaFold model confidence metrics"><thead><tr><th>Model</th><th class="text-end">Mean pLDDT</th><th class="text-end">pTM</th><th class="text-end">ipTM</th><th class="text-end">Ranking score</th><th class="text-end">Rank</th><th>Clash</th></tr></thead><tbody id="gpv-metrics"></tbody></table></div></div>
       <div class="gpv-pae-panel" id="gpv-pae-panel" hidden><div id="gpv-pae-plot" hidden><div class="viz-controls"><button class="btn" type="button" id="gpv-pae-png">Download PAE PNG</button></div><canvas id="gpv-pae" width="420" height="420" role="img" aria-label="Predicted aligned error heatmap"></canvas><div class="gpv-pae-legend text-small"><span>Low error</span><span>PAE (Å)</span><span>High error</span></div><div class="text-small" id="gpv-pae-detail">Move over the heatmap to inspect a residue pair.</div></div><div class="table-responsive" id="gpv-interface-wrap" hidden><table class="table table-sm" aria-label="Chain-pair interface confidence"><thead><tr><th>Chain pair</th><th class="text-end">ipTM</th><th class="text-end">Min PAE (Å)</th></tr></thead><tbody id="gpv-interface-metrics"></tbody></table></div></div>
     </div>
     <h3 class="gpv-subheading">PAE domains</h3>
-    <p class="text-muted text-small gpv-hint">Residues whose predicted aligned error to one another is low are placed together in the prediction. Ten-residue segments are merged greedily while the mean PAE between groups stays below the cutoff. This reads the PAE matrix; it is not a structural domain assignment, and it says nothing about whether the placement is right.</p>
+    <p class="text-muted text-small gpv-hint">Residues whose predicted aligned error to one another is low are placed together in the prediction. Ten-residue segments are merged greedily while the mean PAE between groups stays below the cutoff. This is a heuristic segmentation of the PAE matrix (greedy agglomeration; it differs from the graph clustering used by the AlphaFold Protein Structure Database), not a curated domain assignment, and it says nothing about whether the placement is right.</p>
     <div class="viz-controls">
       <label class="form-label">PAE cutoff<select class="form-select" id="gpv-domain-cutoff"><option value="4">4 Å (strict)</option><option value="6" selected>6 Å</option><option value="8">8 Å (loose)</option></select></label>
       <button class="btn" type="button" id="gpv-domain-run" disabled>Find domains</button>
       <button class="btn" type="button" id="gpv-domain-color" disabled data-tooltip="Switch the colour scheme to PAE domains">Colour by domains</button>
       <button class="btn" type="button" id="gpv-domain-highlight" disabled data-tooltip="Add one highlight selection per domain, in the domain colours">Highlight all</button>
-      <span class="text-muted text-small" id="gpv-domain-state">Show a model with a PAE matrix, then find its domains.</span>
+      <span class="text-muted text-small" id="gpv-domain-state">Show a model with a PAE matrix, then find its domains (heuristic).</span>
     </div>
     <div class="table-responsive" id="gpv-domain-wrap" hidden><table class="table table-sm" aria-label="PAE-derived domains of the current model"><thead><tr><th>Domain</th><th>Residues</th><th class="text-end">Count</th><th class="text-end">Mean PAE within (Å)</th><th></th></tr></thead><tbody id="gpv-domain-rows"></tbody></table></div>
     <h3 class="gpv-subheading">Ligand sites</h3>
@@ -1239,7 +1239,7 @@ html>body{padding:0}</style>
       <ul>
         <li><em>Publish → Write methods text</em> drafts a Methods paragraph stating exactly how the numbers on screen were computed (superposition, RMSD, RMSF, domains, contacts, dimensions, colour scales); every definition is cross-checked against Biopython in the repository's <code>VALIDATION.md</code>.</li>
         <li>The shared report reproduces the outline, depth cueing and faded chains, and shows the contact map beside the PAE heatmap when one was computed for a model in the report.</li>
-        <li><em>Confidence → Colour by MSA</em> reads the alignment inside an AlphaFold 3 archive (or an .a3m you add) and colours matching chains by conservation, identity to the query or coverage; the legend, exports and methods text follow.</li>
+        <li><em>Confidence → Colour by MSA</em> reads the alignment inside an AlphaFold 3 archive (or an .a3m you add) and colours matching chains by conservation (Henikoff position-based sequence weights by default, switchable), identity to the query or coverage; the legend, exports and methods text follow.</li>
         <li><em>Publish → Download composite figure</em> stitches the 3D view with the PAE heatmap, the pLDDT profile and the contact map into one lettered figure at print size, each panel rendered at output resolution.</li>
         <li>The <em>Publication checklist</em> at the foot of the Publish tab lists what a journal or reviewer would flag about the current figure — no physical size, low resolution, small text, colour-blind-unsafe colours, missing legend, scale bar in perspective, unsuperposed models, no title — with one-click fixes.</li>
         <li><em>Compare → Interface contact map</em> draws every residue pair of two chains within a cutoff, closer pairs darker; hover reads the pair, a click selects both residues, <em>Highlight interface</em> colours the interface, and the map and pair list download as PNG and CSV. <em>Annotate → Label style</em> switches every label between boxed and plain text.</li>
@@ -1590,7 +1590,7 @@ html>body{padding:0}</style>
   let busyDepth = 0;
   let restoreMotion = null;
   const listPageSize = 60;
-  const viewerVersion = '2.23.0';
+  const viewerVersion = '2.24.0';
   const preferenceKey = 'protein-structure-viewer:preferences';
   const themeKey = 'protein-structure-viewer:theme';
   const labelColors = getComputedStyle(root);
@@ -4174,7 +4174,7 @@ html>body{padding:0}</style>
     if (!groups.length) { wrap.hidden = true; state.textContent = displayName(entry) + ' has no ligands or ions (water is not counted).'; return; }
     if (!results) { wrap.hidden = true; state.textContent = groups.length + ' ligand or ion group' + (groups.length === 1 ? '' : 's') + ' · choose a cutoff and analyse.'; return; }
     wrap.hidden = false;
-    state.textContent = results.rows.length + ' site' + (results.rows.length === 1 ? '' : 's') + ' at ' + results.cutoff + ' Å' + (results.rows.some(row => row.pae !== null) ? ' · ligand–site PAE from AlphaFold 3 tokens' : entry.confidence && entry.confidence.pae ? ' · the PAE matrix carries no ligand tokens' : '');
+    state.textContent = results.rows.length + ' site' + (results.rows.length === 1 ? '' : 's') + ' at ' + results.cutoff + ' Å' + (results.rows.some(row => row.pae !== null) ? ' · ligand–site PAE is the mean over ligand-token × site-residue pairs (a summary, not validated against a reference)' : entry.confidence && entry.confidence.pae ? ' · the PAE matrix carries no ligand tokens' : '');
     results.rows.forEach(row => {
       const tr = document.createElement('tr');
       const name = document.createElement('th'); name.textContent = siteLabel(row.group); name.title = siteResidueList(row.site); tr.append(name);
@@ -4313,12 +4313,12 @@ html>body{padding:0}</style>
     root.querySelector('#gpv-domain-adopt').disabled = !found || !found.domains.length;
     const wrap = root.querySelector('#gpv-domain-wrap'); const body = root.querySelector('#gpv-domain-rows'); body.replaceChildren();
     const state = root.querySelector('#gpv-domain-state');
-    if (!entry || !entry.model) { wrap.hidden = true; state.textContent = 'Show a model with a PAE matrix, then find its domains.'; return; }
+    if (!entry || !entry.model) { wrap.hidden = true; state.textContent = 'Show a model with a PAE matrix, then find its domains (heuristic).'; return; }
     if (!hasPae) { wrap.hidden = true; state.textContent = displayName(entry) + ' has no PAE matrix that maps onto its residues.'; return; }
     if (!found) { wrap.hidden = true; state.textContent = 'PAE loaded for ' + displayName(entry) + ' · choose a cutoff and find domains.'; return; }
     wrap.hidden = !found.domains.length;
     state.textContent = found.domains.length
-      ? found.domains.length + ' domain' + (found.domains.length === 1 ? '' : 's') + ' at ' + found.cutoff + ' Å' + (found.unassigned ? ' · ' + found.unassigned + ' residue' + (found.unassigned === 1 ? '' : 's') + ' unassigned' : '')
+      ? found.domains.length + ' domain' + (found.domains.length === 1 ? '' : 's') + ' at ' + found.cutoff + ' Å' + (found.unassigned ? ' · ' + found.unassigned + ' residue' + (found.unassigned === 1 ? '' : 's') + ' unassigned' : '') + ' · heuristic segmentation of the PAE matrix, not a curated domain assignment'
       : 'No group of twenty or more residues stayed under ' + found.cutoff + ' Å' + (found.reason ? ' (' + found.reason + ')' : '') + '.';
     found.domains.forEach(domain => {
       const tr = document.createElement('tr');
@@ -4724,6 +4724,12 @@ html>body{padding:0}</style>
      record; uppercase letters are match columns, lowercase letters insertions (dropped), '-'
      gaps. Per query column: depth (sequences with a residue), identity to the query, and
      conservation = 1 − H / log2(20) with H the Shannon entropy over the twenty amino acids.
+     By default the entropy uses the position-based sequence weights of Henikoff & Henikoff
+     (1994): at each column every sequence receives 1 / (r · n) where r is the number of residue
+     types in the column and n the number of sequences sharing its residue; a sequence's weight is
+     its sum over columns, scaled so the weights average 1. Redundant clusters of near-identical
+     sequences then no longer dominate the column. The unweighted value is kept alongside
+     (conservationRaw) and selectable with the Henikoff weights switch.
      The columns are mapped onto every chain whose sequence contains the query, and the result
      is loaded as a per-residue dataset so colouring, legends, exports and reports all follow. */
   let msaAssets = [];
@@ -4738,26 +4744,38 @@ html>body{padding:0}</style>
     if (!records.length) return null;
     const query = records[0].parts.join('').replace(/[a-z.]/g, '');
     const length = query.length; if (!length) return null;
+    const isGap = letter => letter === '-' || letter === 'X' || letter === 'x';
+    const kept = records.map(record => record.parts.join('').replace(/[a-z.]/g, '')).filter(sequence => sequence.length === length);
+    const used = kept.length;
     const depth = new Array(length).fill(0); const identity = new Array(length).fill(0); const counts = Array.from({ length }, () => new Map());
-    let used = 0;
-    records.forEach(record => {
-      const sequence = record.parts.join('').replace(/[a-z.]/g, '');
-      if (sequence.length !== length) return;
-      used += 1;
+    kept.forEach(sequence => {
       for (let i = 0; i < length; i += 1) {
         const letter = sequence[i];
-        if (letter === '-' || letter === 'X' || letter === 'x') continue;
+        if (isGap(letter)) continue;
         depth[i] += 1; if (letter === query[i]) identity[i] += 1;
         counts[i].set(letter, (counts[i].get(letter) || 0) + 1);
       }
     });
+    /* Henikoff position-based weights: 1 / (types in column × sequences sharing the residue),
+       summed over the columns where the sequence has a residue, scaled to a mean of 1. */
+    const weights = new Array(used).fill(0);
+    for (let i = 0; i < length; i += 1) {
+      const types = counts[i].size; if (!types) continue;
+      kept.forEach((sequence, s) => { const letter = sequence[i]; if (!isGap(letter)) weights[s] += 1 / (types * counts[i].get(letter)); });
+    }
+    const weightTotal = weights.reduce((sum, weight) => sum + weight, 0);
+    const scale = weightTotal > 0 ? used / weightTotal : 1;
+    for (let s = 0; s < used; s += 1) weights[s] *= scale;
+    const entropyOf = column => { let entropy = 0; let total = 0; column.forEach(count => { total += count; }); if (!total) return null; column.forEach(count => { const p = count / total; if (p > 0) entropy -= p * Math.log2(p); }); return entropy; };
+    const normalise = entropy => (entropy === null ? 0 : Math.max(0, Math.min(1, 1 - entropy / Math.log2(aminoAlphabet.length))));
+    const conservationRaw = counts.map(column => normalise(entropyOf(column)));
     const conservation = counts.map((column, i) => {
-      if (!depth[i]) return 0;
-      let entropy = 0;
-      column.forEach(count => { const p = count / depth[i]; entropy -= p * Math.log2(p); });
-      return Math.max(0, Math.min(1, 1 - entropy / Math.log2(aminoAlphabet.length)));
+      if (!column.size) return 0;
+      const weighted = new Map();
+      kept.forEach((sequence, s) => { const letter = sequence[i]; if (!isGap(letter)) weighted.set(letter, (weighted.get(letter) || 0) + weights[s]); });
+      return normalise(entropyOf(weighted));
     });
-    return { query, sequences: used, depth, identity: identity.map((count, i) => (depth[i] ? count / depth[i] : 0)), conservation };
+    return { query, sequences: used, depth, identity: identity.map((count, i) => (depth[i] ? count / depth[i] : 0)), conservation, conservationRaw, weights };
   }
 
   function msaAssetsFor(entry) {
@@ -4777,6 +4795,7 @@ html>body{padding:0}</style>
     const entry = activeEntry(); if (!entry || !entry.model) return;
     const assets = msaAssetsFor(entry); if (!assets.length) return;
     const metric = root.querySelector('#gpv-msa-metric').value;
+    const weighted = root.querySelector('#gpv-msa-weights').checked;
     const values = new Map(); const covered = []; const notes = [];
     const rows = residueRows(entry);
     assets.forEach(asset => {
@@ -4789,7 +4808,7 @@ html>body{padding:0}</style>
         row.residues.forEach((atom, index) => {
           const column = index - offset + queryOffset;
           if (column < 0 || column >= msa.query.length) return;
-          const value = metric === 'depth' ? msa.depth[column] : metric === 'identity' ? msa.identity[column] : msa.conservation[column];
+          const value = metric === 'depth' ? msa.depth[column] : metric === 'identity' ? msa.identity[column] : weighted ? msa.conservation[column] : msa.conservationRaw[column];
           values.set((atom.chain || '') + '|' + atom.resi, value);
         });
         covered.push((row.chain || '—') + ' (' + msa.sequences + ' seq.)');
@@ -4797,9 +4816,9 @@ html>body{padding:0}</style>
     });
     if (!values.size) { announce('No chain of ' + displayName(entry) + ' matches a query sequence in the alignment' + (notes.length ? ' · ' + notes.join('; ') : ''), 'error'); return; }
     const all = [...values.values()];
-    const names = { conservation: 'MSA conservation (1 − H/log₂20)', identity: 'MSA identity to query', depth: 'MSA coverage (sequences)' };
+    const names = { conservation: weighted ? 'MSA conservation (1 − H/log₂20, Henikoff-weighted)' : 'MSA conservation (1 − H/log₂20, unweighted)', identity: 'MSA identity to query', depth: 'MSA coverage (sequences)' };
     remember('MSA colouring');
-    residueData = { values, byResi: new Map(), min: Math.min(...all), max: Math.max(...all), count: all.length, name: names[metric], scale: 'viridis', scope: 'source', entryId: entry.id, msa: { metric, sequences: assets.map(asset => asset.parsed ? asset.parsed.sequences : 0) } };
+    residueData = { values, byResi: new Map(), min: Math.min(...all), max: Math.max(...all), count: all.length, name: names[metric], scale: 'viridis', scope: 'source', entryId: entry.id, msa: { metric, weighted: metric === 'conservation' ? weighted : null, sequences: assets.map(asset => asset.parsed ? asset.parsed.sequences : 0) } };
     root.querySelector('#gpv-color-mode').value = 'data';
     renderDataState(); applyStyle();
     announce(residueData.name + ' on chain' + (covered.length === 1 ? ' ' : 's ') + clipText(covered.join(', '), 80) + (notes.length ? ' · ' + notes.join('; ') : ''));
@@ -5009,7 +5028,7 @@ html>body{padding:0}</style>
     }
     if (ensembleSpread) sentences.push('Model agreement was expressed per residue as the Cα root-mean-square fluctuation about the mean Cα position across the ' + ensembleSpread.count + ' superposed models, for residues present in at least two models.');
     if (contactResult && contactResult.pairs.size) { const target = entryById(contactResult.entryId); sentences.push('Inter-chain contacts between chains ' + (contactResult.chainA || '—') + ' and ' + (contactResult.chainB || '—') + (target ? ' of ' + displayName(target) : '') + ' were defined as residue pairs with ' + (contactResult.mode === 'ca' ? 'Cα atoms' : 'any pair of heavy atoms') + ' within ' + contactResult.cutoff + ' Å; ' + contactResult.pairs.size + ' residue pairs (' + contactResult.residuesA.length + ' residues on chain ' + (contactResult.chainA || '—') + ', ' + contactResult.residuesB.length + ' on chain ' + (contactResult.chainB || '—') + ') met the criterion.'); }
-    if (residueData && residueData.msa && root.querySelector('#gpv-color-mode').value === 'data') sentences.push('Per-residue ' + (residueData.msa.metric === 'depth' ? 'alignment coverage (number of sequences with a residue at the column)' : residueData.msa.metric === 'identity' ? 'identity to the query (fraction of aligned sequences sharing the query residue)' : 'conservation, defined as 1 − H/log₂20 with H the Shannon entropy of the amino-acid distribution at the column (gaps excluded),') + ' was computed from the unpaired multiple sequence alignment written by AlphaFold 3 (' + residueData.msa.sequences.join(' and ') + ' sequences) and mapped onto the chains whose sequence matches the query.');
+    if (residueData && residueData.msa && root.querySelector('#gpv-color-mode').value === 'data') sentences.push('Per-residue ' + (residueData.msa.metric === 'depth' ? 'alignment coverage (number of sequences with a residue at the column)' : residueData.msa.metric === 'identity' ? 'identity to the query (fraction of aligned sequences sharing the query residue)' : 'conservation, defined as 1 − H/log₂20 with H the Shannon entropy of the amino-acid distribution at the column (gaps excluded' + (residueData.msa.weighted ? '; sequences weighted with the position-based scheme of Henikoff & Henikoff, 1994' : '; sequences unweighted') + '),') + ' was computed from the unpaired multiple sequence alignment written by AlphaFold 3 (' + residueData.msa.sequences.join(' and ') + ' sequences) and mapped onto the chains whose sequence matches the query.');
     const domains = first && first.domains;
     if (domains && domains.domains.length) sentences.push('Domains were derived from the PAE matrix by greedy agglomeration of ten-residue segments: the pair with the lowest mean inter-segment PAE was merged while that mean stayed below ' + domains.cutoff + ' Å; groups of fewer than twenty residues were absorbed into the nearest domain when within twice the cutoff and otherwise left unassigned. This segmentation is a heuristic and differs from the graph clustering used by the AlphaFold Protein Structure Database.');
     if (nearbyResult && nearbyResult.residues) sentences.push('Contacting residues were defined as residues with any heavy atom within ' + nearbyResult.cutoff + ' Å of any heavy atom of the ' + (nearbyResult.mode === 'chain' ? 'target chain' : nearbyResult.mode === 'hetero' ? 'ligands and ions' : 'target residue') + ' (hydrogens and water excluded).');
@@ -6487,8 +6506,8 @@ html>body{padding:0}</style>
     }
     if (mode === 'domain') {
       const active = sequenceEntry(); const found = active && active.domains;
-      if (!found || !found.domains.length) return { title: 'PAE domains', items: [['#9ca3af', 'none yet', 'No domains found yet — Confidence → Find domains']] };
-      return { title: 'PAE domains', items: [...found.domains.slice(0, 12).map(domain => [domainColorFor(domain.id), 'D' + domain.id, 'Domain ' + domain.id + ' · ' + clipText(domainRanges(domain), 36)]), ...(found.unassigned ? [['#9ca3af', 'other', 'Unassigned']] : [])] };
+      if (!found || !found.domains.length) return { title: 'PAE domains (heuristic)', items: [['#9ca3af', 'none yet', 'No domains found yet — Confidence → Find domains']] };
+      return { title: 'PAE domains (heuristic)', items: [...found.domains.slice(0, 12).map(domain => [domainColorFor(domain.id), 'D' + domain.id, 'Domain ' + domain.id + ' · ' + clipText(domainRanges(domain), 36)]), ...(found.unassigned ? [['#9ca3af', 'other', 'Unassigned']] : [])] };
     }
     if (mode === 'agreement') return { title: 'Cα RMSF', items: [...agreementBands.map(([, color, label]) => [color, label]), ['#9ca3af', 'single', 'In one model only']] };
     if (mode === 'deviation') return { title: 'Cα deviation', items: [...deviationBands.map(([, color, label]) => [color, label]), ['#9ca3af', 'unmatched']] };

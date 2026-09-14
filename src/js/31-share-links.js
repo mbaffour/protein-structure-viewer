@@ -627,8 +627,8 @@
     }
     if (mode === 'domain') {
       const active = sequenceEntry(); const found = active && active.domains;
-      if (!found || !found.domains.length) return { title: 'PAE domains', items: [['#9ca3af', 'none yet', 'No domains found yet — Confidence → Find domains']] };
-      return { title: 'PAE domains', items: [...found.domains.slice(0, 12).map(domain => [domainColorFor(domain.id), 'D' + domain.id, 'Domain ' + domain.id + ' · ' + clipText(domainRanges(domain), 36)]), ...(found.unassigned ? [['#9ca3af', 'other', 'Unassigned']] : [])] };
+      if (!found || !found.domains.length) return { title: 'PAE domains (heuristic)', items: [['#9ca3af', 'none yet', 'No domains found yet — Confidence → Find domains']] };
+      return { title: 'PAE domains (heuristic)', items: [...found.domains.slice(0, 12).map(domain => [domainColorFor(domain.id), 'D' + domain.id, 'Domain ' + domain.id + ' · ' + clipText(domainRanges(domain), 36)]), ...(found.unassigned ? [['#9ca3af', 'other', 'Unassigned']] : [])] };
     }
     if (mode === 'agreement') return { title: 'Cα RMSF', items: [...agreementBands.map(([, color, label]) => [color, label]), ['#9ca3af', 'single', 'In one model only']] };
     if (mode === 'deviation') return { title: 'Cα deviation', items: [...deviationBands.map(([, color, label]) => [color, label]), ['#9ca3af', 'unmatched']] };

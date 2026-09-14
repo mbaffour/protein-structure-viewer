@@ -2,7 +2,7 @@
 
 Every quantity the viewer reports was compared with an independent implementation on three real
 AlphaFold 3 runs. This file records the method, the results and the limits of the check, and how to
-rerun it on your own run. Last run: 2026-09-14, viewer 2.23.0.
+rerun it on your own run. Last run: 2026-09-14, viewer 2.24.0.
 
 ## Method
 
@@ -27,8 +27,10 @@ rerun it on your own run. Last run: 2026-09-14, viewer 2.23.0.
   BSA(A,B) = SASA(A alone) + SASA(B alone) − SASA(A and B together), **not** halved and floored at
   zero, which is exactly what the Confidence tab's interface table reports;
 - per-column statistics of every unpaired `.a3m` in the run — conservation (1 − H/log₂20, gaps and X
-  excluded), identity to the query and coverage — with lowercase insertions dropped, exactly as the
-  viewer's *Colour by MSA* defines them.
+  excluded) both with Henikoff & Henikoff (1994) position-based sequence weights and unweighted,
+  identity to the query and coverage — with lowercase insertions dropped, exactly as the viewer's
+  *Colour by MSA* defines them. The weights are computed independently in Python (1/(r·n) per column,
+  summed over the columns where the sequence has a residue, scaled to a mean of 1).
 
 `tests/validate.mjs` then opens the same files in the real viewer (headless Chromium via Playwright),
 runs *Align visible* in identifier mode with model 0 as reference, reads the same quantities through the
@@ -136,7 +138,7 @@ PAE domains at 6 Å on model 0: 6 domains, 50 residues unassigned (heuristic; ru
 
 PAE domains at 6 Å on model 0: 4 domains, 10 residues unassigned (heuristic; run without error, not compared). Console errors: 0.
 
-**All 123 comparisons agree within tolerance** (72 from the 2.14.0 pass, 12 for the contact map added in 2.18.1, 21 for the MSA statistics added in 2.21.0, 18 for buried surface area added in 2.23.0). RMSD, RMSF, radius of gyration and extent agree to
+**All 130 comparisons agree within tolerance** (72 from the 2.14.0 pass, 12 for the contact map added in 2.18.1, 21 for the MSA statistics added in 2.21.0 plus 7 for the Henikoff-weighted conservation added in 2.24.0, 18 for buried surface area added in 2.23.0). RMSD, RMSF, radius of gyration and extent agree to
 better than 5 × 10⁻⁵ Å; contact residue sets are identical; mean pLDDT agrees to 4 × 10⁻⁴; buried
 surface areas agree to 2.7 % of two independently sampled Shrake–Rupley calculations.
 
@@ -197,24 +199,29 @@ excluded. The viewer's pair set, interface residue counts and every closest-atom
 
 The differences are the four-decimal rounding of the reference values.
 
-## MSA statistics (added 2.21.0)
+## MSA statistics (added 2.21.0; Henikoff-weighted conservation added 2.24.0)
 
 For every unpaired alignment in the archive, the viewer's per-residue values on the first chain whose
 sequence contains the query were compared column by column with the reference. Tolerance 10⁻⁵ for
-conservation and identity, exact for coverage.
+conservation and identity, exact for coverage. Since 2.24.0 conservation is checked twice: with the
+Henikoff position-based weights the viewer applies by default, and with the weights switched off. The
+last column gives the largest change the weighting makes to any column of that alignment — a
+statement about the alignment, reported so nobody mistakes the weighting for a rounding detail.
 
-| run | alignment (chains) | sequences | columns | conservation | identity | coverage |
-|---|---|---:|---:|---:|---:|---:|
-| A — M13 virion tip | b_d_e_c_a (α) | 1 | 33 | 0 | 0 | exact |
-| A — M13 virion tip | j_g_i_h_f (β) | 13 | 32 | 3.5 × 10⁻⁷ | 3.8 × 10⁻⁷ | exact |
-| A — M13 virion tip | n_l_o_k_m (γ) | 90 | 73 | 5.0 × 10⁻⁷ | 4.9 × 10⁻⁷ | exact |
-| B — MS2 maturation protein–coat | a | 1 875 | 393 | 5.0 × 10⁻⁷ | 5.0 × 10⁻⁷ | exact |
-| B — MS2 maturation protein–coat | b_c | 62 | 130 | 5.0 × 10⁻⁷ | 4.9 × 10⁻⁷ | exact |
-| C — phiX174 F–G | a | 2 048 | 427 | 5.0 × 10⁻⁷ | 5.0 × 10⁻⁷ | exact |
-| C — phiX174 F–G | b | 798 | 175 | 4.9 × 10⁻⁷ | 5.0 × 10⁻⁷ | exact |
+| run | alignment (chains) | sequences | columns | conservation (weighted) | conservation (unweighted) | identity | coverage | max Δ weighting |
+|---|---|---:|---:|---:|---:|---:|---:|---:|
+| A — M13 virion tip | b_d_e_c_a (α) | 1 | 33 | 0 | 0 | 0 | exact | 0 |
+| A — M13 virion tip | j_g_i_h_f (β) | 13 | 32 | 4.4 × 10⁻⁷ | 3.5 × 10⁻⁷ | 3.8 × 10⁻⁷ | exact | 0.117 |
+| A — M13 virion tip | n_l_o_k_m (γ) | 90 | 73 | 5.0 × 10⁻⁷ | 5.0 × 10⁻⁷ | 4.9 × 10⁻⁷ | exact | 0.121 |
+| B — MS2 maturation protein–coat | a | 1 875 | 393 | 5.0 × 10⁻⁷ | 5.0 × 10⁻⁷ | 5.0 × 10⁻⁷ | exact | 0.138 |
+| B — MS2 maturation protein–coat | b_c | 62 | 130 | 5.0 × 10⁻⁷ | 5.0 × 10⁻⁷ | 4.9 × 10⁻⁷ | exact | 0.130 |
+| C — phiX174 F–G | a | 2 048 | 427 | 5.0 × 10⁻⁷ | 5.0 × 10⁻⁷ | 5.0 × 10⁻⁷ | exact | 0.262 |
+| C — phiX174 F–G | b | 798 | 175 | 5.0 × 10⁻⁷ | 4.9 × 10⁻⁷ | 5.0 × 10⁻⁷ | exact | 0.317 |
 
 Differences are the six-decimal rounding of the reference. Note the single-sequence alignment for the
 M13 α entity: its "conservation" of 1 everywhere is a statement about the alignment, not the protein.
+The weighting matters most for the deep phiX174 alignments, where clusters of near-identical
+sequences otherwise make moderately variable columns look invariant.
 
 ## Buried surface area (added 2.23.0)
 

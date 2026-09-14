@@ -84,7 +84,10 @@ PSV_CHROMIUM=/opt/pw-browsers/chromium/chrome-linux/chrome npm test
 - Report parity: a report made with outline, depth cueing, a faded chain and computed contacts carries all four; the
   contact panel is visible with the pair count, and stays so after the background switches.
 - MSA: a synthetic .a3m colours both fixture chains; the varied column scores below the half-varied and the invariant
-  one, coverage counts 9 and 7, and the methods text gains the alignment sentence.
+  one, coverage counts 9 and 7, and the methods text gains the alignment sentence. Switching the Henikoff weights off
+  changes the varied column's value, keeps the ordering, and the dataset name, the debug hook and the methods text say
+  "unweighted"; switching them back on puts "Henikoff & Henikoff, 1994" in the methods text.
+- PAE domains: the panel state and the figure legend call the segmentation a heuristic.
 - Composite figure: with contacts computed, the three-panel composite downloads at the 178 mm width (2102 px) with
   resolution metadata.
 - Publication checklist: pixel export with chain colours yields at least two warnings; the two one-click fixes switch
@@ -129,6 +132,10 @@ a Markdown table, writes `validation.json` next to the reference and exits non-z
 is committed; point the scripts at your own.
 
 ## Notes
+
+- A step that fails only because Playwright timed out (a `TimeoutError`, or "Timeout … exceeded" in the message)
+  is retried once and logged as `RETRY`; the summary counts these. Assertion failures are never retried, so a
+  wrong answer still fails the run on the first attempt.
 
 - Most fixtures are synthetic (`fixtures.mjs`) — two-chain poly-alanine helices with
   pLDDT-like B-factors, generated from a seeded PRNG so runs are reproducible. No

@@ -304,7 +304,9 @@ pLDDT but high ligand–site PAE is a well-folded pocket with an uncertain pose.
 the pair with the lowest mean PAE between them first — while that mean stays below the cutoff, so
 groups that the prediction places rigidly relative to one another end up together, even across
 chains or with gaps. A domain needs at least twenty residues; smaller leftovers join the nearest domain when they are
-within twice the cutoff and are otherwise reported as unassigned. The table gives each domain's
+within twice the cutoff and are otherwise reported as unassigned. The panel, the hint and the figure
+legend label the result a *heuristic*: it is a segmentation of the PAE matrix, it differs from the graph
+clustering the AlphaFold Protein Structure Database uses, and it is not a curated domain assignment. The table gives each domain's
 residue ranges per chain, its size, and the mean PAE within it; **Highlight** adds a selection for one
 domain, **Highlight all** does so for every domain in the domain colours, and **Colour by domains**
 switches the colour scheme (the legend lists the domains). AlphaFold 3 token ids are honoured, so
@@ -383,7 +385,14 @@ entity as an `.a3m` file. The viewer keeps these when the archive is opened (an 
 added on its own with *Add structures*), and **Colour by MSA** maps the alignment's per-column
 statistic onto every chain whose sequence matches the alignment's query. Three statistics:
 **conservation**, 1 − H/log₂20 where H is the Shannon entropy of the amino-acid distribution at the
-column with gaps and X excluded (1 = one residue everywhere, 0 = uniform); **identity to the
+column with gaps and X excluded (1 = one residue everywhere, 0 = uniform). By default the entropy uses
+the position-based sequence weights of Henikoff & Henikoff (1994): at each column a sequence receives
+1/(r·n), r being the number of residue types in the column and n the number of sequences sharing its
+residue; a sequence's weight is the sum over the columns where it has a residue, scaled so the weights
+average 1. A family represented by fifty near-identical sequences and one distant one then no longer
+looks invariant wherever the fifty agree. The **Henikoff weights** switch turns this off and gives the
+plain column entropy; the dataset name, legend, CSV and methods text record which was used, and both are
+cross-validated in `VALIDATION.md`. Identity and coverage are never weighted; **identity to the
 query**, the fraction of aligned sequences carrying the query residue; **coverage**, the number of
 sequences with a residue at the column. The result is loaded as a per-residue dataset named for the
 statistic, so it behaves like any pasted table: the viridis legend, the sequence strip, exports, the

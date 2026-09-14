@@ -151,8 +151,9 @@ console.log('ligand or ion groups on model 0: ' + (ligands.length ? ligands.join
    alignment, on the first chain whose sequence contains the query */
 for (const msa of (reference.msa || [])) {
   await page.click('[data-gpv-tab="confidence"]');
-  for (const metric of ['conservation', 'identity', 'depth']) {
-    await page.selectOption('#gpv-msa-metric', metric);
+  for (const metric of ['conservation', 'conservation_unweighted', 'identity', 'depth']) {
+    await page.selectOption('#gpv-msa-metric', metric === 'conservation_unweighted' ? 'conservation' : metric);
+    await page.setChecked('#gpv-msa-weights', metric !== 'conservation_unweighted');
     if (await page.locator('#gpv-msa-paint').isDisabled()) { rows.push({ label: 'MSA ' + metric + ' (' + msa.file.slice(-24) + ')', viewer: NaN, reference: msa.query.length, delta: NaN, ok: false }); failed += 1; continue; }
     await page.click('#gpv-msa-paint'); await page.waitForTimeout(600);
     const viewerValues = await page.evaluate(query => {
@@ -173,8 +174,9 @@ for (const msa of (reference.msa || [])) {
     const referenceValues = msa[metric];
     let worst = 0; let missing = 0;
     referenceValues.forEach((value, i) => { const seen = viewerValues.values[i]; if (seen === undefined) missing += 1; else worst = Math.max(worst, Math.abs(seen - value)); });
-    check('MSA ' + metric + ' · ' + referenceValues.length + ' columns on chain ' + viewerValues.chain + ' · largest difference', missing ? NaN : worst, 0, metric === 'depth' ? 0 : 1e-5);
+    check('MSA ' + metric.replace('conservation_unweighted', 'conservation (unweighted)').replace(/^conservation$/, 'conservation (Henikoff-weighted)') + ' · ' + referenceValues.length + ' columns on chain ' + viewerValues.chain + ' · largest difference', missing ? NaN : worst, 0, metric === 'depth' ? 0 : 1e-5);
   }
+  await page.setChecked('#gpv-msa-weights', true);
 }
 
 /* Kabsch superposition of every model onto model 0 and per-residue RMSF */

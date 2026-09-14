@@ -13,8 +13,8 @@ authors:
   - family-names: Awuah
     given-names: Michael Baffour
     email: mbaffour890@gmail.com
-version: 2.23.0
-date-released: 2026-09-13
+version: 2.24.0
+date-released: 2026-09-14
 doi: 10.5281/zenodo.22741488
 license: MIT
 repository-code: "https://github.com/mbaffour/protein-structure-viewer"

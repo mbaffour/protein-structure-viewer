@@ -2,6 +2,24 @@
 
 All notable changes to this project are recorded here.
 
+## 2.24.0
+
+- **Henikoff-weighted MSA conservation.** *Colour by MSA → Conservation* now applies the position-based
+  sequence weights of Henikoff & Henikoff (1994) before the column entropy, so a cluster of near-identical
+  homologues no longer counts as many independent observations. A *Henikoff weights* switch (on by default)
+  gives the plain column entropy instead; the dataset name, the legend, the CSV, the report and the methods
+  text all say which was used. Both versions are cross-validated against an independent Python implementation
+  on the three AlphaFold 3 runs (weighted and unweighted differ by up to 0.32 at some columns of the phiX174
+  alignments, so the choice is not cosmetic).
+- **Heuristics say so in the interface.** PAE domains are labelled a heuristic segmentation in the panel state,
+  the hint and the figure legend ("PAE domains (heuristic)"); the ligand-site state says its PAE column is a
+  summary mean that has not been validated against a reference.
+- **Suite retries a step once after a Playwright timeout** (never after an assertion failure) and logs the retry
+  loudly, so a slow CI runner does not fail a green build while a real regression still does.
+- **CI fixes.** Firefox runs headed under Xvfb on the Linux runner because headless Firefox cannot create a
+  WebGL context there; the report-strip hover test polls for the readout instead of assuming the strip is
+  drawn within 300 ms.
+
 ## 2.23.0
 
 Built to be maintained.

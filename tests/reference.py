@@ -121,6 +121,9 @@ print('bsa', out['bsa']['chains'], out['bsa']['bsa'], 'A^2 over', out['bsa']['pa
 
 # MSA statistics per unpaired .a3m in the folder: conservation = 1 - H/log2(20) over the twenty amino
 # acids (gaps and X excluded), identity to the query, coverage; lowercase insertions dropped.
+# 'conservation' uses Henikoff & Henikoff (1994) position-based sequence weights (1/(r*n) per column,
+# summed over the columns where the sequence has a residue, scaled to a mean weight of 1);
+# 'conservation_unweighted' is the plain column entropy.
 import math, os
 out['msa'] = []
 for a3m in sorted(glob.glob(f'{folder}/*unpaired*.a3m')):
@@ -133,17 +136,29 @@ for a3m in sorted(glob.glob(f'{folder}/*unpaired*.a3m')):
     if not seqs: continue
     query = seqs[0]; L = len(query)
     rows = [q for q in seqs if len(q) == L]
-    depth = [0] * L; ident = [0] * L; cons = [0.0] * L
+    depth = [0] * L; ident = [0] * L; cons = [0.0] * L; cons_raw = [0.0] * L
+    weights = [0.0] * len(rows)
     for i in range(L):
-        column = [r[i] for r in rows if r[i] not in '-Xx']
+        freq = {}
+        for r in rows:
+            if r[i] not in '-Xx': freq[r[i]] = freq.get(r[i], 0) + 1
+        if not freq: continue
+        for s, r in enumerate(rows):
+            if r[i] not in '-Xx': weights[s] += 1.0 / (len(freq) * freq[r[i]])
+    total = sum(weights)
+    if total > 0: weights = [w * len(rows) / total for w in weights]
+    def normalised(H): return max(0.0, min(1.0, 1 - H / math.log2(20)))
+    for i in range(L):
+        column = [(r[i], weights[s]) for s, r in enumerate(rows) if r[i] not in '-Xx']
         depth[i] = len(column)
         if not column: continue
-        ident[i] = sum(1 for c in column if c == query[i]) / len(column)
-        freq = {}
-        for c in column: freq[c] = freq.get(c, 0) + 1
-        H = -sum((n / len(column)) * math.log2(n / len(column)) for n in freq.values())
-        cons[i] = max(0.0, min(1.0, 1 - H / math.log2(20)))
-    out['msa'].append({'file': os.path.basename(a3m), 'query': query, 'sequences': len(rows), 'depth': depth, 'identity': [round(v, 6) for v in ident], 'conservation': [round(v, 6) for v in cons]})
+        ident[i] = sum(1 for c, _ in column if c == query[i]) / len(column)
+        freq = {}; wfreq = {}
+        for c, w in column: freq[c] = freq.get(c, 0) + 1; wfreq[c] = wfreq.get(c, 0.0) + w
+        cons_raw[i] = normalised(-sum((n / len(column)) * math.log2(n / len(column)) for n in freq.values()))
+        wtotal = sum(wfreq.values())
+        cons[i] = normalised(-sum((w / wtotal) * math.log2(w / wtotal) for w in wfreq.values() if w > 0))
+    out['msa'].append({'file': os.path.basename(a3m), 'query': query, 'sequences': len(rows), 'depth': depth, 'identity': [round(v, 6) for v in ident], 'conservation': [round(v, 6) for v in cons], 'conservation_unweighted': [round(v, 6) for v in cons_raw]})
 print('msa', [(m['file'][-30:], m['sequences'], len(m['query'])) for m in out['msa']])
 json.dump(out, open(f'{folder}/reference.json', 'w'), indent=1)
 print(json.dumps({k: v for k, v in out.items() if k != 'contacts'}, indent=1)); print('contacts', out['contacts']['count'], out['contacts']['residues'][:6]); print('contact map', out['contact_map']['chains'], out['contact_map']['pairs'], 'pairs; chain pairs with contacts:', out['contact_map']['chain_pair_counts'])

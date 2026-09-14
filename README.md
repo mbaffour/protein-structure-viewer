@@ -135,7 +135,9 @@ layout and back, and the choice is remembered. Screens narrower than 1100 px alw
 
 Confidence → *Colour by MSA* reads the unpaired alignment inside an AlphaFold 3 archive (or an
 `.a3m` you add) and colours each matching chain by conservation, identity to the query or coverage.
-It loads as a per-residue dataset, so legend, strip, exports, report and methods text follow.
+Conservation is 1 − H/log₂20 with the sequences weighted by the position-based scheme of Henikoff &
+Henikoff (1994) by default; a switch gives the unweighted column entropy. It loads as a per-residue
+dataset, so legend, strip, exports, report and methods text follow and state which weighting was used.
 
 ## Composite figure
 
@@ -218,7 +220,7 @@ computes, with Biopython and numpy, the mean Cα pLDDT, the Kabsch RMSD of each 
 per-residue Cα RMSF across the superposed models, radius of gyration, exact Cα extent and the residue
 set within a cutoff of one chain; `tests/validate.mjs` drives the real viewer on the same files and
 compares. On three AlphaFold 3 runs (an M13 virion tip, an MS2 maturation-protein–coat complex and a
-phiX174 F–G complex) all 123 comparisons — including the interface contact map, the MSA statistics and
+phiX174 F–G complex) all 130 comparisons — including the interface contact map, the MSA statistics (weighted and unweighted conservation) and
 buried surface area — agree within tolerance (rounding of the reference for distances; 5 % for
 buried surface area, which two 92-point Shrake–Rupley samplings cannot match more closely).
 [`VALIDATION.md`](VALIDATION.md) has the tables, what is and is not covered, and how to rerun the check on

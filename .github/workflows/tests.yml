@@ -37,10 +37,21 @@ jobs:
         run: npx playwright install --with-deps ${{ matrix.browser }}
 
       - name: Run regression suite
+        if: matrix.browser != 'firefox'
         working-directory: tests
         env:
           PSV_BROWSER: ${{ matrix.browser }}
         run: npm test
+
+      # Headless Firefox on Linux cannot create a WebGL context ("this._gl is null"), so
+      # Firefox runs headed inside a virtual X display instead.
+      - name: Run regression suite (Firefox, headed under Xvfb)
+        if: matrix.browser == 'firefox'
+        working-directory: tests
+        env:
+          PSV_BROWSER: firefox
+          PSV_HEADED: '1'
+        run: xvfb-run --auto-servernum --server-args="-screen 0 1400x1100x24" npm test
 
   validate-scripts:
     name: validate scripts

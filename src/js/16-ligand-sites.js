@@ -73,7 +73,7 @@
     if (!groups.length) { wrap.hidden = true; state.textContent = displayName(entry) + ' has no ligands or ions (water is not counted).'; return; }
     if (!results) { wrap.hidden = true; state.textContent = groups.length + ' ligand or ion group' + (groups.length === 1 ? '' : 's') + ' · choose a cutoff and analyse.'; return; }
     wrap.hidden = false;
-    state.textContent = results.rows.length + ' site' + (results.rows.length === 1 ? '' : 's') + ' at ' + results.cutoff + ' Å' + (results.rows.some(row => row.pae !== null) ? ' · ligand–site PAE from AlphaFold 3 tokens' : entry.confidence && entry.confidence.pae ? ' · the PAE matrix carries no ligand tokens' : '');
+    state.textContent = results.rows.length + ' site' + (results.rows.length === 1 ? '' : 's') + ' at ' + results.cutoff + ' Å' + (results.rows.some(row => row.pae !== null) ? ' · ligand–site PAE is the mean over ligand-token × site-residue pairs (a summary, not validated against a reference)' : entry.confidence && entry.confidence.pae ? ' · the PAE matrix carries no ligand tokens' : '');
     results.rows.forEach(row => {
       const tr = document.createElement('tr');
       const name = document.createElement('th'); name.textContent = siteLabel(row.group); name.title = siteResidueList(row.site); tr.append(name);

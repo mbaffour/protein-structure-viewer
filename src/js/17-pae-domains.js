@@ -110,12 +110,12 @@
     root.querySelector('#gpv-domain-adopt').disabled = !found || !found.domains.length;
     const wrap = root.querySelector('#gpv-domain-wrap'); const body = root.querySelector('#gpv-domain-rows'); body.replaceChildren();
     const state = root.querySelector('#gpv-domain-state');
-    if (!entry || !entry.model) { wrap.hidden = true; state.textContent = 'Show a model with a PAE matrix, then find its domains.'; return; }
+    if (!entry || !entry.model) { wrap.hidden = true; state.textContent = 'Show a model with a PAE matrix, then find its domains (heuristic).'; return; }
     if (!hasPae) { wrap.hidden = true; state.textContent = displayName(entry) + ' has no PAE matrix that maps onto its residues.'; return; }
     if (!found) { wrap.hidden = true; state.textContent = 'PAE loaded for ' + displayName(entry) + ' · choose a cutoff and find domains.'; return; }
     wrap.hidden = !found.domains.length;
     state.textContent = found.domains.length
-      ? found.domains.length + ' domain' + (found.domains.length === 1 ? '' : 's') + ' at ' + found.cutoff + ' Å' + (found.unassigned ? ' · ' + found.unassigned + ' residue' + (found.unassigned === 1 ? '' : 's') + ' unassigned' : '')
+      ? found.domains.length + ' domain' + (found.domains.length === 1 ? '' : 's') + ' at ' + found.cutoff + ' Å' + (found.unassigned ? ' · ' + found.unassigned + ' residue' + (found.unassigned === 1 ? '' : 's') + ' unassigned' : '') + ' · heuristic segmentation of the PAE matrix, not a curated domain assignment'
       : 'No group of twenty or more residues stayed under ' + found.cutoff + ' Å' + (found.reason ? ' (' + found.reason + ')' : '') + '.';
     found.domains.forEach(domain => {
       const tr = document.createElement('tr');

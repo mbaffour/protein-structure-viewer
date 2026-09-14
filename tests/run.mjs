@@ -56,7 +56,10 @@ const browser = await engine.launch({
      instead of Playwright downloading its own. */
   ...(engineName === 'chromium' && process.env.PSV_CHROMIUM ? { executablePath: process.env.PSV_CHROMIUM } : {}),
   /* The viewer needs WebGL; most CI runners have no GPU. */
-  ...(engineName === 'chromium' ? { args: ['--use-gl=swiftshader', '--enable-unsafe-swiftshader', '--no-sandbox', '--disable-dev-shm-usage'] } : {})
+  ...(engineName === 'chromium' ? { args: ['--use-gl=swiftshader', '--enable-unsafe-swiftshader', '--no-sandbox', '--disable-dev-shm-usage'] } : {}),
+  /* Headless Firefox on a Linux runner refuses to create a WebGL context unless forced; the
+     workflow additionally runs Firefox headed under Xvfb (PSV_HEADED=1). */
+  ...(engineName === 'firefox' ? { firefoxUserPrefs: { 'webgl.force-enabled': true, 'webgl.disabled': false } } : {})
 });
 const page = await browser.newPage({ viewport: { width: 1280, height: 1000 } });
 let currentStep = 'startup';
@@ -67,9 +70,19 @@ page.on('console', message => {
   if (message.type() === 'error' && !/favicon|404/.test(message.text())) noteError(message.text());
 });
 
+/* A step that fails only because Playwright timed out waiting for the page (a slow CI runner,
+   not a wrong answer) is retried once; the retry is logged loudly so a flaky step still shows
+   up in the transcript. Assertion failures are never retried. */
+const isTimeout = error => error && (error.name === 'TimeoutError' || /Timeout \d+ms exceeded/.test(String(error.message)));
+let retries = 0;
 const step = async (name, body) => {
   currentStep = name;
-  try { await body(); console.log('  ok   ' + name); }
+  try { await body(); console.log('  ok   ' + name); return; }
+  catch (error) {
+    if (!isTimeout(error)) { console.log('  FAIL ' + name + ' :: ' + String(error.message).split('\n')[0]); failures.push(name); return; }
+    retries += 1; console.log('  RETRY ' + name + ' :: ' + String(error.message).split('\n')[0]);
+  }
+  try { await body(); console.log('  ok   ' + name + ' (after one retry)'); }
   catch (error) { console.log('  FAIL ' + name + ' :: ' + String(error.message).split('\n')[0]); failures.push(name); }
 };
 const tab = async name => { await page.click(`[data-gpv-tab="${name}"]`); await page.waitForTimeout(150); };
@@ -279,7 +292,19 @@ await step('an a3m alignment colours both chains by conservation, identity or co
   if (await page.locator('#gpv-msa-paint').isDisabled()) throw new Error('paint disabled: ' + await page.locator('#gpv-msa-state').textContent());
   await page.click('#gpv-msa-paint'); await page.waitForTimeout(600);
   const painted = await page.evaluate(() => { const d = window.__viewerDebug.residueData(); return { mode: document.querySelector('#gpv-color-mode').value, name: d.name, count: d.count, varied: d.values.get('A|5'), conserved: d.values.get('A|6'), half: d.values.get('A|20'), b: d.values.get('B|5') }; });
-  if (painted.mode !== 'data' || !/conservation/i.test(painted.name) || painted.count !== 60 || !(painted.varied < painted.half && painted.half < painted.conserved) || painted.b !== painted.varied) throw new Error(JSON.stringify(painted));
+  if (painted.mode !== 'data' || !/conservation/i.test(painted.name) || !/Henikoff/.test(painted.name) || painted.count !== 60 || !(painted.varied < painted.half && painted.half < painted.conserved) || painted.b !== painted.varied) throw new Error(JSON.stringify(painted));
+  /* Switching the Henikoff weights off gives the plain column entropy: same ordering, a different
+     number at the varied column (the fixture's sequences are not equally weighted), and the name,
+     the debug hook and the methods text all say which was used. */
+  await page.setChecked('#gpv-msa-weights', false); await page.click('#gpv-msa-paint'); await page.waitForTimeout(400);
+  const raw = await page.evaluate(() => { const d = window.__viewerDebug.residueData(); return { name: d.name, weighted: d.msa.weighted, varied: d.values.get('A|5'), half: d.values.get('A|20'), conserved: d.values.get('A|1') }; });
+  if (!/unweighted/.test(raw.name) || raw.weighted !== false || raw.varied === painted.varied || !(raw.varied < raw.half && raw.half < raw.conserved)) throw new Error('unweighted: ' + JSON.stringify(raw) + ' vs weighted ' + JSON.stringify(painted));
+  await tab('publish'); await page.click('#gpv-methods-text'); await page.waitForTimeout(300);
+  if (!/sequences unweighted/.test(await page.inputValue('#gpv-methods-field'))) throw new Error('methods text does not say the conservation was unweighted');
+  await tab('confidence'); await page.setChecked('#gpv-msa-weights', true); await page.click('#gpv-msa-paint'); await page.waitForTimeout(400);
+  await tab('publish'); await page.click('#gpv-methods-text'); await page.waitForTimeout(300);
+  if (!/Henikoff & Henikoff, 1994/.test(await page.inputValue('#gpv-methods-field'))) throw new Error('methods text does not name the Henikoff weighting');
+  await tab('confidence');
   await page.selectOption('#gpv-msa-metric', 'depth'); await page.click('#gpv-msa-paint'); await page.waitForTimeout(400);
   const depth = await page.evaluate(() => { const d = window.__viewerDebug.residueData(); return { gapped: d.values.get('A|11'), full: d.values.get('A|5') }; });
   if (!(depth.gapped === 7 && depth.full === 9)) throw new Error(JSON.stringify(depth));
@@ -290,7 +315,7 @@ await step('an a3m alignment colours both chains by conservation, identity or co
   const csv = (await readFile(await (await csvDownload).path(), 'utf8')).split('\n');
   if (!/^"?chain"?,"?resi"?,"?resn"?,/.test(csv[0]) || csv.length - 1 !== 60 || !/"A","11","ALA","7"/.test(csv.find(line => /"A","11",/.test(line)) || '')) throw new Error('data csv: ' + csv.slice(0, 3).join(' | '));
   await tab('annotate'); await page.click('#gpv-data-clear'); await tab('appearance'); await page.selectOption('#gpv-color-mode', 'structure'); await page.waitForTimeout(200);
-  console.log('       conservation varied ' + painted.varied.toFixed(2) + ' · half ' + painted.half.toFixed(2) + ' · conserved ' + painted.conserved.toFixed(2) + ' · coverage 9 / 7');
+  console.log('       conservation varied ' + painted.varied.toFixed(3) + ' (unweighted ' + raw.varied.toFixed(3) + ') · half ' + painted.half.toFixed(2) + ' · conserved ' + painted.conserved.toFixed(2) + ' · coverage 9 / 7');
 });
 await step('the plain label style is a scene setting and the methods text names the contact rule', async () => {
   await tab('annotate'); await page.selectOption('#gpv-label-style', 'plain'); await page.waitForTimeout(300);
@@ -759,11 +784,12 @@ await step('PAE domains are found from a block-diagonal matrix', async () => {
   const state = (await page.locator('#gpv-domain-state').textContent()) || '';
   console.log('       ' + state.trim());
   if (rows !== 2) throw new Error('domains=' + rows + ' · ' + state);
+  if (!/heuristic/.test(state)) throw new Error('the domain state does not say the segmentation is a heuristic: ' + state);
   const ranges = await page.locator('#gpv-domain-rows tr td').first().textContent();
   if (!/A:1–30/.test(ranges || '')) throw new Error('domain 1 ranges: ' + ranges);
   await page.click('#gpv-domain-color'); await page.waitForTimeout(500);
   const legend = (await page.locator('#gpv-plddt-legend').textContent()) || '';
-  if (!/Domain 1/.test(legend) || !/Domain 2/.test(legend)) throw new Error('legend: ' + legend);
+  if (!/Domain 1/.test(legend) || !/Domain 2/.test(legend) || !/heuristic/.test(legend)) throw new Error('legend: ' + legend);
   const before = await page.locator('#gpv-selection-list .gpv-entry').count();
   await page.click('#gpv-domain-highlight'); await page.waitForTimeout(500);
   if ((await page.locator('#gpv-selection-list .gpv-entry').count()) !== before + 2) throw new Error('highlight all did not add two selections');
@@ -1084,8 +1110,13 @@ if (reportPath) {
     const strips = await report.locator('#view .strip').count(); const paneCount = await report.locator('#view .pane').count();
     if (!strips || strips !== paneCount) throw new Error('strips=' + strips + ' panes=' + paneCount);
     const box = await report.locator('#view .strip').first().boundingBox();
-    await report.mouse.move(box.x + box.width * 0.4, box.y + 6); await report.waitForTimeout(300);
-    const readout = (await report.locator('#view .readout').first().textContent()) || '';
+    /* The strip only answers a hover once its rows are drawn; on a slow runner that can be a
+       moment after the panel appears, so hover repeatedly for up to 4 s. */
+    let readout = '';
+    for (let attempt = 0; attempt < 16 && !/ALA\d+/.test(readout); attempt++) {
+      await report.mouse.move(box.x + box.width * 0.4 + (attempt % 2), box.y + 6); await report.waitForTimeout(250);
+      readout = (await report.locator('#view .readout').first().textContent()) || '';
+    }
     if (!/ALA\d+/.test(readout)) throw new Error('readout: ' + readout);
     const before = await report.evaluate(() => document.querySelector('#view .stage canvas').toDataURL());
     await report.mouse.click(box.x + box.width * 0.4, box.y + 6); await report.waitForTimeout(900);
@@ -1406,5 +1437,6 @@ console.log('viewer console errors: ' + consoleErrors.length);
 consoleErrors.slice(0, 10).forEach(error => console.log('  ! ' + error));
 console.log('report console errors: ' + reportErrors.length);
 reportErrors.slice(0, 10).forEach(error => console.log('  ! ' + error));
+console.log('steps retried after a timeout: ' + retries);
 console.log('failed steps: ' + (failures.length ? failures.join(', ') : 'none'));
 process.exit(failures.length || consoleErrors.length || reportErrors.length ? 1 : 0);
