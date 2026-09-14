@@ -527,11 +527,16 @@
     const plain = root.querySelector('#gpv-label-style').value === 'plain';
     const background = backgroundSpec();
     const onDark = background.alpha > 0 && hexLuminance(background.color) < 0.45;
+    /* A boxed label is a patch of the figure's paper with text on it. Once a background colour is
+       chosen the box takes that colour, which is what the SVG export has always drawn; only with a
+       transparent background does it fall back to the interface's own card colour. */
+    const paper = background.alpha > 0 ? background.color : (labelColors.getPropertyValue('--card').trim() || '#ffffff');
+    const ink = background.alpha > 0 ? (onDark ? '#f8fafc' : '#111827') : (labelColors.getPropertyValue('--card-foreground').trim() || '#111827');
     return {
       position,
-      backgroundColor: labelColors.getPropertyValue('--card').trim() || '#ffffff',
-      fontColor: color || (plain ? (onDark ? '#f8fafc' : '#111827') : (labelColors.getPropertyValue('--card-foreground').trim() || '#111827')),
-      borderColor: color || labelColors.getPropertyValue('--border').trim() || '#cbd5e1',
+      backgroundColor: paper,
+      fontColor: color || (plain ? (onDark ? '#f8fafc' : '#111827') : ink),
+      borderColor: color || (background.alpha > 0 ? (onDark ? '#475569' : '#cbd5e1') : (labelColors.getPropertyValue('--border').trim() || '#cbd5e1')),
       borderThickness: plain ? 0 : 1,
       fontSize: Math.round((options.size || 12) * (options.scale || 1)),
       font: figureFont(),

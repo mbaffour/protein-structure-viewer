@@ -2,6 +2,13 @@
 
 All notable changes to this project are recorded here.
 
+## 2.28.1
+
+- **Fixed: boxed labels printed dark boxes on a white figure.** A boxed label took its background from the
+  interface's card colour, so with the dark interface and a white figure background every label came out as a black
+  box — while the SVG export drew the same labels on white. The box now takes the figure's background colour whenever
+  one is chosen, and the interface's only when the background is transparent, so the view, the PNG and the SVG agree.
+
 ## 2.28.0
 
 - **Labels can be dragged.** Pick up any label in the 3D view with the mouse — a residue label, a callout, a
