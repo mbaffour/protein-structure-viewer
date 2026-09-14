@@ -3,7 +3,7 @@
   const persistedControls = [
     '#gpv-style', '#gpv-color-mode', '#gpv-projection', '#gpv-outline', '#gpv-label-style', '#gpv-background', '#gpv-background-color', '#gpv-hetero',
     '#gpv-export-mode', '#gpv-print-width', '#gpv-print-aspect', '#gpv-print-dpi', '#gpv-print-text', '#gpv-figure-font', '#gpv-scale-bar', '#gpv-legend-position',
-    '#gpv-view-mode', '#gpv-order', '#gpv-alignment-mode', '#gpv-export-size', '#gpv-export-scale',
+    '#gpv-view-mode', '#gpv-order', '#gpv-alignment-mode', '#gpv-fit-scope', '#gpv-export-size', '#gpv-export-scale',
     '#gpv-panel-columns', '#gpv-video-length', '#gpv-cycle-speed', '#gpv-speed', '#gpv-report-scope'
   ];
 
@@ -209,6 +209,8 @@
   });
   root.querySelector('#gpv-fit').addEventListener('click', () => { fitAllViews(); updateStatus('Fitted every panel'); });
   root.querySelector('#gpv-align').addEventListener('click', alignVisible);
+  root.querySelector('#gpv-fit-scope').addEventListener('change', renderFitControls);
+  root.querySelector('#gpv-fit-region').addEventListener('input', renderFitControls);
   root.querySelector('#gpv-alignment-csv').addEventListener('click', downloadAlignmentCsv);
   root.querySelector('#gpv-restore').addEventListener('click', () => restoreCoordinates(true));
   root.querySelector('#gpv-add-label').addEventListener('click', addOrEditLabel);

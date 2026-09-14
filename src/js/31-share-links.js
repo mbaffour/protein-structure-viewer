@@ -138,6 +138,9 @@
     if (['boxed', 'plain'].includes(settings.labelStyle)) root.querySelector('#gpv-label-style').value = settings.labelStyle;
     setFigureLabels(settings.figureLabels);
     if (['bottom-left', 'bottom-right', 'top-left', 'top-right', 'left', 'right'].includes(settings.legendPosition)) root.querySelector('#gpv-legend-position').value = settings.legendPosition;
+    if (['all', 'region', 'selection'].includes(settings.fitScope)) root.querySelector('#gpv-fit-scope').value = settings.fitScope;
+    if (typeof settings.fitRegion === 'string') root.querySelector('#gpv-fit-region').value = settings.fitRegion.slice(0, 120);
+    renderFitControls();
     applyBuilderOptions(settings.figureBuilder);
     if ([0, 50, 70].includes(Number(settings.hideBelow))) root.querySelector('#gpv-hide-below').value = String(Number(settings.hideBelow));
     if (['stick', 'sphere', 'hide'].includes(settings.hetero)) root.querySelector('#gpv-hetero').value = settings.hetero;

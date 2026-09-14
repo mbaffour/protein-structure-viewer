@@ -1046,12 +1046,15 @@ html>body{padding:0}</style>
     <div class="viz-controls">
       <label class="form-label gpv-current-label">Alignment reference<select class="form-select" id="gpv-reference" disabled><option>No models loaded</option></select></label>
       <label class="form-label">Residue mapping<select class="form-select" id="gpv-alignment-mode"><option value="sequence">Sequence-aware</option><option value="identifier">Chain and residue IDs</option></select></label>
+      <label class="form-label">Fit on<select class="form-select" id="gpv-fit-scope" data-tooltip="Superpose using only part of the structure — one chain, a residue range, or the current selections — and read the RMSD both over that region and over every matched residue"><option value="all" selected>All matched residues</option><option value="region">A chain or residue range…</option><option value="selection">The selected residues</option></select></label>
+      <label class="form-label">Region<input class="form-control" id="gpv-fit-region" type="text" placeholder="A, A:20-140 or 20-140" maxlength="120" disabled></label>
       <button class="btn" type="button" id="gpv-align" disabled>Align visible</button>
       <button class="btn" type="button" id="gpv-restore" disabled>Restore coordinates</button>
+      <span class="text-muted text-small" id="gpv-fit-state">The superposition uses every residue that matches between the models.</span>
       <button class="btn" type="button" id="gpv-alignment-csv" disabled>Download RMSD CSV</button>
       <button class="btn" type="button" id="gpv-rmsf-csv" disabled data-tooltip="Per-residue Cα spread (RMSF) across the aligned models — the ensemble agreement the colour scheme shows">Download RMSF CSV</button>
     </div>
-    <div class="table-responsive" id="gpv-alignment-wrap" hidden><table class="table table-sm" aria-label="Structural alignment results"><thead><tr><th>Model</th><th>Reference</th><th class="text-end">Cα pairs</th><th class="text-end">Identity</th><th class="text-end">RMSD (Å)</th><th>Mapping</th></tr></thead><tbody id="gpv-alignment-results"></tbody></table></div>
+    <div class="table-responsive" id="gpv-alignment-wrap" hidden><table class="table table-sm" aria-label="Structural alignment results"><thead><tr><th>Model</th><th>Reference</th><th class="text-end">Cα pairs</th><th class="text-end">Identity</th><th class="text-end">RMSD (Å)</th><th>Fitted on</th><th class="text-end">Fit RMSD (Å)</th><th>Mapping</th></tr></thead><tbody id="gpv-alignment-results"></tbody></table></div>
     <div class="viz-controls">
       <label class="form-check form-switch"><input class="form-check-input" id="gpv-side-by-side" type="checkbox"><span class="form-check-label">Synchronized multi-view</span></label>
       <label class="form-label">Camera sync<select class="form-select" id="gpv-sync-mode"><option value="rotation">Rotation only</option><option value="full">Rotation and zoom</option></select></label>
@@ -1261,6 +1264,7 @@ html>body{padding:0}</style>
       </ul>
       <h3>Tips for figures and reviewers</h3>
       <ul>
+        <li><em>Compare → Fit on</em> superposes the visible models using only part of the structure — a chain, a residue range such as <code>A:20-140</code>, or the residues you have selected — and reports the RMSD over that region beside the RMSD over every matched residue, which is how a hinge or a shifted domain is shown.</li>
         <li>Labels are draggable: pick up any label, callout or corner title in the 3D view with the mouse and put it where the figure needs it. A residue label keeps a thin leader line back to its residue, and <em>Reset</em> in its row puts it back. <em>Publish → Legend position</em> moves the colour legend to any corner, or stacks it down the left or right side.</li>
         <li><em>Label domains</em> (Annotate → Domains, or beside the PAE domains) writes each domain's name on the structure at its centroid, in the domain colour and with the legend's names; <em>Download architecture PNG/SVG</em> draws the linear domain diagram — one row per chain, coloured boxes with names and boundary residue numbers — which is also a composite-figure panel and an optional row under the panels of the figure builder.</li>
         <li><em>Publish → Figure builder</em> turns saved views into the panels of one lettered figure: tick the views to include, order them, caption each, choose the columns, and download PNG or SVG at the output width and resolution — each panel rendered from its own camera and colour scheme at the same text size, with its legend and scale bar. The figure is as wide as the chosen figure width however many panels it has.</li>
@@ -1630,7 +1634,7 @@ html>body{padding:0}</style>
   let busyDepth = 0;
   let restoreMotion = null;
   const listPageSize = 60;
-  const viewerVersion = '2.28.1';
+  const viewerVersion = '2.29.0';
   const preferenceKey = 'protein-structure-viewer:preferences';
   const themeKey = 'protein-structure-viewer:theme';
   const labelColors = getComputedStyle(root);
@@ -5185,7 +5189,7 @@ html>body{padding:0}</style>
     if (cut && shown.some(entry => entry.scores.length)) sentences.push('Residues with pLDDT below ' + cut + ' are not shown.');
     const hetero = root.querySelector('#gpv-hetero').value;
     if (hetero !== 'hide' && shown.some(entry => entry.atoms.some(atom => atom.hetflag && !isWater(atom)))) sentences.push('Ligands and ions are drawn as ' + (hetero === 'sphere' ? 'spheres' : 'sticks') + '; water is omitted.');
-    if (alignmentResults.length) sentences.push('Models were superposed on ' + alignmentResults[0].reference + ' by ' + alignmentResults[0].method + ' (' + alignmentResults.map(result => result.name + ': ' + result.count + ' Cα pairs, RMSD ' + result.rmsd.toFixed(2) + ' Å').join('; ') + ').');
+    if (alignmentResults.length) sentences.push('Models were superposed on ' + alignmentResults[0].reference + ' by ' + alignmentResults[0].method + (alignmentResults[0].fitRegion ? ', fitting on ' + alignmentResults[0].fitRegion : '') + ' (' + alignmentResults.map(result => result.name + ': ' + result.count + ' Cα pairs, RMSD ' + result.rmsd.toFixed(2) + ' Å' + (result.fitRegion ? '; fitted region ' + result.fitCount + ' Cα, RMSD ' + result.fitRmsd.toFixed(2) + ' Å' : '')).join('; ') + ').');
     if (root.querySelector('#gpv-side-by-side').checked && comparePanels.length) sentences.push('Panels share one orientation' + (root.querySelector('#gpv-sync-mode').value === 'full' ? ' and zoom' : '') + '.');
     const shownIds = new Set(shown.map(entry => entry.id));
     const labels = labelRecords.filter(label => shownIds.has(label.entryId));
@@ -5222,7 +5226,7 @@ html>body{padding:0}</style>
     if (shown.some(entry => entry.scores.length)) sentences.push('Per-residue pLDDT was read from the B-factor column of the model files and mean pLDDT was calculated over Cα atoms' + (shown.some(entry => entry.confidence && entry.confidence.pae) ? '; predicted aligned error (PAE) matrices were read from the accompanying confidence files' : '') + '.');
     if (alignmentResults.length) {
       const bySequence = alignmentResults[0].method !== 'chain/residue IDs';
-      sentences.push('Models were superposed on ' + alignmentResults[0].reference + ' by least-squares (Kabsch) fitting of Cα atoms paired by ' + (bySequence ? 'global Needleman–Wunsch alignment of each chain pair (match +2, mismatch −1, gap −2), chains being matched greedily by sequence identity' : 'chain and residue identifier') + '; RMSD is reported over all paired Cα atoms without outlier rejection (' + alignmentResults.map(result => result.name + ': n = ' + result.count + ', ' + result.rmsd.toFixed(2) + ' Å').join('; ') + ').');
+      sentences.push('Models were superposed on ' + alignmentResults[0].reference + ' by least-squares (Kabsch) fitting of Cα atoms paired by ' + (bySequence ? 'global Needleman–Wunsch alignment of each chain pair (match +2, mismatch −1, gap −2), chains being matched greedily by sequence identity' : 'chain and residue identifier') + (alignmentResults[0].fitRegion ? '; the rotation was computed from ' + alignmentResults[0].fitRegion + ' alone' : '') + '; RMSD is reported over all paired Cα atoms without outlier rejection' + (alignmentResults[0].fitRegion ? ', and separately over the fitted region' : '') + ' (' + alignmentResults.map(result => result.name + ': n = ' + result.count + ', ' + result.rmsd.toFixed(2) + ' Å').join('; ') + ').');
       sentences.push('Per-residue Cα deviation is the distance between paired Cα atoms after superposition.');
     }
     if (ensembleSpread) sentences.push('Model agreement was expressed per residue as the Cα root-mean-square fluctuation about the mean Cα position across the ' + ensembleSpread.count + ' superposed models, for residues present in at least two models.');
@@ -5771,18 +5775,69 @@ html>body{padding:0}</style>
     return root.querySelector('#gpv-alignment-mode').value === 'sequence' ? sequencePairs(reference, target) : identifierPairs(reference, target);
   }
 
+  /* Fitting on part of the structure. The superposition is computed from the residues of the
+     chosen region only — a chain, a residue range, or whatever is selected — while the RMSD is
+     reported both over that region and over every matched Cα. That difference is the measurement:
+     "0.4 Å over the core, 6.8 Å overall" is how a hinge or a domain shift is shown. */
+  function parseFitRegion(text) {
+    const value = String(text || '').trim();
+    if (!value) return null;
+    const parts = value.split(':');
+    const named = parts.length > 1;
+    const chain = named ? parts[0].trim() : (/^[A-Za-z][A-Za-z0-9]{0,3}$/.test(value) ? value : '');
+    const rangeText = named ? parts.slice(1).join(':').trim() : (chain ? '' : value);
+    const residues = rangeText ? new Set(parseResidueRange(rangeText)) : null;
+    if (chain && !rangeText) return { chain, residues: null, label: 'chain ' + chain };
+    if (!residues || !residues.size) return null;
+    return { chain, residues, label: (chain ? 'chain ' + chain + ' ' : '') + 'residues ' + rangeText };
+  }
+  function fitMatcher() {
+    const scope = root.querySelector('#gpv-fit-scope').value;
+    if (scope === 'selection') {
+      const records = selectionRecords.filter(record => record.action !== 'hide' && record.residues.length);
+      if (!records.length) return null;
+      const byChain = new Map();
+      records.forEach(record => {
+        const key = record.chain || '';
+        if (!byChain.has(key)) byChain.set(key, new Set());
+        record.residues.forEach(resi => byChain.get(key).add(resi));
+      });
+      const anyChain = byChain.get('');
+      return { label: 'the selected residues', test: atom => Boolean((anyChain && anyChain.has(atom.resi)) || (byChain.get(atom.chain || '') || new Set()).has(atom.resi)) };
+    }
+    if (scope !== 'region') return null;
+    const region = parseFitRegion(root.querySelector('#gpv-fit-region').value);
+    if (!region) return null;
+    return { label: region.label, test: atom => (!region.chain || (atom.chain || '') === region.chain) && (!region.residues || region.residues.has(atom.resi)) };
+  }
+  function renderFitControls() {
+    const scope = root.querySelector('#gpv-fit-scope').value;
+    const input = root.querySelector('#gpv-fit-region');
+    input.disabled = scope !== 'region';
+    const state = root.querySelector('#gpv-fit-state');
+    if (scope === 'all') { state.textContent = 'The superposition uses every residue that matches between the models.'; return; }
+    const matcher = fitMatcher();
+    state.textContent = matcher
+      ? 'Fitting on ' + matcher.label + ' · the table reports the RMSD over that region and over everything matched.'
+      : scope === 'selection' ? 'No residues are selected — add a selection in Annotate, or fit on all residues.' : 'Give a chain or a range: A, A:20-140, or 20-140.';
+  }
+
   function determinant3(matrix) {
     return matrix[0][0] * (matrix[1][1] * matrix[2][2] - matrix[1][2] * matrix[2][1])
       - matrix[0][1] * (matrix[1][0] * matrix[2][2] - matrix[1][2] * matrix[2][0])
       + matrix[0][2] * (matrix[1][0] * matrix[2][1] - matrix[1][1] * matrix[2][0]);
   }
 
-  function alignEntry(reference, target) {
+  function alignEntry(reference, target, matcher = null) {
     const pairing = caPairs(reference, target);
     const pairs = pairing.pairs;
     if (pairs.length < 3) return null;
-    const referencePoints = pairs.map(pair => [pair[0].x, pair[0].y, pair[0].z]);
-    const targetPoints = pairs.map(pair => [pair[1].x, pair[1].y, pair[1].z]);
+    /* Fit on the region when enough of it matched; otherwise fall back to every pair and say so. */
+    const region = matcher ? pairs.filter(pair => matcher.test(pair[0])) : [];
+    const fitPairs = region.length >= 3 ? region : pairs;
+    const fitRegion = matcher ? (region.length >= 3 ? matcher.label : matcher.label + ' (too few matched — fitted on all)') : null;
+    const referencePoints = fitPairs.map(pair => [pair[0].x, pair[0].y, pair[0].z]);
+    const targetPoints = fitPairs.map(pair => [pair[1].x, pair[1].y, pair[1].z]);
     const referenceCenter = centroid(referencePoints);
     const targetCenter = centroid(targetPoints);
     const x = targetPoints.map(point => point.map((value, axis) => value - targetCenter[axis]));
@@ -5802,6 +5857,8 @@ html>body{padding:0}</style>
     });
     target.deviations = new Map();
     if (!reference.deviationSamples) reference.deviationSamples = new Map();
+    const fitSet = fitPairs === pairs ? null : new Set(fitPairs.map(pair => pair[1]));
+    let fitSquaredError = 0;
     const squaredError = pairs.reduce((sum, pair) => {
       const dx = pair[0].x - pair[1].x;
       const dy = pair[0].y - pair[1].y;
@@ -5810,9 +5867,14 @@ html>body{padding:0}</style>
       target.deviations.set(residueTag(pair[1]), distance);
       const tag = residueTag(pair[0]);
       reference.deviationSamples.set(tag, [...(reference.deviationSamples.get(tag) || []), distance]);
+      if (!fitSet || fitSet.has(pair[1])) fitSquaredError += dx * dx + dy * dy + dz * dz;
       return sum + dx * dx + dy * dy + dz * dz;
     }, 0);
-    return { count: pairs.length, rmsd: Math.sqrt(squaredError / pairs.length), method: pairing.method, identity: pairing.identity, chainPairs: pairing.chainPairs, name: target.name, reference: reference.name };
+    return {
+      count: pairs.length, rmsd: Math.sqrt(squaredError / pairs.length),
+      fitCount: fitPairs.length, fitRmsd: Math.sqrt(fitSquaredError / fitPairs.length), fitRegion,
+      method: pairing.method, identity: pairing.identity, chainPairs: pairing.chainPairs, name: target.name, reference: reference.name
+    };
   }
 
   function renderAlignmentResults() {
@@ -5824,11 +5886,11 @@ html>body{padding:0}</style>
     body.replaceChildren();
     alignmentResults.forEach(result => {
       const row = document.createElement('tr');
-      const values = [result.name, result.reference, String(result.count), result.identity === null ? '—' : (result.identity * 100).toFixed(1) + '%', result.rmsd.toFixed(3), result.method + (result.chainPairs ? ' · ' + result.chainPairs : '')];
+      const values = [result.name, result.reference, String(result.count), result.identity === null ? '—' : (result.identity * 100).toFixed(1) + '%', result.rmsd.toFixed(3), result.fitRegion ? result.fitRegion + ' · ' + result.fitCount + ' Cα' : 'all matched', result.fitRmsd.toFixed(3), result.method + (result.chainPairs ? ' · ' + result.chainPairs : '')];
       values.forEach((value, index) => {
         const cell = document.createElement(index < 2 ? 'th' : 'td');
         cell.textContent = value;
-        if (index >= 2 && index <= 4) cell.className = 'text-end';
+        if ((index >= 2 && index <= 4) || index === 6) cell.className = 'text-end';
         row.append(cell);
       });
       body.append(row);
@@ -5837,8 +5899,8 @@ html>body{padding:0}</style>
 
   function downloadAlignmentCsv() {
     const quote = value => '"' + String(value ?? '').replace(/"/g, '""') + '"';
-    const rows = [['model', 'reference', 'ca_pairs', 'sequence_identity', 'rmsd_angstrom', 'mapping', 'chain_pairs']];
-    alignmentResults.forEach(result => rows.push([result.name, result.reference, result.count, result.identity === null ? '' : result.identity, result.rmsd, result.method, result.chainPairs || '']));
+    const rows = [['model', 'reference', 'ca_pairs', 'sequence_identity', 'rmsd_angstrom', 'fitted_on', 'fit_ca_pairs', 'fit_rmsd_angstrom', 'mapping', 'chain_pairs']];
+    alignmentResults.forEach(result => rows.push([result.name, result.reference, result.count, result.identity === null ? '' : result.identity, result.rmsd, result.fitRegion || 'all matched', result.fitCount, result.fitRmsd, result.method, result.chainPairs || '']));
     downloadBlob(rows.map(row => row.map(quote).join(',')).join('\n'), 'text/csv', 'protein-alignment-results.csv');
     updateStatus('Alignment CSV downloaded');
   }
@@ -5861,10 +5923,11 @@ html>body{padding:0}</style>
     const targets = visibleEntries().filter(ready);
     restoreCoordinates(false);
     const results = [];
+    const matcher = fitMatcher();
     reference.deviationSamples = new Map();
     targets.forEach(entry => {
       if (entry !== reference) {
-        const result = alignEntry(reference, entry);
+        const result = alignEntry(reference, entry, matcher);
         if (result) results.push(result);
       }
     });
@@ -5882,7 +5945,7 @@ html>body{padding:0}</style>
     if (results.length) {
       const averageRmsd = mean(results.map(result => result.rmsd));
       const identities = results.map(result => result.identity).filter(value => value !== null);
-      announce('Aligned ' + results.length + ' model' + (results.length === 1 ? '' : 's') + ' · mean Cα RMSD ' + averageRmsd.toFixed(2) + ' Å' + (identities.length ? ' · mean identity ' + (mean(identities) * 100).toFixed(1) + '%' : ''));
+      announce('Aligned ' + results.length + ' model' + (results.length === 1 ? '' : 's') + (results[0].fitRegion ? ' on ' + results[0].fitRegion + ' · mean fitted RMSD ' + mean(results.map(result => result.fitRmsd)).toFixed(2) + ' Å' : '') + ' · mean Cα RMSD ' + averageRmsd.toFixed(2) + ' Å over all matched pairs' + (identities.length ? ' · mean identity ' + (mean(identities) * 100).toFixed(1) + '%' : ''));
     } else announce('No model had at least three matching Cα atoms to align on', 'error');
   }
 
@@ -6021,6 +6084,8 @@ html>body{padding:0}</style>
       fog: root.querySelector('#gpv-fog').checked,
       labelStyle: root.querySelector('#gpv-label-style').value,
       legendPosition: root.querySelector('#gpv-legend-position').value,
+      fitScope: root.querySelector('#gpv-fit-scope').value,
+      fitRegion: root.querySelector('#gpv-fit-region').value,
       figureLabels: { ...figureLabels },
       figureBuilder: builderOptions(),
       background: root.querySelector('#gpv-background').value,
@@ -6219,6 +6284,9 @@ html>body{padding:0}</style>
     if (['boxed', 'plain'].includes(settings.labelStyle)) root.querySelector('#gpv-label-style').value = settings.labelStyle;
     setFigureLabels(settings.figureLabels);
     if (['bottom-left', 'bottom-right', 'top-left', 'top-right', 'left', 'right'].includes(settings.legendPosition)) root.querySelector('#gpv-legend-position').value = settings.legendPosition;
+    if (['all', 'region', 'selection'].includes(settings.fitScope)) root.querySelector('#gpv-fit-scope').value = settings.fitScope;
+    if (typeof settings.fitRegion === 'string') root.querySelector('#gpv-fit-region').value = settings.fitRegion.slice(0, 120);
+    renderFitControls();
     applyBuilderOptions(settings.figureBuilder);
     if ([0, 50, 70].includes(Number(settings.hideBelow))) root.querySelector('#gpv-hide-below').value = String(Number(settings.hideBelow));
     if (['stick', 'sphere', 'hide'].includes(settings.hetero)) root.querySelector('#gpv-hetero').value = settings.hetero;
@@ -8565,7 +8633,7 @@ applyBackground();
   const persistedControls = [
     '#gpv-style', '#gpv-color-mode', '#gpv-projection', '#gpv-outline', '#gpv-label-style', '#gpv-background', '#gpv-background-color', '#gpv-hetero',
     '#gpv-export-mode', '#gpv-print-width', '#gpv-print-aspect', '#gpv-print-dpi', '#gpv-print-text', '#gpv-figure-font', '#gpv-scale-bar', '#gpv-legend-position',
-    '#gpv-view-mode', '#gpv-order', '#gpv-alignment-mode', '#gpv-export-size', '#gpv-export-scale',
+    '#gpv-view-mode', '#gpv-order', '#gpv-alignment-mode', '#gpv-fit-scope', '#gpv-export-size', '#gpv-export-scale',
     '#gpv-panel-columns', '#gpv-video-length', '#gpv-cycle-speed', '#gpv-speed', '#gpv-report-scope'
   ];
 
@@ -8771,6 +8839,8 @@ applyBackground();
   });
   root.querySelector('#gpv-fit').addEventListener('click', () => { fitAllViews(); updateStatus('Fitted every panel'); });
   root.querySelector('#gpv-align').addEventListener('click', alignVisible);
+  root.querySelector('#gpv-fit-scope').addEventListener('change', renderFitControls);
+  root.querySelector('#gpv-fit-region').addEventListener('input', renderFitControls);
   root.querySelector('#gpv-alignment-csv').addEventListener('click', downloadAlignmentCsv);
   root.querySelector('#gpv-restore').addEventListener('click', () => restoreCoordinates(true));
   root.querySelector('#gpv-add-label').addEventListener('click', addOrEditLabel);

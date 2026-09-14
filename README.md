@@ -150,6 +150,15 @@ at output resolution with a caption. Tick the panels you want; unavailable ones 
 The shared HTML report reproduces the outline, depth cueing and faded chains, and shows the
 interface contact map beside the PAE heatmap when one was computed for a model in the report.
 
+## Superposing models
+
+Compare → **Align visible** superposes every shown model onto the reference by Kabsch fitting of
+Cα atoms paired by sequence or by residue identifier. **Fit on** narrows what the rotation is
+computed from — a chain, a residue range, or the residues you have selected — and the table reports
+the RMSD over that region beside the RMSD over everything matched, which is how a hinge or a moved
+domain is shown. Colour by *Cα deviation* to paint what moved, and by *Model agreement* for the
+per-residue RMSF across the whole ensemble.
+
 ## Moving labels and placing the legend
 
 Labels are draggable: pick one up in the 3D view and put it where the figure needs it. A residue

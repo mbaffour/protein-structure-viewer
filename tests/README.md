@@ -88,6 +88,9 @@ PSV_CHROMIUM=/opt/pw-browsers/chromium/chrome-linux/chrome npm test
   changes the varied column's value, keeps the ordering, and the dataset name, the debug hook and the methods text say
   "unweighted"; switching them back on puts "Henikoff & Henikoff, 1994" in the methods text.
 - PAE domains: the panel state and the figure legend call the segmentation a heuristic.
+- Fitting on a region: fitting on `A:1-12` keeps the matched pair count, reports exactly 12 Cα in the fitted-on cell, a
+  fitted RMSD at or below the overall one, both in the CSV header and row, and the region in the methods text; with
+  nothing selected the selection scope says so.
 - Dragging a label: hovering the label offers to move it, a 70 × −45 px drag moves it by the same amount on screen,
   leaves a model-space offset of more than 1 Å, does not move the camera, and Reset clears it.
 - Legend position: the same figure SVG carries the legend as one row at the bottom left, and as a stack of three or more

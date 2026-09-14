@@ -425,6 +425,17 @@ figure goes into a slide or a manuscript draft without a file in between. Chrome
 image clipboard writes; Firefox and Safari may refuse, in which case the viewer says so and the
 download remains.
 
+**Fitting on a region.** By default **Align visible** computes the superposition from every residue
+that matches between the models. **Fit on** changes that to a chain (`A`), a residue range
+(`A:20-140`, or `20-140` across all chains), or **the selected residues** — whatever you have
+highlighted in the Annotate tab. Only that region drives the rotation; the pairing, and therefore
+what is measured, is unchanged. The results table then carries two numbers per model: **RMSD (Å)**
+over every matched Cα, and **Fit RMSD (Å)** over the fitted region, with the region and its residue
+count beside them. A small fitted RMSD next to a large overall one is the signature of a hinge or a
+domain that has moved, and colouring by *Cα deviation* shows which residues they are. The RMSD CSV
+and the methods text carry both numbers and the region. If fewer than three residues of the region
+match between two models, that pair is fitted on everything and the table says so.
+
 **Moving labels.** Every piece of text in the 3D view can be dragged with the mouse: residue labels,
 callout and measurement text, and corner titles. Hover one and the pointer becomes a grab cursor while
 the readout names the label; drag it where the figure needs it. The camera stays put during the drag,

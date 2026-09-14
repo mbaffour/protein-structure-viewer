@@ -520,6 +520,38 @@ await step('identifier alignment mode also runs', async () => {
   if ((await page.locator('#gpv-alignment-results tr').count()) < 2) throw new Error('no rows');
   await page.selectOption('#gpv-alignment-mode', 'sequence');
 });
+await step('the superposition can be fitted on one region, reporting that RMSD beside the overall one', async () => {
+  await tab('compare');
+  /* However this ends, leave the tab and the fit scope as the later steps expect them. */
+  const restore = async () => { await tab('compare'); await page.selectOption('#gpv-fit-scope', 'all'); await page.waitForTimeout(200); await page.click('#gpv-align'); await page.waitForTimeout(2500); };
+  try {
+  await page.click('#gpv-align'); await page.waitForTimeout(2500);
+  const whole = await page.locator('#gpv-alignment-results tr').nth(1).locator('td').allTextContents();
+  if (whole[3] !== 'all matched') throw new Error('the default fit is not over everything: ' + whole[3]);
+  await page.selectOption('#gpv-fit-scope', 'region');
+  await page.fill('#gpv-fit-region', 'A:1-12'); await page.waitForTimeout(300);
+  const hint = (await page.locator('#gpv-fit-state').textContent()) || '';
+  if (!/Fitting on chain A residues 1-12/.test(hint)) throw new Error('fit hint: ' + hint);
+  await page.click('#gpv-align'); await page.waitForTimeout(2500);
+  const fitted = await page.locator('#gpv-alignment-results tr').nth(1).locator('td').allTextContents();
+  if (fitted[0] !== whole[0]) throw new Error('the matched pairs changed with the fit region: ' + fitted[0] + ' against ' + whole[0]);
+  if (!/^chain A residues 1-12 · 12 Cα$/.test(fitted[3])) throw new Error('fitted-on cell: ' + fitted[3]);
+  if (!(Number(fitted[4]) <= Number(fitted[2]) + 1e-6)) throw new Error('the fitted RMSD ' + fitted[4] + ' is not at or below the overall ' + fitted[2]);
+  const csvDownload = page.waitForEvent('download', { timeout: 60000 }); await page.click('#gpv-alignment-csv');
+  const csv = (await readFile(await (await csvDownload).path(), 'utf8')).split('\n');
+  if (!/"fitted_on","fit_ca_pairs","fit_rmsd_angstrom"/.test(csv[0])) throw new Error('CSV header: ' + csv[0]);
+  if (!/"chain A residues 1-12","12"/.test(csv[1])) throw new Error('CSV row: ' + csv[1]);
+  await tab('publish'); await page.click('#gpv-methods-text'); await page.waitForTimeout(300);
+  if (!/the rotation was computed from chain A residues 1-12 alone/.test(await page.inputValue('#gpv-methods-field'))) throw new Error('the methods text does not name the fitted region');
+  await tab('publish'); await page.click('#gpv-figure-legend'); await page.waitForTimeout(300);
+  if (!/fitting on chain A residues 1-12/.test(await page.inputValue('#gpv-legend-text'))) throw new Error('the figure legend does not name the fitted region');
+  await tab('compare');
+  await page.selectOption('#gpv-fit-scope', 'selection'); await page.waitForTimeout(200);
+  const none = (await page.locator('#gpv-fit-state').textContent()) || '';
+  if (!/No residues are selected/.test(none)) throw new Error('selection fit state: ' + none);
+  console.log('       12 Cα of chain A · fitted RMSD ' + fitted[4] + ' Å against ' + fitted[2] + ' Å over all ' + fitted[0] + ' pairs');
+  } finally { await restore(); }
+});
 await step('RMSD CSV downloads', async () => {
   const download = page.waitForEvent('download', { timeout: 20000 });
   await page.click('#gpv-alignment-csv'); await download;

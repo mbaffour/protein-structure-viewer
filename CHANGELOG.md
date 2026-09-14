@@ -2,6 +2,16 @@
 
 All notable changes to this project are recorded here.
 
+## 2.29.0
+
+- **Superpose on part of the structure.** *Compare → Fit on* takes **All matched residues** (as before), **a chain or
+  residue range** (`A`, `A:20-140`, `20-140`), or **the selected residues**. The rotation is computed from that region
+  alone, and the results table, the CSV and the methods text now carry the RMSD over the fitted region beside the RMSD
+  over every matched Cα — the pair of numbers that shows a hinge or a shifted domain ("0.4 Å over the core, 6.8 Å
+  overall"). Colouring by Cα deviation then paints exactly what moved. If too few residues of the region match, the fit
+  falls back to all pairs and says so in the table. The choice is a scene setting and a saved preference, and fitting on
+  all residues is byte-for-byte what earlier versions did, so the cross-validated numbers are unchanged.
+
 ## 2.28.1
 
 - **Fixed: boxed labels printed dark boxes on a white figure.** A boxed label took its background from the
