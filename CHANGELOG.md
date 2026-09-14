@@ -2,6 +2,18 @@
 
 All notable changes to this project are recorded here.
 
+## 2.24.1
+
+- **Fixed: the Confidence tab collapsed inside the side panel.** In the workspace layout the tab kept its
+  two-column arrangement (controls beside the PAE map), so with a large PAE matrix the map took the whole
+  420 px panel and the MSA controls, the confidence exports and the *Henikoff weights* switch were squeezed to
+  zero width underneath it. The panel now stacks the controls above the map, the map never exceeds the panel
+  width, and a regression step checks the controls keep their width and do not overlap the map.
+- **Suite hardening for headed engines.** After the generated-report group the suite brings the viewer tab back
+  to the front (in headed Firefox under Xvfb the report tab stayed in front and every later click timed out);
+  a download promise left behind by a timed-out click is logged against its step instead of aborting Node;
+  the report-strip hover step reports what sat under the pointer when it fails.
+
 ## 2.24.0
 
 - **Henikoff-weighted MSA conservation.** *Colour by MSA → Conservation* now applies the position-based

@@ -51,7 +51,7 @@ jobs:
         env:
           PSV_BROWSER: firefox
           PSV_HEADED: '1'
-        run: xvfb-run --auto-servernum --server-args="-screen 0 1400x1100x24" npm test
+        run: xvfb-run --auto-servernum --server-args="-screen 0 1920x1200x24" npm test
 
   validate-scripts:
     name: validate scripts

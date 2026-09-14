@@ -136,6 +136,10 @@ is committed; point the scripts at your own.
 - A step that fails only because Playwright timed out (a `TimeoutError`, or "Timeout … exceeded" in the message)
   is retried once and logged as `RETRY`; the summary counts these. Assertion failures are never retried, so a
   wrong answer still fails the run on the first attempt.
+- An unhandled promise rejection (typically a `waitForEvent('download')` left behind by a click that timed out) is
+  logged with the step it happened in and does not abort the run.
+- The suite fronts the viewer tab after the generated-report group; a headed engine otherwise leaves the report
+  tab in front and clicks on the viewer hang.
 
 - Most fixtures are synthetic (`fixtures.mjs`) — two-chain poly-alanine helices with
   pLDDT-like B-factors, generated from a seeded PRNG so runs are reproducible. No

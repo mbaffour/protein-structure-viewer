@@ -1474,6 +1474,10 @@ html>body{padding:0}</style>
   #generic-protein-viewer.is-workspace .gpv-side-panel .gpv-tool-panel { padding-top: 0; }
   #generic-protein-viewer.is-workspace .gpv-side-panel .form-label { flex: 1 1 150px; }
   #generic-protein-viewer.is-workspace .gpv-side-panel table { display: block; overflow-x: auto; max-width: 100%; }
+  /* Inside the side panel there is no room for the two-column confidence layout: the PAE column
+     would take the whole width and collapse the MSA and export controls to nothing. Stack them. */
+  #generic-protein-viewer.is-workspace .gpv-side-panel .gpv-confidence-layout { grid-template-columns: minmax(0, 1fr); }
+  #generic-protein-viewer #gpv-pae { max-width: 100%; height: auto; }
   #generic-protein-viewer.is-workspace .gpv-splitter { display: block; align-self: stretch; width: 10px; cursor: col-resize; border-radius: 5px; background: transparent; position: relative; }
   #generic-protein-viewer.is-workspace .gpv-splitter::after { content: ''; position: absolute; left: 4px; top: 12px; bottom: 12px; width: 2px; border-radius: 1px; background: var(--border); transition: background 0.15s; }
   #generic-protein-viewer.is-workspace .gpv-splitter:hover::after, #generic-protein-viewer.is-workspace .gpv-splitter.is-dragging::after, #generic-protein-viewer.is-workspace .gpv-splitter:focus-visible::after { background: var(--primary); }

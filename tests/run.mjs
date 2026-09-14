@@ -75,6 +75,9 @@ page.on('console', message => {
    up in the transcript. Assertion failures are never retried. */
 const isTimeout = error => error && (error.name === 'TimeoutError' || /Timeout \d+ms exceeded/.test(String(error.message)));
 let retries = 0;
+/* A download or event promise created before a click that then times out rejects with nobody
+   awaiting it; Node would abort the whole run. Log it against the current step and carry on. */
+process.on('unhandledRejection', error => { console.log('  !    unhandled rejection during [' + currentStep + ']: ' + String(error && error.message || error).split('\n')[0]); });
 const step = async (name, body) => {
   currentStep = name;
   try { await body(); console.log('  ok   ' + name); return; }
@@ -1109,15 +1112,21 @@ if (reportPath) {
   await step('each report panel carries a sequence strip that zooms on click', async () => {
     const strips = await report.locator('#view .strip').count(); const paneCount = await report.locator('#view .pane').count();
     if (!strips || strips !== paneCount) throw new Error('strips=' + strips + ' panes=' + paneCount);
+    await report.bringToFront();
     const box = await report.locator('#view .strip').first().boundingBox();
+    await report.evaluate(() => { const strip = document.querySelector('#view .strip'); window.__stripMoves = 0; strip.addEventListener('pointermove', () => { window.__stripMoves += 1; }); });
     /* The strip only answers a hover once its rows are drawn; on a slow runner that can be a
        moment after the panel appears, so hover repeatedly for up to 4 s. */
     let readout = '';
+    const target = [box.x + box.width * 0.4, box.y + Math.min(6, box.height / 2)];
     for (let attempt = 0; attempt < 16 && !/ALA\d+/.test(readout); attempt++) {
-      await report.mouse.move(box.x + box.width * 0.4 + (attempt % 2), box.y + 6); await report.waitForTimeout(250);
+      await report.mouse.move(target[0] + (attempt % 2), target[1]); await report.waitForTimeout(250);
       readout = (await report.locator('#view .readout').first().textContent()) || '';
     }
-    if (!/ALA\d+/.test(readout)) throw new Error('readout: ' + readout);
+    if (!/ALA\d+/.test(readout)) {
+      const diag = await report.evaluate(([x, y]) => { const strip = document.querySelector('#view .strip'); const under = document.elementFromPoint(x, y); return { moves: window.__stripMoves, hidden: strip.hidden, width: strip.width, height: strip.height, styleHeight: strip.style.height, box: strip.getBoundingClientRect().toJSON(), under: under ? under.tagName + '.' + under.className : null, scroll: [scrollX, scrollY] }; }, target);
+      throw new Error('readout: ' + readout + ' · ' + JSON.stringify(diag));
+    }
     const before = await report.evaluate(() => document.querySelector('#view .stage canvas').toDataURL());
     await report.mouse.click(box.x + box.width * 0.4, box.y + 6); await report.waitForTimeout(900);
     const after = await report.evaluate(() => document.querySelector('#view .stage canvas').toDataURL());
@@ -1160,6 +1169,9 @@ if (reportPath) {
   });
 }
 
+/* The report opened a second tab. In a headed engine (Firefox under Xvfb on CI) that tab stays in
+   front and clicks on the viewer page hang until it is fronted again. */
+await page.bringToFront();
 await step('print-size export writes 300 dpi into a PNG of the stated width', async () => {
   await tab('publish');
   await page.selectOption('#gpv-export-mode', 'print'); await page.selectOption('#gpv-print-width', '85');
@@ -1364,6 +1376,18 @@ await step('PAE domains at 6 Å and assembly dimensions run without error on the
   if (!result.domains || result.domains < 1) throw new Error('domains=' + JSON.stringify(result));
   if (!result.size || result.size.extent < 20 || result.size.extent > 80 || result.size.exact !== true) throw new Error('size=' + JSON.stringify(result.size));
   console.log('       ' + result.domains + ' domain(s) · extent ' + result.size.extent.toFixed(1) + ' Å (exact)');
+});
+await step('in the workspace panel the confidence tab stacks the MSA controls above the PAE map instead of collapsing them', async () => {
+  await tab('confidence'); await page.waitForTimeout(300);
+  const boxes = await page.evaluate(() => {
+    const r = el => el.getBoundingClientRect();
+    const overlap = (a, b) => a.left < b.right && b.left < a.right && a.top < b.bottom && b.top < a.bottom;
+    const paint = r(document.querySelector('#gpv-msa-paint')); const pae = r(document.querySelector('#gpv-pae')); const msa = r(document.querySelector('.gpv-msa'));
+    const panel = document.querySelector('.gpv-side-panel');
+    return { workspace: document.querySelector('#generic-protein-viewer').classList.contains('is-workspace'), msaWidth: Math.round(msa.width), paeWidth: Math.round(pae.width), panelWidth: panel.clientWidth, overlap: overlap(paint, pae) };
+  });
+  if (!boxes.workspace || boxes.msaWidth < 200 || boxes.paeWidth < 100 || boxes.paeWidth > boxes.panelWidth || boxes.overlap) throw new Error(JSON.stringify(boxes));
+  console.log('       controls ' + boxes.msaWidth + ' px wide · PAE map ' + boxes.paeWidth + ' px in a ' + boxes.panelWidth + ' px panel');
 });
 await step('plddt colour mode paints a CA atom', async () => {
   await tab('appearance');
