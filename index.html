@@ -831,10 +831,10 @@ html>body{padding:0}</style>
   <div class="card gpv-drop" id="gpv-drop">
     <span class="gpv-drop-icon" aria-hidden="true"><i data-icon="folder-up"></i></span>
     <strong>Add structures or AlphaFold result ZIPs</strong>
-    <span class="text-muted">Drop files anywhere on this page, or choose PDB, CIF/mmCIF, JSON, CSV, and ZIP files</span>
+    <span class="text-muted">Drop files anywhere on this page, or choose PDB, CIF/mmCIF, JSON, CSV, A3M and ZIP files</span>
     <span class="gpv-drop-badges"><span class="viz-badge">Multiple ZIPs</span><span class="viz-badge">Local processing</span><span class="viz-badge">No upload</span></span>
     <div class="gpv-drop-actions">
-      <input class="form-control gpv-file-input" id="gpv-files" aria-label="Choose model files" type="file" accept=".pdb,.cif,.mmcif,.json,.csv,.zip" multiple>
+      <input class="form-control gpv-file-input" id="gpv-files" aria-label="Choose model files" type="file" accept=".pdb,.cif,.mmcif,.json,.csv,.zip,.a3m" multiple>
       <form class="gpv-fetch" id="gpv-fetch-form">
         <input class="form-control gpv-fetch-field" id="gpv-fetch-id" type="text" autocomplete="off" spellcheck="false" aria-label="Structure identifier to fetch" placeholder="or fetch an ID: 1ubq, P69905">
         <button class="btn" type="submit" id="gpv-fetch" data-tooltip="Download a PDB entry from RCSB, or an AlphaFold DB model from EMBL-EBI"><i data-icon="cloud-download" aria-hidden="true"></i>Fetch</button>
@@ -1075,7 +1075,8 @@ html>body{padding:0}</style>
 
   <section class="gpv-tool-panel" data-gpv-panel="confidence" hidden>
     <div class="gpv-confidence-layout" id="gpv-confidence-panel" hidden>
-      <div><div class="viz-controls"><button class="btn" type="button" id="gpv-confidence-csv">Download confidence CSV</button><button class="btn" type="button" id="gpv-profile-svg" disabled data-tooltip="Per-residue pLDDT plot of the displayed models, one panel per chain, as editable SVG">pLDDT profile SVG</button><button class="btn" type="button" id="gpv-profile-png" disabled data-tooltip="The same pLDDT profile rendered at 2× as PNG">pLDDT profile PNG</button></div><div class="table-responsive"><table class="table table-sm" aria-label="AlphaFold model confidence metrics"><thead><tr><th>Model</th><th class="text-end">Mean pLDDT</th><th class="text-end">pTM</th><th class="text-end">ipTM</th><th class="text-end">Ranking score</th><th class="text-end">Rank</th><th>Clash</th></tr></thead><tbody id="gpv-metrics"></tbody></table></div></div>
+      <div><div class="viz-controls gpv-msa" aria-label="Multiple sequence alignment"><span class="text-small text-muted">MSA</span><label class="form-label">Colour by<select class="form-select" id="gpv-msa-metric"><option value="conservation">Conservation (1 − normalised entropy)</option><option value="identity">Identity to the query</option><option value="depth">Coverage (sequences per column)</option></select></label><button class="btn" type="button" id="gpv-msa-paint" disabled data-tooltip="Read the unpaired MSA that AlphaFold 3 used (the .a3m in the archive) and colour each chain it covers by the chosen per-column statistic">Colour by MSA</button><span class="text-muted text-small" id="gpv-msa-state">No alignment loaded. AlphaFold 3 archives carry one per entity; an .a3m can also be added on its own.</span></div>
+      <div class="viz-controls"><button class="btn" type="button" id="gpv-confidence-csv">Download confidence CSV</button><button class="btn" type="button" id="gpv-profile-svg" disabled data-tooltip="Per-residue pLDDT plot of the displayed models, one panel per chain, as editable SVG">pLDDT profile SVG</button><button class="btn" type="button" id="gpv-profile-png" disabled data-tooltip="The same pLDDT profile rendered at 2× as PNG">pLDDT profile PNG</button></div><div class="table-responsive"><table class="table table-sm" aria-label="AlphaFold model confidence metrics"><thead><tr><th>Model</th><th class="text-end">Mean pLDDT</th><th class="text-end">pTM</th><th class="text-end">ipTM</th><th class="text-end">Ranking score</th><th class="text-end">Rank</th><th>Clash</th></tr></thead><tbody id="gpv-metrics"></tbody></table></div></div>
       <div class="gpv-pae-panel" id="gpv-pae-panel" hidden><div id="gpv-pae-plot" hidden><div class="viz-controls"><button class="btn" type="button" id="gpv-pae-png">Download PAE PNG</button></div><canvas id="gpv-pae" width="420" height="420" role="img" aria-label="Predicted aligned error heatmap"></canvas><div class="gpv-pae-legend text-small"><span>Low error</span><span>PAE (Å)</span><span>High error</span></div><div class="text-small" id="gpv-pae-detail">Move over the heatmap to inspect a residue pair.</div></div><div class="table-responsive" id="gpv-interface-wrap" hidden><table class="table table-sm" aria-label="Chain-pair interface confidence"><thead><tr><th>Chain pair</th><th class="text-end">ipTM</th><th class="text-end">Min PAE (Å)</th></tr></thead><tbody id="gpv-interface-metrics"></tbody></table></div></div>
     </div>
     <h3 class="gpv-subheading">PAE domains</h3>
@@ -1235,6 +1236,7 @@ html>body{padding:0}</style>
       <h3>Tips for figures and reviewers</h3>
       <ul>
         <li><em>Publish → Write methods text</em> drafts a Methods paragraph stating exactly how the numbers on screen were computed (superposition, RMSD, RMSF, domains, contacts, dimensions, colour scales); every definition is cross-checked against Biopython in the repository's <code>VALIDATION.md</code>.</li>
+        <li><em>Confidence → Colour by MSA</em> reads the alignment inside an AlphaFold 3 archive (or an .a3m you add) and colours matching chains by conservation, identity to the query or coverage; the legend, exports and methods text follow.</li>
         <li><em>Publish → Download composite figure</em> stitches the 3D view with the PAE heatmap, the pLDDT profile and the contact map into one lettered figure at print size, each panel rendered at output resolution.</li>
         <li>The <em>Publication checklist</em> at the foot of the Publish tab lists what a journal or reviewer would flag about the current figure — no physical size, low resolution, small text, colour-blind-unsafe colours, missing legend, scale bar in perspective, unsuperposed models, no title — with one-click fixes.</li>
         <li><em>Compare → Interface contact map</em> draws every residue pair of two chains within a cutoff, closer pairs darker; hover reads the pair, a click selects both residues, <em>Highlight interface</em> colours the interface, and the map and pair list download as PNG and CSV. <em>Annotate → Label style</em> switches every label between boxed and plain text.</li>
@@ -1581,7 +1583,7 @@ html>body{padding:0}</style>
   let busyDepth = 0;
   let restoreMotion = null;
   const listPageSize = 60;
-  const viewerVersion = '2.20.0';
+  const viewerVersion = '2.21.0';
   const preferenceKey = 'protein-structure-viewer:preferences';
   const themeKey = 'protein-structure-viewer:theme';
   const labelColors = getComputedStyle(root);
@@ -4333,6 +4335,7 @@ html>body{padding:0}</style>
   function renderComposition() {
     const entry = activeEntry();
     contactChainOptions(entry);
+    renderMsaState();
     const wrap = root.querySelector('#gpv-composition');
     if (!entry || !entry.model) { wrap.hidden = true; return; }
     wrap.hidden = false;
@@ -4690,6 +4693,93 @@ html>body{padding:0}</style>
     }
   }
 
+
+  /* ---------- MSA conservation ----------
+     AlphaFold 3 archives carry the unpaired MSA per entity as .a3m. The query is the first
+     record; uppercase letters are match columns, lowercase letters insertions (dropped), '-'
+     gaps. Per query column: depth (sequences with a residue), identity to the query, and
+     conservation = 1 − H / log2(20) with H the Shannon entropy over the twenty amino acids.
+     The columns are mapped onto every chain whose sequence contains the query, and the result
+     is loaded as a per-residue dataset so colouring, legends, exports and reports all follow. */
+  let msaAssets = [];
+  const aminoAlphabet = 'ACDEFGHIKLMNPQRSTVWY';
+
+  function parseA3m(text) {
+    const records = []; let current = null;
+    String(text).split(/\r?\n/).forEach(line => {
+      if (line.startsWith('>')) { current = { header: line.slice(1).trim(), parts: [] }; records.push(current); }
+      else if (current && line.trim() && !line.startsWith('#')) current.parts.push(line.trim());
+    });
+    if (!records.length) return null;
+    const query = records[0].parts.join('').replace(/[a-z.]/g, '');
+    const length = query.length; if (!length) return null;
+    const depth = new Array(length).fill(0); const identity = new Array(length).fill(0); const counts = Array.from({ length }, () => new Map());
+    let used = 0;
+    records.forEach(record => {
+      const sequence = record.parts.join('').replace(/[a-z.]/g, '');
+      if (sequence.length !== length) return;
+      used += 1;
+      for (let i = 0; i < length; i += 1) {
+        const letter = sequence[i];
+        if (letter === '-' || letter === 'X' || letter === 'x') continue;
+        depth[i] += 1; if (letter === query[i]) identity[i] += 1;
+        counts[i].set(letter, (counts[i].get(letter) || 0) + 1);
+      }
+    });
+    const conservation = counts.map((column, i) => {
+      if (!depth[i]) return 0;
+      let entropy = 0;
+      column.forEach(count => { const p = count / depth[i]; entropy -= p * Math.log2(p); });
+      return Math.max(0, Math.min(1, 1 - entropy / Math.log2(aminoAlphabet.length)));
+    });
+    return { query, sequences: used, depth, identity: identity.map((count, i) => (depth[i] ? count / depth[i] : 0)), conservation };
+  }
+
+  function msaAssetsFor(entry) {
+    if (!entry) return [];
+    return msaAssets.filter(asset => asset.collection === entry.collection);
+  }
+
+  function renderMsaState() {
+    const entry = activeEntry(); const assets = msaAssetsFor(entry);
+    const button = root.querySelector('#gpv-msa-paint'); const state = root.querySelector('#gpv-msa-state');
+    button.disabled = !assets.length || !entry || !entry.model;
+    if (!assets.length) { state.textContent = entry ? 'No alignment for ' + (entry.collection || 'this source') + '. AlphaFold 3 archives carry one per entity; an .a3m can also be added on its own.' : 'No alignment loaded.'; return; }
+    state.textContent = assets.length + ' alignment' + (assets.length === 1 ? '' : 's') + ' from ' + (entry.collection || 'this source') + ': ' + clipText(assets.map(asset => asset.name.replace(/^.*_unpaired_msa_/, '')).join(', '), 90);
+  }
+
+  function paintByMsa() {
+    const entry = activeEntry(); if (!entry || !entry.model) return;
+    const assets = msaAssetsFor(entry); if (!assets.length) return;
+    const metric = root.querySelector('#gpv-msa-metric').value;
+    const values = new Map(); const covered = []; const notes = [];
+    const rows = residueRows(entry);
+    assets.forEach(asset => {
+      if (!asset.parsed) asset.parsed = parseA3m(asset.text) || false;
+      const msa = asset.parsed; if (!msa) { notes.push(asset.name + ': could not be read'); return; }
+      rows.forEach(row => {
+        const letters = row.residues.map(atom => residueLetter(atom.resn)).join('');
+        let offset = letters.indexOf(msa.query); let queryOffset = 0;
+        if (offset < 0) { const inner = msa.query.indexOf(letters); if (inner < 0) return; queryOffset = inner; offset = 0; }
+        row.residues.forEach((atom, index) => {
+          const column = index - offset + queryOffset;
+          if (column < 0 || column >= msa.query.length) return;
+          const value = metric === 'depth' ? msa.depth[column] : metric === 'identity' ? msa.identity[column] : msa.conservation[column];
+          values.set((atom.chain || '') + '|' + atom.resi, value);
+        });
+        covered.push((row.chain || '—') + ' (' + msa.sequences + ' seq.)');
+      });
+    });
+    if (!values.size) { announce('No chain of ' + displayName(entry) + ' matches a query sequence in the alignment' + (notes.length ? ' · ' + notes.join('; ') : ''), 'error'); return; }
+    const all = [...values.values()];
+    const names = { conservation: 'MSA conservation (1 − H/log₂20)', identity: 'MSA identity to query', depth: 'MSA coverage (sequences)' };
+    remember('MSA colouring');
+    residueData = { values, byResi: new Map(), min: Math.min(...all), max: Math.max(...all), count: all.length, name: names[metric], scale: 'viridis', scope: 'source', entryId: entry.id, msa: { metric, sequences: assets.map(asset => asset.parsed ? asset.parsed.sequences : 0) } };
+    root.querySelector('#gpv-color-mode').value = 'data';
+    renderDataState(); applyStyle();
+    announce(residueData.name + ' on chain' + (covered.length === 1 ? ' ' : 's ') + clipText(covered.join(', '), 80) + (notes.length ? ' · ' + notes.join('; ') : ''));
+  }
+
   /* ---------- Go to residue ---------- */
 
   function goToResidue(raw) {
@@ -4894,6 +4984,7 @@ html>body{padding:0}</style>
     }
     if (ensembleSpread) sentences.push('Model agreement was expressed per residue as the Cα root-mean-square fluctuation about the mean Cα position across the ' + ensembleSpread.count + ' superposed models, for residues present in at least two models.');
     if (contactResult && contactResult.pairs.size) { const target = entryById(contactResult.entryId); sentences.push('Inter-chain contacts between chains ' + (contactResult.chainA || '—') + ' and ' + (contactResult.chainB || '—') + (target ? ' of ' + displayName(target) : '') + ' were defined as residue pairs with ' + (contactResult.mode === 'ca' ? 'Cα atoms' : 'any pair of heavy atoms') + ' within ' + contactResult.cutoff + ' Å; ' + contactResult.pairs.size + ' residue pairs (' + contactResult.residuesA.length + ' residues on chain ' + (contactResult.chainA || '—') + ', ' + contactResult.residuesB.length + ' on chain ' + (contactResult.chainB || '—') + ') met the criterion.'); }
+    if (residueData && residueData.msa && root.querySelector('#gpv-color-mode').value === 'data') sentences.push('Per-residue ' + (residueData.msa.metric === 'depth' ? 'alignment coverage (number of sequences with a residue at the column)' : residueData.msa.metric === 'identity' ? 'identity to the query (fraction of aligned sequences sharing the query residue)' : 'conservation, defined as 1 − H/log₂20 with H the Shannon entropy of the amino-acid distribution at the column (gaps excluded),') + ' was computed from the unpaired multiple sequence alignment written by AlphaFold 3 (' + residueData.msa.sequences.join(' and ') + ' sequences) and mapped onto the chains whose sequence matches the query.');
     const domains = first && first.domains;
     if (domains && domains.domains.length) sentences.push('Domains were derived from the PAE matrix by greedy agglomeration of ten-residue segments: the pair with the lowest mean inter-segment PAE was merged while that mean stayed below ' + domains.cutoff + ' Å; groups of fewer than twenty residues were absorbed into the nearest domain when within twice the cutoff and otherwise left unassigned. This segmentation is a heuristic and differs from the graph clustering used by the AlphaFold Protein Structure Database.');
     if (nearbyResult && nearbyResult.residues) sentences.push('Contacting residues were defined as residues with any heavy atom within ' + nearbyResult.cutoff + ' Å of any heavy atom of the ' + (nearbyResult.mode === 'chain' ? 'target chain' : nearbyResult.mode === 'hetero' ? 'ligands and ions' : 'target residue') + ' (hydrogens and water excluded).');
@@ -6025,6 +6116,14 @@ html>body{padding:0}</style>
               if (memberIndex % 5 === 4) await nextPaint();
             } catch (error) { skipped += 1; failures.push(member.name + ': ' + error.message); }
           }
+          const msaMembers = members.filter(member => !member.dir && /\.a3m$/i.test(member.name) && /unpaired/i.test(member.name));
+          for (const member of msaMembers) {
+            try {
+              const text = await member.async('string');
+              if (text.length > 80 * 1024 * 1024) { failures.push(member.name + ': alignment over 80 MB skipped'); continue; }
+              msaAssets.push({ collection: file.name, name: member.name.split('/').pop(), text });
+            } catch (error) { failures.push(member.name + ': alignment could not be read'); }
+          }
           const metadataMembers = members.filter(member => {
             const lower = member.name.toLowerCase();
             return !member.dir && (lower.endsWith('.json') || lower.endsWith('ranking_scores.csv')) && !lower.includes('/templates/');
@@ -6041,6 +6140,9 @@ html>body{padding:0}</style>
         } else if (['pdb', 'cif', 'mmcif'].includes(extension)) {
           addStructure(uniqueModelName(file.name, 'Individual files'), await file.text(), extension === 'pdb' ? 'pdb' : 'cif', file.name, 'Individual files');
           loaded += 1;
+        } else if (extension === 'a3m') {
+          msaAssets.push({ collection: 'Individual files', name: file.name, text: await file.text() });
+          loaded += 0;
         } else if (['json', 'csv'].includes(extension)) {
           if (!registerMetadata(file.name, extension === 'json' ? new Uint8Array(await file.arrayBuffer()) : await file.text())) skipped += 1;
         } else {
@@ -8011,6 +8113,7 @@ applyBackground();
   root.querySelector('#gpv-model-panels').addEventListener('click', downloadModelPanels);
   root.querySelector('#gpv-contact-run').addEventListener('click', () => { computeContacts(); renderCompositeControls(); });
   root.querySelector('#gpv-composite').addEventListener('click', downloadCompositeFigure);
+  root.querySelector('#gpv-msa-paint').addEventListener('click', paintByMsa);
   root.querySelector('#gpv-contact-highlight').addEventListener('click', highlightContactInterface);
   root.querySelector('#gpv-contact-csv').addEventListener('click', downloadContactsCsv);
   root.querySelector('#gpv-contact-png').addEventListener('click', () => { downloadContactPng().catch(error => announce('Could not render the contact map: ' + error.message, 'error')); });
@@ -8298,7 +8401,7 @@ applyBackground();
   offerSessionRestore();
   /* ?debug=1 exposes a few internals for the regression suite and for bug reports;
      it has no effect otherwise. */
-  if (new URLSearchParams(location.search).has('debug')) window.__viewerDebug = { viewer, pickAtomAt, displayedEntries, activeEntry, colorOptions, sceneSettings, contactResult: () => contactResult, entries: () => structures, nearbyResidues, assemblyDimensions, paeDomains, parseConfidenceBytes, methodsText, alignmentResults: () => alignmentResults, ensembleSpread: () => ensembleSpread, siteResults: () => siteResults };
+  if (new URLSearchParams(location.search).has('debug')) window.__viewerDebug = { viewer, pickAtomAt, displayedEntries, activeEntry, colorOptions, sceneSettings, contactResult: () => contactResult, residueData: () => residueData, msaAssets: () => msaAssets, entries: () => structures, nearbyResidues, assemblyDimensions, paeDomains, parseConfidenceBytes, methodsText, alignmentResults: () => alignmentResults, ensembleSpread: () => ensembleSpread, siteResults: () => siteResults };
   applyTheme(readJson(themeKey, 'system'));
   selectToolTab('models');
   applyAppearance();

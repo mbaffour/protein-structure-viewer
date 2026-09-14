@@ -370,6 +370,23 @@ adds the interface residues of a pair as a coloured selection you can manage in 
 loaded — it says how the prediction is packed, not whether the interaction exists — so read it next
 to the chain-pair ipTM and PAE above it.
 
+
+### Colour by MSA
+
+AlphaFold 3 archives include, under `msas/`, the unpaired multiple sequence alignment for each
+entity as an `.a3m` file. The viewer keeps these when the archive is opened (an `.a3m` can also be
+added on its own with *Add structures*), and **Colour by MSA** maps the alignment's per-column
+statistic onto every chain whose sequence matches the alignment's query. Three statistics:
+**conservation**, 1 − H/log₂20 where H is the Shannon entropy of the amino-acid distribution at the
+column with gaps and X excluded (1 = one residue everywhere, 0 = uniform); **identity to the
+query**, the fraction of aligned sequences carrying the query residue; **coverage**, the number of
+sequences with a residue at the column. The result is loaded as a per-residue dataset named for the
+statistic, so it behaves like any pasted table: the viridis legend, the sequence strip, exports, the
+shared report and the methods text all follow, and *Clear data* removes it. Lowercase letters in the
+`.a3m` are insertions relative to the query and are dropped; sequences whose match-column length
+differs from the query are skipped. Conservation reflects the alignment AlphaFold used, not a curated
+family alignment, so read the coverage first: a column supported by eleven sequences says little.
+
 ## Publish tab
 
 **Images.** **Output** chooses between **Print size** — a physical width (85 mm single column,

@@ -128,6 +128,12 @@ the left while the tool tabs scroll in a panel on the right, so you see each cha
 it. Drag the divider to resize the panel; the header's panel button switches to the stacked
 layout and back, and the choice is remembered. Screens narrower than 1100 px always stack.
 
+## Colour by MSA
+
+Confidence → *Colour by MSA* reads the unpaired alignment inside an AlphaFold 3 archive (or an
+`.a3m` you add) and colours each matching chain by conservation, identity to the query or coverage.
+It loads as a per-residue dataset, so legend, strip, exports, report and methods text follow.
+
 ## Composite figure
 
 Publish → *Download composite figure* stitches the 3D view with the PAE heatmap, the pLDDT profile
@@ -204,8 +210,8 @@ computes, with Biopython and numpy, the mean Cα pLDDT, the Kabsch RMSD of each 
 per-residue Cα RMSF across the superposed models, radius of gyration, exact Cα extent and the residue
 set within a cutoff of one chain; `tests/validate.mjs` drives the real viewer on the same files and
 compares. On three AlphaFold 3 runs (an M13 virion tip, an MS2 maturation-protein–coat complex and a
-phiX174 F–G complex) all 84 comparisons — including the interface contact map — agree to within
-5 × 10⁻⁵ Å, the rounding of the reference.
+phiX174 F–G complex) all 105 comparisons — including the interface contact map and the MSA
+statistics — agree to within the rounding of the reference (5 × 10⁻⁵ Å for distances).
 [`VALIDATION.md`](VALIDATION.md) has the tables, what is and is not covered, and how to rerun the check on
 your own run. The viewer also loads a five-model, 4 410-token assembly with 175 MB of confidence JSON per
 model in under eight seconds and a fraction of a gigabyte of memory.

@@ -43,7 +43,7 @@ page.on('pageerror', error => errors.push(error.message));
 page.on('console', message => { if (message.type() === 'error' && !/favicon/.test(message.text())) errors.push(message.text()); });
 await page.goto(`http://127.0.0.1:${server.address().port}/index.html?debug=1`); await page.waitForTimeout(1500);
 
-const inputs = archive ? [archive] : (await readdir(folder)).filter(name => /_model_\d+\.cif$|_full_data_\d+\.json$|_summary_confidences_\d+\.json$/.test(name)).map(name => join(folder, name));
+const inputs = archive ? [archive] : (await readdir(folder)).filter(name => /_model_\d+\.cif$|_full_data_\d+\.json$|_summary_confidences_\d+\.json$|unpaired.*\.a3m$/.test(name)).map(name => join(folder, name));
 await page.setInputFiles('#gpv-files', inputs);
 const expected = reference.models.length;
 for (let i = 0; i < 600; i += 1) { await page.waitForTimeout(500); if ((await page.locator('#gpv-list .gpv-entry').count()) >= expected && await page.locator('#gpv-import-state').isHidden()) break; }
@@ -93,6 +93,36 @@ if (reference.contact_map) {
     check('contact map · interface residues on ' + cm.chains[1], map.residuesB, cm.residues_b, 0);
     let worst = 0; referencePairs.forEach((d, key) => { if (viewerPairs.has(key)) worst = Math.max(worst, Math.abs(viewerPairs.get(key) - d)); });
     check('contact map · largest distance difference over ' + referencePairs.size + ' pairs (Å)', worst, 0, 0.001);
+  }
+}
+
+/* MSA statistics: the viewer's per-residue values against the reference per-column values, for every
+   alignment, on the first chain whose sequence contains the query */
+for (const msa of (reference.msa || [])) {
+  await page.click('[data-gpv-tab="confidence"]');
+  for (const metric of ['conservation', 'identity', 'depth']) {
+    await page.selectOption('#gpv-msa-metric', metric);
+    if (await page.locator('#gpv-msa-paint').isDisabled()) { rows.push({ label: 'MSA ' + metric + ' (' + msa.file.slice(-24) + ')', viewer: NaN, reference: msa.query.length, delta: NaN, ok: false }); failed += 1; continue; }
+    await page.click('#gpv-msa-paint'); await page.waitForTimeout(600);
+    const viewerValues = await page.evaluate(query => {
+      const d = window.__viewerDebug; const data = d.residueData(); const entry = d.activeEntry(); if (!data || !entry) return null;
+      const rowsOf = window.__viewerDebug.residueRows ? window.__viewerDebug.residueRows(entry) : null;
+      const chains = [...new Set([...data.values.keys()].map(key => key.split('|')[0]))];
+      /* pick the chain whose residue letters contain the query, using the model's atoms */
+      const letter = { ALA: 'A', ARG: 'R', ASN: 'N', ASP: 'D', CYS: 'C', GLN: 'Q', GLU: 'E', GLY: 'G', HIS: 'H', ILE: 'I', LEU: 'L', LYS: 'K', MET: 'M', PHE: 'F', PRO: 'P', SER: 'S', THR: 'T', TRP: 'W', TYR: 'Y', VAL: 'V' };
+      for (const chain of chains) {
+        const cas = entry.atoms.filter(atom => (atom.chain || '') === chain && atom.atom === 'CA' && !atom.hetflag).sort((a, b) => a.resi - b.resi);
+        const seq = cas.map(atom => letter[String(atom.resn || '').toUpperCase()] || 'X').join('');
+        const offset = seq.indexOf(query); if (offset < 0) continue;
+        return { chain, values: cas.slice(offset, offset + query.length).map(atom => data.values.get(chain + '|' + atom.resi)) };
+      }
+      return null;
+    }, msa.query);
+    if (!viewerValues) { rows.push({ label: 'MSA ' + metric + ' (' + msa.file.slice(-24) + ')', viewer: NaN, reference: msa.query.length, delta: NaN, ok: false }); failed += 1; continue; }
+    const referenceValues = msa[metric];
+    let worst = 0; let missing = 0;
+    referenceValues.forEach((value, i) => { const seen = viewerValues.values[i]; if (seen === undefined) missing += 1; else worst = Math.max(worst, Math.abs(seen - value)); });
+    check('MSA ' + metric + ' · ' + referenceValues.length + ' columns on chain ' + viewerValues.chain + ' · largest difference', missing ? NaN : worst, 0, metric === 'depth' ? 0 : 1e-5);
   }
 }
 

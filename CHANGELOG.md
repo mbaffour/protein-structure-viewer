@@ -2,6 +2,20 @@
 
 All notable changes to this project are recorded here.
 
+## 2.21.0
+
+What the alignment knew.
+
+### Added
+
+- **Colour by MSA** (Confidence tab). AlphaFold 3 archives carry the unpaired multiple sequence
+  alignment per entity as `.a3m`; the viewer now reads it and colours every chain whose sequence
+  matches the query by **conservation** (1 − H/log₂20, H the Shannon entropy of the column),
+  **identity to the query**, or **coverage** (sequences per column). The result is a per-residue
+  dataset, so the viridis legend, the sequence strip, exports, the report and the methods text all
+  follow, and the CSV of values downloads from the Annotate tab. An `.a3m` can also be added on
+  its own for models from any source.
+
 ## 2.20.0
 
 The whole figure, not just the picture.

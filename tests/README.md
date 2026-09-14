@@ -81,6 +81,8 @@ PSV_CHROMIUM=/opt/pw-browsers/chromium/chrome-linux/chrome npm test
   copying the PNG to the clipboard reports an outcome; the figure legend names the models,
   representation and colouring; the methods text names the Kabsch superposition, the RMSD rule, the
   dimension definitions and the software versions.
+- MSA: a synthetic .a3m colours both fixture chains; the varied column scores below the half-varied and the invariant
+  one, coverage counts 9 and 7, and the methods text gains the alignment sentence.
 - Composite figure: with contacts computed, the three-panel composite downloads at the 178 mm width (2102 px) with
   resolution metadata.
 - Publication checklist: pixel export with chain colours yields at least two warnings; the two one-click fixes switch

@@ -2,7 +2,7 @@
 
 Every quantity the viewer reports was compared with an independent implementation on three real
 AlphaFold 3 runs. This file records the method, the results and the limits of the check, and how to
-rerun it on your own run. Last run: 2026-09-13, viewer 2.18.1.
+rerun it on your own run. Last run: 2026-09-13, viewer 2.21.0.
 
 ## Method
 
@@ -19,7 +19,10 @@ rerun it on your own run. Last run: 2026-09-13, viewer 2.18.1.
 - the set of residues (chain, number, name) with any heavy atom within a cutoff of any heavy atom of
   one chain, hetero groups excluded;
 - the inter-chain contact map of two chains on model 0: every residue pair with a heavy-atom pair
-  within the cutoff, with the closest such distance (the Compare tab's *Interface contact map*).
+  within the cutoff, with the closest such distance (the Compare tab's *Interface contact map*);
+- per-column statistics of every unpaired `.a3m` in the run — conservation (1 − H/log₂20, gaps and X
+  excluded), identity to the query and coverage — with lowercase insertions dropped, exactly as the
+  viewer's *Colour by MSA* defines them.
 
 `tests/validate.mjs` then opens the same files in the real viewer (headless Chromium via Playwright),
 runs *Align visible* in identifier mode with model 0 as reference, reads the same quantities through the
@@ -126,7 +129,7 @@ PAE domains at 6 Å on model 0: 6 domains, 50 residues unassigned (heuristic; ru
 
 PAE domains at 6 Å on model 0: 4 domains, 10 residues unassigned (heuristic; run without error, not compared). Console errors: 0.
 
-**All 84 comparisons agree within tolerance** (72 from the 2.14.0 pass plus 12 for the contact map added in 2.18.1). RMSD, RMSF, radius of gyration and extent agree to
+**All 105 comparisons agree within tolerance** (72 from the 2.14.0 pass, 12 for the contact map added in 2.18.1, 21 for the MSA statistics added in 2.21.0). RMSD, RMSF, radius of gyration and extent agree to
 better than 5 × 10⁻⁵ Å; contact residue sets are identical; mean pLDDT agrees to 4 × 10⁻⁴.
 
 ## What the check found
@@ -182,11 +185,30 @@ excluded. The viewer's pair set, interface residue counts and every closest-atom
 
 The differences are the four-decimal rounding of the reference values.
 
+## MSA statistics (added 2.21.0)
+
+For every unpaired alignment in the archive, the viewer's per-residue values on the first chain whose
+sequence contains the query were compared column by column with the reference. Tolerance 10⁻⁵ for
+conservation and identity, exact for coverage.
+
+| run | alignment (chains) | sequences | columns | conservation | identity | coverage |
+|---|---|---:|---:|---:|---:|---:|
+| A — M13 virion tip | b_d_e_c_a (α) | 1 | 33 | 0 | 0 | exact |
+| A — M13 virion tip | j_g_i_h_f (β) | 13 | 32 | 3.5 × 10⁻⁷ | 3.8 × 10⁻⁷ | exact |
+| A — M13 virion tip | n_l_o_k_m (γ) | 90 | 73 | 5.0 × 10⁻⁷ | 4.9 × 10⁻⁷ | exact |
+| B — MS2 maturation protein–coat | a | 1 875 | 393 | 5.0 × 10⁻⁷ | 5.0 × 10⁻⁷ | exact |
+| B — MS2 maturation protein–coat | b_c | 62 | 130 | 5.0 × 10⁻⁷ | 4.9 × 10⁻⁷ | exact |
+| C — phiX174 F–G | a | 2 048 | 427 | 5.0 × 10⁻⁷ | 5.0 × 10⁻⁷ | exact |
+| C — phiX174 F–G | b | 798 | 175 | 4.9 × 10⁻⁷ | 5.0 × 10⁻⁷ | exact |
+
+Differences are the six-decimal rounding of the reference. Note the single-sequence alignment for the
+M13 α entity: its "conservation" of 1 everywhere is a statement about the alignment, not the protein.
+
 ## Rerunning
 
 ```
 cd tests && npm install && npm test            # once; installs Playwright and verifies the vendored libraries
-mkdir run && unzip -d run fold_x.zip -x "msas/*" "templates/*"
+mkdir run && unzip -d run fold_x.zip -x "templates/*" "msas/*paired*"   # keep the unpaired .a3m for the MSA check
 python3 reference.py run K 6                    # chain K, 6 Å; needs biopython and numpy
 python3 reference.py run K 6 K F                # optionally name the two chains for the contact map
 node validate.mjs run                           # or: node validate.mjs run fold_x.zip

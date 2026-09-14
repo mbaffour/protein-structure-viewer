@@ -228,3 +228,14 @@ cross-validated: on three real runs the residue-pair sets, interface residue cou
 closest-atom distance agree with Biopython's NeighborSearch to within 5 × 10⁻⁵ Å (VALIDATION.md). Hydrogens, water and hetero groups are excluded. The map
 is a description of one model's geometry, not evidence that the interface exists; the text next
 to the tool says so and points to the inter-chain PAE and interface pTM.
+
+
+## MSA statistics (2.21.0)
+
+Read from the unpaired `.a3m` in the archive: query first; uppercase = match columns, lowercase =
+insertions (dropped), `-` = gap. Conservation is 1 − H/log₂20 with H the Shannon entropy over the
+twenty amino acids at the column, gaps and X excluded; identity is the fraction of aligned sequences
+carrying the query residue; coverage is the number of sequences with a residue at the column. No
+sequence weighting or pseudocounts are applied, so redundant sequences inflate conservation; the
+numbers describe the alignment AlphaFold saw. Columns are mapped to chains by exact or substring
+match of the one-letter sequence, so residue renumbering in the model does not affect the mapping.

@@ -260,6 +260,24 @@ await step('the composite figure stitches the 3D view, the pLDDT profile and the
   await page.selectOption('#gpv-export-mode', 'pixels'); await page.waitForTimeout(200);
   console.log('       ' + width + ' × ' + height + ' px · 3 panels at 300 dpi');
 });
+await step('an a3m alignment colours both chains by conservation, identity or coverage', async () => {
+  const query = 'A'.repeat(30); const lines = ['>query', query];
+  for (let k = 0; k < 8; k += 1) { const letters = query.split(''); letters[4] = 'ACDEFGHI'[k]; letters[19] = k % 2 ? 'K' : 'A'; if (k > 5) letters[10] = '-'; lines.push('>seq' + k, letters.join('')); }
+  const a3m = join(work, 'fixture_unpaired_msa_chains_a_b.a3m'); await writeFile(a3m, lines.join('\n') + '\n');
+  await page.setInputFiles('#gpv-files', [a3m]); await page.waitForTimeout(800);
+  await tab('confidence');
+  if (await page.locator('#gpv-msa-paint').isDisabled()) throw new Error('paint disabled: ' + await page.locator('#gpv-msa-state').textContent());
+  await page.click('#gpv-msa-paint'); await page.waitForTimeout(600);
+  const painted = await page.evaluate(() => { const d = window.__viewerDebug.residueData(); return { mode: document.querySelector('#gpv-color-mode').value, name: d.name, count: d.count, varied: d.values.get('A|5'), conserved: d.values.get('A|6'), half: d.values.get('A|20'), b: d.values.get('B|5') }; });
+  if (painted.mode !== 'data' || !/conservation/i.test(painted.name) || painted.count !== 60 || !(painted.varied < painted.half && painted.half < painted.conserved) || painted.b !== painted.varied) throw new Error(JSON.stringify(painted));
+  await page.selectOption('#gpv-msa-metric', 'depth'); await page.click('#gpv-msa-paint'); await page.waitForTimeout(400);
+  const depth = await page.evaluate(() => { const d = window.__viewerDebug.residueData(); return { gapped: d.values.get('A|11'), full: d.values.get('A|5') }; });
+  if (!(depth.gapped === 7 && depth.full === 9)) throw new Error(JSON.stringify(depth));
+  await tab('publish'); await page.click('#gpv-methods-text'); await page.waitForTimeout(300);
+  if (!/multiple sequence alignment/.test(await page.inputValue('#gpv-methods-field'))) throw new Error('methods text lacks the MSA sentence');
+  await tab('annotate'); await page.click('#gpv-data-clear'); await tab('appearance'); await page.selectOption('#gpv-color-mode', 'structure'); await page.waitForTimeout(200);
+  console.log('       conservation varied ' + painted.varied.toFixed(2) + ' · half ' + painted.half.toFixed(2) + ' · conserved ' + painted.conserved.toFixed(2) + ' · coverage 9 / 7');
+});
 await step('the plain label style is a scene setting and the methods text names the contact rule', async () => {
   await tab('annotate'); await page.selectOption('#gpv-label-style', 'plain'); await page.waitForTimeout(300);
   const scene = await page.evaluate(() => window.__viewerDebug.sceneSettings().labelStyle);

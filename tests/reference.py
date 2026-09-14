@@ -73,5 +73,32 @@ for a in chain_atoms(map_a):
         if key not in pairs or pairs[key] > d: pairs[key] = d
 out['contact_map'] = {'chains': [map_a, map_b], 'cutoff': cutoff, 'pairs': len(pairs), 'residues_a': len({k[0] for k in pairs}), 'residues_b': len({k[1] for k in pairs}),
     'all_pairs': [[k[0], k[1], round(v, 4)] for k, v in sorted(pairs.items())], 'chain_pair_counts': pair_counts}
+
+# MSA statistics per unpaired .a3m in the folder: conservation = 1 - H/log2(20) over the twenty amino
+# acids (gaps and X excluded), identity to the query, coverage; lowercase insertions dropped.
+import math, os
+out['msa'] = []
+for a3m in sorted(glob.glob(f'{folder}/*unpaired*.a3m')):
+    records = []; current = None
+    for line in open(a3m, encoding='utf-8', errors='ignore'):
+        line = line.rstrip('\n')
+        if line.startswith('>'): current = []; records.append(current)
+        elif current is not None and line.strip() and not line.startswith('#'): current.append(line.strip())
+    seqs = [''.join(ch for ch in ''.join(r) if not (ch.islower() or ch == '.')) for r in records]
+    if not seqs: continue
+    query = seqs[0]; L = len(query)
+    rows = [q for q in seqs if len(q) == L]
+    depth = [0] * L; ident = [0] * L; cons = [0.0] * L
+    for i in range(L):
+        column = [r[i] for r in rows if r[i] not in '-Xx']
+        depth[i] = len(column)
+        if not column: continue
+        ident[i] = sum(1 for c in column if c == query[i]) / len(column)
+        freq = {}
+        for c in column: freq[c] = freq.get(c, 0) + 1
+        H = -sum((n / len(column)) * math.log2(n / len(column)) for n in freq.values())
+        cons[i] = max(0.0, min(1.0, 1 - H / math.log2(20)))
+    out['msa'].append({'file': os.path.basename(a3m), 'query': query, 'sequences': len(rows), 'depth': depth, 'identity': [round(v, 6) for v in ident], 'conservation': [round(v, 6) for v in cons]})
+print('msa', [(m['file'][-30:], m['sequences'], len(m['query'])) for m in out['msa']])
 json.dump(out, open(f'{folder}/reference.json', 'w'), indent=1)
 print(json.dumps({k: v for k, v in out.items() if k != 'contacts'}, indent=1)); print('contacts', out['contacts']['count'], out['contacts']['residues'][:6]); print('contact map', out['contact_map']['chains'], out['contact_map']['pairs'], 'pairs; chain pairs with contacts:', out['contact_map']['chain_pair_counts'])
