@@ -1113,6 +1113,9 @@ if (reportPath) {
     const strips = await report.locator('#view .strip').count(); const paneCount = await report.locator('#view .pane').count();
     if (!strips || strips !== paneCount) throw new Error('strips=' + strips + ' panes=' + paneCount);
     await report.bringToFront();
+    /* On the Linux runner the report's fonts make the page a little taller and the first strip
+       lands just below the 1000 px viewport; pointer events never reach it there. */
+    await report.locator('#view .strip').first().scrollIntoViewIfNeeded(); await report.waitForTimeout(200);
     const box = await report.locator('#view .strip').first().boundingBox();
     await report.evaluate(() => { const strip = document.querySelector('#view .strip'); window.__stripMoves = 0; strip.addEventListener('pointermove', () => { window.__stripMoves += 1; }); });
     /* The strip only answers a hover once its rows are drawn; on a slow runner that can be a
