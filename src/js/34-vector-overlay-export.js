@@ -304,38 +304,124 @@
     return lines;
   }
 
-  async function downloadContactSheet() {
-    if (!savedViews.length) return;
-    const button = root.querySelector('#gpv-contact-sheet');
-    const done = setBusy('Rendering panels…');
-    button.disabled = true; button.textContent = 'Rendering panels…';
-    await afterPaint();
-    const restore = captureViewState(); const columns = Number(root.querySelector('#gpv-panel-columns').value) || 2;
-    const cellWidth = 1200; const imageHeight = 900; const captionHeight = 140; const rows = Math.ceil(savedViews.length / columns);
-    const canvas = document.createElement('canvas'); canvas.width = columns * cellWidth; canvas.height = rows * (imageHeight + captionHeight); const context = canvas.getContext('2d');
-    context.fillStyle = '#ffffff'; context.fillRect(0, 0, canvas.width, canvas.height); context.fillStyle = '#111827'; context.textBaseline = 'top';
-    try {
-      for (let index = 0; index < savedViews.length; index += 1) {
-        button.textContent = 'Rendering ' + (index + 1) + ' / ' + savedViews.length + '…';
-        await afterPaint();
-        const uri = await renderPublicationImage(savedViews[index], { width: cellWidth, height: imageHeight }); const imageValue = await loadImage(uri);
-        const x = (index % columns) * cellWidth; const y = Math.floor(index / columns) * (imageHeight + captionHeight); context.drawImage(imageValue, x, y, cellWidth, imageHeight);
-        context.font = '700 42px ' + figureFont(); context.fillText(String.fromCharCode(65 + index), x + 32, y + imageHeight + 24);
-        context.font = '600 30px ' + figureFont(); context.fillText(savedViews[index].name, x + 96, y + imageHeight + 24);
-        context.font = '24px ' + figureFont();
-        wrapText(context, savedViews[index].caption, cellWidth - 128).slice(0, 3)
-          .forEach((line, lineIndex) => context.fillText(line, x + 96, y + imageHeight + 70 + lineIndex * 30));
-      }
-      const link = document.createElement('a'); link.href = canvas.toDataURL('image/png'); link.download = 'protein-figure-panels.png'; link.click();
-      announce('Figure panels downloaded');
-    } catch (error) {
-      announce('Could not render the figure panels: ' + error.message, 'error');
-    } finally {
-      releaseExportViewer();
-      done();
-    }
-    applyViewState(restore); button.disabled = savedViews.length === 0; button.textContent = 'Download figure panels';
+  /* ---------- Figure builder ----------
+     Saved views are the panels. Each ticked view is rendered from its own camera, colour
+     scheme and model selection at the same text size; the cells share the figure's aspect
+     ratio and are sized so the whole figure is the chosen output width. Panel letters and
+     captions go in a strip under each cell; legend and scale bar sit inside the cell. */
+  function figurePanelsSelected() { return savedViews.filter(view => view.inFigure !== false); }
+  function builderOptions() {
+    const columns = root.querySelector('#gpv-panel-columns').value;
+    return { columns, captions: root.querySelector('#gpv-builder-captions').value, letters: root.querySelector('#gpv-builder-letters').checked, legends: root.querySelector('#gpv-builder-legends').checked };
   }
+  function applyBuilderOptions(options) {
+    if (!options || typeof options !== 'object') return;
+    if (['auto', '1', '2', '3', '4'].includes(String(options.columns))) root.querySelector('#gpv-panel-columns').value = String(options.columns);
+    if (['both', 'name', 'caption', 'none'].includes(options.captions)) root.querySelector('#gpv-builder-captions').value = options.captions;
+    if (typeof options.letters === 'boolean') root.querySelector('#gpv-builder-letters').checked = options.letters;
+    if (typeof options.legends === 'boolean') root.querySelector('#gpv-builder-legends').checked = options.legends;
+  }
+  function figureLayout(count) {
+    const requested = exportDimensions(); const options = builderOptions(); const total = Math.max(1, count);
+    const columns = Math.max(1, Math.min(total, options.columns === 'auto' ? panelColumns(total) : Number(options.columns) || 2));
+    const rows = Math.ceil(total / columns);
+    const cellWidth = Math.floor(requested.width / columns);
+    const cellHeight = Math.max(1, Math.floor(cellWidth * requested.height / Math.max(1, requested.width)));
+    const fontPx = Math.max(10, Math.round(requested.dpi ? requested.points / 72 * requested.dpi : 12 * figureScale(requested)));
+    const captionHeight = options.letters || options.captions !== 'none' ? Math.round(fontPx * 2.4) : Math.round(fontPx * 0.5);
+    const cellPlan = { width: cellWidth, height: cellHeight, dpi: requested.dpi, points: requested.points, textScale: requested.textScale, mm: requested.mm ? requested.mm / columns : undefined };
+    return { requested, options, columns, rows, cellWidth, cellHeight, fontPx, captionHeight, width: columns * cellWidth, height: rows * (cellHeight + captionHeight), cellPlan };
+  }
+  function builderCaption(view, options) {
+    const name = String(view.name || ''); const caption = String(view.caption || '');
+    return options.captions === 'name' ? name : options.captions === 'caption' ? caption : options.captions === 'none' ? '' : [name, caption].filter(Boolean).join(' — ');
+  }
+  function renderFigureBuilder() {
+    const body = root.querySelector('#gpv-builder-rows'); if (!body) return;
+    body.replaceChildren();
+    let letter = 0;
+    savedViews.forEach((view, index) => {
+      const included = view.inFigure !== false;
+      const tr = document.createElement('tr');
+      const inCell = document.createElement('td'); const tick = document.createElement('input'); tick.type = 'checkbox'; tick.className = 'form-check-input'; tick.checked = included; tick.setAttribute('aria-label', 'Include ' + view.name + ' in the figure');
+      tick.addEventListener('change', () => { remember('figure panels'); view.inFigure = tick.checked; renderFigureBuilder(); });
+      inCell.append(tick); tr.append(inCell);
+      const letterCell = document.createElement('td'); letterCell.className = 'gpv-builder-letter'; letterCell.textContent = included ? String.fromCharCode(65 + letter) : '—'; if (included) letter += 1; tr.append(letterCell);
+      const nameCell = document.createElement('th'); nameCell.scope = 'row'; nameCell.textContent = view.name; tr.append(nameCell);
+      const captionCell = document.createElement('td'); const caption = document.createElement('input'); caption.type = 'text'; caption.className = 'form-control'; caption.value = view.caption || ''; caption.placeholder = 'Panel caption'; caption.maxLength = 200; caption.setAttribute('aria-label', 'Caption for ' + view.name);
+      caption.addEventListener('input', () => { view.caption = caption.value.trim().slice(0, 200); renderSavedViews(false); });
+      caption.addEventListener('change', () => remember('figure caption'));
+      captionCell.append(caption); tr.append(captionCell);
+      const orderCell = document.createElement('td'); const order = document.createElement('span'); order.className = 'gpv-builder-order';
+      const move = (delta, label, glyph) => { const button = document.createElement('button'); button.type = 'button'; button.className = 'btn btn-ghost'; button.textContent = glyph; button.setAttribute('aria-label', label + ' ' + view.name); button.disabled = index + delta < 0 || index + delta >= savedViews.length;
+        button.addEventListener('click', () => { remember('figure panel order'); const target = index + delta; [savedViews[index], savedViews[target]] = [savedViews[target], savedViews[index]]; renderSavedViews(); }); return button; };
+      order.append(move(-1, 'Move up', '↑'), move(1, 'Move down', '↓')); orderCell.append(order); tr.append(orderCell);
+      body.append(tr);
+    });
+    const panels = figurePanelsSelected(); const estimate = root.querySelector('#gpv-builder-estimate');
+    root.querySelector('#gpv-contact-sheet').disabled = !panels.length; root.querySelector('#gpv-builder-svg').disabled = !panels.length;
+    if (!savedViews.length) { estimate.textContent = 'Save a view above to start a figure.'; return; }
+    if (!panels.length) { estimate.textContent = 'No view is ticked.'; return; }
+    const layout = figureLayout(panels.length);
+    estimate.textContent = panels.length + ' panel' + (panels.length === 1 ? '' : 's') + ' · ' + layout.columns + ' column' + (layout.columns === 1 ? '' : 's') + ' · ' + layout.width + ' × ' + layout.height + ' px' + (layout.requested.dpi ? ' · ' + layout.requested.mm + ' mm wide at ' + layout.requested.dpi + ' dpi · text ' + layout.requested.points + ' pt' : '') + ' · each panel ' + layout.cellWidth + ' × ' + layout.cellHeight + ' px';
+  }
+  async function downloadFigure(kind) {
+    const panels = figurePanelsSelected();
+    const button = root.querySelector(kind === 'svg' ? '#gpv-builder-svg' : '#gpv-contact-sheet'); const idle = button.textContent;
+    if (!panels.length) { announce('Tick at least one saved view for the figure', 'error'); return; }
+    const layout = figureLayout(panels.length); const options = layout.options; const palette = figurePalette();
+    const done = setBusy('Rendering figure…'); button.disabled = true; button.textContent = 'Rendering…'; await afterPaint();
+    const restore = captureViewState();
+    const canvas = kind === 'png' ? document.createElement('canvas') : null; let context = null;
+    if (canvas) { canvas.width = layout.width; canvas.height = layout.height; context = canvas.getContext('2d'); context.fillStyle = palette.paper; context.fillRect(0, 0, canvas.width, canvas.height); }
+    const parts = []; const scale = figureScale(layout.cellPlan);
+    const svgText = (x, y, size, weight, value) => '<text x="' + f(x) + '" y="' + f(y) + '" dominant-baseline="central" font-family="' + svgFont + '" font-size="' + f(size) + '" font-weight="' + weight + '" fill="' + palette.ink + '">' + svgEscape(value) + '</text>';
+    try {
+      for (let index = 0; index < panels.length; index += 1) {
+        button.textContent = 'Rendering ' + (index + 1) + ' / ' + panels.length + '…'; await afterPaint();
+        applyViewState(panels[index], { panels: false });
+        const x = (index % layout.columns) * layout.cellWidth; const y = Math.floor(index / layout.columns) * (layout.cellHeight + layout.captionHeight);
+        const uri = await renderPublicationImage(null, layout.cellPlan, kind === 'png');
+        const legend = options.legends ? legendItems('figure') : null; const bar = options.legends ? scaleBarSpec(exportViewer, layout.cellPlan) : null;
+        const letter = String.fromCharCode(65 + index); const caption = builderCaption(panels[index], options);
+        const cy = y + layout.cellHeight + layout.captionHeight / 2; let cursor = x + Math.round(layout.cellWidth * 0.025);
+        if (kind === 'png') {
+          context.drawImage(await loadImage(uri), x, y, layout.cellWidth, layout.cellHeight);
+          context.save(); context.translate(x, y);
+          if (legend) drawPlddtLegend(context, Math.round(24 * scale), layout.cellHeight - Math.round(26 * scale), scale, palette);
+          if (bar) drawScaleBar(context, bar, scale, palette);
+          context.restore();
+          context.fillStyle = palette.ink; context.textBaseline = 'middle';
+          if (options.letters) { context.font = '700 ' + Math.round(layout.fontPx * 1.3) + 'px ' + figureFont(); context.fillText(letter, cursor, cy); cursor += context.measureText(letter).width + layout.fontPx * 0.8; }
+          if (caption) { context.font = '500 ' + layout.fontPx + 'px ' + figureFont(); context.fillText(truncateToWidth(context, caption, x + layout.cellWidth - cursor - layout.fontPx), cursor, cy); }
+        } else {
+          parts.push(svgImage(uri, x, y, layout.cellWidth, layout.cellHeight));
+          const overlay = overlaySvg(exportViewer, new Set(displayedEntries().map(entry => entry.id)), layout.cellPlan, false);
+          const inCell = [overlay];
+          if (legend) inCell.push(svgLegend(24 * scale, layout.cellHeight - 26 * scale, scale, palette).markup);
+          if (bar) inCell.push(scaleBarSvg(bar, scale, palette));
+          parts.push('<g transform="translate(' + f(x) + ' ' + f(y) + ')">' + inCell.join('') + '</g>');
+          if (options.letters) { parts.push(svgText(cursor, cy, layout.fontPx * 1.3, 700, letter)); svgMeasure.font = '700 ' + Math.round(layout.fontPx * 1.3) + 'px ' + svgFont; cursor += svgMeasure.measureText(letter).width + layout.fontPx * 0.8; }
+          if (caption) { svgMeasure.font = '500 ' + layout.fontPx + 'px ' + svgFont; parts.push(svgText(cursor, cy, layout.fontPx, 500, truncateToWidth(svgMeasure, caption, x + layout.cellWidth - cursor - layout.fontPx))); }
+        }
+        /* Back to the on-screen state after each panel, so views with synchronized panels do not
+           leave a WebGL context behind per panel (browsers drop the oldest context past their limit). */
+        applyViewState(restore, { panels: false });
+      }
+      const stem = 'protein-figure-' + panels.length + '-panel' + (panels.length === 1 ? '' : 's');
+      if (kind === 'png') downloadBlob(await pngWithDpi(canvas.toDataURL('image/png'), layout.requested.dpi), 'image/png', exportFileName(stem, layout.requested, 'png'));
+      else downloadBlob(svgDocument(layout.width, layout.height, palette.paper, parts.join('\n')), 'image/svg+xml', stem + '.svg');
+      announce('Figure ' + kind.toUpperCase() + ' downloaded · ' + panels.length + ' panel' + (panels.length === 1 ? '' : 's') + ' · ' + layout.width + ' × ' + layout.height + ' px' + (layout.requested.dpi ? ' · ' + layout.requested.mm + ' mm wide at ' + layout.requested.dpi + ' dpi' : ''));
+    } catch (error) {
+      announce('Could not render the figure: ' + error.message, 'error');
+    } finally {
+      releaseExportViewer(); applyViewState(restore, { panels: false }); done(); button.textContent = idle; renderFigureBuilder();
+    }
+  }
+  function downloadContactSheet() { return downloadFigure('png'); }
+  root.querySelector('#gpv-builder-svg').addEventListener('click', () => downloadFigure('svg'));
+  ['#gpv-panel-columns', '#gpv-builder-captions', '#gpv-builder-letters', '#gpv-builder-legends', '#gpv-export-mode', '#gpv-print-width', '#gpv-print-custom', '#gpv-print-dpi', '#gpv-print-aspect', '#gpv-print-text', '#gpv-export-size', '#gpv-export-scale']
+    .forEach(selector => root.querySelector(selector).addEventListener('change', () => renderFigureBuilder()));
 
   function downloadCaptions() {
     const provenance = provenanceValues();

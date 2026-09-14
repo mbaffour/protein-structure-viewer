@@ -940,6 +940,39 @@ await step('six saved views render a contact sheet', async () => {
   await page.click('#gpv-contact-sheet', { noWaitAfter: true });
   console.log('       ' + (await download).suggestedFilename());
 });
+await step('the figure builder composes the ticked views into one lettered figure at the output width, PNG and SVG', async () => {
+  await tab('publish');
+  const rows = page.locator('#gpv-builder-rows tr');
+  if ((await rows.count()) !== 6) throw new Error('builder rows: ' + (await rows.count()));
+  /* Whatever happens below, put the export controls back so the next steps find them. */
+  const restore = async () => { for (const index of [3, 4, 5]) await rows.nth(index).locator('input[type="checkbox"]').check(); await page.selectOption('#gpv-panel-columns', '2'); await page.selectOption('#gpv-export-mode', 'pixels'); await page.waitForTimeout(200); };
+  try {
+  for (const index of [3, 4, 5]) await rows.nth(index).locator('input[type="checkbox"]').uncheck();
+  await rows.nth(2).locator('button[aria-label^="Move up"]').click(); await page.waitForTimeout(200);
+  const order = await page.locator('#gpv-builder-rows th').allTextContents();
+  if (order.slice(0, 3).join('|') !== 'View 1|View 3|View 2') throw new Error('order after move: ' + order.join('|'));
+  const letters = await page.locator('#gpv-builder-rows .gpv-builder-letter').allTextContents();
+  if (letters.join('') !== 'ABC———') throw new Error('letters: ' + letters.join(','));
+  await page.fill('#gpv-builder-rows tr:nth-child(2) input[type="text"]', 'Interface close-up'); await page.waitForTimeout(200);
+  await page.selectOption('#gpv-panel-columns', '3');
+  await page.selectOption('#gpv-export-mode', 'print'); await page.selectOption('#gpv-print-width', '178'); await page.selectOption('#gpv-print-dpi', '300'); await page.selectOption('#gpv-print-text', '8'); await page.waitForTimeout(300);
+  const estimate = (await page.locator('#gpv-builder-estimate').textContent()) || '';
+  if (!/3 panels · 3 columns · 2100 × \d+ px · 178 mm wide at 300 dpi/.test(estimate)) throw new Error('estimate: ' + estimate);
+  const scene = await page.evaluate(() => window.__viewerDebug.sceneSettings().figureBuilder);
+  if (!scene || scene.columns !== '3' || scene.letters !== true) throw new Error('scene builder options: ' + JSON.stringify(scene));
+  const pngDownload = page.waitForEvent('download', { timeout: 300000 }); await page.click('#gpv-contact-sheet');
+  const png = await readFile(await (await pngDownload).path());
+  const width = png.readUInt32BE(16); const height = png.readUInt32BE(20);
+  /* Three 700 px cells in one row at the 3:2 aspect: 466 px of image plus a caption strip of about 79 px. */
+  if (width !== 2100 || height < 500 || height > 620 || !png.includes('pHYs')) throw new Error('figure PNG ' + width + ' × ' + height + (png.includes('pHYs') ? '' : ' without dpi'));
+  const svgDownload = page.waitForEvent('download', { timeout: 300000 }); await page.click('#gpv-builder-svg');
+  const svg = await readFile(await (await svgDownload).path(), 'utf8');
+  const images = (svg.match(/<image /g) || []).length;
+  if (images !== 3 || !/>A</.test(svg) || !/>B</.test(svg) || !/>C</.test(svg) || !/Interface close-up/.test(svg)) throw new Error('figure SVG: ' + images + ' images · ' + svg.slice(0, 120));
+  if (svg.indexOf('View 1') > svg.indexOf('View 3') || svg.indexOf('View 3') > svg.indexOf('View 2')) throw new Error('SVG panel order does not follow the builder');
+  console.log('       3 of 6 views · 3 columns · PNG ' + width + ' × ' + height + ' at 300 dpi · SVG with 3 panels and vector captions');
+  } finally { await restore(); }
+});
 await step('the main viewport survived seven off-screen renders', async () => {
   /* Regression: export used to leak a WebGL context per panel, and browsers
      silently discard the oldest context past their limit — the main one. */

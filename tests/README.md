@@ -88,6 +88,9 @@ PSV_CHROMIUM=/opt/pw-browsers/chromium/chrome-linux/chrome npm test
   changes the varied column's value, keeps the ordering, and the dataset name, the debug hook and the methods text say
   "unweighted"; switching them back on puts "Henikoff & Henikoff, 1994" in the methods text.
 - PAE domains: the panel state and the figure legend call the segmentation a heuristic.
+- Figure builder: with six saved views, unticking three and moving one up gives panels A–C in the order View 1, View 3,
+  View 2; at 178 mm, 300 dpi and three columns the estimate and the PNG are 2100 px wide with a dpi chunk, and the SVG
+  carries three images, the letters, the edited caption and the panels in builder order.
 - Figure labels: the legend's Edit button opens the Publish editor listing the title and both domains; renaming the title
   and D1 changes the on-screen legend (ranges kept), the scene settings, the generated legend text and the SVG export;
   Reset restores the defaults and empties the scene's labels.

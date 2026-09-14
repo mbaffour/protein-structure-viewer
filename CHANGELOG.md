@@ -2,6 +2,24 @@
 
 All notable changes to this project are recorded here.
 
+## 2.26.0
+
+- **Figure builder.** Saved views are now the panels of a figure. Under *Publish → Figure builder* each saved view has
+  an include switch, a panel letter, an editable caption and move up/down buttons; choose the columns (auto, 1–4), the
+  caption style and whether each panel carries its legend and scale bar, and download the figure as PNG (dpi written
+  into the file) or SVG (vector captions, labels, legends and scale bars). Every panel is rendered from its own camera,
+  colour scheme and model selection at the same text size, and the cells are sized so the whole figure is the width
+  chosen under *Output* — a 178 mm figure is 178 mm with two panels or six. The builder options are part of the scene,
+  and which views are included travels with the saved views. It replaces the fixed-size contact sheet.
+- **Fixed: the all-views ZIP drew the wrong legend.** Each view's legend and scale bar were drawn after the on-screen
+  state had been restored, so every file carried the legend of the view on screen rather than its own. The view is now
+  applied first.
+- **Exports no longer eat WebGL contexts.** Every export job used to lose and recreate the off-screen render
+  context, and applying a saved view for an off-screen render recreated the synchronized panel viewers; a session
+  with many exports then hit the browser's context limit (WebKit drops the oldest live context at sixteen, and a lost
+  context still counts until it is collected), which could kill the main view. One export context now lives for the
+  whole session, emptied and shrunk between jobs, and off-screen renders apply everything but the panels.
+
 ## 2.25.0
 
 - **Editable figure labels.** *Edit labels* on the colour legend (or *Publish → Edit figure labels*) opens a table of

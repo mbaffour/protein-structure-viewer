@@ -172,7 +172,8 @@
     root.querySelector('#gpv-video').disabled = structures.length === 0;
     root.querySelector('#gpv-save-scene').disabled = structures.length === 0; root.querySelector('#gpv-save-session').disabled = structures.length === 0;
     root.querySelector('#gpv-save-view').disabled = structures.length === 0;
-    root.querySelector('#gpv-contact-sheet').disabled = savedViews.length === 0;
+    root.querySelector('#gpv-contact-sheet').disabled = !savedViews.some(view => view.inFigure !== false);
+    root.querySelector('#gpv-builder-svg').disabled = !savedViews.some(view => view.inFigure !== false);
     root.querySelector('#gpv-views-zip').disabled = savedViews.length === 0;
     root.querySelector('#gpv-near-run').disabled = structures.length === 0;
     root.querySelector('#gpv-motif-run').disabled = structures.length === 0;

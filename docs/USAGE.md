@@ -465,8 +465,22 @@ at the current output settings — print size, resolution, text size, legend, sc
 figure legend). Large view sets take a while; the button counts progress.
 
 **Saved views.** Save the current camera, model selection, colours, representation, and background
-under a name and caption. Saved views can be reloaded, exported as a multi-panel contact sheet with
-lettered captions, exported as caption text, and followed as a guided tour inside the shared report.
+under a name and caption. Saved views can be reloaded, become the panels of the figure builder,
+be exported as caption text, and be followed as a guided tour inside the shared report.
+
+**Figure builder.** Saved views are the panels. The table under *Figure builder* lists every saved
+view with an include switch, its panel letter, an editable caption and move up/down buttons; the
+letters follow the order of the included views. Choose **Panel columns** (Auto picks a near-square
+grid, or 1 to 4), the **Captions** style (name and caption, name only, caption only, none), and
+whether each panel carries its **legend and scale bar**. **Download figure PNG** renders every
+ticked view from its own camera, colour scheme, model selection and background at the same text
+size, puts the letter and caption in a strip under each cell, and writes the resolution into the
+file; **Download figure SVG** does the same with vector captions, labels, legends and scale bars.
+The cells share the aspect ratio set under *Output* and are sized so the whole figure is exactly the
+chosen figure width: a 178 mm double-column figure stays 178 mm whether it holds two panels or six,
+and the estimate line gives the pixel size of the figure and of each panel before you render. The
+builder options are part of the scene and which views are included travels with the saved views,
+so a session file or share link reproduces the figure.
 
 **Reports.** **Share report** builds a standalone HTML file with the coordinate data embedded —
 including aligned positions if you superposed models, plus labels, measurements, and figure

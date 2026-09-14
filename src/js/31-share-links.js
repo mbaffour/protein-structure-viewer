@@ -137,6 +137,7 @@
     if (typeof settings.fog === 'boolean') root.querySelector('#gpv-fog').checked = settings.fog;
     if (['boxed', 'plain'].includes(settings.labelStyle)) root.querySelector('#gpv-label-style').value = settings.labelStyle;
     setFigureLabels(settings.figureLabels);
+    applyBuilderOptions(settings.figureBuilder);
     if ([0, 50, 70].includes(Number(settings.hideBelow))) root.querySelector('#gpv-hide-below').value = String(Number(settings.hideBelow));
     if (['stick', 'sphere', 'hide'].includes(settings.hetero)) root.querySelector('#gpv-hetero').value = settings.hetero;
     if (['none', 'translucent', 'opaque'].includes(settings.surface)) root.querySelector('#gpv-surface').value = settings.surface;
@@ -398,7 +399,11 @@
     };
   }
 
-  function applyViewState(state) {
+  /* options.panels === false applies everything except the synchronized panels: off-screen
+     exports render the main view only, and rebuilding panel viewers for every rendered view
+     would churn through WebGL contexts until the browser drops the oldest one. */
+  function applyViewState(state, options = {}) {
+    const panels = options.panels !== false;
     const byName = new Map(structures.map(entry => [entry.name, entry]));
     const visibleNames = new Set(state.visibleModels || []);
     structures.forEach(entry => {
@@ -412,15 +417,16 @@
     if (['perspective', 'orthographic'].includes(state.projection)) root.querySelector('#gpv-projection').value = state.projection;
     if (['transparent', 'white', 'dark', 'custom'].includes(state.background)) root.querySelector('#gpv-background').value = state.background;
     if (/^#[0-9a-f]{6}$/i.test(state.backgroundColor || '')) root.querySelector('#gpv-background-color').value = state.backgroundColor;
-    root.querySelector('#gpv-side-by-side').checked = state.sideBySide === true;
+    if (panels) root.querySelector('#gpv-side-by-side').checked = state.sideBySide === true;
     if (['rotation', 'full'].includes(state.syncMode)) root.querySelector('#gpv-sync-mode').value = state.syncMode;
     const left = byName.get(state.leftModel);
-    if (state.sideBySide === true) setComparePanels(legacyPanelNames(state).map(name => byName.get(name)).filter(Boolean));
+    if (panels && state.sideBySide === true) setComparePanels(legacyPanelNames(state).map(name => byName.get(name)).filter(Boolean));
     renderList();
     if (left) root.querySelector('#gpv-left-model').value = String(left.id);
     applyAppearance(); applyStyle();
     if (state.camera && typeof viewer.setView === 'function') viewer.setView(state.camera);
     viewer.render();
+    if (!panels) return;
     const cameras = Array.isArray(state.panelCameras) ? state.panelCameras : [];
     comparePanels.forEach((panel, index) => {
       if (panel.viewer && cameras[index] && typeof panel.viewer.setView === 'function') { panel.viewer.setView(cameras[index]); panel.viewer.render(); }
@@ -428,7 +434,8 @@
     if (!cameras.length) syncViewsFrom(viewer);
   }
 
-  function renderSavedViews() {
+  function renderSavedViews(rebuildFigure = true) {
+    if (rebuildFigure) renderFigureBuilder();
     const list = root.querySelector('#gpv-saved-views'); list.replaceChildren();
     savedViews.forEach((view, index) => {
       const row = document.createElement('div'); row.className = 'gpv-entry';
@@ -503,8 +510,8 @@
      Browsers cap the number of live WebGL contexts (commonly 8–16) and silently
      kill the oldest one past the limit — which used to be the main viewer's.
      A contact sheet created one context per panel, so a 10-panel sheet reliably
-     lost the scene. One reusable surface is created here instead, and released
-     as soon as the export job finishes. */
+     lost the scene. One reusable surface is created here instead and kept for the
+     whole session; releaseExportViewer() only empties and shrinks it. */
   let exportSurface = null;
   let exportViewer = null;
 
@@ -531,20 +538,23 @@
     return exportViewer;
   }
 
+  /* Release after an export job: clear the scene and shrink the surface so the GPU memory
+     goes, but keep the one context alive. Losing and recreating it per job counted against
+     the browser's WebGL context limit (WebKit drops the oldest live context at sixteen, and
+     a lost context still counts until it is garbage-collected), so a session with many
+     exports eventually killed the main view. One export context for the whole session
+     cannot. */
   function releaseExportViewer() {
-    if (!exportSurface) return;
-    const canvas = exportSurface.querySelector('canvas');
-    const context = canvas && (canvas.getContext('webgl2') || canvas.getContext('webgl'));
-    const lose = context && context.getExtension('WEBGL_lose_context');
-    if (lose) lose.loseContext();
-    exportSurface.remove();
-    exportSurface = null;
-    exportViewer = null;
+    if (!exportViewer) return;
+    exportViewer.removeAllModels(); exportViewer.removeAllLabels(); exportViewer.removeAllShapes();
+    if (typeof exportViewer.removeAllSurfaces === 'function') exportViewer.removeAllSurfaces();
+    exportSurface.style.width = '4px'; exportSurface.style.height = '4px';
+    exportViewer.resize();
   }
 
   async function renderPublicationImage(state = null, dimensions = exportDimensions(), overlays = true) {
     const restore = state ? captureViewState() : null;
-    if (state) applyViewState(state);
+    if (state) applyViewState(state, { panels: false });
     const target = acquireExportViewer(dimensions.width, dimensions.height);
     const background = backgroundSpec();
     target.setBackgroundColor(background.color, background.alpha);
@@ -565,7 +575,7 @@
     target.render();
     await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
     const uri = target.pngURI();
-    if (restore) applyViewState(restore);
+    if (restore) applyViewState(restore, { panels: false });
     return uri;
   }
 

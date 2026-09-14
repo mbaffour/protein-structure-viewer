@@ -150,6 +150,14 @@ at output resolution with a caption. Tick the panels you want; unavailable ones 
 The shared HTML report reproduces the outline, depth cueing and faded chains, and shows the
 interface contact map beside the PAE heatmap when one was computed for a model in the report.
 
+## Figure builder
+
+Save a view for each panel you want — an overview, the interface, a zoom — then under
+Publish → *Figure builder* tick the views to include, order them, caption them and choose the
+columns. **Download figure PNG** or **SVG** renders every panel from its own camera and colour
+scheme at the same text size, with its legend and scale bar, and sizes the cells so the whole
+figure is the output width you chose. The SVG keeps captions, labels and legends as text.
+
 ## Publication checklist
 
 The Publish tab lists what a journal or a reviewer would flag about the current figure — pixel

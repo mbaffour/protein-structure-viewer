@@ -41,6 +41,7 @@
     'Annotate → Domains: name a region, pick its colour, and apply it to every model from the same AlphaFold run. Colour by annotated domains paints them and the legend lists them by name — in the viewer, every export and the report.',
     'Publish → Print size exports at a stated width (85 or 178 mm) and resolution (300 or 600 dpi), writes the dpi into the PNG or TIFF, and sizes labels in points — what a journal checks.',
     'Appearance → Colour-blind-safe palette switches chains and domains to Okabe–Ito colours; a scale bar of 10–100 Å goes bottom-right of every export from Publish → Scale bar.',
+    'Publish → Figure builder: save a few views — overview, interface, a zoom — tick them, order them, caption them, and download one lettered figure at the journal width as PNG or SVG.',
     'Edit labels on the colour legend renames the legend title and entries for your figure — "N-lobe" instead of "D1" — on screen, on every export and in the legend text, without touching the data.',
     'Help (?) → How to cite gives the viewer and 3Dmol.js references; each GitHub release is archived on Zenodo with a DOI.',
     'Annotate → Per-residue data: drop a CSV of residue and value columns — conservation, mutational scores, ΔΔG — and colour the structure by it with a gradient legend that states the range.',

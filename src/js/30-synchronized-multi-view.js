@@ -597,6 +597,7 @@
       fog: root.querySelector('#gpv-fog').checked,
       labelStyle: root.querySelector('#gpv-label-style').value,
       figureLabels: { ...figureLabels },
+      figureBuilder: builderOptions(),
       background: root.querySelector('#gpv-background').value,
       backgroundColor: root.querySelector('#gpv-background-color').value,
       hideBelow: hideBelow(),
