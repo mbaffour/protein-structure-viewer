@@ -2,6 +2,13 @@
 
 All notable changes to this project are recorded here.
 
+## 2.27.1
+
+- **Architecture bar: one name per domain, no piled-up numbers.** A domain that the PAE segmentation splits into several
+  runs is named once, on its widest run (the other runs keep the colour); boundary residue numbers that would overlap a
+  number already placed are dropped, the chain ends always stay. Seen on PARP1, where residues 531–691 alternate between
+  two PAE domains.
+
 ## 2.27.0
 
 - **Label domains.** *Annotate → Domains → Label domains* (and *Label domains* beside the PAE domains in Confidence)

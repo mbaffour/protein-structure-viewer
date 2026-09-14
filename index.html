@@ -1629,7 +1629,7 @@ html>body{padding:0}</style>
   let busyDepth = 0;
   let restoreMotion = null;
   const listPageSize = 60;
-  const viewerVersion = '2.27.0';
+  const viewerVersion = '2.27.1';
   const preferenceKey = 'protein-structure-viewer:preferences';
   const themeKey = 'protein-structure-viewer:theme';
   const labelColors = getComputedStyle(root);
@@ -8133,9 +8133,24 @@ applyBackground();
         const left = px(segment.start); const right = Math.min(barEnd, px(segment.end) + unit); const next = row.segments[i + 1];
         measure.font = '600 ' + m.font + 'px ' + figureFont();
         const inside = measure.measureText(segment.item.name).width <= right - left - 4 * scale;
-        return { left, right, item: segment.item, inside, startLabel: segment.start !== row.first ? String(segment.start) : null, endLabel: segment.end !== row.last && !(next && next.start === segment.end + 1) ? String(segment.end) : null };
+        return { left, right, item: segment.item, inside, named: false, startLabel: segment.start !== row.first ? String(segment.start) : null, endLabel: segment.end !== row.last && !(next && next.start === segment.end + 1) ? String(segment.end) : null };
       });
-      rows.push({ y, chain: 'Chain ' + (row.chain || '—'), barStart: px(row.first), barEnd, first: String(row.first), last: String(row.last), boxes });
+      /* A domain split into several runs is named once, on its widest run; the other runs keep the
+         colour, which the legend resolves. Boundary numbers that would overlap a number already
+         placed are dropped — the chain ends always stay. */
+      const widest = new Map(); boxes.forEach(box => { const current = widest.get(box.item); if (!current || box.right - box.left > current.right - current.left) widest.set(box.item, box); });
+      widest.forEach(box => { box.named = true; });
+      measure.font = '400 ' + m.small + 'px ' + figureFont();
+      const candidates = [{ x: px(row.first), text: String(row.first), anchor: 'start', fixed: true }, { x: barEnd, text: String(row.last), anchor: 'end', fixed: true }];
+      boxes.forEach(box => { if (box.startLabel) candidates.push({ x: box.left, text: box.startLabel, anchor: 'middle' }); if (box.endLabel) candidates.push({ x: box.right, text: box.endLabel, anchor: 'middle' }); });
+      const placed = []; const gap = 3 * scale;
+      const extent = candidate => { const w = measure.measureText(candidate.text).width; const left = candidate.anchor === 'start' ? candidate.x : candidate.anchor === 'end' ? candidate.x - w : candidate.x - w / 2; return [left, left + w]; };
+      [...candidates.filter(c => c.fixed), ...candidates.filter(c => !c.fixed).sort((a, b) => a.x - b.x)].forEach(candidate => {
+        const [left, right] = extent(candidate);
+        if (placed.some(([l, r]) => left < r + gap && right > l - gap)) return;
+        placed.push([left, right]); candidate.keep = true;
+      });
+      rows.push({ y, chain: 'Chain ' + (row.chain || '—'), barStart: px(row.first), barEnd, boxes, numbers: candidates.filter(c => c.keep) });
     });
     return { m, rows };
   }
@@ -8146,17 +8161,14 @@ applyBackground();
       context.fillStyle = palette.ink; context.textAlign = 'left'; context.font = '500 ' + m.font + 'px ' + figureFont();
       context.fillText(truncateToWidth(context, row.chain, m.labelWidth), x0, row.y);
       context.globalAlpha = 0.35; context.fillRect(row.barStart, row.y - Math.max(1, Math.round(1.5 * scale)), row.barEnd - row.barStart, Math.max(2, Math.round(3 * scale))); context.globalAlpha = 1;
-      context.font = '400 ' + m.small + 'px ' + figureFont();
-      context.textAlign = 'left'; context.fillText(row.first, row.barStart, row.y + m.box / 2 + m.small);
-      context.textAlign = 'right'; context.fillText(row.last, row.barEnd, row.y + m.box / 2 + m.small);
+      context.fillStyle = palette.ink; context.font = '400 ' + m.small + 'px ' + figureFont();
+      row.numbers.forEach(number => { context.textAlign = number.anchor === 'start' ? 'left' : number.anchor === 'end' ? 'right' : 'center'; context.fillText(number.text, number.x, row.y + m.box / 2 + m.small); });
       row.boxes.forEach(box => {
         context.fillStyle = box.item.color; context.fillRect(box.left, row.y - m.box / 2, box.right - box.left, m.box);
+        if (!box.named) return;
         context.textAlign = 'center';
         if (box.inside) { context.fillStyle = hexLuminance(box.item.color) > 0.6 ? '#111827' : '#ffffff'; context.font = '600 ' + m.font + 'px ' + figureFont(); context.fillText(box.item.name, (box.left + box.right) / 2, row.y); }
         else { context.fillStyle = palette.ink; context.font = '500 ' + m.small + 'px ' + figureFont(); context.fillText(truncateToWidth(context, box.item.name, Math.max(box.right - box.left + 24 * scale, 40 * scale)), (box.left + box.right) / 2, row.y - m.box / 2 - m.small * 0.8); }
-        context.fillStyle = palette.ink; context.font = '400 ' + m.small + 'px ' + figureFont();
-        if (box.startLabel) context.fillText(box.startLabel, box.left, row.y + m.box / 2 + m.small);
-        if (box.endLabel) context.fillText(box.endLabel, box.right, row.y + m.box / 2 + m.small);
       });
     });
     context.restore();
@@ -8169,14 +8181,12 @@ applyBackground();
     rows.forEach(row => {
       parts.push(text(x0, row.y, m.font, 500, 'start', palette.ink, row.chain));
       parts.push('<rect x="' + f(row.barStart) + '" y="' + f(row.y - Math.max(1, 1.5 * scale)) + '" width="' + f(row.barEnd - row.barStart) + '" height="' + f(Math.max(2, 3 * scale)) + '" fill="' + palette.ink + '" fill-opacity="0.35"/>');
-      parts.push(text(row.barStart, row.y + m.box / 2 + m.small, m.small, 400, 'start', palette.ink, row.first));
-      parts.push(text(row.barEnd, row.y + m.box / 2 + m.small, m.small, 400, 'end', palette.ink, row.last));
+      row.numbers.forEach(number => parts.push(text(number.x, row.y + m.box / 2 + m.small, m.small, 400, number.anchor, palette.ink, number.text)));
       row.boxes.forEach(box => {
         parts.push('<rect x="' + f(box.left) + '" y="' + f(row.y - m.box / 2) + '" width="' + f(box.right - box.left) + '" height="' + f(m.box) + '" fill="' + box.item.color + '"/>');
+        if (!box.named) return;
         if (box.inside) parts.push(text((box.left + box.right) / 2, row.y, m.font, 600, 'middle', hexLuminance(box.item.color) > 0.6 ? '#111827' : '#ffffff', box.item.name));
         else { svgMeasure.font = '500 ' + m.small + 'px ' + svgFont; parts.push(text((box.left + box.right) / 2, row.y - m.box / 2 - m.small * 0.8, m.small, 500, 'middle', palette.ink, truncateToWidth(svgMeasure, box.item.name, Math.max(box.right - box.left + 24 * scale, 40 * scale)))); }
-        if (box.startLabel) parts.push(text(box.left, row.y + m.box / 2 + m.small, m.small, 400, 'middle', palette.ink, box.startLabel));
-        if (box.endLabel) parts.push(text(box.right, row.y + m.box / 2 + m.small, m.small, 400, 'middle', palette.ink, box.endLabel));
       });
     });
     parts.push('</g>');
