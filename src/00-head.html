@@ -994,6 +994,12 @@ html>body{padding:0}</style>
       <button class="btn" type="button" id="gpv-domain-paint" disabled data-tooltip="Switch the colour scheme to annotated domains">Colour by annotated domains</button>
       <button class="btn btn-ghost" type="button" id="gpv-clear-domains">Clear domains</button>
     </div>
+    <div class="viz-controls">
+      <button class="btn" type="button" id="gpv-domain-labels" disabled data-tooltip="Write each domain's name on the structure: one residue label at the Cα nearest the domain's centroid, in the domain colour, using the legend's names">Label domains</button>
+      <button class="btn btn-ghost" type="button" id="gpv-domain-labels-clear" data-tooltip="Remove the labels that Label domains placed; other labels stay">Clear domain labels</button>
+      <button class="btn" type="button" id="gpv-architecture-png" disabled data-tooltip="The linear domain diagram — one row per chain, coloured boxes with names and boundary residue numbers — at the output width and resolution">Download architecture PNG</button>
+      <button class="btn" type="button" id="gpv-architecture-svg" disabled data-tooltip="The same diagram as editable vector graphics">Download architecture SVG</button>
+    </div>
     <div class="gpv-list" id="gpv-domain-list" aria-label="Annotated domains"></div>
     <h3 class="gpv-subheading">Per-residue data</h3>
     <p class="text-muted text-small gpv-hint">Map your own numbers onto the structure — conservation, deep mutational scores, ΔΔG, coverage. A table with residue and value columns (chain optional) as CSV or TSV, chosen or pasted. Colour by per-residue data paints the values with a gradient legend, and the sequence strip follows.</p>
@@ -1087,7 +1093,7 @@ html>body{padding:0}</style>
       <label class="form-label">PAE cutoff<select class="form-select" id="gpv-domain-cutoff"><option value="4">4 Å (strict)</option><option value="6" selected>6 Å</option><option value="8">8 Å (loose)</option></select></label>
       <button class="btn" type="button" id="gpv-domain-run" disabled>Find domains</button>
       <button class="btn" type="button" id="gpv-domain-color" disabled data-tooltip="Switch the colour scheme to PAE domains">Colour by domains</button>
-      <button class="btn" type="button" id="gpv-domain-highlight" disabled data-tooltip="Add one highlight selection per domain, in the domain colours">Highlight all</button>
+      <button class="btn" type="button" id="gpv-domain-highlight" disabled data-tooltip="Add one highlight selection per domain, in the domain colours">Highlight all</button><button class="btn" type="button" id="gpv-pae-domain-labels" disabled data-tooltip="Write each PAE domain's name on the structure at the domain's centroid, in its colour">Label domains</button>
       <span class="text-muted text-small" id="gpv-domain-state">Show a model with a PAE matrix, then find its domains (heuristic).</span>
     </div>
     <div class="table-responsive" id="gpv-domain-wrap" hidden><table class="table table-sm" aria-label="PAE-derived domains of the current model"><thead><tr><th>Domain</th><th>Residues</th><th class="text-end">Count</th><th class="text-end">Mean PAE within (Å)</th><th></th></tr></thead><tbody id="gpv-domain-rows"></tbody></table></div>
@@ -1139,6 +1145,7 @@ html>body{padding:0}</style>
       <label class="form-check form-switch"><input class="form-check-input" id="gpv-composite-pae" type="checkbox" checked><span class="form-check-label">PAE heatmap</span></label>
       <label class="form-check form-switch"><input class="form-check-input" id="gpv-composite-profile" type="checkbox" checked><span class="form-check-label">pLDDT profile</span></label>
       <label class="form-check form-switch"><input class="form-check-input" id="gpv-composite-contacts" type="checkbox" checked><span class="form-check-label">Contact map</span></label>
+      <label class="form-check form-switch"><input class="form-check-input" id="gpv-composite-architecture" type="checkbox" checked><span class="form-check-label">Domain architecture</span></label>
       <label class="form-label">Columns<select class="form-select" id="gpv-composite-columns"><option value="1">1</option><option value="2" selected>2</option><option value="3">3</option></select></label>
       <button class="btn" type="button" id="gpv-composite" disabled data-tooltip="One lettered figure at the chosen print size: the 3D view first, then the confidence panels you tick — the PAE heatmap, the pLDDT profile and the contact map when they are available">Download composite figure</button>
       <button class="btn" type="button" id="gpv-compare-svg" disabled data-tooltip="The stitched comparison figure with vector captions and annotations">Download comparison SVG</button>
@@ -1191,6 +1198,7 @@ html>body{padding:0}</style>
       <label class="form-label">Captions<select class="form-select" id="gpv-builder-captions"><option value="both" selected>Name and caption</option><option value="name">Name only</option><option value="caption">Caption only</option><option value="none">None</option></select></label>
       <label class="form-check form-switch"><input class="form-check-input" id="gpv-builder-letters" type="checkbox" checked><span class="form-check-label">Panel letters</span></label>
       <label class="form-check form-switch"><input class="form-check-input" id="gpv-builder-legends" type="checkbox" checked><span class="form-check-label">Legend and scale bar on each panel</span></label>
+      <label class="form-check form-switch"><input class="form-check-input" id="gpv-builder-architecture" type="checkbox"><span class="form-check-label">Domain architecture row under the panels</span></label>
       <button class="btn" type="button" id="gpv-contact-sheet" disabled data-tooltip="One lettered figure of the ticked views at the chosen output width and resolution, dpi written into the file">Download figure PNG</button>
       <button class="btn" type="button" id="gpv-builder-svg" disabled data-tooltip="The same figure with vector captions, labels, legends and scale bars — editable in Illustrator or Inkscape">Download figure SVG</button>
       <span class="text-muted text-small" id="gpv-builder-estimate"></span>
@@ -1253,6 +1261,7 @@ html>body{padding:0}</style>
       </ul>
       <h3>Tips for figures and reviewers</h3>
       <ul>
+        <li><em>Label domains</em> (Annotate → Domains, or beside the PAE domains) writes each domain's name on the structure at its centroid, in the domain colour and with the legend's names; <em>Download architecture PNG/SVG</em> draws the linear domain diagram — one row per chain, coloured boxes with names and boundary residue numbers — which is also a composite-figure panel and an optional row under the panels of the figure builder.</li>
         <li><em>Publish → Figure builder</em> turns saved views into the panels of one lettered figure: tick the views to include, order them, caption each, choose the columns, and download PNG or SVG at the output width and resolution — each panel rendered from its own camera and colour scheme at the same text size, with its legend and scale bar. The figure is as wide as the chosen figure width however many panels it has.</li>
         <li><em>Edit labels</em> on the colour legend (or <em>Publish → Edit figure labels</em>) renames the legend title and entries as they will read on the figure — "N-lobe" for a PAE domain, a protein name for an entity — on screen, on every PNG, TIFF and SVG export and in the generated legend text; the data are untouched and the names travel with the scene.</li>
         <li><em>Publish → Write methods text</em> drafts a Methods paragraph stating exactly how the numbers on screen were computed (superposition, RMSD, RMSF, domains, contacts, dimensions, colour scales); every definition is cross-checked against Biopython in the repository's <code>VALIDATION.md</code>.</li>

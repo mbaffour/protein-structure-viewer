@@ -798,6 +798,35 @@ await step('PAE domains are found from a block-diagonal matrix', async () => {
   if ((await page.locator('#gpv-selection-list .gpv-entry').count()) !== before + 2) throw new Error('highlight all did not add two selections');
   await tab('appearance'); await page.selectOption('#gpv-color-mode', 'plddt'); await page.waitForTimeout(300); await tab('confidence');
 });
+await step('domain labels sit at the domain centroids and the architecture bar exports as SVG and PNG', async () => {
+  await tab('confidence');
+  const before = await page.locator('#gpv-label-list .gpv-entry').count();
+  await page.click('#gpv-pae-domain-labels'); await page.waitForTimeout(500);
+  const texts = await page.locator('#gpv-label-list .gpv-entry input[type="text"]').evaluateAll(inputs => inputs.map(input => input.value));
+  if ((await page.locator('#gpv-label-list .gpv-entry').count()) !== before + 2 || !texts.includes('D1') || !texts.includes('D2')) throw new Error('domain labels: ' + JSON.stringify(texts));
+  const state = (await page.locator('#gpv-state').textContent()) || '';
+  if (!/2 domain labels placed at the domain centroids/.test(state)) throw new Error('state: ' + state);
+  const model = await page.evaluate(() => { const d = window.__viewerDebug; const m = d.architectureModel(d.activeEntry()); return m && { source: m.source, chains: m.chains.map(row => row.chain + ':' + row.first + '-' + row.last + ':' + row.segments.map(s => s.item.name + s.start + '-' + s.end).join(',')) }; });
+  if (!model || model.source !== 'pae' || model.chains.length !== 2 || model.chains[0] !== 'A:1-30:D11-30' || model.chains[1] !== 'B:1-30:D21-30') throw new Error('architecture model: ' + JSON.stringify(model));
+  await tab('annotate');
+  let download = page.waitForEvent('download', { timeout: 120000 }); await page.click('#gpv-architecture-svg');
+  const svg = await readFile(await (await download).path(), 'utf8');
+  if (!/id="architecture"/.test(svg) || !/>Chain A</.test(svg) || !/>Chain B</.test(svg) || !/>D1</.test(svg) || !/>D2</.test(svg) || !/>30</.test(svg)) throw new Error('architecture SVG lacks rows, names or residue numbers');
+  const estimate = (await page.locator('#gpv-export-estimate').textContent()) || ''; const expectedWidth = Number((estimate.match(/^(\d+) ×/) || [])[1]);
+  download = page.waitForEvent('download', { timeout: 120000 }); await page.click('#gpv-architecture-png');
+  const png = await readFile(await (await download).path());
+  if (png.readUInt32BE(16) !== expectedWidth || png.readUInt32BE(20) < 60) throw new Error('architecture PNG ' + png.readUInt32BE(16) + ' × ' + png.readUInt32BE(20) + ' for an estimate of ' + estimate);
+  await tab('publish');
+  if (await page.locator('#gpv-composite-architecture').isDisabled()) throw new Error('the composite figure does not offer the architecture panel although domains exist');
+  await page.check('#gpv-builder-architecture'); await page.waitForTimeout(200);
+  const builderState = (await page.locator('#gpv-builder-estimate').textContent()) || '';
+  if (!/Save a view|architecture row/.test(builderState)) throw new Error('builder estimate: ' + builderState);
+  await page.uncheck('#gpv-builder-architecture');
+  await tab('annotate'); await page.click('#gpv-domain-labels-clear'); await page.waitForTimeout(300);
+  if ((await page.locator('#gpv-label-list .gpv-entry').count()) !== before) throw new Error('clear domain labels left ' + (await page.locator('#gpv-label-list .gpv-entry').count()) + ' labels');
+  await tab('confidence');
+  console.log('       D1 and D2 labelled at their centroids · architecture bar: 2 chains, SVG rows and numbers, PNG ' + expectedWidth + ' px wide');
+});
 await step('figure labels rename the legend on screen, in the SVG, in the legend text and in the scene', async () => {
   await tab('appearance'); await page.selectOption('#gpv-color-mode', 'domain'); await page.waitForTimeout(400);
   await page.click('#gpv-legend-edit'); await page.waitForTimeout(400);

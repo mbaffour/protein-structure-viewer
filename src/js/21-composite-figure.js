@@ -8,13 +8,14 @@
     return {
       pae: Boolean(entry && entry.confidence && Array.isArray(entry.confidence.pae) && entry.confidence.pae.length),
       profile: shown.some(item => item.scores.length),
-      contacts: Boolean(contactResult && entry && contactResult.entryId === entry.id && contactResult.pairs.size)
+      contacts: Boolean(contactResult && entry && contactResult.entryId === entry.id && contactResult.pairs.size),
+      architecture: Boolean(entry && architectureModel(entry))
     };
   }
 
   function renderCompositeControls() {
     const available = compositeAvailability();
-    [['#gpv-composite-pae', available.pae], ['#gpv-composite-profile', available.profile], ['#gpv-composite-contacts', available.contacts]].forEach(([selector, ok]) => {
+    [['#gpv-composite-pae', available.pae], ['#gpv-composite-profile', available.profile], ['#gpv-composite-contacts', available.contacts], ['#gpv-composite-architecture', available.architecture]].forEach(([selector, ok]) => {
       const control = root.querySelector(selector); control.disabled = !ok; control.closest('label').title = ok ? '' : 'Not available for the current model';
     });
     root.querySelector('#gpv-composite').disabled = structures.length === 0;
@@ -53,7 +54,8 @@
     const wanted = {
       pae: available.pae && root.querySelector('#gpv-composite-pae').checked,
       profile: available.profile && root.querySelector('#gpv-composite-profile').checked,
-      contacts: available.contacts && root.querySelector('#gpv-composite-contacts').checked
+      contacts: available.contacts && root.querySelector('#gpv-composite-contacts').checked,
+      architecture: available.architecture && root.querySelector('#gpv-composite-architecture').checked
     };
     const columns = Math.max(1, Math.min(3, Number(root.querySelector('#gpv-composite-columns').value) || 2));
     const count = 1 + Object.values(wanted).filter(Boolean).length;
@@ -76,6 +78,13 @@
         if (profile) { const image = await loadImage('data:image/svg+xml;charset=utf-8,' + encodeURIComponent(profile.svg)); panels.push({ image, caption: 'Per-residue pLDDT' + (displayedEntries().filter(item => item.scores.length).length > 1 ? ' of the displayed models' : ''), aspect: profile.width / profile.height }); }
       }
       if (wanted.contacts) { const canvas = document.createElement('canvas'); drawContactMap(canvas, true, Math.max(1, Math.round(cell / 600 * 2))); panels.push({ image: canvas, caption: 'Contacts between chains ' + (contactResult.chainA || '—') + ' and ' + (contactResult.chainB || '—') + ' within ' + contactResult.cutoff + ' Å' }); }
+      if (wanted.architecture) {
+        const model = architectureModel(entry); const scale = figureScale(panelPlan); const pad = Math.round(16 * scale);
+        const canvasA = document.createElement('canvas'); canvasA.width = cell; canvasA.height = architectureHeight(model, scale) + pad * 2;
+        const contextA = canvasA.getContext('2d'); contextA.fillStyle = palette.paper; contextA.fillRect(0, 0, canvasA.width, canvasA.height);
+        drawArchitecture(contextA, pad, pad, cell - pad * 2, model, scale, palette);
+        panels.push({ image: canvasA, caption: 'Domain architecture (' + (model.source === 'pae' ? 'PAE domains, heuristic' : 'annotated domains') + ')' });
+      }
       const canvas = document.createElement('canvas');
       canvas.width = columns * cell; canvas.height = rows * (cellHeight + captionHeight);
       const context = canvas.getContext('2d');

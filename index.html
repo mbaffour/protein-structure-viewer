@@ -994,6 +994,12 @@ html>body{padding:0}</style>
       <button class="btn" type="button" id="gpv-domain-paint" disabled data-tooltip="Switch the colour scheme to annotated domains">Colour by annotated domains</button>
       <button class="btn btn-ghost" type="button" id="gpv-clear-domains">Clear domains</button>
     </div>
+    <div class="viz-controls">
+      <button class="btn" type="button" id="gpv-domain-labels" disabled data-tooltip="Write each domain's name on the structure: one residue label at the Cα nearest the domain's centroid, in the domain colour, using the legend's names">Label domains</button>
+      <button class="btn btn-ghost" type="button" id="gpv-domain-labels-clear" data-tooltip="Remove the labels that Label domains placed; other labels stay">Clear domain labels</button>
+      <button class="btn" type="button" id="gpv-architecture-png" disabled data-tooltip="The linear domain diagram — one row per chain, coloured boxes with names and boundary residue numbers — at the output width and resolution">Download architecture PNG</button>
+      <button class="btn" type="button" id="gpv-architecture-svg" disabled data-tooltip="The same diagram as editable vector graphics">Download architecture SVG</button>
+    </div>
     <div class="gpv-list" id="gpv-domain-list" aria-label="Annotated domains"></div>
     <h3 class="gpv-subheading">Per-residue data</h3>
     <p class="text-muted text-small gpv-hint">Map your own numbers onto the structure — conservation, deep mutational scores, ΔΔG, coverage. A table with residue and value columns (chain optional) as CSV or TSV, chosen or pasted. Colour by per-residue data paints the values with a gradient legend, and the sequence strip follows.</p>
@@ -1087,7 +1093,7 @@ html>body{padding:0}</style>
       <label class="form-label">PAE cutoff<select class="form-select" id="gpv-domain-cutoff"><option value="4">4 Å (strict)</option><option value="6" selected>6 Å</option><option value="8">8 Å (loose)</option></select></label>
       <button class="btn" type="button" id="gpv-domain-run" disabled>Find domains</button>
       <button class="btn" type="button" id="gpv-domain-color" disabled data-tooltip="Switch the colour scheme to PAE domains">Colour by domains</button>
-      <button class="btn" type="button" id="gpv-domain-highlight" disabled data-tooltip="Add one highlight selection per domain, in the domain colours">Highlight all</button>
+      <button class="btn" type="button" id="gpv-domain-highlight" disabled data-tooltip="Add one highlight selection per domain, in the domain colours">Highlight all</button><button class="btn" type="button" id="gpv-pae-domain-labels" disabled data-tooltip="Write each PAE domain's name on the structure at the domain's centroid, in its colour">Label domains</button>
       <span class="text-muted text-small" id="gpv-domain-state">Show a model with a PAE matrix, then find its domains (heuristic).</span>
     </div>
     <div class="table-responsive" id="gpv-domain-wrap" hidden><table class="table table-sm" aria-label="PAE-derived domains of the current model"><thead><tr><th>Domain</th><th>Residues</th><th class="text-end">Count</th><th class="text-end">Mean PAE within (Å)</th><th></th></tr></thead><tbody id="gpv-domain-rows"></tbody></table></div>
@@ -1139,6 +1145,7 @@ html>body{padding:0}</style>
       <label class="form-check form-switch"><input class="form-check-input" id="gpv-composite-pae" type="checkbox" checked><span class="form-check-label">PAE heatmap</span></label>
       <label class="form-check form-switch"><input class="form-check-input" id="gpv-composite-profile" type="checkbox" checked><span class="form-check-label">pLDDT profile</span></label>
       <label class="form-check form-switch"><input class="form-check-input" id="gpv-composite-contacts" type="checkbox" checked><span class="form-check-label">Contact map</span></label>
+      <label class="form-check form-switch"><input class="form-check-input" id="gpv-composite-architecture" type="checkbox" checked><span class="form-check-label">Domain architecture</span></label>
       <label class="form-label">Columns<select class="form-select" id="gpv-composite-columns"><option value="1">1</option><option value="2" selected>2</option><option value="3">3</option></select></label>
       <button class="btn" type="button" id="gpv-composite" disabled data-tooltip="One lettered figure at the chosen print size: the 3D view first, then the confidence panels you tick — the PAE heatmap, the pLDDT profile and the contact map when they are available">Download composite figure</button>
       <button class="btn" type="button" id="gpv-compare-svg" disabled data-tooltip="The stitched comparison figure with vector captions and annotations">Download comparison SVG</button>
@@ -1191,6 +1198,7 @@ html>body{padding:0}</style>
       <label class="form-label">Captions<select class="form-select" id="gpv-builder-captions"><option value="both" selected>Name and caption</option><option value="name">Name only</option><option value="caption">Caption only</option><option value="none">None</option></select></label>
       <label class="form-check form-switch"><input class="form-check-input" id="gpv-builder-letters" type="checkbox" checked><span class="form-check-label">Panel letters</span></label>
       <label class="form-check form-switch"><input class="form-check-input" id="gpv-builder-legends" type="checkbox" checked><span class="form-check-label">Legend and scale bar on each panel</span></label>
+      <label class="form-check form-switch"><input class="form-check-input" id="gpv-builder-architecture" type="checkbox"><span class="form-check-label">Domain architecture row under the panels</span></label>
       <button class="btn" type="button" id="gpv-contact-sheet" disabled data-tooltip="One lettered figure of the ticked views at the chosen output width and resolution, dpi written into the file">Download figure PNG</button>
       <button class="btn" type="button" id="gpv-builder-svg" disabled data-tooltip="The same figure with vector captions, labels, legends and scale bars — editable in Illustrator or Inkscape">Download figure SVG</button>
       <span class="text-muted text-small" id="gpv-builder-estimate"></span>
@@ -1253,6 +1261,7 @@ html>body{padding:0}</style>
       </ul>
       <h3>Tips for figures and reviewers</h3>
       <ul>
+        <li><em>Label domains</em> (Annotate → Domains, or beside the PAE domains) writes each domain's name on the structure at its centroid, in the domain colour and with the legend's names; <em>Download architecture PNG/SVG</em> draws the linear domain diagram — one row per chain, coloured boxes with names and boundary residue numbers — which is also a composite-figure panel and an optional row under the panels of the figure builder.</li>
         <li><em>Publish → Figure builder</em> turns saved views into the panels of one lettered figure: tick the views to include, order them, caption each, choose the columns, and download PNG or SVG at the output width and resolution — each panel rendered from its own camera and colour scheme at the same text size, with its legend and scale bar. The figure is as wide as the chosen figure width however many panels it has.</li>
         <li><em>Edit labels</em> on the colour legend (or <em>Publish → Edit figure labels</em>) renames the legend title and entries as they will read on the figure — "N-lobe" for a PAE domain, a protein name for an entity — on screen, on every PNG, TIFF and SVG export and in the generated legend text; the data are untouched and the names travel with the scene.</li>
         <li><em>Publish → Write methods text</em> drafts a Methods paragraph stating exactly how the numbers on screen were computed (superposition, RMSD, RMSF, domains, contacts, dimensions, colour scales); every definition is cross-checked against Biopython in the repository's <code>VALIDATION.md</code>.</li>
@@ -1620,7 +1629,7 @@ html>body{padding:0}</style>
   let busyDepth = 0;
   let restoreMotion = null;
   const listPageSize = 60;
-  const viewerVersion = '2.26.1';
+  const viewerVersion = '2.27.0';
   const preferenceKey = 'protein-structure-viewer:preferences';
   const themeKey = 'protein-structure-viewer:theme';
   const labelColors = getComputedStyle(root);
@@ -2392,6 +2401,7 @@ html>body{padding:0}</style>
     root.querySelector('#gpv-data-apply').disabled = structures.length === 0;
     scheduleSessionSave();
     root.querySelector('#gpv-captions').disabled = savedViews.length === 0;
+    ['#gpv-domain-labels', '#gpv-pae-domain-labels', '#gpv-architecture-png', '#gpv-architecture-svg'].forEach(selector => { root.querySelector(selector).disabled = structures.length === 0; });
     updateReportEstimate();
     ['#gpv-current', '#gpv-reference', '#gpv-selection-model', '#gpv-left-model', '#gpv-previous', '#gpv-next', '#gpv-cycle', '#gpv-align', '#gpv-restore', '#gpv-add-selection', '#gpv-annotate', '#gpv-add-screen-text', '#gpv-interface-model', '#gpv-interface-run'].forEach(selector => {
       root.querySelector(selector).disabled = structures.length === 0;
@@ -4662,13 +4672,14 @@ html>body{padding:0}</style>
     return {
       pae: Boolean(entry && entry.confidence && Array.isArray(entry.confidence.pae) && entry.confidence.pae.length),
       profile: shown.some(item => item.scores.length),
-      contacts: Boolean(contactResult && entry && contactResult.entryId === entry.id && contactResult.pairs.size)
+      contacts: Boolean(contactResult && entry && contactResult.entryId === entry.id && contactResult.pairs.size),
+      architecture: Boolean(entry && architectureModel(entry))
     };
   }
 
   function renderCompositeControls() {
     const available = compositeAvailability();
-    [['#gpv-composite-pae', available.pae], ['#gpv-composite-profile', available.profile], ['#gpv-composite-contacts', available.contacts]].forEach(([selector, ok]) => {
+    [['#gpv-composite-pae', available.pae], ['#gpv-composite-profile', available.profile], ['#gpv-composite-contacts', available.contacts], ['#gpv-composite-architecture', available.architecture]].forEach(([selector, ok]) => {
       const control = root.querySelector(selector); control.disabled = !ok; control.closest('label').title = ok ? '' : 'Not available for the current model';
     });
     root.querySelector('#gpv-composite').disabled = structures.length === 0;
@@ -4707,7 +4718,8 @@ html>body{padding:0}</style>
     const wanted = {
       pae: available.pae && root.querySelector('#gpv-composite-pae').checked,
       profile: available.profile && root.querySelector('#gpv-composite-profile').checked,
-      contacts: available.contacts && root.querySelector('#gpv-composite-contacts').checked
+      contacts: available.contacts && root.querySelector('#gpv-composite-contacts').checked,
+      architecture: available.architecture && root.querySelector('#gpv-composite-architecture').checked
     };
     const columns = Math.max(1, Math.min(3, Number(root.querySelector('#gpv-composite-columns').value) || 2));
     const count = 1 + Object.values(wanted).filter(Boolean).length;
@@ -4730,6 +4742,13 @@ html>body{padding:0}</style>
         if (profile) { const image = await loadImage('data:image/svg+xml;charset=utf-8,' + encodeURIComponent(profile.svg)); panels.push({ image, caption: 'Per-residue pLDDT' + (displayedEntries().filter(item => item.scores.length).length > 1 ? ' of the displayed models' : ''), aspect: profile.width / profile.height }); }
       }
       if (wanted.contacts) { const canvas = document.createElement('canvas'); drawContactMap(canvas, true, Math.max(1, Math.round(cell / 600 * 2))); panels.push({ image: canvas, caption: 'Contacts between chains ' + (contactResult.chainA || '—') + ' and ' + (contactResult.chainB || '—') + ' within ' + contactResult.cutoff + ' Å' }); }
+      if (wanted.architecture) {
+        const model = architectureModel(entry); const scale = figureScale(panelPlan); const pad = Math.round(16 * scale);
+        const canvasA = document.createElement('canvas'); canvasA.width = cell; canvasA.height = architectureHeight(model, scale) + pad * 2;
+        const contextA = canvasA.getContext('2d'); contextA.fillStyle = palette.paper; contextA.fillRect(0, 0, canvasA.width, canvasA.height);
+        drawArchitecture(contextA, pad, pad, cell - pad * 2, model, scale, palette);
+        panels.push({ image: canvasA, caption: 'Domain architecture (' + (model.source === 'pae' ? 'PAE domains, heuristic' : 'annotated domains') + ')' });
+      }
       const canvas = document.createElement('canvas');
       canvas.width = columns * cell; canvas.height = rows * (cellHeight + captionHeight);
       const context = canvas.getContext('2d');
@@ -5881,7 +5900,7 @@ html>body{padding:0}</style>
     const keptPoints = record => record.points.every(point => keep(point.entryId));
     const point = item => ({ model: nameOf(item.entryId), chain: item.chain, resi: item.resi, atom: item.atom, index: item.index });
     return {
-      labels: labelRecords.filter(kept).map(label => ({ model: nameOf(label.entryId), chain: label.chain, resi: label.resi, atom: label.atom, text: label.text, color: label.color, size: label.size })),
+      labels: labelRecords.filter(kept).map(label => ({ model: nameOf(label.entryId), chain: label.chain, resi: label.resi, atom: label.atom, text: label.text, color: label.color, size: label.size, ...(label.kind === 'domain' ? { kind: 'domain' } : {}) })),
       selections: selectionRecords.filter(kept).map(record => ({ model: nameOf(record.entryId), chain: record.chain, residues: record.residues, action: record.action, color: record.color })),
       measurements: measurementRecords.filter(keptPoints).map(record => ({ type: record.type, points: record.points.map(point) })),
       residueData: residueData && (residueData.scope === 'all' || keep(residueData.entryId)) ? { name: residueData.name, scale: residueData.scale, scope: residueData.scope, model: nameOf(residueData.entryId), rows: [...residueData.values.entries()].map(([key, value]) => [key.split('|')[0], Number(key.split('|')[1]), value]).concat([...residueData.byResi.entries()].map(([resi, value]) => ['', resi, value])) } : null,
@@ -6070,7 +6089,7 @@ html>body{padding:0}</style>
       if (!entry) return null;
       const atom = entry.atoms.find(item => (item.chain || '') === (label.chain || '') && item.resi === label.resi && (item.atom === label.atom || item.atom === 'CA'));
       if (!atom) return null;
-      return { entryId: entry.id, chain: label.chain || '', resi: label.resi, atom: label.atom || 'CA', resn: atom.resn, x: atom.x, y: atom.y, z: atom.z, key: residueKey(entry.id, label.chain, label.resi), text: label.text, color: /^#[0-9a-f]{6}$/i.test(label.color || '') ? label.color : undefined, size: labelSizes.some(([value]) => value === Number(label.size)) ? Number(label.size) : undefined };
+      return { entryId: entry.id, chain: label.chain || '', resi: label.resi, atom: label.atom || 'CA', resn: atom.resn, x: atom.x, y: atom.y, z: atom.z, key: residueKey(entry.id, label.chain, label.resi), ...(label.kind === 'domain' ? { kind: 'domain' } : {}), text: label.text, color: /^#[0-9a-f]{6}$/i.test(label.color || '') ? label.color : undefined, size: labelSizes.some(([value]) => value === Number(label.size)) ? Number(label.size) : undefined };
     }).filter(Boolean);
     selectionRecords = (scene.selections || []).map(record => {
       const entry = byName.get(record.model); if (!entry) return null;
@@ -7219,7 +7238,7 @@ html>body{padding:0}</style>
   function figurePanelsSelected() { return savedViews.filter(view => view.inFigure !== false); }
   function builderOptions() {
     const columns = root.querySelector('#gpv-panel-columns').value;
-    return { columns, captions: root.querySelector('#gpv-builder-captions').value, letters: root.querySelector('#gpv-builder-letters').checked, legends: root.querySelector('#gpv-builder-legends').checked };
+    return { columns, captions: root.querySelector('#gpv-builder-captions').value, letters: root.querySelector('#gpv-builder-letters').checked, legends: root.querySelector('#gpv-builder-legends').checked, architecture: root.querySelector('#gpv-builder-architecture').checked };
   }
   function applyBuilderOptions(options) {
     if (!options || typeof options !== 'object') return;
@@ -7227,6 +7246,7 @@ html>body{padding:0}</style>
     if (['both', 'name', 'caption', 'none'].includes(options.captions)) root.querySelector('#gpv-builder-captions').value = options.captions;
     if (typeof options.letters === 'boolean') root.querySelector('#gpv-builder-letters').checked = options.letters;
     if (typeof options.legends === 'boolean') root.querySelector('#gpv-builder-legends').checked = options.legends;
+    if (typeof options.architecture === 'boolean') root.querySelector('#gpv-builder-architecture').checked = options.architecture;
   }
   function figureLayout(count, panels = []) {
     const requested = exportDimensions(); const options = builderOptions(); const total = Math.max(1, count);
@@ -7246,7 +7266,11 @@ html>body{padding:0}</style>
     const lines = Math.max(1, ...panels.map(view => captionLines(view).length));
     const captionHeight = options.letters || options.captions !== 'none' ? Math.round(fontPx * (0.9 + 1.3 * lines)) : Math.round(fontPx * 0.5);
     const cellPlan = { width: cellWidth, height: cellHeight, dpi: requested.dpi, points: requested.points, textScale: requested.textScale, mm: requested.mm ? requested.mm / columns : undefined };
-    return { requested, options, columns, rows, cellWidth, cellHeight, fontPx, inset, letterWidth, captionWidth, captionLines, lines, captionHeight, width: columns * cellWidth, height: rows * (cellHeight + captionHeight), cellPlan };
+    /* The optional architecture row spans the figure width under the panels and reads the
+       domains of the model on screen. */
+    const scale = figureScale(cellPlan); const architecture = options.architecture ? architectureModel(activeEntry()) : null;
+    const architectureRow = architecture ? architectureHeight(architecture, scale) + Math.round(24 * scale) : 0;
+    return { requested, options, columns, rows, cellWidth, cellHeight, fontPx, inset, letterWidth, captionWidth, captionLines, lines, captionHeight, architecture, architectureRow, scale, width: columns * cellWidth, height: rows * (cellHeight + captionHeight) + architectureRow, cellPlan };
   }
   function builderCaption(view, options) {
     const name = String(view.name || ''); const caption = String(view.caption || '');
@@ -7280,7 +7304,7 @@ html>body{padding:0}</style>
     if (!savedViews.length) { estimate.textContent = 'Save a view above to start a figure.'; return; }
     if (!panels.length) { estimate.textContent = 'No view is ticked.'; return; }
     const layout = figureLayout(panels.length, panels);
-    estimate.textContent = panels.length + ' panel' + (panels.length === 1 ? '' : 's') + ' · ' + layout.columns + ' column' + (layout.columns === 1 ? '' : 's') + ' · ' + layout.width + ' × ' + layout.height + ' px' + (layout.requested.dpi ? ' · ' + layout.requested.mm + ' mm wide at ' + layout.requested.dpi + ' dpi · text ' + layout.requested.points + ' pt' : '') + ' · each panel ' + layout.cellWidth + ' × ' + layout.cellHeight + ' px';
+    estimate.textContent = panels.length + ' panel' + (panels.length === 1 ? '' : 's') + ' · ' + layout.columns + ' column' + (layout.columns === 1 ? '' : 's') + ' · ' + layout.width + ' × ' + layout.height + ' px' + (layout.requested.dpi ? ' · ' + layout.requested.mm + ' mm wide at ' + layout.requested.dpi + ' dpi · text ' + layout.requested.points + ' pt' : '') + ' · each panel ' + layout.cellWidth + ' × ' + layout.cellHeight + ' px' + (layout.architecture ? ' · architecture row ' + layout.architectureRow + ' px' : layout.options.architecture ? ' · no domains for an architecture row' : '');
   }
   async function downloadFigure(kind) {
     const panels = figurePanelsSelected();
@@ -7321,6 +7345,11 @@ html>body{padding:0}</style>
            leave a WebGL context behind per panel (browsers drop the oldest context past their limit). */
         applyViewState(restore, { panels: false });
       }
+      if (layout.architecture) {
+        const top = layout.rows * (layout.cellHeight + layout.captionHeight) + Math.round(12 * layout.scale);
+        if (kind === 'png') drawArchitecture(context, layout.inset, top, layout.width - layout.inset * 2, layout.architecture, layout.scale, palette);
+        else parts.push(svgArchitecture(layout.inset, top, layout.width - layout.inset * 2, layout.architecture, layout.scale, palette).markup);
+      }
       const stem = 'protein-figure-' + panels.length + '-panel' + (panels.length === 1 ? '' : 's');
       if (kind === 'png') downloadBlob(await pngWithDpi(canvas.toDataURL('image/png'), layout.requested.dpi), 'image/png', exportFileName(stem, layout.requested, 'png'));
       else downloadBlob(svgDocument(layout.width, layout.height, palette.paper, parts.join('\n')), 'image/svg+xml', stem + '.svg');
@@ -7333,7 +7362,7 @@ html>body{padding:0}</style>
   }
   function downloadContactSheet() { return downloadFigure('png'); }
   root.querySelector('#gpv-builder-svg').addEventListener('click', () => downloadFigure('svg'));
-  ['#gpv-panel-columns', '#gpv-builder-captions', '#gpv-builder-letters', '#gpv-builder-legends', '#gpv-export-mode', '#gpv-print-width', '#gpv-print-custom', '#gpv-print-dpi', '#gpv-print-aspect', '#gpv-print-text', '#gpv-export-size', '#gpv-export-scale']
+  ['#gpv-panel-columns', '#gpv-builder-captions', '#gpv-builder-letters', '#gpv-builder-legends', '#gpv-builder-architecture', '#gpv-export-mode', '#gpv-print-width', '#gpv-print-custom', '#gpv-print-dpi', '#gpv-print-aspect', '#gpv-print-text', '#gpv-export-size', '#gpv-export-scale']
     .forEach(selector => root.querySelector(selector).addEventListener('change', () => renderFigureBuilder()));
 
   function downloadCaptions() {
@@ -8020,6 +8049,160 @@ applyBackground();
 <\/script></main></body></html>`;
   }
 
+  /* ---------- Domain labels and architecture ----------
+     Two things a domain figure needs beyond colouring: the domain names written on the
+     structure, and the linear architecture bar under it. Both read the domain definition that
+     is colouring the structure (annotated domains or PAE domains), use the figure-label names,
+     and share the domain colours. Labels are ordinary residue labels placed at the Cα nearest
+     each domain's centroid, so they export, share and undo like any label. */
+  function figureLabelFor(mode, short, fallback) { return figureLabels[mode + '|' + short] || fallback; }
+  function domainSets(entry, prefer = null) {
+    if (!entry) return { source: null, items: [] };
+    const mode = root.querySelector('#gpv-color-mode').value;
+    const annotated = domainRecords.filter(record => domainApplies(record, entry));
+    const pae = entry.domains && entry.domains.domains.length ? entry.domains : null;
+    const source = prefer === 'annotated' && annotated.length ? 'annotated' : prefer === 'pae' && pae ? 'pae' : mode === 'domain' && pae ? 'pae' : annotated.length ? 'annotated' : pae ? 'pae' : null;
+    if (source === 'annotated') {
+      const seen = new Map();
+      annotated.forEach(record => { if (!seen.has(record.name)) seen.set(record.name, { key: 'annotated|' + record.name, name: figureLabelFor('annotated', clipText(record.name, 18), record.name), color: record.color, tags: new Set() }); });
+      domainLookup(entry).forEach((record, tag) => { const item = seen.get(record.name); if (item) item.tags.add(tag); });
+      return { source, items: [...seen.values()].filter(item => item.tags.size) };
+    }
+    if (source === 'pae') return { source, items: pae.domains.map(domain => ({ key: 'domain|D' + domain.id, name: figureLabelFor('domain', 'D' + domain.id, 'D' + domain.id), color: domainColorFor(domain.id), tags: new Set(domain.tags) })) };
+    return { source: null, items: [] };
+  }
+  function labelDomains(prefer = null) {
+    const entry = activeEntry(); if (!entry || !entry.model) { announce('Show a model first', 'error'); return; }
+    const sets = domainSets(entry, prefer);
+    if (!sets.items.length) { announce(prefer === 'pae' ? 'Find PAE domains first (Confidence → Find domains)' : 'Define domains first (Annotate → Domains) or find PAE domains (Confidence)', 'error'); return; }
+    remember('domain labels');
+    let added = 0;
+    sets.items.forEach(item => {
+      const cas = entry.atoms.filter(atom => atom.atom === 'CA' && !atom.hetflag && item.tags.has(residueTag(atom)));
+      if (!cas.length) return;
+      const centre = { x: mean(cas.map(atom => atom.x)), y: mean(cas.map(atom => atom.y)), z: mean(cas.map(atom => atom.z)) };
+      let best = cas[0]; let bestDistance = Infinity;
+      cas.forEach(atom => { const d = (atom.x - centre.x) ** 2 + (atom.y - centre.y) ** 2 + (atom.z - centre.z) ** 2; if (d < bestDistance) { bestDistance = d; best = atom; } });
+      const key = residueKey(entry.id, best.chain || '', best.resi);
+      const record = { entryId: entry.id, chain: best.chain || '', resi: best.resi, resn: best.resn || 'RES', atom: 'CA', x: best.x, y: best.y, z: best.z, key, text: item.name, color: item.color, size: 15, kind: 'domain' };
+      const index = labelRecords.findIndex(label => label.key === key);
+      if (index >= 0) labelRecords[index] = { ...labelRecords[index], ...record }; else labelRecords.push(record);
+      added += 1;
+    });
+    renderLabelList(); rebuildOverlays();
+    announce(added + ' domain label' + (added === 1 ? '' : 's') + ' placed at the domain centroids (' + (sets.source === 'pae' ? 'PAE domains' : 'annotated domains') + ') · rename in Annotate → Labels, or rerun after renaming the legend');
+  }
+  function clearDomainLabels() {
+    const before = labelRecords.length;
+    if (!labelRecords.some(label => label.kind === 'domain')) { announce('No domain labels to remove'); return; }
+    remember('domain labels'); labelRecords = labelRecords.filter(label => label.kind !== 'domain');
+    renderLabelList(); rebuildOverlays(); announce((before - labelRecords.length) + ' domain label' + (before - labelRecords.length === 1 ? '' : 's') + ' removed');
+  }
+
+  /* The architecture bar: one row per chain, the sequence as a thin line from its first to its
+     last residue, a coloured box per contiguous domain run with the name inside (or above when it
+     does not fit), residue numbers at the ends and at every domain boundary. */
+  function architectureModel(entry, prefer = null) {
+    if (!entry || !entry.model) return null;
+    const sets = domainSets(entry, prefer); if (!sets.items.length) return null;
+    const byTag = new Map(); sets.items.forEach(item => item.tags.forEach(tag => byTag.set(tag, item)));
+    const chains = residueRows(entry).map(row => {
+      const residues = row.residues; const first = residues[0].resi; const last = residues[residues.length - 1].resi;
+      const segments = []; let open = null;
+      residues.forEach(atom => {
+        const item = byTag.get(residueTag(atom)) || null;
+        if (open && open.item === item && atom.resi === open.end + 1) { open.end = atom.resi; return; }
+        if (open && open.item) segments.push(open);
+        open = { item, start: atom.resi, end: atom.resi };
+      });
+      if (open && open.item) segments.push(open);
+      return { chain: row.chain, first, last, segments };
+    }).filter(row => row.segments.length);
+    return chains.length ? { source: sets.source, items: sets.items, chains } : null;
+  }
+  function architectureMetrics(width, scale) {
+    return { rowHeight: Math.round(46 * scale), labelWidth: Math.round(64 * scale), pad: Math.round(10 * scale), box: Math.round(14 * scale), font: Math.round(11 * scale), small: Math.round(9 * scale), barX: Math.round(74 * scale), barWidth: Math.max(10, width - Math.round(74 * scale) - Math.round(10 * scale)) };
+  }
+  function architectureHeight(model, scale) { return model ? model.chains.length * architectureMetrics(100, scale).rowHeight + Math.round(6 * scale) : 0; }
+  function architectureRows(model, x0, y0, width, scale, measure) {
+    const m = architectureMetrics(width, scale); const rows = [];
+    model.chains.forEach((row, index) => {
+      const y = y0 + Math.round(3 * scale) + index * m.rowHeight + m.rowHeight / 2; const span = Math.max(1, row.last - row.first); const unit = m.barWidth / span;
+      const px = resi => x0 + m.barX + (resi - row.first) / span * m.barWidth; const barEnd = x0 + m.barX + m.barWidth;
+      const boxes = row.segments.map((segment, i) => {
+        const left = px(segment.start); const right = Math.min(barEnd, px(segment.end) + unit); const next = row.segments[i + 1];
+        measure.font = '600 ' + m.font + 'px ' + figureFont();
+        const inside = measure.measureText(segment.item.name).width <= right - left - 4 * scale;
+        return { left, right, item: segment.item, inside, startLabel: segment.start !== row.first ? String(segment.start) : null, endLabel: segment.end !== row.last && !(next && next.start === segment.end + 1) ? String(segment.end) : null };
+      });
+      rows.push({ y, chain: 'Chain ' + (row.chain || '—'), barStart: px(row.first), barEnd, first: String(row.first), last: String(row.last), boxes });
+    });
+    return { m, rows };
+  }
+  function drawArchitecture(context, x0, y0, width, model, scale, palette) {
+    const { m, rows } = architectureRows(model, x0, y0, width, scale, context);
+    context.save(); context.textBaseline = 'middle';
+    rows.forEach(row => {
+      context.fillStyle = palette.ink; context.textAlign = 'left'; context.font = '500 ' + m.font + 'px ' + figureFont();
+      context.fillText(truncateToWidth(context, row.chain, m.labelWidth), x0, row.y);
+      context.globalAlpha = 0.35; context.fillRect(row.barStart, row.y - Math.max(1, Math.round(1.5 * scale)), row.barEnd - row.barStart, Math.max(2, Math.round(3 * scale))); context.globalAlpha = 1;
+      context.font = '400 ' + m.small + 'px ' + figureFont();
+      context.textAlign = 'left'; context.fillText(row.first, row.barStart, row.y + m.box / 2 + m.small);
+      context.textAlign = 'right'; context.fillText(row.last, row.barEnd, row.y + m.box / 2 + m.small);
+      row.boxes.forEach(box => {
+        context.fillStyle = box.item.color; context.fillRect(box.left, row.y - m.box / 2, box.right - box.left, m.box);
+        context.textAlign = 'center';
+        if (box.inside) { context.fillStyle = hexLuminance(box.item.color) > 0.6 ? '#111827' : '#ffffff'; context.font = '600 ' + m.font + 'px ' + figureFont(); context.fillText(box.item.name, (box.left + box.right) / 2, row.y); }
+        else { context.fillStyle = palette.ink; context.font = '500 ' + m.small + 'px ' + figureFont(); context.fillText(truncateToWidth(context, box.item.name, Math.max(box.right - box.left + 24 * scale, 40 * scale)), (box.left + box.right) / 2, row.y - m.box / 2 - m.small * 0.8); }
+        context.fillStyle = palette.ink; context.font = '400 ' + m.small + 'px ' + figureFont();
+        if (box.startLabel) context.fillText(box.startLabel, box.left, row.y + m.box / 2 + m.small);
+        if (box.endLabel) context.fillText(box.endLabel, box.right, row.y + m.box / 2 + m.small);
+      });
+    });
+    context.restore();
+    return architectureHeight(model, scale);
+  }
+  function svgArchitecture(x0, y0, width, model, scale, palette) {
+    const { m, rows } = architectureRows(model, x0, y0, width, scale, svgMeasure);
+    const text = (x, y, size, weight, anchor, fill, value) => '<text x="' + f(x) + '" y="' + f(y) + '" dominant-baseline="central" text-anchor="' + anchor + '" font-family="' + svgFont + '" font-size="' + f(size) + '" font-weight="' + weight + '" fill="' + fill + '">' + svgEscape(value) + '</text>';
+    const parts = ['<g id="architecture">'];
+    rows.forEach(row => {
+      parts.push(text(x0, row.y, m.font, 500, 'start', palette.ink, row.chain));
+      parts.push('<rect x="' + f(row.barStart) + '" y="' + f(row.y - Math.max(1, 1.5 * scale)) + '" width="' + f(row.barEnd - row.barStart) + '" height="' + f(Math.max(2, 3 * scale)) + '" fill="' + palette.ink + '" fill-opacity="0.35"/>');
+      parts.push(text(row.barStart, row.y + m.box / 2 + m.small, m.small, 400, 'start', palette.ink, row.first));
+      parts.push(text(row.barEnd, row.y + m.box / 2 + m.small, m.small, 400, 'end', palette.ink, row.last));
+      row.boxes.forEach(box => {
+        parts.push('<rect x="' + f(box.left) + '" y="' + f(row.y - m.box / 2) + '" width="' + f(box.right - box.left) + '" height="' + f(m.box) + '" fill="' + box.item.color + '"/>');
+        if (box.inside) parts.push(text((box.left + box.right) / 2, row.y, m.font, 600, 'middle', hexLuminance(box.item.color) > 0.6 ? '#111827' : '#ffffff', box.item.name));
+        else { svgMeasure.font = '500 ' + m.small + 'px ' + svgFont; parts.push(text((box.left + box.right) / 2, row.y - m.box / 2 - m.small * 0.8, m.small, 500, 'middle', palette.ink, truncateToWidth(svgMeasure, box.item.name, Math.max(box.right - box.left + 24 * scale, 40 * scale)))); }
+        if (box.startLabel) parts.push(text(box.left, row.y + m.box / 2 + m.small, m.small, 400, 'middle', palette.ink, box.startLabel));
+        if (box.endLabel) parts.push(text(box.right, row.y + m.box / 2 + m.small, m.small, 400, 'middle', palette.ink, box.endLabel));
+      });
+    });
+    parts.push('</g>');
+    return { markup: parts.join(''), height: architectureHeight(model, scale) };
+  }
+  async function downloadArchitecture(kind) {
+    const entry = activeEntry(); const model = architectureModel(entry);
+    if (!model) { announce('No domains to draw: define domains in Annotate, or find PAE domains in Confidence', 'error'); return; }
+    const plan = exportDimensions(); const scale = figureScale(plan); const palette = figurePalette(); const pad = Math.round(16 * scale);
+    const width = plan.width; const height = architectureHeight(model, scale) + pad * 2;
+    if (kind === 'png') {
+      const canvas = document.createElement('canvas'); canvas.width = width; canvas.height = height; const context = canvas.getContext('2d');
+      context.fillStyle = palette.paper; context.fillRect(0, 0, width, height);
+      drawArchitecture(context, pad, pad, width - pad * 2, model, scale, palette);
+      downloadBlob(await pngWithDpi(canvas.toDataURL('image/png'), plan.dpi), 'image/png', exportFileName('protein-domain-architecture', plan, 'png'));
+    } else {
+      downloadBlob(svgDocument(width, height, palette.paper, svgArchitecture(pad, pad, width - pad * 2, model, scale, palette).markup), 'image/svg+xml', 'protein-domain-architecture.svg');
+    }
+    announce('Domain architecture ' + kind.toUpperCase() + ' downloaded · ' + model.chains.length + ' chain' + (model.chains.length === 1 ? '' : 's') + ' · ' + model.items.length + ' domain' + (model.items.length === 1 ? '' : 's') + ' (' + (model.source === 'pae' ? 'PAE domains' : 'annotated domains') + ') · ' + width + ' × ' + height + ' px' + (plan.dpi ? ' at ' + plan.dpi + ' dpi' : ''));
+  }
+  root.querySelector('#gpv-domain-labels').addEventListener('click', () => labelDomains('annotated'));
+  root.querySelector('#gpv-pae-domain-labels').addEventListener('click', () => labelDomains('pae'));
+  root.querySelector('#gpv-domain-labels-clear').addEventListener('click', clearDomainLabels);
+  root.querySelector('#gpv-architecture-png').addEventListener('click', () => downloadArchitecture('png'));
+  root.querySelector('#gpv-architecture-svg').addEventListener('click', () => downloadArchitecture('svg'));
+
   /* ---------- Appearance theme ---------- */
 
   const themeModes = [
@@ -8676,6 +8859,7 @@ applyBackground();
     'Annotate → Domains: name a region, pick its colour, and apply it to every model from the same AlphaFold run. Colour by annotated domains paints them and the legend lists them by name — in the viewer, every export and the report.',
     'Publish → Print size exports at a stated width (85 or 178 mm) and resolution (300 or 600 dpi), writes the dpi into the PNG or TIFF, and sizes labels in points — what a journal checks.',
     'Appearance → Colour-blind-safe palette switches chains and domains to Okabe–Ito colours; a scale bar of 10–100 Å goes bottom-right of every export from Publish → Scale bar.',
+    'Annotate → Domains → Label domains writes each domain\'s name on the structure at its centroid; Download architecture PNG/SVG draws the linear domain diagram that goes under it.',
     'Publish → Figure builder: save a few views — overview, interface, a zoom — tick them, order them, caption them, and download one lettered figure at the journal width as PNG or SVG.',
     'Edit labels on the colour legend renames the legend title and entries for your figure — "N-lobe" instead of "D1" — on screen, on every export and in the legend text, without touching the data.',
     'Help (?) → How to cite gives the viewer and 3Dmol.js references; each GitHub release is archived on Zenodo with a DOI.',
@@ -8754,7 +8938,7 @@ applyBackground();
   offerSessionRestore();
   /* ?debug=1 exposes a few internals for the regression suite and for bug reports;
      it has no effect otherwise. */
-  if (new URLSearchParams(location.search).has('debug')) window.__viewerDebug = { viewer, pickAtomAt, displayedEntries, activeEntry, colorOptions, sceneSettings, contactResult: () => contactResult, residueData: () => residueData, msaAssets: () => msaAssets, entries: () => structures, nearbyResidues, assemblyDimensions, paeDomains, parseConfidenceBytes, methodsText, alignmentResults: () => alignmentResults, ensembleSpread: () => ensembleSpread, siteResults: () => siteResults, interfaceResults: () => interfaceResults, solventAccessibleArea, heavyAtoms, ligandGroups };
+  if (new URLSearchParams(location.search).has('debug')) window.__viewerDebug = { viewer, pickAtomAt, displayedEntries, activeEntry, colorOptions, sceneSettings, contactResult: () => contactResult, residueData: () => residueData, msaAssets: () => msaAssets, entries: () => structures, nearbyResidues, assemblyDimensions, paeDomains, parseConfidenceBytes, methodsText, alignmentResults: () => alignmentResults, ensembleSpread: () => ensembleSpread, siteResults: () => siteResults, interfaceResults: () => interfaceResults, solventAccessibleArea, heavyAtoms, ligandGroups, architectureModel, domainSets };
   applyTheme(readJson(themeKey, 'system'));
   selectToolTab('models');
   applyAppearance();

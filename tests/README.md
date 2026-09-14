@@ -88,6 +88,10 @@ PSV_CHROMIUM=/opt/pw-browsers/chromium/chrome-linux/chrome npm test
   changes the varied column's value, keeps the ordering, and the dataset name, the debug hook and the methods text say
   "unweighted"; switching them back on puts "Henikoff & Henikoff, 1994" in the methods text.
 - PAE domains: the panel state and the figure legend call the segmentation a heuristic.
+- Domain labels and architecture: on the block-diagonal PAE model, Label domains adds exactly two labels, D1 and D2, at
+  the domain centroids; the architecture model reads two chains with one domain run each; the SVG carries the chain rows,
+  names and residue numbers, the PNG is as wide as the export estimate says; the composite offers the panel, the builder
+  estimate mentions the row, and Clear domain labels leaves the other labels alone.
 - Figure builder: with six saved views, unticking three and moving one up gives panels A–C in the order View 1, View 3,
   View 2; at 178 mm, 300 dpi and three columns the estimate and the PNG are 2100 px wide with a dpi chunk, and the SVG
   carries three images, the letters, the edited caption and the panels in builder order.

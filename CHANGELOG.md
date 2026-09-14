@@ -2,6 +2,20 @@
 
 All notable changes to this project are recorded here.
 
+## 2.27.0
+
+- **Label domains.** *Annotate → Domains → Label domains* (and *Label domains* beside the PAE domains in Confidence)
+  writes each domain's name on the structure: one residue label at the Cα nearest the domain's centroid, in the domain
+  colour, using the legend's names (so a domain renamed under Figure labels is labelled with that name). They are
+  ordinary labels — editable in the label list, exported in PNG and SVG, carried by scenes and the report, undone with
+  ⌘Z — and *Clear domain labels* removes only them. Which definition is used follows the colour scheme: PAE domains
+  when colouring by them, otherwise annotated domains, otherwise PAE domains if found.
+- **Domain architecture bar.** *Download architecture PNG/SVG* draws the linear domain diagram: one row per chain, the
+  sequence as a line from its first to its last residue, a coloured box per contiguous domain run with the name inside
+  (or above when it does not fit), residue numbers at the chain ends and at every domain boundary, at the output width
+  and resolution. The same bar is a panel of the composite figure and, with *Domain architecture row under the panels*
+  ticked, spans the bottom of a figure-builder figure so the structure panels and the architecture read as one figure.
+
 ## 2.26.1
 
 - **Legend and scale bar no longer collide on narrow exports.** The legend is shrunk (never below 55 %) when it would

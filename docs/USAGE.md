@@ -425,6 +425,22 @@ figure goes into a slide or a manuscript draft without a file in between. Chrome
 image clipboard writes; Firefox and Safari may refuse, in which case the viewer says so and the
 download remains.
 
+**Domain labels and the architecture bar.** With domains defined (Annotate → Domains) or found
+(Confidence → PAE domains), **Label domains** writes each domain's name on the structure: one residue
+label at the Cα nearest the domain's centroid, in the domain colour, using the legend's names — so a
+PAE domain renamed "N-lobe" under *Figure labels* is labelled "N-lobe". Which definition is used
+follows the colour scheme: PAE domains when the structure is coloured by them, otherwise annotated
+domains, otherwise PAE domains if any were found; the button under the PAE domains always uses those.
+The labels are ordinary residue labels: edit their text or size in the label list, export them in PNG
+and SVG, carry them in scenes and reports, undo them, and **Clear domain labels** removes only them
+(rerun *Label domains* after renaming a domain to relabel). **Download architecture PNG** and **SVG**
+draw the linear domain diagram at the output width and resolution: one row per chain, the sequence as a
+thin line from its first to its last residue, a coloured box per contiguous domain run with the name
+inside (or above when it does not fit), and residue numbers at the chain ends and at every domain
+boundary. The same bar is offered as a panel of the composite figure (*Domain architecture*) and, with
+**Domain architecture row under the panels** ticked in the figure builder, spans the bottom of the
+built figure, reading the domains of the model on screen.
+
 **Figure labels.** The colour legend carries an **Edit labels** button (also *Publish → Edit figure
 labels*). It opens a table with the legend's title and each entry in the current colour scheme —
 "PAE domains (heuristic)", "D1", "D2"; "Entity", "α ×2"; "Chain", "A" — and a text field beside each.

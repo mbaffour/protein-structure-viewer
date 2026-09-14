@@ -150,6 +150,15 @@ at output resolution with a caption. Tick the panels you want; unavailable ones 
 The shared HTML report reproduces the outline, depth cueing and faded chains, and shows the
 interface contact map beside the PAE heatmap when one was computed for a model in the report.
 
+## Domain figures
+
+Colour by annotated or PAE domains, then **Label domains** writes each domain's name on the
+structure at its centroid in the domain colour, using the names from the legend. **Download
+architecture PNG/SVG** draws the linear domain diagram — one row per chain, coloured boxes with
+names and boundary residue numbers — which is also a composite-figure panel and an optional row
+under the panels of the figure builder, so structure, legend and architecture bar come out of one
+set of domain definitions.
+
 ## Figure builder
 
 Save a view for each panel you want — an overview, the interface, a zoom — then under
