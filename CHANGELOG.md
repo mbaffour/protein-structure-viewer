@@ -2,6 +2,18 @@
 
 All notable changes to this project are recorded here.
 
+## 2.32.0
+
+- **Pairwise RMSD matrix.** *Compare → Pairwise RMSD → Compute matrix* superposes every shown model onto every other
+  with the rules set above — residue mapping, fit region, positional chain matching — without moving anything on
+  screen, and tabulates the Cα RMSDs with a heat tint; hovering a cell gives the pair count and the chain mapping. The
+  matrix downloads as CSV (values, pair counts and the settings), as a heat-map PNG at the output resolution and as SVG
+  with the values in the cells and a colour bar, and it is a panel of the composite figure. The methods text gains a
+  sentence with the range. Up to twelve shown models.
+- **The build refuses duplicate function names.** All source parts share one scope, so a second declaration of the
+  same name silently replaces the first everywhere; that had happened twice. `scripts/build.mjs` now fails, in the
+  build and in the CI drift check, when two parts declare the same top-level function.
+
 ## 2.31.1
 
 - **Fixed: the Model legend showed full colours for faded models.** With one model emphasised, the others are drawn as

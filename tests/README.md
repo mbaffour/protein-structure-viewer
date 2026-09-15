@@ -88,6 +88,9 @@ PSV_CHROMIUM=/opt/pw-browsers/chromium/chrome-linux/chrome npm test
   changes the varied column's value, keeps the ordering, and the dataset name, the debug hook and the methods text say
   "unweighted"; switching them back on puts "Henikoff & Henikoff, 1994" in the methods text.
 - PAE domains: the panel state and the figure legend call the segmentation a heuristic.
+- Pairwise RMSD matrix: symmetric with a zero diagonal, the reference's row agrees with the alignment table to 0.005 Å,
+  the CSV carries values, pair counts and settings, the SVG has a rect per cell and the colour bar, the PNG is at least
+  300 px wide, the composite offers the panel and the methods text describes it.
 - Emphasis: Emphasise on one model fades every other shown model and thins its ribbon, pressing it again restores them
   all, and the scene carries the faded flag.
 - Identical chains by position: a copy of the fixture with its two chains renamed A↔B aligns badly while chains are

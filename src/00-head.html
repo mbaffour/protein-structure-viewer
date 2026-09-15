@@ -1055,6 +1055,15 @@ html>body{padding:0}</style>
       <button class="btn" type="button" id="gpv-alignment-csv" disabled>Download RMSD CSV</button>
       <button class="btn" type="button" id="gpv-rmsf-csv" disabled data-tooltip="Per-residue Cα spread (RMSF) across the aligned models — the ensemble agreement the colour scheme shows">Download RMSF CSV</button>
     </div>
+    <div class="viz-controls">
+      <span class="text-small text-muted">Pairwise RMSD</span>
+      <button class="btn" type="button" id="gpv-rmsd-matrix-run" disabled data-tooltip="Superpose every shown model onto every other, with the residue mapping, fit region and chain matching set above, and tabulate the Cα RMSDs — nothing on screen moves">Compute matrix</button>
+      <button class="btn" type="button" id="gpv-rmsd-matrix-csv" disabled>Download matrix CSV</button>
+      <button class="btn" type="button" id="gpv-rmsd-matrix-png" disabled data-tooltip="The matrix as a heat map at the output resolution, values in the cells and a colour bar">Download matrix PNG</button>
+      <button class="btn" type="button" id="gpv-rmsd-matrix-svg" disabled data-tooltip="The same heat map as editable vector graphics">Download matrix SVG</button>
+      <span class="text-muted text-small" id="gpv-rmsd-matrix-state">Show two or more models, then compute. Uses the residue mapping, fit region and chain matching set above.</span>
+    </div>
+    <div class="table-responsive" id="gpv-rmsd-matrix-wrap" hidden><table class="table table-sm gpv-rmsd-matrix" aria-label="Pairwise Cα RMSD between the shown models"><thead id="gpv-rmsd-matrix-head"></thead><tbody id="gpv-rmsd-matrix-body"></tbody></table></div>
     <div class="table-responsive" id="gpv-alignment-wrap" hidden><table class="table table-sm" aria-label="Structural alignment results"><thead><tr><th>Model</th><th>Reference</th><th class="text-end">Cα pairs</th><th class="text-end">Identity</th><th class="text-end">RMSD (Å)</th><th>Fitted on</th><th class="text-end">Fit RMSD (Å)</th><th>Mapping</th></tr></thead><tbody id="gpv-alignment-results"></tbody></table></div>
     <div class="viz-controls">
       <label class="form-check form-switch"><input class="form-check-input" id="gpv-side-by-side" type="checkbox"><span class="form-check-label">Synchronized multi-view</span></label>
@@ -1150,6 +1159,7 @@ html>body{padding:0}</style>
       <label class="form-check form-switch"><input class="form-check-input" id="gpv-composite-profile" type="checkbox" checked><span class="form-check-label">pLDDT profile</span></label>
       <label class="form-check form-switch"><input class="form-check-input" id="gpv-composite-contacts" type="checkbox" checked><span class="form-check-label">Contact map</span></label>
       <label class="form-check form-switch"><input class="form-check-input" id="gpv-composite-architecture" type="checkbox" checked><span class="form-check-label">Domain architecture</span></label>
+      <label class="form-check form-switch"><input class="form-check-input" id="gpv-composite-matrix" type="checkbox" checked><span class="form-check-label">RMSD matrix</span></label>
       <label class="form-label">Columns<select class="form-select" id="gpv-composite-columns"><option value="1">1</option><option value="2" selected>2</option><option value="3">3</option></select></label>
       <button class="btn" type="button" id="gpv-composite" disabled data-tooltip="One lettered figure at the chosen print size: the 3D view first, then the confidence panels you tick — the PAE heatmap, the pLDDT profile and the contact map when they are available">Download composite figure</button>
       <button class="btn" type="button" id="gpv-compare-svg" disabled data-tooltip="The stitched comparison figure with vector captions and annotations">Download comparison SVG</button>
@@ -1265,6 +1275,7 @@ html>body{padding:0}</style>
       </ul>
       <h3>Tips for figures and reviewers</h3>
       <ul>
+        <li><em>Compare → Pairwise RMSD → Compute matrix</em> superposes every shown model onto every other with the same rules as Align visible and tabulates the Cα RMSDs — which models of an ensemble agree, which is the odd one out — with a CSV, a heat-map PNG or SVG with the values in the cells, and a panel for the composite figure.</li>
         <li><em>Compare → Match identical chains by position</em> re-pairs the chains of an assembly by where they sit after a first fit, so a model that puts the same subunit in a different place is compared against the copy it actually corresponds to; the chain mapping it chose is printed with each result.</li>
         <li><em>Compare → Fit on</em> superposes the visible models using only part of the structure — a chain, a residue range such as <code>A:20-140</code>, or the residues you have selected — and reports the RMSD over that region beside the RMSD over every matched residue, which is how a hinge or a shifted domain is shown.</li>
         <li>Labels are draggable: pick up any label, callout or corner title in the 3D view with the mouse and put it where the figure needs it. A residue label keeps a thin leader line back to its residue, and <em>Reset</em> in its row puts it back. <em>Publish → Legend position</em> moves the colour legend to any corner, or stacks it down the left or right side.</li>
@@ -1436,6 +1447,7 @@ html>body{padding:0}</style>
   #generic-protein-viewer .gpv-labels-table th[scope="row"] { font-weight: 500; white-space: nowrap; }
   #generic-protein-viewer .gpv-labels-table input { min-width: 160px; }
   #generic-protein-viewer .gpv-builder-table td, #generic-protein-viewer .gpv-builder-table th { vertical-align: middle; }
+  #generic-protein-viewer .gpv-rmsd-matrix td { font-variant-numeric: tabular-nums; min-width: 3.6em; }
   #generic-protein-viewer .gpv-builder-table .gpv-builder-letter { font-weight: 700; }
   #generic-protein-viewer .gpv-builder-table input[type="text"] { min-width: 150px; }
   #generic-protein-viewer .gpv-builder-table .gpv-builder-order { display: inline-flex; gap: 2px; }

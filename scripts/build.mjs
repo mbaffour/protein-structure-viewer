@@ -49,6 +49,19 @@ for (const p of parts) {
   if (!existsSync(p)) { console.error(`build: missing part ${p}`); process.exit(1); }
 }
 
+/* Every part shares one IIFE scope, so two parts declaring a function of the same name do not
+ * clash — the later declaration silently replaces the earlier one everywhere. That has bitten
+ * twice (highlightInterface, matrixMaximum). Refuse to build when it happens. */
+const declared = new Map();
+for (const f of jsParts) {
+  const text = readFileSync(join(jsDir, f), 'utf8');
+  for (const match of text.matchAll(/^  (?:async )?function ([A-Za-z_$][\w$]*)\s*\(/gm)) {
+    const name = match[1];
+    if (declared.has(name)) { console.error(`build: function ${name} is declared in both ${declared.get(name)} and ${f}; the later one would silently replace the earlier`); process.exit(1); }
+    declared.set(name, f);
+  }
+}
+
 /* Read as bytes, not text: nothing here needs decoding, and Buffer.concat
  * cannot silently normalise a newline or drop a byte-order mark. */
 const output = Buffer.concat(parts.map(p => readFileSync(p)));

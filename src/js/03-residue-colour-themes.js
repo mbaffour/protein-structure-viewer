@@ -179,6 +179,7 @@
     root.querySelector('#gpv-profile-svg').disabled = !scored;
     root.querySelector('#gpv-profile-png').disabled = !scored;
     root.querySelector('#gpv-image').disabled = structures.length === 0; root.querySelector('#gpv-model-panels').disabled = structures.length < 2;
+    root.querySelector('#gpv-rmsd-matrix-run').disabled = structures.length < 2;
     root.querySelector('#gpv-svg').disabled = structures.length === 0;
     root.querySelector('#gpv-video').disabled = structures.length === 0;
     root.querySelector('#gpv-save-scene').disabled = structures.length === 0; root.querySelector('#gpv-save-session').disabled = structures.length === 0;

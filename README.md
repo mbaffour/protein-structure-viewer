@@ -157,7 +157,9 @@ Cα atoms paired by sequence or by residue identifier. For assemblies of identic
 **Match identical chains by position** re-pairs the chains by where they sit after a first fit, so a
 model that places the same subunit differently is compared against the copy it corresponds to. In
 the Models list, **Emphasise** draws one model solid and the rest as faded thin ribbons, which is
-how an overlay of five predictions becomes a figure. **Fit on** narrows what the rotation is
+how an overlay of five predictions becomes a figure. **Compute matrix** superposes every shown model
+onto every other and tabulates the pairwise Cα RMSDs, exportable as CSV and as a heat map, so an
+ensemble figure can say which models agree. **Fit on** narrows what the rotation is
 computed from — a chain, a residue range, or the residues you have selected — and the table reports
 the RMSD over that region beside the RMSD over everything matched, which is how a hinge or a moved
 domain is shown. Colour by *Cα deviation* to paint what moved, and by *Model agreement* for the

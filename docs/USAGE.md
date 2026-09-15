@@ -425,6 +425,17 @@ figure goes into a slide or a manuscript draft without a file in between. Chrome
 image clipboard writes; Firefox and Safari may refuse, in which case the viewer says so and the
 download remains.
 
+**Pairwise RMSD matrix.** **Compute matrix** under *Pairwise RMSD* superposes every shown model onto
+every other — up to twelve — with the same rules as *Align visible*: the residue mapping, the fit
+region and positional chain matching if switched on. Nothing on screen moves; the fits are computed on
+copies. The table tints each cell from white to red by RMSD; hovering a cell gives the number of Cα
+pairs and the chain mapping that pair used. **Download matrix CSV** writes the values, the pair counts
+and the settings; **Download matrix PNG** and **SVG** draw the heat map at the output resolution with
+the values in the cells and a colour bar, and the same panel can be ticked into the composite figure.
+The methods text gains a sentence stating how the pairs were superposed and the range of values.
+Recompute after aligning on a different region or changing the mapping; the state line says which
+settings the current matrix used.
+
 **Emphasising one model.** An overlay of several models drawn identically is a tangle. Each row of the
 Models list carries a fade switch, and **Emphasise** fades every other shown model in one press: the
 emphasised model keeps its colour and full ribbon while the others are mixed towards the paper and

@@ -567,6 +567,186 @@
     } else announce('No model had at least three matching Cα atoms to align on', 'error');
   }
 
+  /* ---- Pairwise RMSD matrix ----
+     Every shown model superposed onto every other with the same pairing rules as Align visible —
+     residue mapping, fit region, positional chain matching — without moving anything on screen.
+     The matrix says which models of an ensemble agree and which is the odd one out; the figure
+     panel is the small heat map every ensemble paper carries. */
+  let rmsdMatrix = null;
+  function kabschFit(pairs) {
+    if (pairs.length < 3) return null;
+    const referencePoints = pairs.map(pair => [pair[0].x, pair[0].y, pair[0].z]);
+    const targetPoints = pairs.map(pair => [pair[1].x, pair[1].y, pair[1].z]);
+    const referenceCenter = centroid(referencePoints); const targetCenter = centroid(targetPoints);
+    const x = targetPoints.map(point => point.map((value, axis) => value - targetCenter[axis]));
+    const y = referencePoints.map(point => point.map((value, axis) => value - referenceCenter[axis]));
+    const svd = numeric.svd(numeric.dot(numeric.transpose(x), y));
+    let rotation = numeric.dot(svd.V, numeric.transpose(svd.U));
+    if (determinant3(rotation) < 0) { svd.V.forEach(row => { row[2] *= -1; }); rotation = numeric.dot(svd.V, numeric.transpose(svd.U)); }
+    return { rotation, referenceCenter, targetCenter };
+  }
+  function movedBy(fit, point) {
+    const moved = numeric.dot(fit.rotation, [point.x - fit.targetCenter[0], point.y - fit.targetCenter[1], point.z - fit.targetCenter[2]]);
+    return { x: moved[0] + fit.referenceCenter[0], y: moved[1] + fit.referenceCenter[1], z: moved[2] + fit.referenceCenter[2] };
+  }
+  function rmsdUnder(fit, pairs) {
+    let sum = 0;
+    pairs.forEach(pair => { const moved = movedBy(fit, pair[1]); sum += (moved.x - pair[0].x) ** 2 + (moved.y - pair[0].y) ** 2 + (moved.z - pair[0].z) ** 2; });
+    return Math.sqrt(sum / pairs.length);
+  }
+  /* RMSD of target on reference under the current Compare settings, leaving both untouched. */
+  function pairwiseRmsd(reference, target, matcher, byPosition) {
+    const evaluate = pairing => {
+      const pairs = pairing.pairs; if (pairs.length < 3) return null;
+      const region = matcher ? pairs.filter(pair => matcher.test(pair[0])) : [];
+      const fit = kabschFit(region.length >= 3 ? region : pairs); if (!fit) return null;
+      return { rmsd: rmsdUnder(fit, pairs), count: pairs.length, fit, mapping: pairing.chainPairs };
+    };
+    let best = evaluate(caPairs(reference, target));
+    if (best && byPosition) {
+      /* Re-pair identical chains in the fitted frame, on copies, so nothing on screen moves. */
+      const copies = target.atoms.filter(atom => atom.atom === 'CA').map(atom => ({ ...atom, ...movedBy(best.fit, atom) }));
+      const again = evaluate(positionalPairs(reference, { atoms: copies }));
+      if (again && again.rmsd <= best.rmsd) best = again;
+    }
+    return best;
+  }
+  function computeRmsdMatrix() {
+    if (typeof numeric === 'undefined' || typeof numeric.svd !== 'function') { announce('The matrix needs the numeric.js library, which did not load. Reload the page and try again.', 'error'); return; }
+    const shown = displayedEntries().filter(entry => entry.model);
+    if (shown.length < 2) { announce('Show at least two models to build a pairwise RMSD matrix', 'error'); return; }
+    if (shown.length > 12) { announce('The pairwise matrix is limited to twelve shown models · hide some first', 'error'); return; }
+    const matcher = fitMatcher(); const byPosition = root.querySelector('#gpv-chain-position').checked;
+    const done = setBusy('Superposing every pair…');
+    try {
+      const values = shown.map(() => shown.map(() => 0)); const counts = shown.map(() => shown.map(() => 0)); const mappings = shown.map(() => shown.map(() => ''));
+      for (let i = 0; i < shown.length; i += 1) for (let j = i + 1; j < shown.length; j += 1) {
+        const result = pairwiseRmsd(shown[i], shown[j], matcher, byPosition);
+        values[i][j] = values[j][i] = result ? result.rmsd : NaN;
+        counts[i][j] = counts[j][i] = result ? result.count : 0;
+        mappings[i][j] = mappings[j][i] = result ? result.mapping || '' : '';
+      }
+      rmsdMatrix = { names: shown.map(displayName), short: distinguishingNames(shown.map(displayName)), values, counts, mappings, mapping: root.querySelector('#gpv-alignment-mode').value === 'sequence' ? 'sequence' : 'identifier', fitRegion: matcher ? matcher.label : null, byPosition };
+    } finally { done(); }
+    renderRmsdMatrix();
+    if (typeof renderCompositeControls === 'function') renderCompositeControls();
+    const finite = rmsdMatrix.values.flat().filter((value, index) => Number.isFinite(value) && index % (shown.length + 1) !== 0);
+    announce('Pairwise RMSD matrix · ' + shown.length + ' models · ' + (finite.length ? Math.min(...finite).toFixed(2) + ' to ' + Math.max(...finite).toFixed(2) + ' Å' : 'no pair could be fitted') + (rmsdMatrix.fitRegion ? ' · fitted on ' + rmsdMatrix.fitRegion : '') + (byPosition ? ' · chains matched by position' : ''));
+  }
+  function rmsdMatrixMaximum() {
+    const finite = rmsdMatrix.values.flat().filter(Number.isFinite);
+    return Math.max(0.01, ...finite);
+  }
+  function renderRmsdMatrix() {
+    const wrap = root.querySelector('#gpv-rmsd-matrix-wrap'); const state = root.querySelector('#gpv-rmsd-matrix-state');
+    ['#gpv-rmsd-matrix-csv', '#gpv-rmsd-matrix-png', '#gpv-rmsd-matrix-svg'].forEach(selector => { root.querySelector(selector).disabled = !rmsdMatrix; });
+    if (!rmsdMatrix) { wrap.hidden = true; state.textContent = 'Show two or more models, then compute. Uses the residue mapping, fit region and chain matching set above.'; return; }
+    wrap.hidden = false;
+    const head = root.querySelector('#gpv-rmsd-matrix-head'); const body = root.querySelector('#gpv-rmsd-matrix-body'); head.replaceChildren(); body.replaceChildren();
+    const headRow = document.createElement('tr'); headRow.append(document.createElement('th'));
+    rmsdMatrix.short.forEach((name, index) => { const th = document.createElement('th'); th.className = 'text-end'; th.textContent = name; th.title = rmsdMatrix.names[index]; headRow.append(th); });
+    head.append(headRow);
+    const maximum = rmsdMatrixMaximum();
+    rmsdMatrix.values.forEach((row, i) => {
+      const tr = document.createElement('tr'); const th = document.createElement('th'); th.scope = 'row'; th.textContent = rmsdMatrix.short[i]; th.title = rmsdMatrix.names[i]; tr.append(th);
+      row.forEach((value, j) => {
+        const td = document.createElement('td'); td.className = 'text-end';
+        if (i === j) td.textContent = '—';
+        else if (!Number.isFinite(value)) td.textContent = 'n/a';
+        else { td.textContent = value.toFixed(2); td.style.background = gradientColor(dataScales.heat, value / maximum); td.style.color = value / maximum > 0.55 ? '#ffffff' : '#111827'; td.title = rmsdMatrix.counts[i][j] + ' Cα pairs' + (rmsdMatrix.mappings[i][j] ? ' · ' + rmsdMatrix.mappings[i][j] : ''); }
+        tr.append(td);
+      });
+      body.append(tr);
+    });
+    state.textContent = rmsdMatrix.names.length + ' models · Cα RMSD after superposing each pair · ' + (rmsdMatrix.mapping === 'sequence' ? 'sequence-aware mapping' : 'chain and residue identifiers') + (rmsdMatrix.fitRegion ? ' · fitted on ' + rmsdMatrix.fitRegion + ', RMSD over all matched pairs' : '') + (rmsdMatrix.byPosition ? ' · identical chains matched by position' : '') + ' · hover a cell for the pair count and chain mapping';
+  }
+  function downloadRmsdMatrixCsv() {
+    if (!rmsdMatrix) return;
+    const quote = value => '"' + String(value ?? '').replace(/"/g, '""') + '"';
+    const rows = [['model', ...rmsdMatrix.names]];
+    rmsdMatrix.values.forEach((row, i) => rows.push([rmsdMatrix.names[i], ...row.map((value, j) => (i === j ? 0 : Number.isFinite(value) ? value : ''))]));
+    rows.push([]); rows.push(['ca_pairs', ...rmsdMatrix.names]);
+    rmsdMatrix.counts.forEach((row, i) => rows.push([rmsdMatrix.names[i], ...row]));
+    rows.push([]); rows.push(['settings', 'mapping=' + rmsdMatrix.mapping, 'fitted_on=' + (rmsdMatrix.fitRegion || 'all matched'), 'chains_by_position=' + rmsdMatrix.byPosition]);
+    downloadBlob(rows.map(row => row.map(quote).join(',')).join('\n'), 'text/csv', 'protein-rmsd-matrix.csv');
+    updateStatus('RMSD matrix CSV downloaded');
+  }
+  /* The heat map: names down the left and along the top, one coloured square per pair with the
+     value inside, a colour bar underneath. Drawn square in a given side length. */
+  function rmsdMatrixMetrics(size, scale) {
+    const n = rmsdMatrix.names.length; const label = Math.round(Math.min(size * 0.28, 120 * scale)); const bar = Math.round(28 * scale);
+    const cell = Math.floor((size - label - bar - Math.round(10 * scale)) / n);
+    return { n, label, bar, cell, font: Math.max(8, Math.min(Math.round(13 * scale), Math.round(cell * 0.32))), small: Math.round(10 * scale), gridX: label, gridY: label, width: label + cell * n, height: label + cell * n + bar + Math.round(10 * scale) };
+  }
+  function drawRmsdMatrix(context, x0, y0, size, scale, palette) {
+    const m = rmsdMatrixMetrics(size, scale); const maximum = rmsdMatrixMaximum();
+    context.save(); context.textBaseline = 'middle';
+    context.font = '500 ' + m.small + 'px ' + figureFont(); context.fillStyle = palette.ink;
+    rmsdMatrix.short.forEach((name, i) => {
+      const text = truncateToWidth(context, name, m.label - 6 * scale);
+      context.textAlign = 'right'; context.fillText(text, x0 + m.gridX - 4 * scale, y0 + m.gridY + i * m.cell + m.cell / 2);
+      context.save(); context.translate(x0 + m.gridX + i * m.cell + m.cell / 2, y0 + m.gridY - 4 * scale); context.rotate(-Math.PI / 2); context.textAlign = 'left'; context.fillText(text, 0, 0); context.restore();
+    });
+    rmsdMatrix.values.forEach((row, i) => row.forEach((value, j) => {
+      const x = x0 + m.gridX + j * m.cell; const y = y0 + m.gridY + i * m.cell;
+      const tint = i === j ? palette.paper : Number.isFinite(value) ? gradientColor(dataScales.heat, value / maximum) : '#e5e7eb';
+      context.fillStyle = tint; context.fillRect(x, y, m.cell, m.cell);
+      context.strokeStyle = palette.paper; context.lineWidth = Math.max(1, scale); context.strokeRect(x + 0.5, y + 0.5, m.cell - 1, m.cell - 1);
+      if (i !== j) { context.fillStyle = Number.isFinite(value) && value / maximum > 0.55 ? '#ffffff' : '#111827'; context.font = '600 ' + m.font + 'px ' + figureFont(); context.textAlign = 'center'; context.fillText(Number.isFinite(value) ? value.toFixed(value >= 10 ? 1 : 2) : 'n/a', x + m.cell / 2, y + m.cell / 2); }
+    }));
+    const barY = y0 + m.gridY + m.n * m.cell + Math.round(10 * scale); const barW = m.n * m.cell;
+    for (let k = 0; k < barW; k += 1) { context.fillStyle = gradientColor(dataScales.heat, k / Math.max(1, barW - 1)); context.fillRect(x0 + m.gridX + k, barY, 1, Math.round(m.bar * 0.45)); }
+    context.fillStyle = palette.ink; context.font = '500 ' + m.small + 'px ' + figureFont(); context.textAlign = 'left'; context.fillText('0', x0 + m.gridX, barY + m.bar * 0.8);
+    context.textAlign = 'right'; context.fillText(maximum.toFixed(1) + ' Å', x0 + m.gridX + barW, barY + m.bar * 0.8);
+    context.textAlign = 'center'; context.fillText('Cα RMSD', x0 + m.gridX + barW / 2, barY + m.bar * 0.8);
+    context.restore();
+    return m;
+  }
+  function svgRmsdMatrix(x0, y0, size, scale, palette) {
+    const m = rmsdMatrixMetrics(size, scale); const maximum = rmsdMatrixMaximum();
+    const text = (x, y, sz, weight, anchor, fill, value, transform) => '<text x="' + f(x) + '" y="' + f(y) + '" dominant-baseline="central" text-anchor="' + anchor + '" font-family="' + svgFont + '" font-size="' + f(sz) + '" font-weight="' + weight + '" fill="' + fill + '"' + (transform ? ' transform="' + transform + '"' : '') + '>' + svgEscape(value) + '</text>';
+    const parts = ['<g id="rmsd-matrix">'];
+    svgMeasure.font = '500 ' + m.small + 'px ' + svgFont;
+    rmsdMatrix.short.forEach((name, i) => {
+      const label = truncateToWidth(svgMeasure, name, m.label - 6 * scale);
+      parts.push(text(x0 + m.gridX - 4 * scale, y0 + m.gridY + i * m.cell + m.cell / 2, m.small, 500, 'end', palette.ink, label));
+      const cx = x0 + m.gridX + i * m.cell + m.cell / 2; const cy = y0 + m.gridY - 4 * scale;
+      parts.push(text(cx, cy, m.small, 500, 'start', palette.ink, label, 'rotate(-90 ' + f(cx) + ' ' + f(cy) + ')'));
+    });
+    rmsdMatrix.values.forEach((row, i) => row.forEach((value, j) => {
+      const x = x0 + m.gridX + j * m.cell; const y = y0 + m.gridY + i * m.cell;
+      const tint = i === j ? palette.paper : Number.isFinite(value) ? gradientColor(dataScales.heat, value / maximum) : '#e5e7eb';
+      parts.push('<rect x="' + f(x) + '" y="' + f(y) + '" width="' + f(m.cell) + '" height="' + f(m.cell) + '" fill="' + tint + '" stroke="' + palette.paper + '" stroke-width="' + f(Math.max(1, scale)) + '"/>');
+      if (i !== j) parts.push(text(x + m.cell / 2, y + m.cell / 2, m.font, 600, 'middle', Number.isFinite(value) && value / maximum > 0.55 ? '#ffffff' : '#111827', Number.isFinite(value) ? value.toFixed(value >= 10 ? 1 : 2) : 'n/a'));
+    }));
+    const barY = y0 + m.gridY + m.n * m.cell + 10 * scale; const barW = m.n * m.cell; const steps = 24;
+    for (let k = 0; k < steps; k += 1) parts.push('<rect x="' + f(x0 + m.gridX + barW * k / steps) + '" y="' + f(barY) + '" width="' + f(barW / steps + 0.5) + '" height="' + f(m.bar * 0.45) + '" fill="' + gradientColor(dataScales.heat, k / (steps - 1)) + '"/>');
+    parts.push(text(x0 + m.gridX, barY + m.bar * 0.8, m.small, 500, 'start', palette.ink, '0'));
+    parts.push(text(x0 + m.gridX + barW, barY + m.bar * 0.8, m.small, 500, 'end', palette.ink, maximum.toFixed(1) + ' Å'));
+    parts.push(text(x0 + m.gridX + barW / 2, barY + m.bar * 0.8, m.small, 500, 'middle', palette.ink, 'Cα RMSD'));
+    parts.push('</g>');
+    return { markup: parts.join(''), height: m.height };
+  }
+  async function downloadRmsdMatrix(kind) {
+    if (!rmsdMatrix) { announce('Compute the pairwise RMSD matrix first', 'error'); return; }
+    const plan = exportDimensions(); const scale = figureScale(plan); const palette = figurePalette(); const pad = Math.round(16 * scale);
+    const size = Math.min(plan.width, plan.height) - pad * 2; const m = rmsdMatrixMetrics(size, scale);
+    const width = m.width + pad * 2; const height = m.height + pad * 2;
+    if (kind === 'png') {
+      const canvas = document.createElement('canvas'); canvas.width = width; canvas.height = height; const context = canvas.getContext('2d');
+      context.fillStyle = palette.paper; context.fillRect(0, 0, width, height);
+      drawRmsdMatrix(context, pad, pad, size, scale, palette);
+      downloadBlob(await pngWithDpi(canvas.toDataURL('image/png'), plan.dpi), 'image/png', exportFileName('protein-rmsd-matrix', plan, 'png'));
+    } else {
+      downloadBlob(svgDocument(width, height, palette.paper, svgRmsdMatrix(pad, pad, size, scale, palette).markup), 'image/svg+xml', 'protein-rmsd-matrix.svg');
+    }
+    announce('RMSD matrix ' + kind.toUpperCase() + ' downloaded · ' + rmsdMatrix.names.length + ' × ' + rmsdMatrix.names.length + ' · ' + width + ' × ' + height + ' px' + (plan.dpi ? ' at ' + plan.dpi + ' dpi' : ''));
+  }
+  root.querySelector('#gpv-rmsd-matrix-run').addEventListener('click', computeRmsdMatrix);
+  root.querySelector('#gpv-rmsd-matrix-csv').addEventListener('click', downloadRmsdMatrixCsv);
+  root.querySelector('#gpv-rmsd-matrix-png').addEventListener('click', () => downloadRmsdMatrix('png'));
+  root.querySelector('#gpv-rmsd-matrix-svg').addEventListener('click', () => downloadRmsdMatrix('svg'));
+
   function recordSpinVideo() {
     const canvas = root.querySelector('#gpv-stage canvas');
     if (!canvas || !canvas.captureStream || typeof MediaRecorder === 'undefined') {

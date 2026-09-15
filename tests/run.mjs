@@ -612,6 +612,39 @@ await step('identical chains are re-paired by position when a model places the s
     console.log('       swapped copies: ' + byName.rmsd.toFixed(2) + ' Å in file order → ' + byPosition.rmsd.toFixed(2) + ' Å by position · ' + byPosition.mapping);
   } finally { await cleanup(); }
 });
+await step('the pairwise RMSD matrix agrees with the alignment table and exports as CSV, PNG, SVG and a composite panel', async () => {
+  await tab('models'); await page.click('#gpv-show-all'); await page.waitForTimeout(400);
+  const viewBefore = await page.inputValue('#gpv-view-mode'); await page.selectOption('#gpv-view-mode', 'overlay'); await page.waitForTimeout(500);
+  try {
+    await tab('compare'); await page.click('#gpv-align'); await page.waitForTimeout(2500);
+    const table = await page.locator('#gpv-alignment-results tr').evaluateAll(list => list.map(row => [...row.querySelectorAll('th,td')].map(cell => cell.textContent)));
+    await page.click('#gpv-rmsd-matrix-run'); await page.waitForTimeout(1500);
+    const matrix = await page.evaluate(() => { const m = window.__viewerDebug.rmsdMatrix(); return m && { names: m.names, values: m.values }; });
+    if (!matrix || matrix.names.length < 3) throw new Error('matrix missing or too small: ' + JSON.stringify(matrix && matrix.names));
+    const n = matrix.names.length;
+    for (let i = 0; i < n; i += 1) for (let j = 0; j < n; j += 1) {
+      if (i === j && matrix.values[i][j] !== 0) throw new Error('diagonal is not zero at ' + i);
+      if (Math.abs(matrix.values[i][j] - matrix.values[j][i]) > 1e-9) throw new Error('matrix is not symmetric at ' + i + ',' + j);
+    }
+    /* Row of the reference against the table: the same superposition, so the same number. */
+    const reference = table[0][1]; const r = matrix.names.indexOf(reference); if (r < 0) throw new Error('reference ' + reference + ' not in the matrix ' + matrix.names.join(', '));
+    table.forEach(cells => { const c = matrix.names.indexOf(cells[0]); if (c < 0) return; const tableRmsd = Number(cells[4]); if (Math.abs(matrix.values[r][c] - tableRmsd) > 0.005) throw new Error(cells[0] + ': matrix ' + matrix.values[r][c].toFixed(3) + ' against table ' + tableRmsd); });
+    const shown = await page.locator('#gpv-rmsd-matrix-body tr').count(); if (shown !== n) throw new Error('table rows ' + shown + ' for ' + n + ' models');
+    let download = page.waitForEvent('download', { timeout: 60000 }); await page.click('#gpv-rmsd-matrix-csv');
+    const csv = await readFile(await (await download).path(), 'utf8');
+    if (!csv.startsWith('"model",') || !/"ca_pairs"/.test(csv) || !/chains_by_position=/.test(csv)) throw new Error('matrix CSV: ' + csv.slice(0, 120));
+    download = page.waitForEvent('download', { timeout: 120000 }); await page.click('#gpv-rmsd-matrix-svg');
+    const svg = await readFile(await (await download).path(), 'utf8');
+    const cells = (svg.match(/<rect /g) || []).length; if (!/id="rmsd-matrix"/.test(svg) || cells < n * n || !/Cα RMSD/.test(svg)) throw new Error('matrix SVG: ' + cells + ' rects');
+    download = page.waitForEvent('download', { timeout: 120000 }); await page.click('#gpv-rmsd-matrix-png');
+    const png = await readFile(await (await download).path()); if (png.readUInt32BE(16) < 300) throw new Error('matrix PNG too small: ' + png.readUInt32BE(16));
+    await tab('publish'); if (await page.locator('#gpv-composite-matrix').isDisabled()) throw new Error('the composite figure does not offer the matrix panel');
+    await page.click('#gpv-methods-text'); await page.waitForTimeout(300);
+    if (!/Pairwise Cα RMSDs between the \d+ (shown )?models/.test(await page.inputValue('#gpv-methods-field'))) throw new Error('the methods text does not describe the matrix');
+    const off = matrix.values.flatMap((row, i) => row.filter((value, j) => j > i));
+    console.log('       ' + n + ' × ' + n + ' · ' + Math.min(...off).toFixed(2) + ' to ' + Math.max(...off).toFixed(2) + ' Å · row of ' + reference.replace(/\.pdb$/, '') + ' matches the alignment table');
+  } finally { await tab('models'); await page.selectOption('#gpv-view-mode', viewBefore); await page.waitForTimeout(300); await tab('compare'); }
+});
 await step('the model legend drops the shared part of long run file names', async () => {
   const cases = await page.evaluate(() => {
     const shorten = window.__viewerDebug.distinguishingNames;
