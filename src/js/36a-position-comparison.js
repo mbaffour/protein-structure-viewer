@@ -269,6 +269,8 @@
 
   function renderPositionState(message = null) {
     const state = root.querySelector('#gpv-position-state');
+    const figure = root.querySelector('#gpv-position-figure');
+    if (figure) figure.disabled = !spotlightResidues.length;
     if (message) { state.textContent = message; return; }
     if (!spotlightResidues.length) { state.textContent = 'Select a residue, then compare it across the shown models.'; return; }
     state.textContent = spotlightResidues.map(positionReadout).join('  ·  ');

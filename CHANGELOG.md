@@ -2,6 +2,24 @@
 
 All notable changes to this project are recorded here.
 
+## 2.38.0
+
+- **Make site figure.** The figure a mutation study ends up drawing is always the same two panels, so
+  the viewer now draws them. With a position compared, **Make site figure** in Annotate saves
+  **Overview** — every shown model solid, the whole superposition in frame, the site marked — and
+  **Site A:15** — the camera on the compared residue in the reference model, backed off a little so the
+  neighbours show, the side chains drawn, each model's own residue labelled, and the reference (the wild
+  type) solid against every other shown model faded. Both are saved views, captioned (the close-up takes
+  the comparison readout, `A:15 · model_a Ala → model_mutant Gly · differs`, as its caption), ticked as
+  the only two panels of the figure builder in two columns with letters, captions and per-panel legends
+  on, and the Publish tab opens at the figure builder ready for **Download figure PNG** or **SVG**. The
+  press needs a compared position and at least two shown models; it switches colouring to one colour per
+  model and turns the side chains on; it leaves the screen as it found it, solid, not faded; and the
+  whole thing is one undo step. With several positions compared it builds the figure for the first.
+- **Saved views now record which models are faded**, so a panel built with one model emphasised renders
+  that way in the figure and in the report, and **undo covers saved views** — the two panels of a site
+  figure, a tick in the figure builder, a reordered panel, and saving or removing a view.
+
 ## 2.37.0
 
 - **Fixed: a rejected positional re-pairing left the model in the rejected superposition.** With *Match identical

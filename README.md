@@ -193,6 +193,10 @@ neighbourhood table of every residue of the reference model with a heavy atom wi
 with the site first, a neighbourhood mean at the bottom, and a one-line summary — *site moved 0.42 Å
 in model_mutant · 7 neighbours within 5 Å moved 0.31 Å on average*. **Highlight neighbourhood** turns
 those residues into a normal highlight selection and **Download effect CSV** exports the table.
+**Make site figure** then turns the comparison into a finished two-panel figure in one press — an
+overview of the superposed models with the site marked, and a close-up with the side chains, a label per
+model and the wild type solid against the others faded — ticked, lettered and captioned in the figure
+builder ready to download as PNG or SVG.
 
 ## Domain figures
 

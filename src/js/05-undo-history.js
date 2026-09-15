@@ -5,7 +5,7 @@
   let redoStack = [];
 
   function snapshotRecords() {
-    return structuredClone({ labels: labelRecords, selections: selectionRecords, measurements: measurementRecords, annotations: annotationRecords, domains: domainRecords, positions: spotlightResidues });
+    return structuredClone({ labels: labelRecords, selections: selectionRecords, measurements: measurementRecords, annotations: annotationRecords, domains: domainRecords, positions: spotlightResidues, views: savedViews });
   }
 
   function renderHistoryButtons() {
@@ -34,7 +34,10 @@
     annotationRecords = state.annotations.filter(record => record.points.every(alive));
     domainRecords = (state.domains || []).filter(record => record.scope === 'all' || alive(record)); domainVersion += 1;
     spotlightResidues = state.positions || [];
-    renderLabelList(); renderSelectionList(); renderMeasurementList(); renderAnnotationList(); renderDomainList(); renderPositionState();
+    /* Saved views are records too: Make site figure adds two of them in one press, and undo has to
+       take them back with the rest of the state that press changed. */
+    if (Array.isArray(state.views)) savedViews = state.views;
+    renderLabelList(); renderSelectionList(); renderMeasurementList(); renderAnnotationList(); renderDomainList(); renderPositionState(); renderSavedViews();
     applyStyle();
   }
 

@@ -964,6 +964,7 @@ html>body{padding:0}</style>
       <label class="form-label">Neighbourhood (Å)<input class="form-control" id="gpv-position-cutoff" type="number" min="3" max="12" step="0.5" value="5" data-tooltip="Residues of the reference model with any heavy atom this close to the compared residue are the neighbourhood whose movement is measured"></label>
       <button class="btn" type="button" id="gpv-position-highlight" disabled data-tooltip="Highlight the neighbourhood of the compared position on the reference model">Highlight neighbourhood</button>
       <button class="btn btn-ghost" type="button" id="gpv-position-csv" disabled data-tooltip="Cα deviation of the site and of every neighbour, one column per model">Download effect CSV</button>
+      <button class="btn" type="button" id="gpv-position-figure" disabled data-tooltip="Build a two-panel figure around the compared position: an overview of the superposed models with the site marked, and a close-up with the side chains, one label per model, and the reference drawn solid against the others faded — both saved as figure panels in Publish">Make site figure</button>
       <button class="btn btn-ghost" type="button" id="gpv-position-clear">Clear compared positions</button>
       <span class="text-muted text-small" id="gpv-position-state">Select a residue, then compare it across the shown models.</span>
     </div>
@@ -1218,7 +1219,7 @@ html>body{padding:0}</style>
       <button class="btn" type="button" id="gpv-captions" disabled>Download captions</button>
     </div>
     <div class="gpv-list" id="gpv-saved-views" aria-label="Saved publication views"></div>
-    <h3 class="gpv-subheading">Figure builder</h3>
+    <h3 class="gpv-subheading" id="gpv-builder-heading">Figure builder</h3>
     <p class="text-muted text-small gpv-hint">Saved views are the panels. Tick the ones to include, order them, give each a caption, and download one lettered figure. Every panel is rendered from its own camera, colour scheme and model selection at the same text size, with its own legend and scale bar, and the panels are sized so the whole figure is the width chosen under Output above — a 178 mm figure stays 178 mm whether it has two panels or six.</p>
     <table class="table table-sm gpv-builder-table" aria-label="Figure panels"><thead><tr><th scope="col">In</th><th scope="col">Panel</th><th scope="col">View</th><th scope="col">Caption</th><th scope="col">Order</th></tr></thead><tbody id="gpv-builder-rows"></tbody></table>
     <div class="viz-controls">
@@ -1289,7 +1290,7 @@ html>body{padding:0}</style>
       </ul>
       <h3>Tips for figures and reviewers</h3>
       <ul>
-        <li><em>Annotate → Compare this position</em> takes the residue you have selected and, in every shown model, draws its side chain, writes that model’s own residue on it (Arg273, His273) and states whether the models agree — the one-press check on a wild-type and mutant pair. Positions are matched by the Cα pairing of the superposition once the models are aligned, and by chain and residue number otherwise. After <em>Align visible</em> the same press also measures what the substitution did: a neighbourhood table of every residue with a heavy atom within the cutoff of the site, each row giving its Cα deviation from the reference in every other model, with <em>Highlight neighbourhood</em> and an effect CSV.</li>
+        <li><em>Annotate → Compare this position</em> takes the residue you have selected and, in every shown model, draws its side chain, writes that model’s own residue on it (Arg273, His273) and states whether the models agree — the one-press check on a wild-type and mutant pair. Positions are matched by the Cα pairing of the superposition once the models are aligned, and by chain and residue number otherwise. After <em>Align visible</em> the same press also measures what the substitution did: a neighbourhood table of every residue with a heavy atom within the cutoff of the site, each row giving its Cα deviation from the reference in every other model, with <em>Highlight neighbourhood</em> and an effect CSV. <em>Make site figure</em> then turns the comparison into a finished two-panel figure in one press: panel A an overview of the superposed models with the site marked, panel B a close-up of the site with the side chains and each model’s label, the reference model solid and the others faded. Both are saved as views, ticked as the only two panels of the figure builder in two columns, and the Publish tab opens at the builder ready for <em>Download figure PNG</em> or <em>SVG</em>; ⌘Z takes the two panels back.</li>
         <li><em>Publish → Figure format</em> saves the same figure as PNG or TIFF with the resolution in the file, as a PDF whose page is the physical size you chose, or as JPEG or WebP for slides; <em>Download figure SVG</em> stays the vector option with editable text.</li>
         <li>After <em>Align visible</em>, <em>RMSF profile SVG/PNG</em> plots the per-residue Cα spread across the aligned models, one panel per chain with the agreement bands behind the trace, and the same plot is a panel of the composite figure — the ensemble counterpart of the pLDDT profile.</li>
         <li><em>Compare → Pairwise RMSD → Compute matrix</em> superposes every shown model onto every other with the same rules as Align visible and tabulates the Cα RMSDs — which models of an ensemble agree, which is the odd one out — with a mean column, a ★ on the medoid, a CSV, a heat-map PNG or SVG with the values in the cells, and a panel for the composite figure. <em>Use medoid as reference</em> superposes everything onto that model and draws it solid against the rest.</li>
@@ -1665,7 +1666,7 @@ html>body{padding:0}</style>
   let busyDepth = 0;
   let restoreMotion = null;
   const listPageSize = 60;
-  const viewerVersion = '2.37.0';
+  const viewerVersion = '2.38.0';
   const preferenceKey = 'protein-structure-viewer:preferences';
   const themeKey = 'protein-structure-viewer:theme';
   const labelColors = getComputedStyle(root);
@@ -3480,7 +3481,7 @@ html>body{padding:0}</style>
   let redoStack = [];
 
   function snapshotRecords() {
-    return structuredClone({ labels: labelRecords, selections: selectionRecords, measurements: measurementRecords, annotations: annotationRecords, domains: domainRecords, positions: spotlightResidues });
+    return structuredClone({ labels: labelRecords, selections: selectionRecords, measurements: measurementRecords, annotations: annotationRecords, domains: domainRecords, positions: spotlightResidues, views: savedViews });
   }
 
   function renderHistoryButtons() {
@@ -3509,7 +3510,10 @@ html>body{padding:0}</style>
     annotationRecords = state.annotations.filter(record => record.points.every(alive));
     domainRecords = (state.domains || []).filter(record => record.scope === 'all' || alive(record)); domainVersion += 1;
     spotlightResidues = state.positions || [];
-    renderLabelList(); renderSelectionList(); renderMeasurementList(); renderAnnotationList(); renderDomainList(); renderPositionState();
+    /* Saved views are records too: Make site figure adds two of them in one press, and undo has to
+       take them back with the rest of the state that press changed. */
+    if (Array.isArray(state.views)) savedViews = state.views;
+    renderLabelList(); renderSelectionList(); renderMeasurementList(); renderAnnotationList(); renderDomainList(); renderPositionState(); renderSavedViews();
     applyStyle();
   }
 
@@ -6616,6 +6620,7 @@ html>body{padding:0}</style>
         activeModel: has(view.activeModel) ? view.activeModel : shared[0].name,
         visibleModels: (view.visibleModels || []).filter(has),
         colors: Object.fromEntries(Object.entries(view.colors || {}).filter(([name]) => has(name))),
+        faded: Object.fromEntries(Object.entries(view.faded || {}).filter(([name]) => has(name))),
         leftModel: has(view.leftModel) ? view.leftModel : null,
         comparePanels: (view.comparePanels || []).filter(has)
       }))
@@ -6984,6 +6989,9 @@ html>body{padding:0}</style>
       activeModel: active ? active.name : null,
       visibleModels: structures.filter(entry => entry.visible).map(entry => entry.name),
       colors: Object.fromEntries(structures.map(entry => [entry.name, entry.color])),
+      /* Emphasis is part of what a panel shows: the site close-up of Make site figure is the
+         reference solid against the others faded, and a panel that forgot it would render solid. */
+      faded: Object.fromEntries(structures.map(entry => [entry.name, Boolean(entry.faded)])),
       viewMode: root.querySelector('#gpv-view-mode').value,
       representation: root.querySelector('#gpv-style').value,
       colorMode: root.querySelector('#gpv-color-mode').value,
@@ -7005,9 +7013,12 @@ html>body{padding:0}</style>
     const panels = options.panels !== false;
     const byName = new Map(structures.map(entry => [entry.name, entry]));
     const visibleNames = new Set(state.visibleModels || []);
+    /* Views saved before emphasis was recorded carry no faded map; those leave it as it is. */
+    const fadedMap = state.faded && typeof state.faded === 'object' ? state.faded : null;
     structures.forEach(entry => {
       entry.visible = visibleNames.has(entry.name);
       if (/^#[0-9a-f]{6}$/i.test((state.colors || {})[entry.name] || '')) entry.color = state.colors[entry.name];
+      if (fadedMap && Object.prototype.hasOwnProperty.call(fadedMap, entry.name)) entry.faded = fadedMap[entry.name] === true;
     });
     const active = byName.get(state.activeModel); if (active) activeId = active.id;
     if (['overlay', 'single'].includes(state.viewMode)) root.querySelector('#gpv-view-mode').value = state.viewMode;
@@ -7041,7 +7052,7 @@ html>body{padding:0}</style>
       const textValue = document.createElement('span'); textValue.className = 'gpv-entry-name';
       textValue.textContent = String.fromCharCode(65 + index) + ' · ' + view.name + (view.caption ? ' — ' + view.caption : '');
       const load = document.createElement('button'); load.className = 'btn'; load.type = 'button'; load.textContent = 'Load'; load.addEventListener('click', () => { applyViewState(view); updateStatus('Loaded view ' + view.name); });
-      const remove = document.createElement('button'); remove.className = 'btn btn-ghost'; remove.type = 'button'; remove.textContent = 'Remove'; remove.addEventListener('click', () => { savedViews = savedViews.filter(item => item.id !== view.id); renderSavedViews(); updateStatus('Saved view removed'); });
+      const remove = document.createElement('button'); remove.className = 'btn btn-ghost'; remove.type = 'button'; remove.textContent = 'Remove'; remove.addEventListener('click', () => { remember('remove view'); savedViews = savedViews.filter(item => item.id !== view.id); renderSavedViews(); updateStatus('Saved view removed'); });
       row.append(textValue, load, remove); list.append(row);
     });
     updateStatus();
@@ -7050,6 +7061,7 @@ html>body{padding:0}</style>
   function saveCurrentView() {
     const nameInput = root.querySelector('#gpv-view-name'); const captionInput = root.querySelector('#gpv-view-caption');
     const name = nameInput.value.trim() || 'View ' + (savedViews.length + 1);
+    remember('save view');
     savedViews.push(captureViewState(name, captionInput.value.trim()));
     nameInput.value = ''; captionInput.value = ''; renderSavedViews(); updateStatus('Saved publication view ' + name);
   }
@@ -9309,6 +9321,8 @@ applyBackground();
 
   function renderPositionState(message = null) {
     const state = root.querySelector('#gpv-position-state');
+    const figure = root.querySelector('#gpv-position-figure');
+    if (figure) figure.disabled = !spotlightResidues.length;
     if (message) { state.textContent = message; return; }
     if (!spotlightResidues.length) { state.textContent = 'Select a residue, then compare it across the shown models.'; return; }
     state.textContent = spotlightResidues.map(positionReadout).join('  ·  ');
@@ -9375,6 +9389,89 @@ applyBackground();
     applyStyle();
     updateStatus(root.querySelector('#gpv-position-sticks').checked ? 'Side chains drawn at the compared positions' : 'Side chains at the compared positions hidden');
   });
+  /* ---------- Site figure ----------
+     The figure a mutation study ends up drawing is always the same two panels: an overview of the
+     superposed models so the reader knows where the site is, and a close-up of the site itself with
+     the side chains, each model's own residue named on it, and the wild type solid against the
+     mutants faded. Make site figure builds both from the position that was just compared — camera,
+     colouring, emphasis and captions — ticks them as the only two panels of the figure builder and
+     opens Publish at it, so the press between "what did this mutation do?" and a figure file is
+     Download figure PNG. Everything it does is one undo step. */
+
+  /* The wild type: the reference of the superposition when it is on screen, and otherwise the first
+     shown model, which is the only honest default when nothing has been aligned. */
+  function siteFigureReference() {
+    const shown = displayedEntries().filter(entry => entry.model);
+    const chosen = entryById(Number(root.querySelector('#gpv-reference').value));
+    return chosen && chosen.model && shown.includes(chosen) ? chosen : shown[0] || null;
+  }
+
+  /* Set a control and let everything that listens to it react, the way a user changing it would. */
+  function siteFigureSet(selector, value) {
+    const control = root.querySelector(selector);
+    if (!control) return;
+    if (control.type === 'checkbox') { if (control.checked === value) return; control.checked = value; }
+    else { if (control.value === value) return; control.value = value; }
+    control.dispatchEvent(new Event('change', { bubbles: true }));
+  }
+
+  function makeSiteFigure() {
+    const shown = displayedEntries().filter(entry => entry.model);
+    if (!spotlightResidues.length) { announce('Compare a position first — the site figure is built around it', 'error'); return; }
+    if (shown.length < 2) { announce('Show at least two models to make a site figure', 'error'); return; }
+    const reference = siteFigureReference();
+    if (!reference) { announce('Show at least two models to make a site figure', 'error'); return; }
+    /* Several compared positions make several figures; this press builds the first one. */
+    const spot = spotlightResidues[0];
+    const tag = positionTag(spot);
+    const restore = captureViewState();
+    remember('site figure');
+    /* Per-model colouring is what makes the two panels readable: one colour per model, named in the
+       legend. Side chains are the point of the close-up. */
+    siteFigureSet('#gpv-color-mode', 'structure');
+    siteFigureSet('#gpv-position-sticks', true);
+
+    /* Panel A — the overview: every shown model solid, the whole superposition in frame. */
+    shown.forEach(entry => { entry.faded = false; });
+    applyStyle(); fitPrimary(); viewer.render();
+    const overview = captureViewState('Overview', 'Superposed models, site ' + tag + ' marked');
+    overview.inFigure = true;
+
+    /* Panel B — the close-up: the reference solid, the others faded behind it, the camera on the
+       site itself. zoomTo() frames the residue alone; backing off a little brings its neighbours
+       and the rest of the fold into the panel, which is what makes the close-up legible. */
+    shown.forEach(entry => { entry.faded = entry !== reference; });
+    applyStyle();
+    const selection = { model: reference.model.getID(), resi: spot.resi };
+    if (spot.chain) selection.chain = spot.chain;
+    viewer.zoomTo(selection);
+    if (typeof viewer.zoom === 'function') viewer.zoom(0.6);
+    viewer.render();
+    const closeUp = captureViewState('Site ' + tag, String(positionReadout(spot) || tag).slice(0, 200));
+    closeUp.inFigure = true;
+
+    /* Exactly these two panels, side by side, lettered and captioned. */
+    savedViews.forEach(view => { view.inFigure = false; });
+    savedViews.push(overview, closeUp);
+    siteFigureSet('#gpv-panel-columns', '2');
+    siteFigureSet('#gpv-builder-captions', 'both');
+    siteFigureSet('#gpv-builder-letters', true);
+    siteFigureSet('#gpv-builder-legends', true);
+    renderSavedViews();
+
+    /* The panels keep their own emphasis; the screen goes back to what it was, solid, so nobody is
+       left looking at a faded model wondering what happened. */
+    applyViewState(restore);
+    displayedEntries().filter(entry => entry.model).forEach(entry => { entry.faded = false; });
+    applyStyle();
+
+    root.querySelector('[data-gpv-tab="publish"]').click();
+    const heading = root.querySelector('#gpv-builder-heading');
+    if (heading) heading.scrollIntoView({ block: 'start' });
+    announce('Site figure ready · two panels in the figure builder · download it as PNG or SVG');
+  }
+
+  root.querySelector('#gpv-position-figure').addEventListener('click', makeSiteFigure);
   /* ---------- Appearance theme ---------- */
 
   const themeModes = [
@@ -10040,7 +10137,7 @@ applyBackground();
     'Publish → Print size exports at a stated width (85 or 178 mm) and resolution (300 or 600 dpi), writes the dpi into the PNG or TIFF, and sizes labels in points — what a journal checks.',
     'Appearance → Colour-blind-safe palette switches chains and domains to Okabe–Ito colours; a scale bar of 10–100 Å goes bottom-right of every export from Publish → Scale bar.',
     'Publish → Figure format saves the figure as PNG, TIFF, PDF, JPEG or WebP; the PDF page is the physical size you chose, and the SVG button keeps the text editable.',
-    'Annotate → Compare this position: pick the mutated residue, press the button, and every shown model gets its side chain drawn and its own residue named — Ala15 against Gly15 — with the difference stated in one line. After Align visible the same press adds the neighbourhood table: how far the site and every residue within the cutoff moved, with Highlight neighbourhood and an effect CSV.',
+    'Annotate → Compare this position: pick the mutated residue, press the button, and every shown model gets its side chain drawn and its own residue named — Ala15 against Gly15 — with the difference stated in one line. After Align visible the same press adds the neighbourhood table: how far the site and every residue within the cutoff moved, with Highlight neighbourhood and an effect CSV. Make site figure then builds the whole figure in one press: an overview panel with the site marked and a close-up with the reference solid and the others faded, ticked and lettered in the figure builder ready to download.',
     'Drag any label in the 3D view to move it: a residue label keeps a leader line back to its residue, and Reset in its row puts it back. Publish → Legend position puts the colour legend in any corner or down one side.',
     'Annotate → Domains → Label domains writes each domain\'s name on the structure at its centroid; Download architecture PNG/SVG draws the linear domain diagram that goes under it.',
     'Publish → Figure builder: save a few views — overview, interface, a zoom — tick them, order them, caption them, and download one lettered figure at the journal width as PNG or SVG.',
@@ -10120,7 +10217,7 @@ applyBackground();
   offerSessionRestore();
   /* ?debug=1 exposes a few internals for the regression suite and for bug reports;
      it has no effect otherwise. */
-  if (new URLSearchParams(location.search).has('debug')) window.__viewerDebug = { viewer, pickAtomAt, displayedEntries, activeEntry, colorOptions, sceneSettings, contactResult: () => contactResult, residueData: () => residueData, msaAssets: () => msaAssets, entries: () => structures, nearbyResidues, assemblyDimensions, paeDomains, parseConfidenceBytes, methodsText, alignmentResults: () => alignmentResults, ensembleSpread: () => ensembleSpread, siteResults: () => siteResults, interfaceResults: () => interfaceResults, solventAccessibleArea, heavyAtoms, ligandGroups, architectureModel, domainSets, distinguishingNames, rmsdMatrix: () => rmsdMatrix, rmsdMedoid, scaleBarSpec, pixelsPerAngstrom, sceneCentre, exportDimensions, exportViewer: () => exportViewer, renderPublicationImage, furnitureLayout, legendWanted, figurePalette, figureScale, releaseExportViewer, labelRecords: () => labelRecords, labelPosition, labelHitAt, spotlightResidues: () => spotlightResidues, positionEffect: () => positionEffect, selectionRecords: () => selectionRecords };
+  if (new URLSearchParams(location.search).has('debug')) window.__viewerDebug = { viewer, pickAtomAt, displayedEntries, activeEntry, colorOptions, sceneSettings, contactResult: () => contactResult, residueData: () => residueData, msaAssets: () => msaAssets, entries: () => structures, nearbyResidues, assemblyDimensions, paeDomains, parseConfidenceBytes, methodsText, alignmentResults: () => alignmentResults, ensembleSpread: () => ensembleSpread, siteResults: () => siteResults, interfaceResults: () => interfaceResults, solventAccessibleArea, heavyAtoms, ligandGroups, architectureModel, domainSets, distinguishingNames, rmsdMatrix: () => rmsdMatrix, rmsdMedoid, scaleBarSpec, pixelsPerAngstrom, sceneCentre, exportDimensions, exportViewer: () => exportViewer, renderPublicationImage, furnitureLayout, legendWanted, figurePalette, figureScale, releaseExportViewer, labelRecords: () => labelRecords, labelPosition, labelHitAt, spotlightResidues: () => spotlightResidues, positionEffect: () => positionEffect, savedViews: () => savedViews, selectionRecords: () => selectionRecords };
   applyTheme(readJson(themeKey, 'system'));
   selectToolTab('models');
   applyAppearance();

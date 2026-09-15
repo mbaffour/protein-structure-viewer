@@ -879,8 +879,22 @@ await step('one position is compared across a wild-type and a mutant model: side
   /* Highlight neighbourhood adds one selection per chain of the neighbourhood; the finally takes
      back exactly those rows so the rest of the suite starts from the selections it left. */
   let neighbourhoodRows = 0;
+  /* Make site figure saves two views and unticks every other one; the finally takes both back and
+     re-ticks the rest, so the later figure builder step still finds six included views. */
+  let siteFigureViews = 0;
   const startAlignmentMode = await page.inputValue('#gpv-alignment-mode');
   const cleanup = async () => {
+    if (siteFigureViews) {
+      await tab('publish');
+      for (const name of ['Site A:15', 'Overview']) {
+        /* A string hasText is case-insensitive and 'Site A:15' would match the Overview's caption 'site A:15 marked'. */
+        const row = page.locator('#gpv-saved-views .gpv-entry', { hasText: new RegExp('· ' + name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + ' —') });
+        if (await row.count()) { await row.first().locator('button:has-text("Remove")').click(); await page.waitForTimeout(250); }
+      }
+      const ticks = page.locator('#gpv-builder-rows input[type="checkbox"]');
+      for (let index = 0; index < (await ticks.count()); index += 1) { await ticks.nth(index).check(); await page.waitForTimeout(120); }
+      siteFigureViews = 0;
+    }
     await tab('compare');
     await page.selectOption('#gpv-alignment-mode', startAlignmentMode); await page.waitForTimeout(200);
     await tab('annotate');
@@ -966,13 +980,43 @@ await step('one position is compared across a wild-type and a mutant model: side
     const csvLines = csv.split('\n');
     if (!csvLines[0].startsWith('"chain","resi","resn","role"')) throw new Error('effect CSV header: ' + csvLines[0]);
     if (!csvLines.slice(1).some(line => /^"[^"]*","15","[^"]*","site"/.test(line))) throw new Error('the effect CSV has no site row for residue 15');
+    /* One press turns the compared position into the finished two-panel figure: an overview and a
+       close-up, the only two panels ticked in the builder, with Publish open at it. */
+    const viewsBefore = await page.evaluate(() => window.__viewerDebug.savedViews().length);
+    if (await page.locator('#gpv-position-figure').isDisabled()) throw new Error('Make site figure stayed disabled with a position compared');
+    await page.click('#gpv-position-figure'); await page.waitForTimeout(1500);
+    const views = await page.evaluate(() => window.__viewerDebug.savedViews().map(view => ({ name: view.name, included: view.inFigure !== false })));
+    siteFigureViews = views.length - viewsBefore;
+    if (siteFigureViews !== 2) throw new Error('Make site figure added ' + siteFigureViews + ' saved views, not 2');
+    const added = views.slice(viewsBefore);
+    if (added[0].name !== 'Overview' || added[1].name !== 'Site A:15') throw new Error('panel names: ' + added.map(view => view.name).join(', '));
+    if (!added.every(view => view.included)) throw new Error('the two site figure panels are not both ticked');
+    if (views.slice(0, viewsBefore).some(view => view.included)) throw new Error('an earlier saved view is still ticked into the figure');
+    const builderLetters = await page.locator('#gpv-builder-rows .gpv-builder-letter').allTextContents();
+    const expectedLetters = [...Array(viewsBefore).fill('—'), 'A', 'B'];
+    if (builderLetters.join('') !== expectedLetters.join('')) throw new Error('builder letters: ' + builderLetters.join(',') + ' not ' + expectedLetters.join(','));
+    if (!(await page.locator('[data-gpv-panel="publish"]').isVisible())) throw new Error('Make site figure did not open the Publish tab');
+    if ((await page.inputValue('#gpv-panel-columns')) !== '2') throw new Error('panel columns: ' + (await page.inputValue('#gpv-panel-columns')));
+    const estimate = (await page.locator('#gpv-export-estimate').textContent()) || '';
+    const estimateWidth = Number((estimate.match(/^(\d+) ×/) || [])[1]);
+    const figureDownload = page.waitForEvent('download', { timeout: 300000 });
+    await page.click('#gpv-contact-sheet');
+    const figureFile = await figureDownload;
+    const figurePng = await readFile(await figureFile.path());
+    const figureWidth = figurePng.readUInt32BE(16);
+    if (!/2-panels/.test(figureFile.suggestedFilename())) throw new Error('figure file name: ' + figureFile.suggestedFilename());
+    if (Number.isFinite(estimateWidth) && estimateWidth > 0) {
+      if (figureWidth !== 2 * Math.floor(estimateWidth / 2)) throw new Error('figure PNG is ' + figureWidth + ' px wide, not the two-column ' + (2 * Math.floor(estimateWidth / 2)));
+    } else if (figureWidth < 1000) throw new Error('figure PNG is only ' + figureWidth + ' px wide');
+    await tab('annotate');
     await page.click('#gpv-position-clear'); await page.waitForTimeout(600);
+    if (!(await page.locator('#gpv-position-figure').isDisabled())) throw new Error('Make site figure stayed enabled with no compared position');
     if (await page.evaluate(() => window.__viewerDebug.positionEffect())) throw new Error('clearing left the measured neighbourhood behind');
     if (!(await page.locator('#gpv-position-effect-wrap').isHidden())) throw new Error('clearing left the effect table on screen');
     if (await page.evaluate(() => window.__viewerDebug.labelRecords().some(label => label.kind === 'position'))) throw new Error('clearing left position labels behind');
     if ((await page.evaluate(() => window.__viewerDebug.spotlightResidues())).length) throw new Error('clearing left compared positions behind');
     if ((await page.locator('#gpv-label-list .gpv-entry').count()) !== labelsBefore) throw new Error('clearing removed labels it did not place');
-    console.log('       ' + state.trim() + ' · side chains and both labels in the SVG · ' + effect.summary.neighbourCount + ' neighbours within ' + effect.cutoff + ' Å measured, highlighted and exported · cleared');
+    console.log('       ' + state.trim() + ' · side chains and both labels in the SVG · ' + effect.summary.neighbourCount + ' neighbours within ' + effect.cutoff + ' Å measured, highlighted and exported · site figure: Overview + Site A:15 as panels A and B, PNG ' + figureWidth + ' px wide · cleared');
   } finally { await cleanup(); }
 });
 await step('the sequence strip shows both chains and selects a residue on click', async () => {

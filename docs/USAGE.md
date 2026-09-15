@@ -529,6 +529,20 @@ links. The figure legend gains the sentence *After superposition the Cα at A:15
 model_mutant, and the 7 residues within 5 Å moved 0.31 Å on average*, and the methods text states the
 neighbourhood rule.
 
+**Make site figure.** With a position compared, one press builds the whole figure. **Make site figure**
+saves two panels: **Overview**, every shown model solid with the superposition in frame and the site
+marked, and **Site A:15**, the camera on the compared residue in the reference model, backed off a
+little so the neighbours stay in the panel, with the side chains drawn, each model's own residue
+labelled, and the reference — the wild type — solid against every other shown model faded. It needs a
+compared position and at least two shown models; it switches colouring to one colour per model and turns
+**Side chains at compared positions** on. The close-up takes the comparison readout as its caption.
+Both panels are ticked as the *only* two panels of the figure builder, in two columns with letters,
+captions and a legend on each, and the Publish tab opens at the builder, so the next press is
+**Download figure PNG** or **Download figure SVG**. The screen goes back to what it was — solid, never
+left faded — the panels keep their own emphasis, and the whole press is a single ⌘Z. If several
+positions are compared, the figure is built around the first of them; compare the next one on its own
+and press again for its figure.
+
 **Legend position.** The **Legend position** control in Publish decides where the colour legend is drawn
 on exports: any of the four corners, or stacked as a column down the **left** or **right** side, which
 is what a tall single-panel figure usually wants. It applies to the publication PNG and TIFF, the figure

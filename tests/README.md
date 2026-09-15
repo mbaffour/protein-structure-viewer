@@ -122,6 +122,12 @@ PSV_CHROMIUM=/opt/pw-browsers/chromium/chrome-linux/chrome npm test
   carries one row per residue plus the summary row, the readout states how far the site moved, Highlight neighbourhood
   adds one `#f97316` selection per chain of the neighbourhood, and the effect CSV starts `"chain","resi","resn","role"`
   with a `site` row for residue 15; clearing removes the table and disables both buttons.
+- Make site figure: the same step then presses it and checks that exactly two saved views are added, named
+  `Overview` and `Site A:15`, that those two are the only ones ticked into the figure (letters A and B, every
+  earlier view `—`), that the Publish tab is open with two panel columns, and that the figure PNG downloads at
+  the two-column width the export estimate implies with `2-panels` in its name; the step then clears the
+  comparison, which disables the button again, and takes both views back so the figure builder step still
+  finds six included views.
 - Domain labels and architecture: on the block-diagonal PAE model, Label domains adds exactly two labels, D1 and D2, at
   the domain centroids; the architecture model reads two chains with one domain run each; the SVG carries the chain rows,
   names and residue numbers, the PNG is as wide as the export estimate says; the composite offers the panel, the builder

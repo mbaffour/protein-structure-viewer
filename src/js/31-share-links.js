@@ -29,6 +29,7 @@
         activeModel: has(view.activeModel) ? view.activeModel : shared[0].name,
         visibleModels: (view.visibleModels || []).filter(has),
         colors: Object.fromEntries(Object.entries(view.colors || {}).filter(([name]) => has(name))),
+        faded: Object.fromEntries(Object.entries(view.faded || {}).filter(([name]) => has(name))),
         leftModel: has(view.leftModel) ? view.leftModel : null,
         comparePanels: (view.comparePanels || []).filter(has)
       }))
@@ -397,6 +398,9 @@
       activeModel: active ? active.name : null,
       visibleModels: structures.filter(entry => entry.visible).map(entry => entry.name),
       colors: Object.fromEntries(structures.map(entry => [entry.name, entry.color])),
+      /* Emphasis is part of what a panel shows: the site close-up of Make site figure is the
+         reference solid against the others faded, and a panel that forgot it would render solid. */
+      faded: Object.fromEntries(structures.map(entry => [entry.name, Boolean(entry.faded)])),
       viewMode: root.querySelector('#gpv-view-mode').value,
       representation: root.querySelector('#gpv-style').value,
       colorMode: root.querySelector('#gpv-color-mode').value,
@@ -418,9 +422,12 @@
     const panels = options.panels !== false;
     const byName = new Map(structures.map(entry => [entry.name, entry]));
     const visibleNames = new Set(state.visibleModels || []);
+    /* Views saved before emphasis was recorded carry no faded map; those leave it as it is. */
+    const fadedMap = state.faded && typeof state.faded === 'object' ? state.faded : null;
     structures.forEach(entry => {
       entry.visible = visibleNames.has(entry.name);
       if (/^#[0-9a-f]{6}$/i.test((state.colors || {})[entry.name] || '')) entry.color = state.colors[entry.name];
+      if (fadedMap && Object.prototype.hasOwnProperty.call(fadedMap, entry.name)) entry.faded = fadedMap[entry.name] === true;
     });
     const active = byName.get(state.activeModel); if (active) activeId = active.id;
     if (['overlay', 'single'].includes(state.viewMode)) root.querySelector('#gpv-view-mode').value = state.viewMode;
@@ -454,7 +461,7 @@
       const textValue = document.createElement('span'); textValue.className = 'gpv-entry-name';
       textValue.textContent = String.fromCharCode(65 + index) + ' · ' + view.name + (view.caption ? ' — ' + view.caption : '');
       const load = document.createElement('button'); load.className = 'btn'; load.type = 'button'; load.textContent = 'Load'; load.addEventListener('click', () => { applyViewState(view); updateStatus('Loaded view ' + view.name); });
-      const remove = document.createElement('button'); remove.className = 'btn btn-ghost'; remove.type = 'button'; remove.textContent = 'Remove'; remove.addEventListener('click', () => { savedViews = savedViews.filter(item => item.id !== view.id); renderSavedViews(); updateStatus('Saved view removed'); });
+      const remove = document.createElement('button'); remove.className = 'btn btn-ghost'; remove.type = 'button'; remove.textContent = 'Remove'; remove.addEventListener('click', () => { remember('remove view'); savedViews = savedViews.filter(item => item.id !== view.id); renderSavedViews(); updateStatus('Saved view removed'); });
       row.append(textValue, load, remove); list.append(row);
     });
     updateStatus();
@@ -463,6 +470,7 @@
   function saveCurrentView() {
     const nameInput = root.querySelector('#gpv-view-name'); const captionInput = root.querySelector('#gpv-view-caption');
     const name = nameInput.value.trim() || 'View ' + (savedViews.length + 1);
+    remember('save view');
     savedViews.push(captureViewState(name, captionInput.value.trim()));
     nameInput.value = ''; captionInput.value = ''; renderSavedViews(); updateStatus('Saved publication view ' + name);
   }
