@@ -54,6 +54,7 @@
     const shownIds = new Set(shown.map(entry => entry.id));
     const labels = labelRecords.filter(label => shownIds.has(label.entryId));
     if (labels.length) sentences.push('Labelled residues: ' + labels.map(label => label.text).join(', ') + '.');
+    spotlightResidues.forEach(spot => { const sentence = positionSentence(spot); if (sentence) sentences.push(sentence); });
     const highlights = selectionRecords.filter(record => record.action === 'highlight' && shownIds.has(record.entryId));
     if (highlights.length) sentences.push('Highlighted residues: ' + highlights.map(record => (record.chain ? 'chain ' + record.chain + ' ' : '') + compactRange(record.residues)).join('; ') + '.');
     const measurements = measurementRecords.filter(record => record.points.every(point => shownIds.has(point.entryId)));
@@ -109,6 +110,7 @@
       data: residueData ? 'Per-residue values (' + residueData.name + ') were mapped linearly onto a ' + ({ viridis: 'viridis', diverging: 'diverging blue–white–red', heat: 'white–red' })[residueData.scale] + ' scale between the minimum and maximum of the data.' : null
     };
     if (colourNotes[mode]) sentences.push(colourNotes[mode]);
+    if (spotlightResidues.length) sentences.push('Position' + (spotlightResidues.length === 1 ? ' ' : 's ') + spotlightResidues.map(positionTag).join(', ') + ' w' + (spotlightResidues.length === 1 ? 'as' : 'ere') + ' compared across the shown models by matching chain and residue number, not by sequence alignment; an insertion or deletion between two predictions therefore shifts the position compared.');
     if (hideBelow()) sentences.push('Residues with pLDDT below ' + hideBelow() + ' were hidden from the figures.');
     const plan = exportDimensions();
     if (plan.mm) sentences.push('Figures were exported at ' + plan.mm + ' mm width and ' + plan.dpi + ' dpi' + (safePaletteOn ? ' using the Okabe–Ito colour-blind-safe palette' : '') + '.');

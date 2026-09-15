@@ -88,6 +88,9 @@ PSV_CHROMIUM=/opt/pw-browsers/chromium/chrome-linux/chrome npm test
   changes the varied column's value, keeps the ordering, and the dataset name, the debug hook and the methods text say
   "unweighted"; switching them back on puts "Henikoff & Henikoff, 1994" in the methods text.
 - PAE domains: the panel state and the figure legend call the segmentation a heuristic.
+- Figure formats: the PDF starts with %PDF-1.4, its MediaBox matches 85 mm at 300 dpi to half a point, it carries an
+  image object and a valid trailer; JPEG and WebP download with the right magic bytes (or as PNG where the browser
+  cannot encode them); the checklist flags the lossy choice; TIFF now goes through the same button.
 - RMSF profile: after aligning, the SVG has one chain group and one trace per fixture chain, the title, the axis label
   and the band legend; the PNG is at least the output width; the composite offers the panel.
 - Medoid: it is one of the two fixture models that share a backbone, its mean is the smallest, exactly one row carries
@@ -108,6 +111,10 @@ PSV_CHROMIUM=/opt/pw-browsers/chromium/chrome-linux/chrome npm test
   leaves a model-space offset of more than 1 Å, does not move the camera, and Reset clears it.
 - Legend position: the same figure SVG carries the legend as one row at the bottom left, and as a stack of three or more
   rows on the right when the position is changed; the scene records the choice.
+- Comparing a position: a mutant of `model_a` with chain A residue 15 changed from ALA to GLY is dropped in and shown
+  beside the original; selecting A:15 with Go to and pressing Compare this position gives a readout naming both models
+  and their residues with `differs`, one entry in the spotlight list, exactly two new labels reading `Ala15` and `Gly15`,
+  and both of those texts in the figure SVG; Clear compared positions removes them and empties the list.
 - Domain labels and architecture: on the block-diagonal PAE model, Label domains adds exactly two labels, D1 and D2, at
   the domain centroids; the architecture model reads two chains with one domain run each; the SVG carries the chain rows,
   names and residue numbers, the PNG is as wide as the export estimate says; the composite offers the panel, the builder

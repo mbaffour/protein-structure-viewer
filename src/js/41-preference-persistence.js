@@ -2,7 +2,7 @@
 
   const persistedControls = [
     '#gpv-style', '#gpv-color-mode', '#gpv-projection', '#gpv-outline', '#gpv-label-style', '#gpv-background', '#gpv-background-color', '#gpv-hetero',
-    '#gpv-export-mode', '#gpv-print-width', '#gpv-print-aspect', '#gpv-print-dpi', '#gpv-print-text', '#gpv-figure-font', '#gpv-scale-bar', '#gpv-legend-position',
+    '#gpv-export-mode', '#gpv-print-width', '#gpv-print-aspect', '#gpv-print-dpi', '#gpv-print-text', '#gpv-figure-font', '#gpv-scale-bar', '#gpv-legend-position', '#gpv-image-format',
     '#gpv-view-mode', '#gpv-order', '#gpv-alignment-mode', '#gpv-fit-scope', '#gpv-export-size', '#gpv-export-scale',
     '#gpv-panel-columns', '#gpv-video-length', '#gpv-cycle-speed', '#gpv-speed', '#gpv-report-scope'
   ];
@@ -151,6 +151,7 @@
     selectedResidue = null;
     clearHistory();
     labelRecords = [];
+    spotlightResidues = []; renderPositionState();
     domainRecords = []; domainVersion += 1;
     residueData = null; nearbyResult = null; renderDataState();
     selectionRecords = [];
@@ -173,6 +174,7 @@
     root.querySelector('#gpv-residue').textContent = 'Click any atom in the viewer to inspect it.';
     root.querySelector('#gpv-label-text').value = '';
     root.querySelector('#gpv-add-label').disabled = true;
+    root.querySelector('#gpv-position-compare').disabled = true;
     root.querySelector('#gpv-all-labels').checked = false;
     root.querySelector('#gpv-side-by-side').checked = false;
     clearComparePanels();
@@ -253,7 +255,9 @@
   root.querySelector('#gpv-compare-image').addEventListener('click', downloadComparisonPng);
   root.querySelector('#gpv-svg').addEventListener('click', downloadPublicationSvg);
   root.querySelector('#gpv-compare-svg').addEventListener('click', downloadComparisonSvg);
-  root.querySelector('#gpv-image').addEventListener('click', downloadPublicationPng);
+  root.querySelector('#gpv-image').addEventListener('click', () => { downloadPublicationImage().catch(error => announce('Could not render the figure: ' + error.message, 'error')); });
+  root.querySelector('#gpv-image-format').addEventListener('change', () => { renderImageButton(); renderPublicationChecks(); });
+  renderImageButton();
   root.querySelector('#gpv-save-view').addEventListener('click', saveCurrentView);
   root.querySelector('#gpv-contact-sheet').addEventListener('click', downloadContactSheet);
   root.querySelector('#gpv-captions').addEventListener('click', downloadCaptions);

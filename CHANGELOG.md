@@ -2,6 +2,35 @@
 
 All notable changes to this project are recorded here.
 
+## 2.36.0
+
+- **Compare this position across models.** A mutation study loads the same protein twice — one run of
+  the wild type, one of the point mutant. Select the residue and press **Compare this position**
+  (Annotate, under the residue label controls): every shown model gets the side chain drawn at that
+  position as sticks on top of the cartoon, a label naming *that model's* residue there (`Ala15`,
+  `Gly15`) in the model's colour, and a one-line readout that either says the models agree
+  (`A:15 · Ala in all 3 models`) or names the difference (`A:15 · model_wt Arg → model_mut His ·
+  differs`). The sticks are part of the style, so the main view, every panel and every export —
+  PNG, TIFF, PDF, SVG, the composite and built figures — show the same thing, and the labels are
+  ordinary residue labels: draggable, recolourable, undoable, and carried by scenes, sessions and
+  share links. *Side chains at compared positions* turns the sticks off without losing the labels,
+  *Clear compared positions* removes only what the comparison placed, and the generated figure
+  legend and methods text state the position and what each model has there.
+  **Positions are matched by chain and residue number, not by sequence alignment**: two runs of the
+  same sequence line up, but an insertion or deletion between the runs shifts the numbering and the
+  comparison follows the numbers, so check the alignment before trusting a comparison across
+  models of different lengths. The methods text says so as well.
+
+## 2.35.0
+
+- **More figure formats.** *Publish → Figure format* saves the same figure as **PNG** or **TIFF** with the resolution
+  written into the file, as a **PDF** whose page is exactly the physical size chosen (85 mm at 300 dpi becomes a
+  240.96 pt page, the image deflated losslessly where the browser can, JPEG otherwise), or as **JPEG** or **WebP** for
+  slides and email. One button, labelled with the format. *Download figure SVG* is unchanged and remains the vector
+  option with editable text. The publication checklist warns when a lossy format is selected and offers PNG in one
+  click; when a browser cannot encode WebP the file is saved as PNG and the status line says so. The separate
+  "Download publication TIFF" button is now the TIFF entry in the format list.
+
 ## 2.34.0
 
 - **RMSF profile.** After *Align visible*, **RMSF profile SVG** and **PNG** in Compare plot the per-residue Cα spread

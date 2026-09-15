@@ -8,6 +8,9 @@
     const plan = exportDimensions();
     const mode = root.querySelector('#gpv-color-mode').value;
     const shown = displayedEntries().filter(entry => entry.model);
+    const format = imageFormat();
+    if (format === 'jpeg' || format === 'webp') push('warn', imageFormats[format].label + ' is lossy and carries no resolution field: fine for slides, not for a figure a journal will print. Save PNG, TIFF or PDF instead.', { label: 'Use PNG', action: () => { root.querySelector('#gpv-image-format').value = 'png'; root.querySelector('#gpv-image-format').dispatchEvent(new Event('change', { bubbles: true })); } });
+    else if (format === 'pdf') push('ok', 'PDF at the physical page size; the text in it is part of the image, so keep the SVG if an editor needs to retype a label.');
     if (plan.dpi) push('ok', 'Print size ' + plan.mm + ' × ' + Math.round(plan.heightMm) + ' mm at ' + plan.dpi + ' dpi (' + plan.width + ' × ' + plan.height + ' px), written into the PNG and TIFF.');
     else push('warn', 'Pixel export: the file carries no physical size. Choose a print width and 300 dpi so the journal sees the figure at the size you intend.', { label: 'Use print size', action: () => { root.querySelector('#gpv-export-mode').value = 'print'; root.querySelector('#gpv-export-mode').dispatchEvent(new Event('change', { bubbles: true })); } });
     if (plan.dpi && plan.dpi < 300) push('warn', plan.dpi + ' dpi is below the 300 dpi most journals require for images.');

@@ -958,6 +958,12 @@ html>body{padding:0}</style>
       <label class="form-label">Label style<select class="form-select" id="gpv-label-style" data-tooltip="Boxed labels read on any background; plain text suits clean figures where the box would hide the model"><option value="boxed">Boxed</option><option value="plain">Plain text</option></select></label>
       <button class="btn btn-ghost" type="button" id="gpv-clear-labels">Clear labels</button>
     </div>
+    <div class="viz-controls">
+      <button class="btn" type="button" id="gpv-position-compare" disabled data-tooltip="Show the side chain at the selected position in every shown model, label each model&#39;s residue there, and say whether they differ — positions are matched by chain and residue number">Compare this position</button>
+      <label class="form-check form-switch"><input class="form-check-input" id="gpv-position-sticks" type="checkbox" checked><span class="form-check-label">Side chains at compared positions</span></label>
+      <button class="btn btn-ghost" type="button" id="gpv-position-clear">Clear compared positions</button>
+      <span class="text-muted text-small" id="gpv-position-state">Select a residue, then compare it across the shown models.</span>
+    </div>
     <div class="gpv-list" id="gpv-label-list" aria-label="Residue labels"></div>
     <div class="viz-controls">
       <label class="form-label gpv-current-label">Selection model<select class="form-select" id="gpv-selection-model" disabled><option>No models loaded</option></select></label>
@@ -1149,9 +1155,9 @@ html>body{padding:0}</style>
       <label class="form-label">Figure font<select class="form-select" id="gpv-figure-font"><option value="Arial, Helvetica, sans-serif" selected>Arial / Helvetica</option><option value="'Times New Roman', Times, serif">Times</option><option value="system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif">System default</option></select></label>
       <label class="form-label">Scale bar<select class="form-select" id="gpv-scale-bar" data-tooltip="Bar of known length at the model centre, bottom right of the figure; exact in orthographic projection"><option value="0" selected>None</option><option value="10">10 Å</option><option value="20">20 Å</option><option value="50">50 Å</option><option value="100">100 Å</option></select></label>
       <span class="text-muted text-small" id="gpv-export-estimate"></span>
-      <button class="btn" type="button" id="gpv-image" disabled>Download publication PNG</button>
+      <label class="form-label">Figure format<select class="form-select" id="gpv-image-format" data-tooltip="PNG and TIFF carry the resolution in the file, PDF carries the physical page size, JPEG and WebP are lossy and meant for slides; the SVG button beside this one is the vector option"><option value="png" selected>PNG</option><option value="tiff">TIFF</option><option value="pdf">PDF</option><option value="jpeg">JPEG</option><option value="webp">WebP</option></select></label>
+      <button class="btn" type="button" id="gpv-image" disabled>Download figure PNG</button>
       <button class="btn" type="button" id="gpv-copy-image" disabled data-tooltip="Render the publication PNG and put it on the clipboard, ready to paste into slides or a document">Copy PNG to clipboard</button>
-      <button class="btn" type="button" id="gpv-tiff" disabled data-tooltip="Uncompressed RGB TIFF with the resolution written into the file, for journals that require TIFF">Download publication TIFF</button>
       <button class="btn" type="button" id="gpv-svg" disabled data-tooltip="Raster molecule with labels, arrows, callouts and legend as editable vector layers">Download figure SVG</button>
       <button class="btn" type="button" id="gpv-compare-image" disabled data-tooltip="Stitch every synchronized panel into one lettered figure at the chosen size">Download comparison PNG</button>
       <button class="btn" type="button" id="gpv-model-panels" disabled data-tooltip="One lettered panel per model, every panel rendered from the current camera — the five models of an AlphaFold run side by side, identically framed">Download one panel per model</button>
@@ -1279,6 +1285,8 @@ html>body{padding:0}</style>
       </ul>
       <h3>Tips for figures and reviewers</h3>
       <ul>
+        <li><em>Annotate → Compare this position</em> takes the residue you have selected and, in every shown model, draws its side chain, writes that model’s own residue on it (Arg273, His273) and states whether the models agree — the one-press check on a wild-type and mutant pair. Positions are matched by chain and residue number, so an insertion or deletion between two runs shifts them.</li>
+        <li><em>Publish → Figure format</em> saves the same figure as PNG or TIFF with the resolution in the file, as a PDF whose page is the physical size you chose, or as JPEG or WebP for slides; <em>Download figure SVG</em> stays the vector option with editable text.</li>
         <li>After <em>Align visible</em>, <em>RMSF profile SVG/PNG</em> plots the per-residue Cα spread across the aligned models, one panel per chain with the agreement bands behind the trace, and the same plot is a panel of the composite figure — the ensemble counterpart of the pLDDT profile.</li>
         <li><em>Compare → Pairwise RMSD → Compute matrix</em> superposes every shown model onto every other with the same rules as Align visible and tabulates the Cα RMSDs — which models of an ensemble agree, which is the odd one out — with a mean column, a ★ on the medoid, a CSV, a heat-map PNG or SVG with the values in the cells, and a panel for the composite figure. <em>Use medoid as reference</em> superposes everything onto that model and draws it solid against the rest.</li>
         <li><em>Compare → Match identical chains by position</em> re-pairs the chains of an assembly by where they sit after a first fit, so a model that puts the same subunit in a different place is compared against the copy it actually corresponds to; the chain mapping it chose is printed with each result.</li>
@@ -1653,7 +1661,7 @@ html>body{padding:0}</style>
   let busyDepth = 0;
   let restoreMotion = null;
   const listPageSize = 60;
-  const viewerVersion = '2.34.0';
+  const viewerVersion = '2.36.0';
   const preferenceKey = 'protein-structure-viewer:preferences';
   const themeKey = 'protein-structure-viewer:theme';
   const labelColors = getComputedStyle(root);
@@ -2375,6 +2383,15 @@ html>body{padding:0}</style>
     model.setStyle({ hetflag: true }, heteroStyle);
     model.setStyle({ resn: waterNames }, {});
     if (entry.hiddenChains && entry.hiddenChains.length) model.setStyle({ chain: entry.hiddenChains }, {});
+    /* Compared positions (Annotate → Compare this position) get side-chain sticks added on top of
+       whatever the model is drawn as, so the position under discussion is visible in the main view,
+       every panel and every export at once. A hidden chain stays hidden. */
+    if (spotlightResidues.length && root.querySelector('#gpv-position-sticks').checked) {
+      spotlightResidues.forEach(spot => {
+        if (spot.chain && (entry.hiddenChains || []).includes(spot.chain)) return;
+        model.setStyle(spot.chain ? { chain: spot.chain, resi: spot.resi } : { resi: spot.resi }, { stick: { radius: 0.22, colorscheme: 'default' } }, true);
+      });
+    }
     const surface = root.querySelector('#gpv-surface').value;
     if (surface === 'none' || !host || typeof host.addSurface !== 'function') return Promise.resolve();
     if (entry.atoms.length > surfaceAtomLimit) {
@@ -2416,8 +2433,8 @@ html>body{padding:0}</style>
     root.querySelector('#gpv-share-link').disabled = !structures.some(entry => entry.fetchId);
     root.querySelector('#gpv-fasta').disabled = structures.length === 0;
     root.querySelector('#gpv-copy-image').disabled = structures.length === 0;
-    root.querySelector('#gpv-tiff').disabled = structures.length === 0;
     root.querySelector('#gpv-add-domain').disabled = !activeEntry();
+    updatePositionCompare();
     root.querySelector('#gpv-figure-legend').disabled = structures.length === 0;
     root.querySelector('#gpv-methods-text').disabled = structures.length === 0;
     const scored = structures.some(entry => entry.visible && entry.scores.length);
@@ -2426,6 +2443,7 @@ html>body{padding:0}</style>
     root.querySelector('#gpv-image').disabled = structures.length === 0; root.querySelector('#gpv-model-panels').disabled = structures.length < 2;
     root.querySelector('#gpv-rmsd-matrix-run').disabled = structures.length < 2;
     root.querySelector('#gpv-svg').disabled = structures.length === 0;
+    if (typeof renderImageButton === 'function') renderImageButton();
     root.querySelector('#gpv-video').disabled = structures.length === 0;
     root.querySelector('#gpv-save-scene').disabled = structures.length === 0; root.querySelector('#gpv-save-session').disabled = structures.length === 0;
     root.querySelector('#gpv-save-view').disabled = structures.length === 0;
@@ -2784,6 +2802,7 @@ html>body{padding:0}</style>
     const saved = labelRecords.find(label => label.key === key);
     root.querySelector('#gpv-label-text').value = saved ? saved.text : (atom.resn || 'RES') + atom.resi + (atom.chain ? ' · ' + atom.chain : '');
     root.querySelector('#gpv-add-label').disabled = false;
+    updatePositionCompare();
   }
 
   function addOrEditLabel() {
@@ -3457,7 +3476,7 @@ html>body{padding:0}</style>
   let redoStack = [];
 
   function snapshotRecords() {
-    return structuredClone({ labels: labelRecords, selections: selectionRecords, measurements: measurementRecords, annotations: annotationRecords, domains: domainRecords });
+    return structuredClone({ labels: labelRecords, selections: selectionRecords, measurements: measurementRecords, annotations: annotationRecords, domains: domainRecords, positions: spotlightResidues });
   }
 
   function renderHistoryButtons() {
@@ -3485,7 +3504,8 @@ html>body{padding:0}</style>
     measurementRecords = state.measurements.filter(record => record.points.every(alive));
     annotationRecords = state.annotations.filter(record => record.points.every(alive));
     domainRecords = (state.domains || []).filter(record => record.scope === 'all' || alive(record)); domainVersion += 1;
-    renderLabelList(); renderSelectionList(); renderMeasurementList(); renderAnnotationList(); renderDomainList();
+    spotlightResidues = state.positions || [];
+    renderLabelList(); renderSelectionList(); renderMeasurementList(); renderAnnotationList(); renderDomainList(); renderPositionState();
     applyStyle();
   }
 
@@ -4878,6 +4898,9 @@ html>body{padding:0}</style>
     const plan = exportDimensions();
     const mode = root.querySelector('#gpv-color-mode').value;
     const shown = displayedEntries().filter(entry => entry.model);
+    const format = imageFormat();
+    if (format === 'jpeg' || format === 'webp') push('warn', imageFormats[format].label + ' is lossy and carries no resolution field: fine for slides, not for a figure a journal will print. Save PNG, TIFF or PDF instead.', { label: 'Use PNG', action: () => { root.querySelector('#gpv-image-format').value = 'png'; root.querySelector('#gpv-image-format').dispatchEvent(new Event('change', { bubbles: true })); } });
+    else if (format === 'pdf') push('ok', 'PDF at the physical page size; the text in it is part of the image, so keep the SVG if an editor needs to retype a label.');
     if (plan.dpi) push('ok', 'Print size ' + plan.mm + ' × ' + Math.round(plan.heightMm) + ' mm at ' + plan.dpi + ' dpi (' + plan.width + ' × ' + plan.height + ' px), written into the PNG and TIFF.');
     else push('warn', 'Pixel export: the file carries no physical size. Choose a print width and 300 dpi so the journal sees the figure at the size you intend.', { label: 'Use print size', action: () => { root.querySelector('#gpv-export-mode').value = 'print'; root.querySelector('#gpv-export-mode').dispatchEvent(new Event('change', { bubbles: true })); } });
     if (plan.dpi && plan.dpi < 300) push('warn', plan.dpi + ' dpi is below the 300 dpi most journals require for images.');
@@ -5329,6 +5352,7 @@ html>body{padding:0}</style>
     const shownIds = new Set(shown.map(entry => entry.id));
     const labels = labelRecords.filter(label => shownIds.has(label.entryId));
     if (labels.length) sentences.push('Labelled residues: ' + labels.map(label => label.text).join(', ') + '.');
+    spotlightResidues.forEach(spot => { const sentence = positionSentence(spot); if (sentence) sentences.push(sentence); });
     const highlights = selectionRecords.filter(record => record.action === 'highlight' && shownIds.has(record.entryId));
     if (highlights.length) sentences.push('Highlighted residues: ' + highlights.map(record => (record.chain ? 'chain ' + record.chain + ' ' : '') + compactRange(record.residues)).join('; ') + '.');
     const measurements = measurementRecords.filter(record => record.points.every(point => shownIds.has(point.entryId)));
@@ -5384,6 +5408,7 @@ html>body{padding:0}</style>
       data: residueData ? 'Per-residue values (' + residueData.name + ') were mapped linearly onto a ' + ({ viridis: 'viridis', diverging: 'diverging blue–white–red', heat: 'white–red' })[residueData.scale] + ' scale between the minimum and maximum of the data.' : null
     };
     if (colourNotes[mode]) sentences.push(colourNotes[mode]);
+    if (spotlightResidues.length) sentences.push('Position' + (spotlightResidues.length === 1 ? ' ' : 's ') + spotlightResidues.map(positionTag).join(', ') + ' w' + (spotlightResidues.length === 1 ? 'as' : 'ere') + ' compared across the shown models by matching chain and residue number, not by sequence alignment; an insertion or deletion between two predictions therefore shifts the position compared.');
     if (hideBelow()) sentences.push('Residues with pLDDT below ' + hideBelow() + ' were hidden from the figures.');
     const plan = exportDimensions();
     if (plan.mm) sentences.push('Figures were exported at ' + plan.mm + ' mm width and ' + plan.dpi + ' dpi' + (safePaletteOn ? ' using the Okabe–Ito colour-blind-safe palette' : '') + '.');
@@ -6498,12 +6523,15 @@ html>body{padding:0}</style>
     const keptPoints = record => record.points.every(point => keep(point.entryId));
     const point = item => ({ model: nameOf(item.entryId), chain: item.chain, resi: item.resi, atom: item.atom, index: item.index });
     return {
-      labels: labelRecords.filter(kept).map(label => ({ model: nameOf(label.entryId), chain: label.chain, resi: label.resi, atom: label.atom, text: label.text, color: label.color, size: label.size, ...(label.kind === 'domain' ? { kind: 'domain' } : {}), ...(labelOffsetLength(label) ? { offset: label.offset } : {}) })),
+      labels: labelRecords.filter(kept).map(label => ({ model: nameOf(label.entryId), chain: label.chain, resi: label.resi, atom: label.atom, text: label.text, color: label.color, size: label.size, ...(label.kind === 'domain' || label.kind === 'position' ? { kind: label.kind } : {}), ...(labelOffsetLength(label) ? { offset: label.offset } : {}) })),
       selections: selectionRecords.filter(kept).map(record => ({ model: nameOf(record.entryId), chain: record.chain, residues: record.residues, action: record.action, color: record.color })),
       measurements: measurementRecords.filter(keptPoints).map(record => ({ type: record.type, points: record.points.map(point) })),
       residueData: residueData && (residueData.scope === 'all' || keep(residueData.entryId)) ? { name: residueData.name, scale: residueData.scale, scope: residueData.scope, model: nameOf(residueData.entryId), rows: [...residueData.values.entries()].map(([key, value]) => [key.split('|')[0], Number(key.split('|')[1]), value]).concat([...residueData.byResi.entries()].map(([resi, value]) => ['', resi, value])) } : null,
       domains: domainRecords.filter(record => record.scope === 'all' || kept(record)).map(record => ({ name: record.name, color: record.color, chain: record.chain, residues: record.residues, scope: record.scope, model: nameOf(record.entryId) })),
-      annotations: annotationRecords.filter(keptPoints).map(record => ({ type: record.type, text: record.text, color: record.color, size: record.size, dashed: record.dashed, corner: record.corner, offset: record.offset, distance: record.distance, dx: record.dx, dy: record.dy, points: record.points.map(point) }))
+      annotations: annotationRecords.filter(keptPoints).map(record => ({ type: record.type, text: record.text, color: record.color, size: record.size, dashed: record.dashed, corner: record.corner, offset: record.offset, distance: record.distance, dx: record.dx, dy: record.dy, points: record.points.map(point) })),
+      /* Compared positions belong to no single model — they are a chain and a residue number applied
+         to whatever is shown — so they survive a share link that drops some models. */
+      positions: spotlightResidues.map(spot => ({ chain: spot.chain, resi: spot.resi }))
     };
   }
 
@@ -6694,8 +6722,12 @@ html>body{padding:0}</style>
       if (!entry) return null;
       const atom = entry.atoms.find(item => (item.chain || '') === (label.chain || '') && item.resi === label.resi && (item.atom === label.atom || item.atom === 'CA'));
       if (!atom) return null;
-      return { entryId: entry.id, chain: label.chain || '', resi: label.resi, atom: label.atom || 'CA', resn: atom.resn, x: atom.x, y: atom.y, z: atom.z, key: residueKey(entry.id, label.chain, label.resi), ...(label.kind === 'domain' ? { kind: 'domain' } : {}), ...(label.offset && Number.isFinite(Number(label.offset.x)) ? { offset: { x: Number(label.offset.x), y: Number(label.offset.y), z: Number(label.offset.z) } } : {}), text: label.text, color: /^#[0-9a-f]{6}$/i.test(label.color || '') ? label.color : undefined, size: labelSizes.some(([value]) => value === Number(label.size)) ? Number(label.size) : undefined };
+      return { entryId: entry.id, chain: label.chain || '', resi: label.resi, atom: label.atom || 'CA', resn: atom.resn, x: atom.x, y: atom.y, z: atom.z, key: residueKey(entry.id, label.chain, label.resi), ...(label.kind === 'domain' || label.kind === 'position' ? { kind: label.kind } : {}), ...(label.offset && Number.isFinite(Number(label.offset.x)) ? { offset: { x: Number(label.offset.x), y: Number(label.offset.y), z: Number(label.offset.z) } } : {}), text: label.text, color: /^#[0-9a-f]{6}$/i.test(label.color || '') ? label.color : undefined, size: labelSizes.some(([value]) => value === Number(label.size)) ? Number(label.size) : undefined };
     }).filter(Boolean);
+    spotlightResidues = (Array.isArray(scene.positions) ? scene.positions : []).slice(0, 200)
+      .map(record => ({ chain: String(record && record.chain || '').slice(0, 4), resi: Number(record && record.resi) }))
+      .filter(spot => Number.isFinite(spot.resi));
+    renderPositionState();
     selectionRecords = (scene.selections || []).map(record => {
       const entry = byName.get(record.model); if (!entry) return null;
       return { id: nextAnnotationId++, entryId: entry.id, chain: record.chain || '', residues: (record.residues || []).map(Number).filter(Number.isFinite), action: record.action === 'hide' ? 'hide' : 'highlight', color: /^#[0-9a-f]{6}$/i.test(record.color || '') ? record.color : '#f97316' };
@@ -7122,28 +7154,6 @@ html>body{padding:0}</style>
     return uri;
   }
 
-  async function downloadPublicationPng() {
-    const button = root.querySelector('#gpv-image');
-    const requested = exportDimensions();
-    if (requested.width * requested.height > 6000000) {
-      toast('Rendering ' + requested.width + ' × ' + requested.height + ' — this can take a while and the page will not respond meanwhile.');
-    }
-    const done = setBusy('Rendering PNG…');
-    button.disabled = true; button.textContent = 'Rendering…';
-    await afterPaint();
-    try {
-      const uri = await withLegend(await renderPublicationImage(null, requested), requested);
-      downloadBlob(await pngWithDpi(uri, requested.dpi), 'image/png', exportFileName('protein-publication', requested, 'png'));
-      announce('Publication PNG downloaded · ' + requested.width + ' × ' + requested.height + (requested.dpi ? ' at ' + requested.dpi + ' dpi (' + requested.mm + ' mm wide)' : '') + (requested.capped ? ' · size capped for browser stability' : ''));
-    } catch (error) {
-      announce('Could not render the publication PNG: ' + error.message, 'error');
-    } finally {
-      releaseExportViewer();
-      done();
-      button.disabled = structures.length === 0; button.textContent = 'Download publication PNG';
-    }
-  }
-
   function hexLuminance(hex) {
     const value = /^#([0-9a-f]{6})$/i.exec(hex || '');
     if (!value) return 1;
@@ -7548,21 +7558,120 @@ html>body{padding:0}</style>
     return new Blob([buffer], { type: 'image/tiff' });
   }
 
-  async function downloadPublicationTiff() {
-    const button = root.querySelector('#gpv-tiff');
+  /* One page, the figure at its physical size. The composed figure goes in as a single image —
+     deflated when the browser can (lossless), JPEG otherwise — and the page box is written in
+     points from the print width, so the PDF opens at exactly the millimetres asked for. Text is
+     part of the image: the SVG export is the one with editable type. */
+  async function pdfFromImage(uri, plan) {
+    const image = await loadImage(uri);
+    const width = image.naturalWidth; const height = image.naturalHeight;
+    const dpi = plan.dpi || 96;
+    const pageWidth = width / dpi * 72; const pageHeight = height / dpi * 72;
+    const canvas = document.createElement('canvas'); canvas.width = width; canvas.height = height;
+    const context = canvas.getContext('2d');
+    /* PDF images have no alpha channel here, so flatten onto the figure's paper first. */
+    context.fillStyle = figurePalette().paper; context.fillRect(0, 0, width, height);
+    context.drawImage(image, 0, 0);
+    let stream; let filter;
+    if (typeof CompressionStream === 'function') {
+      const pixels = context.getImageData(0, 0, width, height).data;
+      const rgb = new Uint8Array(width * height * 3);
+      for (let i = 0, j = 0; i < pixels.length; i += 4, j += 3) { rgb[j] = pixels[i]; rgb[j + 1] = pixels[i + 1]; rgb[j + 2] = pixels[i + 2]; }
+      stream = new Uint8Array(await new Response(new Blob([rgb]).stream().pipeThrough(new CompressionStream('deflate'))).arrayBuffer());
+      filter = '/FlateDecode';
+    } else {
+      stream = new Uint8Array(await (await fetch(canvas.toDataURL('image/jpeg', 0.95))).arrayBuffer());
+      filter = '/DCTDecode';
+    }
+    const encoder = new TextEncoder();
+    const chunks = []; let length = 0;
+    const push = part => { const bytes = typeof part === 'string' ? encoder.encode(part) : part; chunks.push(bytes); length += bytes.length; };
+    const offsets = [];
+    const object = (number, body, streamBytes) => {
+      offsets[number] = length;
+      push(number + ' 0 obj\n' + body + '\n');
+      if (streamBytes) { push('stream\n'); push(streamBytes); push('\nendstream\n'); }
+      push('endobj\n');
+    };
+    const points = value => (Math.round(value * 100) / 100).toString();
+    push('%PDF-1.4\n'); push(new Uint8Array([0x25, 0xe2, 0xe3, 0xcf, 0xd3, 0x0a]));
+    object(1, '<< /Type /Catalog /Pages 2 0 R >>');
+    object(2, '<< /Type /Pages /Kids [3 0 R] /Count 1 >>');
+    object(3, '<< /Type /Page /Parent 2 0 R /MediaBox [0 0 ' + points(pageWidth) + ' ' + points(pageHeight) + '] /Resources << /XObject << /Im0 4 0 R >> >> /Contents 5 0 R >>');
+    object(4, '<< /Type /XObject /Subtype /Image /Width ' + width + ' /Height ' + height + ' /ColorSpace /DeviceRGB /BitsPerComponent 8 /Filter ' + filter + ' /Length ' + stream.length + ' >>', stream);
+    const content = encoder.encode('q\n' + points(pageWidth) + ' 0 0 ' + points(pageHeight) + ' 0 0 cm\n/Im0 Do\nQ\n');
+    object(5, '<< /Length ' + content.length + ' >>', content);
+    const xref = length;
+    let table = 'xref\n0 6\n0000000000 65535 f \n';
+    for (let number = 1; number <= 5; number += 1) table += String(offsets[number]).padStart(10, '0') + ' 00000 n \n';
+    push(table);
+    push('trailer\n<< /Size 6 /Root 1 0 R >>\nstartxref\n' + xref + '\n%%EOF\n');
+    return { blob: new Blob(chunks, { type: 'application/pdf' }), lossless: filter === '/FlateDecode', pageWidth, pageHeight };
+  }
+
+  /* Every format the figure can be saved in. PNG and TIFF carry the resolution in the file; PDF
+     carries the physical page size; JPEG and WebP are for slides and email, not for print. */
+  const imageFormats = {
+    png: { label: 'PNG', extension: 'png' },
+    tiff: { label: 'TIFF', extension: 'tiff' },
+    pdf: { label: 'PDF', extension: 'pdf' },
+    jpeg: { label: 'JPEG', extension: 'jpg', mime: 'image/jpeg', lossy: true },
+    webp: { label: 'WebP', extension: 'webp', mime: 'image/webp', lossy: true }
+  };
+  function imageFormat() {
+    const value = root.querySelector('#gpv-image-format').value;
+    return imageFormats[value] ? value : 'png';
+  }
+  function renderImageButton() {
+    const format = imageFormats[imageFormat()];
+    const button = root.querySelector('#gpv-image');
+    if (!button.dataset.busy) button.textContent = 'Download figure ' + format.label;
+  }
+  /* toBlob falls back to PNG when a browser cannot encode the type asked for; say so rather than
+     handing over a .jpg that is really a PNG. */
+  function encodeCanvas(canvas, mime, quality) {
+    return new Promise(resolve => canvas.toBlob(blob => resolve(blob), mime, quality));
+  }
+  async function downloadPublicationImage() {
+    const key = imageFormat(); const format = imageFormats[key];
+    const button = root.querySelector('#gpv-image');
     const plan = exportDimensions();
-    const done = setBusy('Rendering TIFF…');
-    button.disabled = true;
+    if (plan.width * plan.height > 6000000) toast('Rendering ' + plan.width + ' × ' + plan.height + ' — this can take a while and the page will not respond meanwhile.');
+    const done = setBusy('Rendering ' + format.label + '…');
+    button.dataset.busy = '1'; button.disabled = true; button.textContent = 'Rendering…';
     await afterPaint();
     try {
       const uri = await withLegend(await renderPublicationImage(null, plan), plan);
-      const blob = await tiffFromImage(uri, plan.dpi || 96);
-      downloadBlob(blob, 'image/tiff', exportFileName('protein-publication', plan, 'tiff'));
-      announce('Publication TIFF downloaded · ' + formatBytes(blob.size) + (plan.dpi ? ' · ' + plan.dpi + ' dpi' : ''));
+      const size = plan.width + ' × ' + plan.height + (plan.dpi ? ' at ' + plan.dpi + ' dpi (' + plan.mm + ' mm wide)' : '');
+      if (key === 'png') {
+        const blob = await pngWithDpi(uri, plan.dpi);
+        downloadBlob(blob, 'image/png', exportFileName('protein-publication', plan, 'png'));
+        announce('Figure PNG downloaded · ' + size + (plan.capped ? ' · size capped for browser stability' : ''));
+      } else if (key === 'tiff') {
+        const blob = await tiffFromImage(uri, plan.dpi || 96);
+        downloadBlob(blob, 'image/tiff', exportFileName('protein-publication', plan, 'tiff'));
+        announce('Figure TIFF downloaded · ' + formatBytes(blob.size) + ' · ' + size);
+      } else if (key === 'pdf') {
+        const pdf = await pdfFromImage(uri, plan);
+        downloadBlob(pdf.blob, 'application/pdf', exportFileName('protein-publication', plan, 'pdf'));
+        announce('Figure PDF downloaded · page ' + (Math.round(pdf.pageWidth / 72 * 25.4)) + ' × ' + Math.round(pdf.pageHeight / 72 * 25.4) + ' mm · ' + size + ' · ' + (pdf.lossless ? 'lossless image' : 'JPEG image, this browser cannot deflate') + ' · text is part of the image, use SVG for editable type');
+      } else {
+        const image = await loadImage(uri);
+        const canvas = document.createElement('canvas'); canvas.width = image.naturalWidth; canvas.height = image.naturalHeight;
+        const context = canvas.getContext('2d');
+        context.fillStyle = figurePalette().paper; context.fillRect(0, 0, canvas.width, canvas.height);
+        context.drawImage(image, 0, 0);
+        const blob = await encodeCanvas(canvas, format.mime, 0.95);
+        const fellBack = !blob || blob.type !== format.mime;
+        const extension = fellBack ? 'png' : format.extension;
+        downloadBlob(blob, blob ? blob.type : 'image/png', exportFileName('protein-publication', plan, extension));
+        announce('Figure ' + (fellBack ? 'PNG' : format.label) + ' downloaded · ' + formatBytes(blob.size) + ' · ' + size + (fellBack ? ' · this browser cannot write ' + format.label + ', so a PNG was saved instead' : ' · lossy, and without a resolution field: use PNG, TIFF or PDF for print'));
+      }
     } catch (error) {
-      announce('Could not render the publication TIFF: ' + error.message, 'error');
+      announce('Could not render the figure ' + format.label + ': ' + error.message, 'error');
     } finally {
-      releaseExportViewer(); done(); button.disabled = structures.length === 0;
+      releaseExportViewer(); done();
+      delete button.dataset.busy; button.disabled = structures.length === 0; renderImageButton();
     }
   }
 
@@ -8905,6 +9014,113 @@ applyBackground();
   root.querySelector('#gpv-architecture-png').addEventListener('click', () => downloadArchitecture('png'));
   root.querySelector('#gpv-architecture-svg').addEventListener('click', () => downloadArchitecture('svg'));
 
+  /* ---------- Position comparison ----------
+     A mutation study loads the same protein twice — one run of the wild type, one of the point
+     mutant — and the question is what sits at one position in each. Compare this position takes the
+     selected residue and, in every shown model, draws the side chain there, writes that model's own
+     residue on it, and states whether the models agree. Positions are matched by chain and residue
+     number alone, which is what two runs of the same sequence share; an insertion or deletion
+     between the runs shifts the numbering and the comparison follows the numbers, not the residues. */
+  let spotlightResidues = [];
+
+  /* ARG → Arg: the three-letter code as it is written in a figure label. */
+  function positionResidueName(resn) {
+    const text = String(resn || 'RES').trim() || 'RES';
+    return text.charAt(0).toUpperCase() + text.slice(1).toLowerCase();
+  }
+  const positionTag = spot => (spot.chain ? spot.chain + ':' : '') + spot.resi;
+
+  /* Every shown model that has this position, with the atom the label hangs on. */
+  function positionAtoms(chain, resi) {
+    return displayedEntries().filter(entry => entry.model).map(entry => {
+      const candidates = entry.atoms.filter(atom => !atom.hetflag && atom.resi === resi && (atom.chain || '') === (chain || ''));
+      const atom = candidates.find(item => item.atom === 'CA') || candidates[0];
+      return atom ? { entry, atom } : null;
+    }).filter(Boolean);
+  }
+
+  /* The readout: one line naming the position, what each model has there, and whether they differ. */
+  function positionReadout(spot) {
+    const found = positionAtoms(spot.chain, spot.resi);
+    if (!found.length) return positionTag(spot) + ' · in none of the shown models';
+    const identities = found.map(item => positionResidueName(item.atom.resn));
+    const tag = positionTag(spot);
+    if (new Set(identities).size === 1) return tag + ' · ' + identities[0] + ' in all ' + found.length + ' model' + (found.length === 1 ? '' : 's');
+    const names = distinguishingNames(found.map(item => displayName(item.entry)));
+    const parts = found.map((item, index) => names[index] + ' ' + identities[index]);
+    return tag + ' · ' + (found.length === 2 ? parts[0] + ' → ' + parts[1] : parts.join(' · ')) + ' · differs';
+  }
+
+  /* The same comparison as a sentence for the figure legend. */
+  function positionSentence(spot) {
+    const found = positionAtoms(spot.chain, spot.resi);
+    if (!found.length) return null;
+    const drawn = root.querySelector('#gpv-position-sticks').checked ? 'is drawn as side-chain sticks and labelled' : 'is labelled';
+    const identities = found.map(item => positionResidueName(item.atom.resn));
+    const lead = 'Position ' + positionTag(spot) + ' ' + drawn + ' in every model; it is ';
+    if (new Set(identities).size === 1) return lead + identities[0] + ' in all ' + found.length + ' of them.';
+    const names = distinguishingNames(found.map(item => displayName(item.entry)));
+    const parts = found.map((item, index) => identities[index] + ' in ' + names[index]);
+    return lead + parts.slice(0, -1).join(', ') + ' and ' + parts[parts.length - 1] + '.';
+  }
+
+  function renderPositionState(message = null) {
+    const state = root.querySelector('#gpv-position-state');
+    if (message) { state.textContent = message; return; }
+    if (!spotlightResidues.length) { state.textContent = 'Select a residue, then compare it across the shown models.'; return; }
+    state.textContent = spotlightResidues.map(positionReadout).join('  ·  ');
+  }
+
+  /* Comparing needs a residue to compare and at least two models to compare it in. */
+  function updatePositionCompare() {
+    const button = root.querySelector('#gpv-position-compare');
+    if (button) button.disabled = !selectedResidue || displayedEntries().filter(entry => entry.model).length < 2;
+  }
+
+  function comparePosition() {
+    if (!selectedResidue) { announce('Click a residue first — in the viewer, the sequence strip, or with Go to', 'error'); return; }
+    if (displayedEntries().filter(entry => entry.model).length < 2) { announce('Show at least two models to compare a position across them', 'error'); return; }
+    const chain = selectedResidue.chain || '';
+    const resi = selectedResidue.resi;
+    const found = positionAtoms(chain, resi);
+    if (found.length < 2) {
+      announce(positionTag({ chain, resi }) + ' is in only ' + found.length + ' of the shown models · check the chain and the numbering', 'error');
+      return;
+    }
+    remember('position comparison');
+    if (!spotlightResidues.some(spot => spot.chain === chain && spot.resi === resi)) spotlightResidues.push({ chain, resi });
+    found.forEach(({ entry, atom }) => {
+      const key = residueKey(entry.id, atom.chain || '', atom.resi);
+      const record = {
+        entryId: entry.id, chain: atom.chain || '', resi: atom.resi, resn: atom.resn || 'RES', atom: 'CA',
+        x: atom.x, y: atom.y, z: atom.z, key,
+        text: positionResidueName(atom.resn) + atom.resi, color: entry.color, size: 15, kind: 'position'
+      };
+      const index = labelRecords.findIndex(label => label.key === key);
+      if (index >= 0) labelRecords[index] = { ...labelRecords[index], ...record }; else labelRecords.push(record);
+    });
+    renderLabelList(); applyStyle(); rebuildOverlays();
+    const readout = positionReadout({ chain, resi });
+    renderPositionState();
+    announce(readout);
+  }
+
+  function clearPositions() {
+    if (!spotlightResidues.length && !labelRecords.some(label => label.kind === 'position')) { announce('No compared positions to clear'); return; }
+    remember('compared positions');
+    spotlightResidues = [];
+    labelRecords = labelRecords.filter(label => label.kind !== 'position');
+    renderLabelList(); applyStyle(); rebuildOverlays();
+    renderPositionState();
+    announce('Compared positions cleared');
+  }
+
+  root.querySelector('#gpv-position-compare').addEventListener('click', comparePosition);
+  root.querySelector('#gpv-position-clear').addEventListener('click', clearPositions);
+  root.querySelector('#gpv-position-sticks').addEventListener('change', () => {
+    applyStyle();
+    updateStatus(root.querySelector('#gpv-position-sticks').checked ? 'Side chains drawn at the compared positions' : 'Side chains at the compared positions hidden');
+  });
   /* ---------- Appearance theme ---------- */
 
   const themeModes = [
@@ -9057,7 +9273,7 @@ applyBackground();
 
   const persistedControls = [
     '#gpv-style', '#gpv-color-mode', '#gpv-projection', '#gpv-outline', '#gpv-label-style', '#gpv-background', '#gpv-background-color', '#gpv-hetero',
-    '#gpv-export-mode', '#gpv-print-width', '#gpv-print-aspect', '#gpv-print-dpi', '#gpv-print-text', '#gpv-figure-font', '#gpv-scale-bar', '#gpv-legend-position',
+    '#gpv-export-mode', '#gpv-print-width', '#gpv-print-aspect', '#gpv-print-dpi', '#gpv-print-text', '#gpv-figure-font', '#gpv-scale-bar', '#gpv-legend-position', '#gpv-image-format',
     '#gpv-view-mode', '#gpv-order', '#gpv-alignment-mode', '#gpv-fit-scope', '#gpv-export-size', '#gpv-export-scale',
     '#gpv-panel-columns', '#gpv-video-length', '#gpv-cycle-speed', '#gpv-speed', '#gpv-report-scope'
   ];
@@ -9206,6 +9422,7 @@ applyBackground();
     selectedResidue = null;
     clearHistory();
     labelRecords = [];
+    spotlightResidues = []; renderPositionState();
     domainRecords = []; domainVersion += 1;
     residueData = null; nearbyResult = null; renderDataState();
     selectionRecords = [];
@@ -9228,6 +9445,7 @@ applyBackground();
     root.querySelector('#gpv-residue').textContent = 'Click any atom in the viewer to inspect it.';
     root.querySelector('#gpv-label-text').value = '';
     root.querySelector('#gpv-add-label').disabled = true;
+    root.querySelector('#gpv-position-compare').disabled = true;
     root.querySelector('#gpv-all-labels').checked = false;
     root.querySelector('#gpv-side-by-side').checked = false;
     clearComparePanels();
@@ -9308,7 +9526,9 @@ applyBackground();
   root.querySelector('#gpv-compare-image').addEventListener('click', downloadComparisonPng);
   root.querySelector('#gpv-svg').addEventListener('click', downloadPublicationSvg);
   root.querySelector('#gpv-compare-svg').addEventListener('click', downloadComparisonSvg);
-  root.querySelector('#gpv-image').addEventListener('click', downloadPublicationPng);
+  root.querySelector('#gpv-image').addEventListener('click', () => { downloadPublicationImage().catch(error => announce('Could not render the figure: ' + error.message, 'error')); });
+  root.querySelector('#gpv-image-format').addEventListener('change', () => { renderImageButton(); renderPublicationChecks(); });
+  renderImageButton();
   root.querySelector('#gpv-save-view').addEventListener('click', saveCurrentView);
   root.querySelector('#gpv-contact-sheet').addEventListener('click', downloadContactSheet);
   root.querySelector('#gpv-captions').addEventListener('click', downloadCaptions);
@@ -9565,6 +9785,8 @@ applyBackground();
     'Annotate → Domains: name a region, pick its colour, and apply it to every model from the same AlphaFold run. Colour by annotated domains paints them and the legend lists them by name — in the viewer, every export and the report.',
     'Publish → Print size exports at a stated width (85 or 178 mm) and resolution (300 or 600 dpi), writes the dpi into the PNG or TIFF, and sizes labels in points — what a journal checks.',
     'Appearance → Colour-blind-safe palette switches chains and domains to Okabe–Ito colours; a scale bar of 10–100 Å goes bottom-right of every export from Publish → Scale bar.',
+    'Publish → Figure format saves the figure as PNG, TIFF, PDF, JPEG or WebP; the PDF page is the physical size you chose, and the SVG button keeps the text editable.',
+    'Annotate → Compare this position: pick the mutated residue, press the button, and every shown model gets its side chain drawn and its own residue named — Ala15 against Gly15 — with the difference stated in one line.',
     'Drag any label in the 3D view to move it: a residue label keeps a leader line back to its residue, and Reset in its row puts it back. Publish → Legend position puts the colour legend in any corner or down one side.',
     'Annotate → Domains → Label domains writes each domain\'s name on the structure at its centroid; Download architecture PNG/SVG draws the linear domain diagram that goes under it.',
     'Publish → Figure builder: save a few views — overview, interface, a zoom — tick them, order them, caption them, and download one lettered figure at the journal width as PNG or SVG.',
@@ -9620,7 +9842,6 @@ applyBackground();
   root.querySelector('#gpv-domain-color').addEventListener('click', () => { const select = root.querySelector('#gpv-color-mode'); select.value = 'domain'; select.dispatchEvent(new Event('change', { bubbles: true })); });
   root.querySelector('#gpv-domain-highlight').addEventListener('click', () => { const entry = activeEntry(); if (entry && entry.domains && entry.domains.domains.length) highlightDomains(entry, entry.domains.domains); });
   root.querySelector('#gpv-copy-image').addEventListener('click', () => { copyPublicationPng(); });
-  root.querySelector('#gpv-tiff').addEventListener('click', () => { downloadPublicationTiff(); });
   ['#gpv-export-mode', '#gpv-print-width', '#gpv-print-custom', '#gpv-print-aspect', '#gpv-print-dpi', '#gpv-print-text', '#gpv-export-size', '#gpv-export-scale'].forEach(selector => root.querySelector(selector).addEventListener('change', updateExportEstimate));
   root.querySelector('#gpv-figure-font').addEventListener('change', () => { figureFont(); rebuildOverlays(); updateStatus('Figure font: ' + root.querySelector('#gpv-figure-font').selectedOptions[0].textContent); });
   root.querySelector('#gpv-scale-bar').addEventListener('change', () => { if (Number(root.querySelector('#gpv-scale-bar').value)) ensureScaleBarLoop(); else updateScreenScaleBar(); });
@@ -9645,7 +9866,7 @@ applyBackground();
   offerSessionRestore();
   /* ?debug=1 exposes a few internals for the regression suite and for bug reports;
      it has no effect otherwise. */
-  if (new URLSearchParams(location.search).has('debug')) window.__viewerDebug = { viewer, pickAtomAt, displayedEntries, activeEntry, colorOptions, sceneSettings, contactResult: () => contactResult, residueData: () => residueData, msaAssets: () => msaAssets, entries: () => structures, nearbyResidues, assemblyDimensions, paeDomains, parseConfidenceBytes, methodsText, alignmentResults: () => alignmentResults, ensembleSpread: () => ensembleSpread, siteResults: () => siteResults, interfaceResults: () => interfaceResults, solventAccessibleArea, heavyAtoms, ligandGroups, architectureModel, domainSets, distinguishingNames, rmsdMatrix: () => rmsdMatrix, rmsdMedoid, scaleBarSpec, pixelsPerAngstrom, sceneCentre, exportDimensions, exportViewer: () => exportViewer, renderPublicationImage, furnitureLayout, legendWanted, figurePalette, figureScale, releaseExportViewer, labelRecords: () => labelRecords, labelPosition, labelHitAt };
+  if (new URLSearchParams(location.search).has('debug')) window.__viewerDebug = { viewer, pickAtomAt, displayedEntries, activeEntry, colorOptions, sceneSettings, contactResult: () => contactResult, residueData: () => residueData, msaAssets: () => msaAssets, entries: () => structures, nearbyResidues, assemblyDimensions, paeDomains, parseConfidenceBytes, methodsText, alignmentResults: () => alignmentResults, ensembleSpread: () => ensembleSpread, siteResults: () => siteResults, interfaceResults: () => interfaceResults, solventAccessibleArea, heavyAtoms, ligandGroups, architectureModel, domainSets, distinguishingNames, rmsdMatrix: () => rmsdMatrix, rmsdMedoid, scaleBarSpec, pixelsPerAngstrom, sceneCentre, exportDimensions, exportViewer: () => exportViewer, renderPublicationImage, furnitureLayout, legendWanted, figurePalette, figureScale, releaseExportViewer, labelRecords: () => labelRecords, labelPosition, labelHitAt, spotlightResidues: () => spotlightResidues };
   applyTheme(readJson(themeKey, 'system'));
   selectToolTab('models');
   applyAppearance();

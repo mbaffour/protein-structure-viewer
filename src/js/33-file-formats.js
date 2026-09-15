@@ -38,21 +38,120 @@
     return new Blob([buffer], { type: 'image/tiff' });
   }
 
-  async function downloadPublicationTiff() {
-    const button = root.querySelector('#gpv-tiff');
+  /* One page, the figure at its physical size. The composed figure goes in as a single image —
+     deflated when the browser can (lossless), JPEG otherwise — and the page box is written in
+     points from the print width, so the PDF opens at exactly the millimetres asked for. Text is
+     part of the image: the SVG export is the one with editable type. */
+  async function pdfFromImage(uri, plan) {
+    const image = await loadImage(uri);
+    const width = image.naturalWidth; const height = image.naturalHeight;
+    const dpi = plan.dpi || 96;
+    const pageWidth = width / dpi * 72; const pageHeight = height / dpi * 72;
+    const canvas = document.createElement('canvas'); canvas.width = width; canvas.height = height;
+    const context = canvas.getContext('2d');
+    /* PDF images have no alpha channel here, so flatten onto the figure's paper first. */
+    context.fillStyle = figurePalette().paper; context.fillRect(0, 0, width, height);
+    context.drawImage(image, 0, 0);
+    let stream; let filter;
+    if (typeof CompressionStream === 'function') {
+      const pixels = context.getImageData(0, 0, width, height).data;
+      const rgb = new Uint8Array(width * height * 3);
+      for (let i = 0, j = 0; i < pixels.length; i += 4, j += 3) { rgb[j] = pixels[i]; rgb[j + 1] = pixels[i + 1]; rgb[j + 2] = pixels[i + 2]; }
+      stream = new Uint8Array(await new Response(new Blob([rgb]).stream().pipeThrough(new CompressionStream('deflate'))).arrayBuffer());
+      filter = '/FlateDecode';
+    } else {
+      stream = new Uint8Array(await (await fetch(canvas.toDataURL('image/jpeg', 0.95))).arrayBuffer());
+      filter = '/DCTDecode';
+    }
+    const encoder = new TextEncoder();
+    const chunks = []; let length = 0;
+    const push = part => { const bytes = typeof part === 'string' ? encoder.encode(part) : part; chunks.push(bytes); length += bytes.length; };
+    const offsets = [];
+    const object = (number, body, streamBytes) => {
+      offsets[number] = length;
+      push(number + ' 0 obj\n' + body + '\n');
+      if (streamBytes) { push('stream\n'); push(streamBytes); push('\nendstream\n'); }
+      push('endobj\n');
+    };
+    const points = value => (Math.round(value * 100) / 100).toString();
+    push('%PDF-1.4\n'); push(new Uint8Array([0x25, 0xe2, 0xe3, 0xcf, 0xd3, 0x0a]));
+    object(1, '<< /Type /Catalog /Pages 2 0 R >>');
+    object(2, '<< /Type /Pages /Kids [3 0 R] /Count 1 >>');
+    object(3, '<< /Type /Page /Parent 2 0 R /MediaBox [0 0 ' + points(pageWidth) + ' ' + points(pageHeight) + '] /Resources << /XObject << /Im0 4 0 R >> >> /Contents 5 0 R >>');
+    object(4, '<< /Type /XObject /Subtype /Image /Width ' + width + ' /Height ' + height + ' /ColorSpace /DeviceRGB /BitsPerComponent 8 /Filter ' + filter + ' /Length ' + stream.length + ' >>', stream);
+    const content = encoder.encode('q\n' + points(pageWidth) + ' 0 0 ' + points(pageHeight) + ' 0 0 cm\n/Im0 Do\nQ\n');
+    object(5, '<< /Length ' + content.length + ' >>', content);
+    const xref = length;
+    let table = 'xref\n0 6\n0000000000 65535 f \n';
+    for (let number = 1; number <= 5; number += 1) table += String(offsets[number]).padStart(10, '0') + ' 00000 n \n';
+    push(table);
+    push('trailer\n<< /Size 6 /Root 1 0 R >>\nstartxref\n' + xref + '\n%%EOF\n');
+    return { blob: new Blob(chunks, { type: 'application/pdf' }), lossless: filter === '/FlateDecode', pageWidth, pageHeight };
+  }
+
+  /* Every format the figure can be saved in. PNG and TIFF carry the resolution in the file; PDF
+     carries the physical page size; JPEG and WebP are for slides and email, not for print. */
+  const imageFormats = {
+    png: { label: 'PNG', extension: 'png' },
+    tiff: { label: 'TIFF', extension: 'tiff' },
+    pdf: { label: 'PDF', extension: 'pdf' },
+    jpeg: { label: 'JPEG', extension: 'jpg', mime: 'image/jpeg', lossy: true },
+    webp: { label: 'WebP', extension: 'webp', mime: 'image/webp', lossy: true }
+  };
+  function imageFormat() {
+    const value = root.querySelector('#gpv-image-format').value;
+    return imageFormats[value] ? value : 'png';
+  }
+  function renderImageButton() {
+    const format = imageFormats[imageFormat()];
+    const button = root.querySelector('#gpv-image');
+    if (!button.dataset.busy) button.textContent = 'Download figure ' + format.label;
+  }
+  /* toBlob falls back to PNG when a browser cannot encode the type asked for; say so rather than
+     handing over a .jpg that is really a PNG. */
+  function encodeCanvas(canvas, mime, quality) {
+    return new Promise(resolve => canvas.toBlob(blob => resolve(blob), mime, quality));
+  }
+  async function downloadPublicationImage() {
+    const key = imageFormat(); const format = imageFormats[key];
+    const button = root.querySelector('#gpv-image');
     const plan = exportDimensions();
-    const done = setBusy('Rendering TIFF…');
-    button.disabled = true;
+    if (plan.width * plan.height > 6000000) toast('Rendering ' + plan.width + ' × ' + plan.height + ' — this can take a while and the page will not respond meanwhile.');
+    const done = setBusy('Rendering ' + format.label + '…');
+    button.dataset.busy = '1'; button.disabled = true; button.textContent = 'Rendering…';
     await afterPaint();
     try {
       const uri = await withLegend(await renderPublicationImage(null, plan), plan);
-      const blob = await tiffFromImage(uri, plan.dpi || 96);
-      downloadBlob(blob, 'image/tiff', exportFileName('protein-publication', plan, 'tiff'));
-      announce('Publication TIFF downloaded · ' + formatBytes(blob.size) + (plan.dpi ? ' · ' + plan.dpi + ' dpi' : ''));
+      const size = plan.width + ' × ' + plan.height + (plan.dpi ? ' at ' + plan.dpi + ' dpi (' + plan.mm + ' mm wide)' : '');
+      if (key === 'png') {
+        const blob = await pngWithDpi(uri, plan.dpi);
+        downloadBlob(blob, 'image/png', exportFileName('protein-publication', plan, 'png'));
+        announce('Figure PNG downloaded · ' + size + (plan.capped ? ' · size capped for browser stability' : ''));
+      } else if (key === 'tiff') {
+        const blob = await tiffFromImage(uri, plan.dpi || 96);
+        downloadBlob(blob, 'image/tiff', exportFileName('protein-publication', plan, 'tiff'));
+        announce('Figure TIFF downloaded · ' + formatBytes(blob.size) + ' · ' + size);
+      } else if (key === 'pdf') {
+        const pdf = await pdfFromImage(uri, plan);
+        downloadBlob(pdf.blob, 'application/pdf', exportFileName('protein-publication', plan, 'pdf'));
+        announce('Figure PDF downloaded · page ' + (Math.round(pdf.pageWidth / 72 * 25.4)) + ' × ' + Math.round(pdf.pageHeight / 72 * 25.4) + ' mm · ' + size + ' · ' + (pdf.lossless ? 'lossless image' : 'JPEG image, this browser cannot deflate') + ' · text is part of the image, use SVG for editable type');
+      } else {
+        const image = await loadImage(uri);
+        const canvas = document.createElement('canvas'); canvas.width = image.naturalWidth; canvas.height = image.naturalHeight;
+        const context = canvas.getContext('2d');
+        context.fillStyle = figurePalette().paper; context.fillRect(0, 0, canvas.width, canvas.height);
+        context.drawImage(image, 0, 0);
+        const blob = await encodeCanvas(canvas, format.mime, 0.95);
+        const fellBack = !blob || blob.type !== format.mime;
+        const extension = fellBack ? 'png' : format.extension;
+        downloadBlob(blob, blob ? blob.type : 'image/png', exportFileName('protein-publication', plan, extension));
+        announce('Figure ' + (fellBack ? 'PNG' : format.label) + ' downloaded · ' + formatBytes(blob.size) + ' · ' + size + (fellBack ? ' · this browser cannot write ' + format.label + ', so a PNG was saved instead' : ' · lossy, and without a resolution field: use PNG, TIFF or PDF for print'));
+      }
     } catch (error) {
-      announce('Could not render the publication TIFF: ' + error.message, 'error');
+      announce('Could not render the figure ' + format.label + ': ' + error.message, 'error');
     } finally {
-      releaseExportViewer(); done(); button.disabled = structures.length === 0;
+      releaseExportViewer(); done();
+      delete button.dataset.busy; button.disabled = structures.length === 0; renderImageButton();
     }
   }
 

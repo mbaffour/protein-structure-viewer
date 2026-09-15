@@ -867,6 +867,62 @@ await step('a label is dragged with the mouse, keeps a model-space offset, and r
   await page.click('#gpv-label-list .gpv-entry button:has-text("Remove")'); await page.waitForTimeout(200);
   console.log('       dragged ' + dx.toFixed(0) + ', ' + dy.toFixed(0) + ' px · offset kept in model space · camera still · reset');
 });
+await step('one position is compared across a wild-type and a mutant model: side chains, a label per model, and the difference stated', async () => {
+  /* A point mutant of the fixture: chain A residue 15 becomes glycine, everything else identical —
+     which is what a second AlphaFold run of a mutated sequence looks like to the viewer. */
+  const original = (await readFile(join(work, 'model_a.pdb'), 'utf8')).split('\n');
+  const mutated = original.map(line => (/^ATOM/.test(line) && line[21] === 'A' && Number(line.slice(22, 26)) === 15 ? line.slice(0, 17) + 'GLY' + line.slice(20) : line)).join('\n');
+  if (mutated === original.join('\n')) throw new Error('the mutant fixture is identical to model_a — check the PDB columns');
+  const file = join(work, 'model_mutant.pdb'); await writeFile(file, mutated);
+  const startTab = await page.evaluate(() => (document.querySelector('[data-gpv-tab][aria-selected="true"]') || {}).dataset.gpvTab || 'models');
+  const startMode = await page.inputValue('#gpv-view-mode');
+  const cleanup = async () => {
+    await tab('annotate');
+    if (await page.locator('#gpv-position-clear').count()) { await page.click('#gpv-position-clear'); await page.waitForTimeout(300); }
+    await tab('models');
+    const row = page.locator('#gpv-list .gpv-entry', { hasText: 'model_mutant' });
+    if (await row.count()) { await row.first().locator('button:has-text("Remove")').click(); await page.waitForTimeout(400); }
+    await page.click('#gpv-show-all'); await page.waitForTimeout(600);
+    await page.selectOption('#gpv-view-mode', startMode); await page.waitForTimeout(400);
+    await tab(startTab);
+  };
+  try {
+    await tab('models'); await page.setInputFiles('#gpv-files', [file]); await page.waitForTimeout(1800);
+    await page.selectOption('#gpv-view-mode', 'overlay'); await page.waitForTimeout(300);
+    const only = async names => page.evaluate(labels => {
+      [...document.querySelectorAll('#gpv-list .gpv-entry')].forEach(entry => {
+        const toggle = entry.querySelector('input[type="checkbox"]');
+        const wanted = labels.some(label => entry.textContent.includes(label));
+        if (toggle && toggle.checked !== wanted) toggle.click();
+      });
+    }, names);
+    await only(['model_a.pdb', 'model_mutant.pdb']); await page.waitForTimeout(900);
+    await tab('annotate');
+    const labelsBefore = await page.locator('#gpv-label-list .gpv-entry').count();
+    await page.fill('#gpv-goto', 'A:15'); await page.click('#gpv-goto-run'); await page.waitForTimeout(500);
+    if (await page.locator('#gpv-position-compare').isDisabled()) throw new Error('Compare this position stayed disabled with a residue selected and two models shown');
+    await page.click('#gpv-position-compare'); await page.waitForTimeout(900);
+    const state = (await page.locator('#gpv-position-state').textContent()) || '';
+    if (!/A:15 .*Ala.*→.*Gly.*differs/.test(state)) throw new Error('readout: ' + state);
+    const spots = await page.evaluate(() => window.__viewerDebug.spotlightResidues());
+    if (spots.length !== 1 || spots[0].chain !== 'A' || spots[0].resi !== 15) throw new Error('spotlight list: ' + JSON.stringify(spots));
+    const texts = await page.evaluate(() => window.__viewerDebug.labelRecords().filter(label => label.kind === 'position').map(label => label.text).sort());
+    if (texts.length !== 2 || texts[0] !== 'Ala15' || texts[1] !== 'Gly15') throw new Error('position labels: ' + JSON.stringify(texts));
+    const labelsAfter = await page.locator('#gpv-label-list .gpv-entry').count();
+    if (labelsAfter - labelsBefore !== 2) throw new Error('the label list gained ' + (labelsAfter - labelsBefore) + ' rows, not 2');
+    await tab('publish');
+    const download = page.waitForEvent('download', { timeout: 120000 });
+    await page.click('#gpv-svg');
+    const svg = await readFile(await (await download).path(), 'utf8');
+    if (!/>Ala15</.test(svg) || !/>Gly15</.test(svg)) throw new Error('the figure SVG does not carry both residue labels');
+    await tab('annotate');
+    await page.click('#gpv-position-clear'); await page.waitForTimeout(600);
+    if (await page.evaluate(() => window.__viewerDebug.labelRecords().some(label => label.kind === 'position'))) throw new Error('clearing left position labels behind');
+    if ((await page.evaluate(() => window.__viewerDebug.spotlightResidues())).length) throw new Error('clearing left compared positions behind');
+    if ((await page.locator('#gpv-label-list .gpv-entry').count()) !== labelsBefore) throw new Error('clearing removed labels it did not place');
+    console.log('       ' + state.trim() + ' · side chains and both labels in the SVG · cleared');
+  } finally { await cleanup(); }
+});
 await step('the sequence strip shows both chains and selects a residue on click', async () => {
   await tab('models'); await page.selectOption('#gpv-view-mode', 'single'); await tab('annotate'); await page.waitForTimeout(500);
   const canvases = page.locator('#gpv-sequence-rows canvas');
@@ -1180,7 +1236,7 @@ await step('the export button re-enables afterwards', async () => {
   await page.waitForTimeout(600);
   if (await page.locator('#gpv-image').isDisabled()) throw new Error('still disabled');
   const label = await page.locator('#gpv-image').textContent();
-  if (!/Download publication PNG/.test(label)) throw new Error('label not restored: ' + label);
+  if (!/Download figure PNG/.test(label)) throw new Error('label not restored: ' + label);
 });
 await step('the publication PNG is not blank', async () => {
   await page.selectOption('#gpv-export-size', '1200x1200'); await page.selectOption('#gpv-export-scale', '1');
@@ -1514,9 +1570,39 @@ await step('print-size export writes 300 dpi into a PNG of the stated width', as
   if (Math.abs(perMetre - 11811) > 1 || png[at + 12] !== 1) throw new Error('pHYs ' + perMetre + ' unit ' + png[at + 12]);
   console.log('       ' + estimate.trim() + ' · pHYs ' + perMetre + ' px/m');
 });
+await step('the figure saves as PDF, JPEG and WebP beside PNG, and the checklist flags the lossy ones', async () => {
+  await tab('publish');
+  await page.selectOption('#gpv-export-mode', 'print'); await page.selectOption('#gpv-print-width', '85'); await page.selectOption('#gpv-print-dpi', '300'); await page.waitForTimeout(200);
+  try {
+    await page.selectOption('#gpv-image-format', 'pdf'); await page.waitForTimeout(200);
+    if (!/Download figure PDF/.test((await page.locator('#gpv-image').textContent()) || '')) throw new Error('the button does not follow the format: ' + await page.locator('#gpv-image').textContent());
+    let download = page.waitForEvent('download', { timeout: 180000 }); await page.click('#gpv-image');
+    const pdfPath = await (await download).path(); const pdf = await readFile(pdfPath);
+    if (!/\.pdf$/.test((await download).suggestedFilename())) throw new Error('PDF name: ' + (await download).suggestedFilename());
+    const head = pdf.toString('latin1', 0, 9); if (!head.startsWith('%PDF-1.4')) throw new Error('not a PDF: ' + head);
+    const text = pdf.toString('latin1');
+    /* 85 mm at 300 dpi is 1004 px, which is 240.96 pt; the page box must say so. */
+    const box = text.match(/\/MediaBox \[0 0 ([\d.]+) ([\d.]+)\]/); if (!box || Math.abs(Number(box[1]) - 1004 / 300 * 72) > 0.5) throw new Error('MediaBox: ' + (box && box[0]));
+    if (!/\/Subtype \/Image/.test(text) || !/\/FlateDecode|\/DCTDecode/.test(text)) throw new Error('the PDF carries no image');
+    if (!/startxref\n\d+\n%%EOF/.test(text)) throw new Error('the PDF has no valid trailer');
+    if (pdf.length < 20000) throw new Error('PDF is only ' + pdf.length + ' bytes — likely blank');
+    await page.selectOption('#gpv-image-format', 'jpeg'); await page.waitForTimeout(300);
+    const flagged = (await page.locator('#gpv-check-list').textContent()) || '';
+    if (!/JPEG is lossy/.test(flagged)) throw new Error('the checklist does not flag the lossy format');
+    download = page.waitForEvent('download', { timeout: 180000 }); await page.click('#gpv-image');
+    const jpegName = (await download).suggestedFilename(); const jpeg = await readFile(await (await download).path());
+    if (!/\.(jpg|png)$/.test(jpegName)) throw new Error('JPEG name: ' + jpegName);
+    if (/\.jpg$/.test(jpegName) && !(jpeg[0] === 0xff && jpeg[1] === 0xd8)) throw new Error('not a JPEG');
+    await page.selectOption('#gpv-image-format', 'webp'); await page.waitForTimeout(200);
+    download = page.waitForEvent('download', { timeout: 180000 }); await page.click('#gpv-image');
+    const webpName = (await download).suggestedFilename(); const webp = await readFile(await (await download).path());
+    if (/\.webp$/.test(webpName) && webp.toString('latin1', 8, 12) !== 'WEBP') throw new Error('not a WebP');
+    console.log('       PDF ' + (pdf.length / 1024).toFixed(0) + ' KB, page ' + box[1] + ' × ' + box[2] + ' pt · ' + jpegName.replace(/^.*-/, '') + ' ' + (jpeg.length / 1024).toFixed(0) + ' KB · ' + webpName.replace(/^.*-/, '') + ' ' + (webp.length / 1024).toFixed(0) + ' KB');
+  } finally { await page.selectOption('#gpv-image-format', 'png'); await page.waitForTimeout(200); }
+});
 await step('the TIFF export is a baseline RGB TIFF with the resolution set', async () => {
   const download = page.waitForEvent('download', { timeout: 120000 });
-  await page.click('#gpv-tiff');
+  await page.selectOption('#gpv-image-format', 'tiff'); await page.waitForTimeout(200); await page.click('#gpv-image');
   const file = join(work, 'print.tiff'); await (await download).saveAs(file);
   const tiff = await readFile(file);
   if (tiff.toString('latin1', 0, 4) !== 'II*\u0000') throw new Error('not a little-endian TIFF');
@@ -1553,6 +1639,7 @@ await step('the legend sits where the figure asks: a bottom row, or a stack down
   console.log('       one row at y ' + bottom.rows[0].toFixed(0) + ' · stacked over ' + side.rows.length + ' rows on the right');
 });
 await step('a scale bar of known length appears in the figure SVG', async () => {
+  await page.selectOption('#gpv-image-format', 'png'); await page.waitForTimeout(150);
   await page.selectOption('#gpv-scale-bar', '20'); await page.waitForTimeout(400);
   if (await page.locator('#gpv-scalebar').isHidden()) throw new Error('on-screen scale bar hidden');
   const download = page.waitForEvent('download', { timeout: 120000 });

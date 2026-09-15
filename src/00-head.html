@@ -958,6 +958,12 @@ html>body{padding:0}</style>
       <label class="form-label">Label style<select class="form-select" id="gpv-label-style" data-tooltip="Boxed labels read on any background; plain text suits clean figures where the box would hide the model"><option value="boxed">Boxed</option><option value="plain">Plain text</option></select></label>
       <button class="btn btn-ghost" type="button" id="gpv-clear-labels">Clear labels</button>
     </div>
+    <div class="viz-controls">
+      <button class="btn" type="button" id="gpv-position-compare" disabled data-tooltip="Show the side chain at the selected position in every shown model, label each model&#39;s residue there, and say whether they differ — positions are matched by chain and residue number">Compare this position</button>
+      <label class="form-check form-switch"><input class="form-check-input" id="gpv-position-sticks" type="checkbox" checked><span class="form-check-label">Side chains at compared positions</span></label>
+      <button class="btn btn-ghost" type="button" id="gpv-position-clear">Clear compared positions</button>
+      <span class="text-muted text-small" id="gpv-position-state">Select a residue, then compare it across the shown models.</span>
+    </div>
     <div class="gpv-list" id="gpv-label-list" aria-label="Residue labels"></div>
     <div class="viz-controls">
       <label class="form-label gpv-current-label">Selection model<select class="form-select" id="gpv-selection-model" disabled><option>No models loaded</option></select></label>
@@ -1149,9 +1155,9 @@ html>body{padding:0}</style>
       <label class="form-label">Figure font<select class="form-select" id="gpv-figure-font"><option value="Arial, Helvetica, sans-serif" selected>Arial / Helvetica</option><option value="'Times New Roman', Times, serif">Times</option><option value="system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif">System default</option></select></label>
       <label class="form-label">Scale bar<select class="form-select" id="gpv-scale-bar" data-tooltip="Bar of known length at the model centre, bottom right of the figure; exact in orthographic projection"><option value="0" selected>None</option><option value="10">10 Å</option><option value="20">20 Å</option><option value="50">50 Å</option><option value="100">100 Å</option></select></label>
       <span class="text-muted text-small" id="gpv-export-estimate"></span>
-      <button class="btn" type="button" id="gpv-image" disabled>Download publication PNG</button>
+      <label class="form-label">Figure format<select class="form-select" id="gpv-image-format" data-tooltip="PNG and TIFF carry the resolution in the file, PDF carries the physical page size, JPEG and WebP are lossy and meant for slides; the SVG button beside this one is the vector option"><option value="png" selected>PNG</option><option value="tiff">TIFF</option><option value="pdf">PDF</option><option value="jpeg">JPEG</option><option value="webp">WebP</option></select></label>
+      <button class="btn" type="button" id="gpv-image" disabled>Download figure PNG</button>
       <button class="btn" type="button" id="gpv-copy-image" disabled data-tooltip="Render the publication PNG and put it on the clipboard, ready to paste into slides or a document">Copy PNG to clipboard</button>
-      <button class="btn" type="button" id="gpv-tiff" disabled data-tooltip="Uncompressed RGB TIFF with the resolution written into the file, for journals that require TIFF">Download publication TIFF</button>
       <button class="btn" type="button" id="gpv-svg" disabled data-tooltip="Raster molecule with labels, arrows, callouts and legend as editable vector layers">Download figure SVG</button>
       <button class="btn" type="button" id="gpv-compare-image" disabled data-tooltip="Stitch every synchronized panel into one lettered figure at the chosen size">Download comparison PNG</button>
       <button class="btn" type="button" id="gpv-model-panels" disabled data-tooltip="One lettered panel per model, every panel rendered from the current camera — the five models of an AlphaFold run side by side, identically framed">Download one panel per model</button>
@@ -1279,6 +1285,8 @@ html>body{padding:0}</style>
       </ul>
       <h3>Tips for figures and reviewers</h3>
       <ul>
+        <li><em>Annotate → Compare this position</em> takes the residue you have selected and, in every shown model, draws its side chain, writes that model’s own residue on it (Arg273, His273) and states whether the models agree — the one-press check on a wild-type and mutant pair. Positions are matched by chain and residue number, so an insertion or deletion between two runs shifts them.</li>
+        <li><em>Publish → Figure format</em> saves the same figure as PNG or TIFF with the resolution in the file, as a PDF whose page is the physical size you chose, or as JPEG or WebP for slides; <em>Download figure SVG</em> stays the vector option with editable text.</li>
         <li>After <em>Align visible</em>, <em>RMSF profile SVG/PNG</em> plots the per-residue Cα spread across the aligned models, one panel per chain with the agreement bands behind the trace, and the same plot is a panel of the composite figure — the ensemble counterpart of the pLDDT profile.</li>
         <li><em>Compare → Pairwise RMSD → Compute matrix</em> superposes every shown model onto every other with the same rules as Align visible and tabulates the Cα RMSDs — which models of an ensemble agree, which is the odd one out — with a mean column, a ★ on the medoid, a CSV, a heat-map PNG or SVG with the values in the cells, and a panel for the composite figure. <em>Use medoid as reference</em> superposes everything onto that model and draws it solid against the rest.</li>
         <li><em>Compare → Match identical chains by position</em> re-pairs the chains of an assembly by where they sit after a first fit, so a model that puts the same subunit in a different place is compared against the copy it actually corresponds to; the chain mapping it chose is printed with each result.</li>

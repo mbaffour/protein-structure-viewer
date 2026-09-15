@@ -489,6 +489,25 @@ structure as the camera turns rather than sliding across the screen, and it trav
 sessions and share links and is undone with ⌘Z. **Reset** in the label's row puts it back on its
 residue; the arrow buttons in an annotation's row nudge its text by small steps for fine work.
 
+**Comparing one position across models.** Two runs of the same protein — a wild type and a point
+mutant — are the usual reason for loading two models of the same length. Select the residue in
+question (click it, pick it from the sequence strip, or type it into **Go to**) and press **Compare
+this position** in Annotate. In every shown model the viewer draws the side chain at that position as
+sticks on top of the current representation, places a label naming *that model's* residue there —
+`Ala15` in one, `Gly15` in the other, each in its model's colour — and writes a single line under the
+button: `A:15 · Ala in all 3 models` when the models agree, or `A:15 · model_wt Arg → model_mut His ·
+differs` when they do not, using the shortened model names. Compare a second position and both stay
+marked. The sticks are part of the style, so the main view, each panel of a side-by-side comparison
+and every export agree; **Side chains at compared positions** turns them off while keeping the
+labels, and **Clear compared positions** removes only the labels and sticks the comparison placed,
+leaving your own labels alone. The labels are ordinary residue labels — drag them, recolour them,
+resize them, undo with ⌘Z — and the comparison travels with scenes, sessions and share links. The
+generated figure legend names the position and what each model has there, and the methods text
+records how the comparison was made. **Positions are matched by chain and residue number**, which is
+what two runs of one sequence share; there is no sequence alignment behind it, so an insertion or a
+deletion between the two runs shifts the numbering and the comparison follows the numbers rather than
+the residues. For models of different lengths, align them first and check what actually lines up.
+
 **Legend position.** The **Legend position** control in Publish decides where the colour legend is drawn
 on exports: any of the four corners, or stacked as a column down the **left** or **right** side, which
 is what a tall single-panel figure usually wants. It applies to the publication PNG and TIFF, the figure
@@ -524,6 +543,16 @@ domain colouring does not touch the chain legend, and they are part of the scene
 and share links carry them, undo covers them, and **Reset labels** clears the current scheme's names.
 Model names in the *Model* legend come from the display name set in the Models tab; annotated domains
 are named where they are defined, in Annotate → Domains.
+
+**Figure format.** One button saves the figure, and **Figure format** decides what it writes.
+**PNG** and **TIFF** carry the resolution in the file, which is what a journal's figure checker reads.
+**PDF** writes a single page whose box is the physical size you chose — 85 mm at 300 dpi becomes a
+240.96 pt page — with the figure embedded as one image, deflated losslessly where the browser supports
+it and JPEG-compressed where it does not; the text in a PDF is part of that image, so keep the SVG if
+an editor may need to retype a label. **JPEG** and **WebP** are lossy and carry no resolution field:
+they are for slides and email, and the publication checklist says so and offers PNG in one click. A
+browser that cannot encode WebP saves a PNG instead and the status line tells you. **Download figure
+SVG** is unchanged: raster molecule, vector labels, legend and scale bar.
 
 **Comparison figure.** With the synchronized multi-view on, **Download comparison PNG** renders every
 panel at the chosen size and stitches them into one lettered figure with each model's name and mean

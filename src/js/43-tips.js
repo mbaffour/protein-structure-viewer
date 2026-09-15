@@ -41,6 +41,8 @@
     'Annotate → Domains: name a region, pick its colour, and apply it to every model from the same AlphaFold run. Colour by annotated domains paints them and the legend lists them by name — in the viewer, every export and the report.',
     'Publish → Print size exports at a stated width (85 or 178 mm) and resolution (300 or 600 dpi), writes the dpi into the PNG or TIFF, and sizes labels in points — what a journal checks.',
     'Appearance → Colour-blind-safe palette switches chains and domains to Okabe–Ito colours; a scale bar of 10–100 Å goes bottom-right of every export from Publish → Scale bar.',
+    'Publish → Figure format saves the figure as PNG, TIFF, PDF, JPEG or WebP; the PDF page is the physical size you chose, and the SVG button keeps the text editable.',
+    'Annotate → Compare this position: pick the mutated residue, press the button, and every shown model gets its side chain drawn and its own residue named — Ala15 against Gly15 — with the difference stated in one line.',
     'Drag any label in the 3D view to move it: a residue label keeps a leader line back to its residue, and Reset in its row puts it back. Publish → Legend position puts the colour legend in any corner or down one side.',
     'Annotate → Domains → Label domains writes each domain\'s name on the structure at its centroid; Download architecture PNG/SVG draws the linear domain diagram that goes under it.',
     'Publish → Figure builder: save a few views — overview, interface, a zoom — tick them, order them, caption them, and download one lettered figure at the journal width as PNG or SVG.',
@@ -96,7 +98,6 @@
   root.querySelector('#gpv-domain-color').addEventListener('click', () => { const select = root.querySelector('#gpv-color-mode'); select.value = 'domain'; select.dispatchEvent(new Event('change', { bubbles: true })); });
   root.querySelector('#gpv-domain-highlight').addEventListener('click', () => { const entry = activeEntry(); if (entry && entry.domains && entry.domains.domains.length) highlightDomains(entry, entry.domains.domains); });
   root.querySelector('#gpv-copy-image').addEventListener('click', () => { copyPublicationPng(); });
-  root.querySelector('#gpv-tiff').addEventListener('click', () => { downloadPublicationTiff(); });
   ['#gpv-export-mode', '#gpv-print-width', '#gpv-print-custom', '#gpv-print-aspect', '#gpv-print-dpi', '#gpv-print-text', '#gpv-export-size', '#gpv-export-scale'].forEach(selector => root.querySelector(selector).addEventListener('change', updateExportEstimate));
   root.querySelector('#gpv-figure-font').addEventListener('change', () => { figureFont(); rebuildOverlays(); updateStatus('Figure font: ' + root.querySelector('#gpv-figure-font').selectedOptions[0].textContent); });
   root.querySelector('#gpv-scale-bar').addEventListener('change', () => { if (Number(root.querySelector('#gpv-scale-bar').value)) ensureScaleBarLoop(); else updateScreenScaleBar(); });
@@ -121,7 +122,7 @@
   offerSessionRestore();
   /* ?debug=1 exposes a few internals for the regression suite and for bug reports;
      it has no effect otherwise. */
-  if (new URLSearchParams(location.search).has('debug')) window.__viewerDebug = { viewer, pickAtomAt, displayedEntries, activeEntry, colorOptions, sceneSettings, contactResult: () => contactResult, residueData: () => residueData, msaAssets: () => msaAssets, entries: () => structures, nearbyResidues, assemblyDimensions, paeDomains, parseConfidenceBytes, methodsText, alignmentResults: () => alignmentResults, ensembleSpread: () => ensembleSpread, siteResults: () => siteResults, interfaceResults: () => interfaceResults, solventAccessibleArea, heavyAtoms, ligandGroups, architectureModel, domainSets, distinguishingNames, rmsdMatrix: () => rmsdMatrix, rmsdMedoid, scaleBarSpec, pixelsPerAngstrom, sceneCentre, exportDimensions, exportViewer: () => exportViewer, renderPublicationImage, furnitureLayout, legendWanted, figurePalette, figureScale, releaseExportViewer, labelRecords: () => labelRecords, labelPosition, labelHitAt };
+  if (new URLSearchParams(location.search).has('debug')) window.__viewerDebug = { viewer, pickAtomAt, displayedEntries, activeEntry, colorOptions, sceneSettings, contactResult: () => contactResult, residueData: () => residueData, msaAssets: () => msaAssets, entries: () => structures, nearbyResidues, assemblyDimensions, paeDomains, parseConfidenceBytes, methodsText, alignmentResults: () => alignmentResults, ensembleSpread: () => ensembleSpread, siteResults: () => siteResults, interfaceResults: () => interfaceResults, solventAccessibleArea, heavyAtoms, ligandGroups, architectureModel, domainSets, distinguishingNames, rmsdMatrix: () => rmsdMatrix, rmsdMedoid, scaleBarSpec, pixelsPerAngstrom, sceneCentre, exportDimensions, exportViewer: () => exportViewer, renderPublicationImage, furnitureLayout, legendWanted, figurePalette, figureScale, releaseExportViewer, labelRecords: () => labelRecords, labelPosition, labelHitAt, spotlightResidues: () => spotlightResidues };
   applyTheme(readJson(themeKey, 'system'));
   selectToolTab('models');
   applyAppearance();

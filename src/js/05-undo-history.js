@@ -5,7 +5,7 @@
   let redoStack = [];
 
   function snapshotRecords() {
-    return structuredClone({ labels: labelRecords, selections: selectionRecords, measurements: measurementRecords, annotations: annotationRecords, domains: domainRecords });
+    return structuredClone({ labels: labelRecords, selections: selectionRecords, measurements: measurementRecords, annotations: annotationRecords, domains: domainRecords, positions: spotlightResidues });
   }
 
   function renderHistoryButtons() {
@@ -33,7 +33,8 @@
     measurementRecords = state.measurements.filter(record => record.points.every(alive));
     annotationRecords = state.annotations.filter(record => record.points.every(alive));
     domainRecords = (state.domains || []).filter(record => record.scope === 'all' || alive(record)); domainVersion += 1;
-    renderLabelList(); renderSelectionList(); renderMeasurementList(); renderAnnotationList(); renderDomainList();
+    spotlightResidues = state.positions || [];
+    renderLabelList(); renderSelectionList(); renderMeasurementList(); renderAnnotationList(); renderDomainList(); renderPositionState();
     applyStyle();
   }
 

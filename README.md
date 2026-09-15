@@ -176,6 +176,16 @@ camera can turn without losing the arrangement; *Reset* in its row puts it back.
 in Publish puts the colour legend in any corner or stacks it down the left or right side of the
 figure, on every export and on each panel of a built figure.
 
+## Comparing one position across models
+
+Loaded a wild type and a point mutant from two prediction runs? Select the residue and press
+**Compare this position** in Annotate. Every shown model gets the side chain drawn at that position,
+a label naming that model's own residue there — `Ala15` against `Gly15`, in the model's colour — and
+a one-line readout saying whether the models agree or exactly how they differ. The sticks are part of
+the style, so every panel and export shows them, and the labels behave like any other residue label.
+Positions are matched by chain and residue number, so an insertion or deletion between two runs
+shifts them; the methods text says as much.
+
 ## Domain figures
 
 Colour by annotated or PAE domains, then **Label domains** writes each domain's name on the
@@ -308,8 +318,9 @@ the fallback block still has the same hash, or drop the fallback for that librar
 ## Publishing a figure
 
 Publish → **Output: Print size** states the width (85 mm single column, 178 mm double column, or
-custom), resolution (300 or 600 dpi) and text size in points; the PNG and TIFF carry the dpi in the
-file, the SVG keeps text as text in the chosen figure font, and a scale bar can be added. The
+custom), resolution (300 or 600 dpi) and text size in points. **Figure format** then saves it as
+PNG or TIFF with the dpi in the file, as a PDF whose page is that physical size, or as JPEG or WebP
+for slides; the PNG and TIFF carry the dpi in the file, the SVG keeps text as text in the chosen figure font, and a scale bar can be added. The
 **Colour-blind-safe palette** (Okabe–Ito) covers chains and domains, and **Write figure legend**
 drafts the legend including the colour bands, cut-offs, alignment statistics, print settings and a
 rendering credit. See [`docs/USAGE.md`](docs/USAGE.md#publishing-a-figure) for the checklist.

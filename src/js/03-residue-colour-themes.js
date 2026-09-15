@@ -130,6 +130,15 @@
     model.setStyle({ hetflag: true }, heteroStyle);
     model.setStyle({ resn: waterNames }, {});
     if (entry.hiddenChains && entry.hiddenChains.length) model.setStyle({ chain: entry.hiddenChains }, {});
+    /* Compared positions (Annotate → Compare this position) get side-chain sticks added on top of
+       whatever the model is drawn as, so the position under discussion is visible in the main view,
+       every panel and every export at once. A hidden chain stays hidden. */
+    if (spotlightResidues.length && root.querySelector('#gpv-position-sticks').checked) {
+      spotlightResidues.forEach(spot => {
+        if (spot.chain && (entry.hiddenChains || []).includes(spot.chain)) return;
+        model.setStyle(spot.chain ? { chain: spot.chain, resi: spot.resi } : { resi: spot.resi }, { stick: { radius: 0.22, colorscheme: 'default' } }, true);
+      });
+    }
     const surface = root.querySelector('#gpv-surface').value;
     if (surface === 'none' || !host || typeof host.addSurface !== 'function') return Promise.resolve();
     if (entry.atoms.length > surfaceAtomLimit) {
@@ -171,8 +180,8 @@
     root.querySelector('#gpv-share-link').disabled = !structures.some(entry => entry.fetchId);
     root.querySelector('#gpv-fasta').disabled = structures.length === 0;
     root.querySelector('#gpv-copy-image').disabled = structures.length === 0;
-    root.querySelector('#gpv-tiff').disabled = structures.length === 0;
     root.querySelector('#gpv-add-domain').disabled = !activeEntry();
+    updatePositionCompare();
     root.querySelector('#gpv-figure-legend').disabled = structures.length === 0;
     root.querySelector('#gpv-methods-text').disabled = structures.length === 0;
     const scored = structures.some(entry => entry.visible && entry.scores.length);
@@ -181,6 +190,7 @@
     root.querySelector('#gpv-image').disabled = structures.length === 0; root.querySelector('#gpv-model-panels').disabled = structures.length < 2;
     root.querySelector('#gpv-rmsd-matrix-run').disabled = structures.length < 2;
     root.querySelector('#gpv-svg').disabled = structures.length === 0;
+    if (typeof renderImageButton === 'function') renderImageButton();
     root.querySelector('#gpv-video').disabled = structures.length === 0;
     root.querySelector('#gpv-save-scene').disabled = structures.length === 0; root.querySelector('#gpv-save-session').disabled = structures.length === 0;
     root.querySelector('#gpv-save-view').disabled = structures.length === 0;
@@ -539,6 +549,7 @@
     const saved = labelRecords.find(label => label.key === key);
     root.querySelector('#gpv-label-text').value = saved ? saved.text : (atom.resn || 'RES') + atom.resi + (atom.chain ? ' · ' + atom.chain : '');
     root.querySelector('#gpv-add-label').disabled = false;
+    updatePositionCompare();
   }
 
   function addOrEditLabel() {

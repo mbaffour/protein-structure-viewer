@@ -157,8 +157,12 @@
       if (!entry) return null;
       const atom = entry.atoms.find(item => (item.chain || '') === (label.chain || '') && item.resi === label.resi && (item.atom === label.atom || item.atom === 'CA'));
       if (!atom) return null;
-      return { entryId: entry.id, chain: label.chain || '', resi: label.resi, atom: label.atom || 'CA', resn: atom.resn, x: atom.x, y: atom.y, z: atom.z, key: residueKey(entry.id, label.chain, label.resi), ...(label.kind === 'domain' ? { kind: 'domain' } : {}), ...(label.offset && Number.isFinite(Number(label.offset.x)) ? { offset: { x: Number(label.offset.x), y: Number(label.offset.y), z: Number(label.offset.z) } } : {}), text: label.text, color: /^#[0-9a-f]{6}$/i.test(label.color || '') ? label.color : undefined, size: labelSizes.some(([value]) => value === Number(label.size)) ? Number(label.size) : undefined };
+      return { entryId: entry.id, chain: label.chain || '', resi: label.resi, atom: label.atom || 'CA', resn: atom.resn, x: atom.x, y: atom.y, z: atom.z, key: residueKey(entry.id, label.chain, label.resi), ...(label.kind === 'domain' || label.kind === 'position' ? { kind: label.kind } : {}), ...(label.offset && Number.isFinite(Number(label.offset.x)) ? { offset: { x: Number(label.offset.x), y: Number(label.offset.y), z: Number(label.offset.z) } } : {}), text: label.text, color: /^#[0-9a-f]{6}$/i.test(label.color || '') ? label.color : undefined, size: labelSizes.some(([value]) => value === Number(label.size)) ? Number(label.size) : undefined };
     }).filter(Boolean);
+    spotlightResidues = (Array.isArray(scene.positions) ? scene.positions : []).slice(0, 200)
+      .map(record => ({ chain: String(record && record.chain || '').slice(0, 4), resi: Number(record && record.resi) }))
+      .filter(spot => Number.isFinite(spot.resi));
+    renderPositionState();
     selectionRecords = (scene.selections || []).map(record => {
       const entry = byName.get(record.model); if (!entry) return null;
       return { id: nextAnnotationId++, entryId: entry.id, chain: record.chain || '', residues: (record.residues || []).map(Number).filter(Number.isFinite), action: record.action === 'hide' ? 'hide' : 'highlight', color: /^#[0-9a-f]{6}$/i.test(record.color || '') ? record.color : '#f97316' };
@@ -583,28 +587,6 @@
     const uri = target.pngURI();
     if (restore) applyViewState(restore, { panels: false });
     return uri;
-  }
-
-  async function downloadPublicationPng() {
-    const button = root.querySelector('#gpv-image');
-    const requested = exportDimensions();
-    if (requested.width * requested.height > 6000000) {
-      toast('Rendering ' + requested.width + ' × ' + requested.height + ' — this can take a while and the page will not respond meanwhile.');
-    }
-    const done = setBusy('Rendering PNG…');
-    button.disabled = true; button.textContent = 'Rendering…';
-    await afterPaint();
-    try {
-      const uri = await withLegend(await renderPublicationImage(null, requested), requested);
-      downloadBlob(await pngWithDpi(uri, requested.dpi), 'image/png', exportFileName('protein-publication', requested, 'png'));
-      announce('Publication PNG downloaded · ' + requested.width + ' × ' + requested.height + (requested.dpi ? ' at ' + requested.dpi + ' dpi (' + requested.mm + ' mm wide)' : '') + (requested.capped ? ' · size capped for browser stability' : ''));
-    } catch (error) {
-      announce('Could not render the publication PNG: ' + error.message, 'error');
-    } finally {
-      releaseExportViewer();
-      done();
-      button.disabled = structures.length === 0; button.textContent = 'Download publication PNG';
-    }
   }
 
   function hexLuminance(hex) {
