@@ -2,6 +2,26 @@
 
 All notable changes to this project are recorded here.
 
+## 2.42.0
+
+### Fixed
+
+- **A legend wider than its panel is no longer cut off in silence.** The colour legend was laid out as
+  one row however long it was; when it would not fit, the only remedy was shrinking it, and that stopped
+  at 55 % of the figure's text size. Past that point the row was simply drawn at its full width and
+  whatever hung over the panel's right edge was lost — the three-panel *Make site figure* output at
+  178 mm was the plain case, its six-band **Cα deviation** legend ending in a grey swatch flush with the
+  edge and the word *unmatched* nowhere on the page. Nothing warned anyone; the figure just went out
+  wrong. The legend now wraps: when the entries do not fit one row in the width the panel gives it, they
+  run onto as many rows as they need, the box growing taller and never wider than the panel. Shrinking
+  is still tried first, so a legend that fits today is drawn exactly as it was. An entry too long even
+  for a row of its own has its label truncated with an ellipsis rather than clipped mid-glyph, and the
+  wrapped box is kept inside the panel rather than climbing off the top of a small figure. Canvas and
+  SVG share one layout, so the PNG and the SVG of a figure wrap and truncate the same way, and the
+  wrapped height is reported back to the furniture layout, which goes on placing the legend and lifting
+  the scale bar clear of it. The side (left/right) legends stack as before, their labels now trimmed to
+  the width they are given instead of spilling over the structure.
+
 ## 2.41.0
 
 - **A third site-figure panel: what moved.** *Make site figure* answered where the site is and which

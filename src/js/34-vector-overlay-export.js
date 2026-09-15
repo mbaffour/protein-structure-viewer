@@ -46,29 +46,19 @@
       + '<text x="' + f(x + width / 2) + '" y="' + f(position.y) + '" text-anchor="middle" dominant-baseline="central" font-family="' + svgFont + '" font-size="' + f(fontSize) + '" font-weight="500" fill="' + color + '">' + svgEscape(text) + '</text></g>';
   }
 
-  function svgLegend(x, y, scale, palette, kind = 'figure', vertical = false) {
-    const metrics = legendMetrics(svgMeasure, scale, kind, vertical);
+  /* The same rows legendMetrics hands the canvas drawer, so a PNG and an SVG of one figure wrap
+     and ellipsise identically — `available` is the width the legend has been given. */
+  function svgLegend(x, y, scale, palette, kind = 'figure', vertical = false, available = Infinity) {
+    const metrics = legendMetrics(svgMeasure, scale, kind, vertical, available);
     if (!metrics) return { markup: '', width: 0, height: 0 };
-    const { legend, swatch, gap, font } = metrics;
+    const { swatch, gap, font } = metrics;
     const text = (tx, ty, value) => '<text x="' + f(tx) + '" y="' + f(ty) + '" dominant-baseline="central" font-family="' + svgFont + '" font-size="' + f(font) + '" font-weight="500" fill="' + palette.ink + '">' + svgEscape(value) + '</text>';
-    const parts = [];
-    if (vertical) {
-      parts.push('<g id="legend"><rect x="' + f(x - gap) + '" y="' + f(y) + '" width="' + f(metrics.width) + '" height="' + f(metrics.height) + '" fill="' + palette.paper + '" fill-opacity="0.88"/>');
-      parts.push(text(x, y + gap + metrics.step / 2, legend.title));
-      legend.items.forEach((item, index) => {
-        const rowY = y + gap + metrics.step * (index + 1) + metrics.step / 2;
-        parts.push('<rect x="' + f(x) + '" y="' + f(rowY - swatch / 2) + '" width="' + f(swatch) + '" height="' + f(swatch) + '" fill="' + item[0] + '"/>');
-        parts.push(text(x + swatch + gap, rowY, item[1]));
-      });
-      parts.push('</g>');
-      return { markup: parts.join(''), width: metrics.width, height: metrics.height };
-    }
-    parts.push('<g id="legend"><rect x="' + f(x - gap) + '" y="' + f(y - swatch) + '" width="' + f(metrics.width + gap) + '" height="' + f(swatch * 2) + '" fill="' + palette.paper + '" fill-opacity="0.88"/>');
-    let cursor = x; parts.push(text(cursor, y, legend.title)); cursor += metrics.titleWidth + gap * 2;
-    legend.items.forEach((item, index) => {
-      parts.push('<rect x="' + f(cursor) + '" y="' + f(y - swatch / 2) + '" width="' + f(swatch) + '" height="' + f(swatch) + '" fill="' + item[0] + '"/>');
-      parts.push(text(cursor + swatch + gap, y, item[1])); cursor += metrics.widths[index];
-    });
+    const parts = ['<g id="legend"><rect x="' + f(x - gap) + '" y="' + f(y + metrics.top) + '" width="' + f(metrics.boxWidth) + '" height="' + f(metrics.height) + '" fill="' + palette.paper + '" fill-opacity="0.88"/>'];
+    metrics.rows.forEach(row => row.cells.forEach(cell => {
+      const rowY = y + row.dy;
+      if (cell.color) parts.push('<rect x="' + f(x + cell.x) + '" y="' + f(rowY - swatch / 2) + '" width="' + f(swatch) + '" height="' + f(swatch) + '" fill="' + cell.color + '"/>');
+      parts.push(text(x + cell.textX, rowY, cell.text));
+    }));
     parts.push('</g>');
     return { markup: parts.join(''), width: metrics.width, height: metrics.height };
   }
@@ -76,7 +66,7 @@
   function svgFurniture(width, height, scale, bar, palette, wanted = legendWanted()) {
     const layout = furnitureLayout(width, height, scale, bar, palette, wanted);
     const parts = [];
-    if (wanted) parts.push(svgLegend(layout.legendX, layout.legendY, layout.legendScale, palette, 'figure', layout.vertical).markup);
+    if (wanted) parts.push(svgLegend(layout.legendX, layout.legendY, layout.legendScale, palette, 'figure', layout.vertical, layout.legendAvailable).markup);
     if (bar) parts.push(layout.barLift ? '<g transform="translate(0 ' + f(-layout.barLift) + ')">' + scaleBarSvg(bar, scale, palette) + '</g>' : scaleBarSvg(bar, scale, palette));
     return parts.join('');
   }
@@ -197,7 +187,8 @@
       }
       if (footer) {
         const y = height - footer / 2; const scale = captionHeight / 40; let used = 0;
-        if (legendWanted('comparison')) { const legend = svgLegend(cellWidth * 0.025, y, scale, palette, 'comparison'); parts.push(legend.markup); used = legend.width + cellWidth * 0.06; }
+        /* The footer band is as wide as the figure, so that is the legend's room — it wraps rather than running past the last panel. */
+        if (legendWanted('comparison')) { const legend = svgLegend(cellWidth * 0.025, y, scale, palette, 'comparison', false, width - cellWidth * 0.05); parts.push(legend.markup); used = legend.width + cellWidth * 0.06; }
         const title = provenanceValues().title;
         if (title) parts.push(caption(cellWidth * 0.025 + used, y, captionHeight * 0.36, 600, title));
       }
@@ -269,7 +260,8 @@
       if (footer) {
         const y = canvas.height - footer / 2; const scale = captionHeight / 40;
         let used = 0;
-        if (legendWanted('comparison')) used = drawPlddtLegend(context, Math.round(cellWidth * 0.025), y, scale, palette, 'comparison') + Math.round(cellWidth * 0.06);
+        /* The footer band is as wide as the figure, so that is the legend's room — it wraps rather than running past the last panel. */
+        if (legendWanted('comparison')) used = drawPlddtLegend(context, Math.round(cellWidth * 0.025), y, scale, palette, 'comparison', false, false, canvas.width - Math.round(cellWidth * 0.05)) + Math.round(cellWidth * 0.06);
         const title = provenanceValues().title;
         if (title) {
           context.fillStyle = palette.ink; context.textBaseline = 'middle'; context.font = '600 ' + Math.round(captionHeight * 0.36) + 'px ' + figureFont();

@@ -581,7 +581,12 @@ on exports: any of the four corners, or stacked as a column down the **left** or
 is what a tall single-panel figure usually wants. It applies to the publication PNG and TIFF, the figure
 SVG, each panel of a figure built from saved views, and the composite figure, and it is part of the
 scene. Wherever the legend and the scale bar would meet, the bar is lifted clear; a legend too wide for
-the figure is shrunk, to 55 % of the figure's text size at most.
+the figure is shrunk, to 55 % of the figure's text size at most, and a legend that still does not fit —
+many bands or chains in the narrow panel of a multi-panel figure, or a single-column figure — wraps onto
+as many rows as it needs rather than running off the edge, so the box grows taller but never wider than
+the panel. An entry with no room even on a row of its own has its label cut with an ellipsis, which is
+at least visible and deliberate; rename it shorter under *Figure labels* if that matters. The PNG and
+the SVG wrap identically.
 
 **Domain labels and the architecture bar.** With domains defined (Annotate → Domains) or found
 (Confidence → PAE domains), **Label domains** writes each domain's name on the structure: one residue

@@ -1531,6 +1531,54 @@ await step('the figure builder composes the ticked views into one lettered figur
   console.log('       3 of 6 views · 3 columns · PNG ' + width + ' × ' + height + ' at 300 dpi · SVG with 3 panels and vector captions');
   } finally { await restore(); }
 });
+await step('a legend too wide for its panel wraps onto more rows instead of running off the edge', async () => {
+  await tab('publish');
+  const colour = await page.inputValue('#gpv-color-mode');
+  /* Whatever happens below, put the colour scheme and the output size back for the next steps. */
+  const restore = async () => {
+    /* The custom width only exists while it is the chosen width, so put it back first. */
+    if (await page.locator('#gpv-print-custom').isVisible()) await page.fill('#gpv-print-custom', '120');
+    await page.selectOption('#gpv-print-width', '178');
+    await page.selectOption('#gpv-export-mode', 'pixels');
+    await tab('appearance'); await page.selectOption('#gpv-color-mode', colour); await page.waitForTimeout(300); await tab('publish');
+  };
+  try {
+  await tab('appearance'); await page.selectOption('#gpv-color-mode', 'plddt'); await page.waitForTimeout(400); await tab('publish');
+  /* A 35 mm figure at 8 pt: the four pLDDT bands and their title need about 450 px on one line
+     and the panel gives 279, which the 55 % shrink floor alone cannot close. */
+  await page.selectOption('#gpv-export-mode', 'print'); await page.selectOption('#gpv-print-width', 'custom');
+  await page.fill('#gpv-print-custom', '35'); await page.selectOption('#gpv-print-dpi', '300'); await page.selectOption('#gpv-print-text', '8');
+  await page.waitForTimeout(400);
+  const measured = await page.evaluate(() => {
+    const debug = window.__viewerDebug; const requested = debug.exportDimensions();
+    const layout = debug.furnitureLayout(requested.width, requested.height, debug.figureScale(requested), null, debug.figurePalette(), true);
+    const metrics = debug.legendMetrics(document.createElement('canvas').getContext('2d'), layout.legendScale, 'figure', layout.vertical, layout.legendAvailable);
+    return { figure: { width: requested.width, height: requested.height }, available: layout.legendAvailable, left: layout.legendX - metrics.gap, right: layout.legendX + metrics.width,
+      top: layout.legendY + metrics.top, bottom: layout.legendY + metrics.top + metrics.height, width: metrics.width, height: metrics.height, oneRow: metrics.swatch * 2,
+      rows: metrics.rows.map(row => row.cells.map(cell => cell.text)) };
+  });
+  if (measured.width > measured.available) throw new Error('the legend is wider than the room it has: ' + measured.width.toFixed(0) + ' px in ' + measured.available);
+  if (measured.rows.length < 2 || measured.height <= measured.oneRow) throw new Error('the legend did not wrap: ' + JSON.stringify(measured.rows) + ' · height ' + measured.height);
+  if (measured.left < 0 || measured.right > measured.figure.width || measured.top < 0 || measured.bottom > measured.figure.height) throw new Error('the wrapped legend box leaves the panel: ' + JSON.stringify(measured));
+  const download = page.waitForEvent('download', { timeout: 120000 }); await page.click('#gpv-svg');
+  const svg = await readFile(await (await download).path(), 'utf8');
+  const group = (svg.match(/<g id="legend">[\s\S]*?<\/g>/) || [''])[0];
+  if (!group) throw new Error('the SVG carries no legend group');
+  const box = (group.match(/<rect x="([-\d.]+)" y="([-\d.]+)" width="([-\d.]+)"/) || []).slice(1).map(Number);
+  const unescape = value => value.replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&amp;/g, '&');
+  const labels = [...group.matchAll(/<text x="([-\d.]+)" y="([-\d.]+)"[^>]*>([^<]*)<\/text>/g)].map(match => ({ x: Number(match[1]), y: Number(match[2]), text: unescape(match[3]) }));
+  if (box[0] + box[2] > measured.figure.width) throw new Error('the SVG legend box runs past the panel: ' + (box[0] + box[2]).toFixed(0) + ' > ' + measured.figure.width);
+  if (labels.some(label => label.x < box[0] || label.x >= box[0] + box[2])) throw new Error('an SVG label starts outside the legend box: ' + JSON.stringify(labels));
+  /* The SVG must be the very rows the metrics reported — same wrapping, same ellipses as the PNG. */
+  if (labels.map(label => label.text).join('|') !== measured.rows.flat().join('|')) throw new Error('SVG labels ' + JSON.stringify(labels.map(label => label.text)) + ' do not match the measured rows ' + JSON.stringify(measured.rows));
+  const drawn = labels.map(label => label.text);
+  for (const wanted of ['pLDDT', '<50', '50–70', '70–90', '≥90']) {
+    if (!drawn.some(text => text === wanted || (text.endsWith('…') && wanted.startsWith(text.slice(0, -1))))) throw new Error('“' + wanted + '” is missing from the legend: ' + JSON.stringify(drawn));
+  }
+  if (new Set(labels.map(label => label.y)).size !== measured.rows.length) throw new Error('the SVG legend rows do not match the metrics: ' + JSON.stringify(labels.map(label => label.y)));
+  console.log('       ' + measured.figure.width + ' px panel · ' + measured.rows.length + ' rows in ' + measured.width.toFixed(0) + ' of ' + measured.available + ' px · ' + measured.rows.map(row => row.join(' ')).join(' / '));
+  } finally { await restore(); }
+});
 await step('a figure template saves the whole presentation and puts it back over changed controls', async () => {
   await tab('publish');
   const rows = page.locator('#gpv-builder-rows tr');

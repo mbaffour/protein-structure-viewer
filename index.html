@@ -1677,7 +1677,7 @@ html>body{padding:0}</style>
   let busyDepth = 0;
   let restoreMotion = null;
   const listPageSize = 60;
-  const viewerVersion = '2.41.0';
+  const viewerVersion = '2.42.0';
   const preferenceKey = 'protein-structure-viewer:preferences';
   const themeKey = 'protein-structure-viewer:theme';
   const labelColors = getComputedStyle(root);
@@ -7398,47 +7398,61 @@ html>body{padding:0}</style>
 
   /* The legend is a row — (x, y) is its left edge and centre line — or, when the figure puts it
      down one side, a stack whose (x, y) is its top-left corner. One set of metrics serves the
-     canvas and the SVG so a PNG and an SVG of the same figure agree to the pixel. */
-  function legendMetrics(context, scale, kind, vertical) {
+     canvas and the SVG so a PNG and an SVG of the same figure agree to the pixel: `rows` is the
+     whole layout, offsets from (x, y), and both drawers do nothing but walk it.
+     `available` is the width the legend has actually been given (Infinity when nothing constrains
+     it). A row legend that will not fit wraps onto as many rows as it needs — growing upwards, so
+     a bottom legend stays clear of the figure's edge — and a label with no room even on a row of
+     its own is cut with an ellipsis. Before 2.42.0 a long legend did neither and simply ran off
+     the panel, the last swatch and its word falling outside the figure with no warning. */
+  function legendMetrics(context, scale, kind, vertical, available = Infinity) {
     const legend = legendItems(kind); if (!legend) return null;
     const swatch = Math.round(14 * scale); const gap = Math.round(6 * scale); const font = Math.round(13 * scale);
     context.font = '500 ' + font + 'px ' + figureFont();
-    const titleWidth = context.measureText(legend.title).width;
+    /* Never truncate below one character plus the ellipsis, however narrow the panel. */
+    const roomFor = room => Math.max(font, room);
+    const title = truncateToWidth(context, legend.title, roomFor(available - gap * 2));
+    const titleWidth = context.measureText(title).width;
     if (vertical) {
       const step = Math.round(swatch * 1.7);
-      const width = Math.max(titleWidth, ...legend.items.map(item => swatch + gap + context.measureText(item[1]).width)) + gap * 2;
-      return { legend, swatch, gap, font, step, vertical: true, width, height: step * (legend.items.length + 1) + gap * 2 };
+      const labels = legend.items.map(item => truncateToWidth(context, item[1], roomFor(available - gap * 3 - swatch)));
+      const width = Math.max(titleWidth, ...labels.map(label => swatch + gap + context.measureText(label).width)) + gap * 2;
+      const rows = [[{ textX: 0, text: title }], ...labels.map((label, index) => [{ color: legend.items[index][0], x: 0, textX: swatch + gap, text: label }])]
+        .map((cells, index) => ({ dy: gap + step * index + step / 2, cells }));
+      return { legend, swatch, gap, font, vertical: true, rows, top: 0, boxWidth: width, width, height: step * (legend.items.length + 1) + gap * 2 };
     }
-    const widths = legend.items.map(item => swatch + gap + context.measureText(item[1]).width + gap * 2);
-    return { legend, swatch, gap, font, widths, titleWidth, vertical: false, width: titleWidth + gap * 2 + widths.reduce((sum, value) => sum + value, 0), height: swatch * 2 };
+    const rowStep = swatch * 2;
+    const rows = [{ cells: [{ textX: 0, text: title }] }];
+    let cursor = titleWidth + gap * 2; let width = cursor;
+    legend.items.forEach(item => {
+      let label = item[1]; let itemWidth = swatch + gap + context.measureText(label).width + gap * 2;
+      /* Wrap first — a shorter legend in more rows reads better than a shrunken one. */
+      if (cursor > 0 && cursor + itemWidth > available) { rows.push({ cells: [] }); cursor = 0; }
+      if (cursor + itemWidth > available) {
+        label = truncateToWidth(context, label, roomFor(available - cursor - swatch - gap * 3));
+        itemWidth = swatch + gap + context.measureText(label).width + gap * 2;
+      }
+      rows[rows.length - 1].cells.push({ color: item[0], x: cursor, textX: cursor + swatch + gap, text: label });
+      cursor += itemWidth; width = Math.max(width, cursor);
+    });
+    /* The last row keeps the centre line the caller asked for; earlier rows stack above it. */
+    rows.forEach((row, index) => { row.dy = (index - (rows.length - 1)) * rowStep; });
+    return { legend, swatch, gap, font, vertical: false, rows, top: -swatch - (rows.length - 1) * rowStep, boxWidth: width + gap, width, height: rowStep * rows.length };
   }
-  function drawPlddtLegend(context, x, y, scale, palette, kind = 'figure', measureOnly = false, vertical = false) {
+  function drawPlddtLegend(context, x, y, scale, palette, kind = 'figure', measureOnly = false, vertical = false, available = Infinity) {
     context.save();
-    const metrics = legendMetrics(context, scale, kind, vertical);
+    const metrics = legendMetrics(context, scale, kind, vertical, available);
     if (!metrics) { context.restore(); return 0; }
     if (measureOnly) { context.restore(); return metrics.width; }
-    const { legend, swatch, gap } = metrics;
+    const { swatch, gap } = metrics;
     context.textBaseline = 'middle'; context.textAlign = 'left';
     context.fillStyle = palette.paper; context.globalAlpha = 0.88;
-    if (vertical) {
-      context.fillRect(x - gap, y, metrics.width, metrics.height); context.globalAlpha = 1;
-      context.fillStyle = palette.ink; context.fillText(legend.title, x, y + gap + metrics.step / 2);
-      legend.items.forEach((item, index) => {
-        const rowY = y + gap + metrics.step * (index + 1) + metrics.step / 2;
-        context.fillStyle = item[0]; context.fillRect(x, rowY - swatch / 2, swatch, swatch);
-        context.fillStyle = palette.ink; context.fillText(item[1], x + swatch + gap, rowY);
-      });
-      context.restore();
-      return metrics.width;
-    }
-    context.fillRect(x - gap, y - swatch, metrics.width + gap, swatch * 2); context.globalAlpha = 1;
-    let cursor = x;
-    context.fillStyle = palette.ink; context.fillText(legend.title, cursor, y); cursor += metrics.titleWidth + gap * 2;
-    legend.items.forEach((item, index) => {
-      context.fillStyle = item[0]; context.fillRect(cursor, y - swatch / 2, swatch, swatch);
-      context.fillStyle = palette.ink; context.fillText(item[1], cursor + swatch + gap, y);
-      cursor += metrics.widths[index];
-    });
+    context.fillRect(x - gap, y + metrics.top, metrics.boxWidth, metrics.height); context.globalAlpha = 1;
+    metrics.rows.forEach(row => row.cells.forEach(cell => {
+      const rowY = y + row.dy;
+      if (cell.color) { context.fillStyle = cell.color; context.fillRect(x + cell.x, rowY - swatch / 2, swatch, swatch); }
+      context.fillStyle = palette.ink; context.fillText(cell.text, x + cell.textX, rowY);
+    }));
     context.restore();
     return metrics.width;
   }
@@ -7454,39 +7468,45 @@ html>body{padding:0}</style>
     return { value, vertical: value === 'left' || value === 'right', right: /right$/.test(value) || value === 'right', top: value.startsWith('top') };
   }
   /* Legend where the figure asks for it, scale bar bottom-right, and never one over the other:
-     the legend shrinks (to 55 % at most) if it would not fit, and the bar is lifted clear when
-     the two rectangles still meet. */
+     the legend shrinks (to 55 % at most) if it would not fit, wraps onto extra rows inside the
+     width it has when even the floor is too wide, and the bar is lifted clear when the two
+     rectangles still meet. The width the legend is given travels with the layout as
+     legendAvailable, so the canvas and the SVG drawer wrap it the same way. */
   function furnitureLayout(width, height, scale, bar, palette, wanted = legendWanted()) {
     const margin = Math.round(24 * scale);
     const place = legendPlacement();
+    const available = place.vertical ? Math.max(1, width * 0.45) : width - margin * 2;
     let legendScale = scale; let metrics = null;
     if (wanted) {
       metrics = legendMetrics(furnitureMeasure, legendScale, 'figure', place.vertical);
-      const available = place.vertical ? Math.max(1, width * 0.45) : width - margin * 2;
       if (metrics && metrics.width > available) {
         legendScale = Math.max(scale * 0.55, scale * available / metrics.width);
-        metrics = legendMetrics(furnitureMeasure, legendScale, 'figure', place.vertical);
+        metrics = legendMetrics(furnitureMeasure, legendScale, 'figure', place.vertical, available);
       }
     }
     const legendWidth = metrics ? metrics.width : 0;
     const legendX = place.right ? Math.round(width - margin - legendWidth) : margin;
+    /* Wrapped rows stack above the centre line, so a top legend is pushed down by what it grew
+       and a bottom one is pushed down far enough to keep its first row inside the panel. */
+    const stacked = metrics && !place.vertical ? metrics.height - metrics.swatch * 2 : 0;
     const legendY = place.vertical
       ? Math.round((height - (metrics ? metrics.height : 0)) / 2)
-      : place.top ? margin + Math.round(13 * legendScale) : height - Math.round(26 * legendScale);
+      : place.top ? margin + Math.round(13 * legendScale) + stacked
+        : Math.max(height - Math.round(26 * legendScale), metrics ? metrics.swatch + stacked : 0);
     let barLift = 0;
     if (bar && metrics) {
       const barMargin = Math.round(24 * scale); const thickness = Math.max(2, Math.round(3 * scale)); const barFont = Math.round(13 * scale);
       const barLeft = bar.width - barMargin - bar.pixels;
       const barRect = { left: barLeft - barMargin / 3, right: barLeft + bar.pixels + barMargin / 3, top: bar.height - barMargin - barFont - thickness - barMargin / 3, bottom: bar.height - barMargin + thickness + barMargin / 6 };
-      const legendRect = { left: legendX - metrics.gap, right: legendX + legendWidth, top: place.vertical ? legendY : legendY - metrics.swatch, bottom: place.vertical ? legendY + metrics.height : legendY + metrics.swatch };
+      const legendRect = { left: legendX - metrics.gap, right: legendX + legendWidth, top: legendY + metrics.top, bottom: legendY + metrics.top + metrics.height };
       const meet = legendRect.left < barRect.right && barRect.left < legendRect.right && legendRect.top < barRect.bottom && barRect.top < legendRect.bottom;
       if (meet) barLift = Math.round(barRect.bottom - legendRect.top + 10 * scale);
     }
-    return { legendX, legendY, legendScale, barLift, vertical: place.vertical, position: place.value };
+    return { legendX, legendY, legendScale, legendAvailable: available, barLift, vertical: place.vertical, position: place.value };
   }
   function drawFurniture(context, width, height, scale, bar, palette, wanted = legendWanted()) {
     const layout = furnitureLayout(width, height, scale, bar, palette, wanted);
-    if (wanted) drawPlddtLegend(context, layout.legendX, layout.legendY, layout.legendScale, palette, 'figure', false, layout.vertical);
+    if (wanted) drawPlddtLegend(context, layout.legendX, layout.legendY, layout.legendScale, palette, 'figure', false, layout.vertical, layout.legendAvailable);
     if (bar) { context.save(); context.translate(0, -layout.barLift); drawScaleBar(context, bar, scale, palette); context.restore(); }
     return layout;
   }
@@ -7810,29 +7830,19 @@ html>body{padding:0}</style>
       + '<text x="' + f(x + width / 2) + '" y="' + f(position.y) + '" text-anchor="middle" dominant-baseline="central" font-family="' + svgFont + '" font-size="' + f(fontSize) + '" font-weight="500" fill="' + color + '">' + svgEscape(text) + '</text></g>';
   }
 
-  function svgLegend(x, y, scale, palette, kind = 'figure', vertical = false) {
-    const metrics = legendMetrics(svgMeasure, scale, kind, vertical);
+  /* The same rows legendMetrics hands the canvas drawer, so a PNG and an SVG of one figure wrap
+     and ellipsise identically — `available` is the width the legend has been given. */
+  function svgLegend(x, y, scale, palette, kind = 'figure', vertical = false, available = Infinity) {
+    const metrics = legendMetrics(svgMeasure, scale, kind, vertical, available);
     if (!metrics) return { markup: '', width: 0, height: 0 };
-    const { legend, swatch, gap, font } = metrics;
+    const { swatch, gap, font } = metrics;
     const text = (tx, ty, value) => '<text x="' + f(tx) + '" y="' + f(ty) + '" dominant-baseline="central" font-family="' + svgFont + '" font-size="' + f(font) + '" font-weight="500" fill="' + palette.ink + '">' + svgEscape(value) + '</text>';
-    const parts = [];
-    if (vertical) {
-      parts.push('<g id="legend"><rect x="' + f(x - gap) + '" y="' + f(y) + '" width="' + f(metrics.width) + '" height="' + f(metrics.height) + '" fill="' + palette.paper + '" fill-opacity="0.88"/>');
-      parts.push(text(x, y + gap + metrics.step / 2, legend.title));
-      legend.items.forEach((item, index) => {
-        const rowY = y + gap + metrics.step * (index + 1) + metrics.step / 2;
-        parts.push('<rect x="' + f(x) + '" y="' + f(rowY - swatch / 2) + '" width="' + f(swatch) + '" height="' + f(swatch) + '" fill="' + item[0] + '"/>');
-        parts.push(text(x + swatch + gap, rowY, item[1]));
-      });
-      parts.push('</g>');
-      return { markup: parts.join(''), width: metrics.width, height: metrics.height };
-    }
-    parts.push('<g id="legend"><rect x="' + f(x - gap) + '" y="' + f(y - swatch) + '" width="' + f(metrics.width + gap) + '" height="' + f(swatch * 2) + '" fill="' + palette.paper + '" fill-opacity="0.88"/>');
-    let cursor = x; parts.push(text(cursor, y, legend.title)); cursor += metrics.titleWidth + gap * 2;
-    legend.items.forEach((item, index) => {
-      parts.push('<rect x="' + f(cursor) + '" y="' + f(y - swatch / 2) + '" width="' + f(swatch) + '" height="' + f(swatch) + '" fill="' + item[0] + '"/>');
-      parts.push(text(cursor + swatch + gap, y, item[1])); cursor += metrics.widths[index];
-    });
+    const parts = ['<g id="legend"><rect x="' + f(x - gap) + '" y="' + f(y + metrics.top) + '" width="' + f(metrics.boxWidth) + '" height="' + f(metrics.height) + '" fill="' + palette.paper + '" fill-opacity="0.88"/>'];
+    metrics.rows.forEach(row => row.cells.forEach(cell => {
+      const rowY = y + row.dy;
+      if (cell.color) parts.push('<rect x="' + f(x + cell.x) + '" y="' + f(rowY - swatch / 2) + '" width="' + f(swatch) + '" height="' + f(swatch) + '" fill="' + cell.color + '"/>');
+      parts.push(text(x + cell.textX, rowY, cell.text));
+    }));
     parts.push('</g>');
     return { markup: parts.join(''), width: metrics.width, height: metrics.height };
   }
@@ -7840,7 +7850,7 @@ html>body{padding:0}</style>
   function svgFurniture(width, height, scale, bar, palette, wanted = legendWanted()) {
     const layout = furnitureLayout(width, height, scale, bar, palette, wanted);
     const parts = [];
-    if (wanted) parts.push(svgLegend(layout.legendX, layout.legendY, layout.legendScale, palette, 'figure', layout.vertical).markup);
+    if (wanted) parts.push(svgLegend(layout.legendX, layout.legendY, layout.legendScale, palette, 'figure', layout.vertical, layout.legendAvailable).markup);
     if (bar) parts.push(layout.barLift ? '<g transform="translate(0 ' + f(-layout.barLift) + ')">' + scaleBarSvg(bar, scale, palette) + '</g>' : scaleBarSvg(bar, scale, palette));
     return parts.join('');
   }
@@ -7961,7 +7971,8 @@ html>body{padding:0}</style>
       }
       if (footer) {
         const y = height - footer / 2; const scale = captionHeight / 40; let used = 0;
-        if (legendWanted('comparison')) { const legend = svgLegend(cellWidth * 0.025, y, scale, palette, 'comparison'); parts.push(legend.markup); used = legend.width + cellWidth * 0.06; }
+        /* The footer band is as wide as the figure, so that is the legend's room — it wraps rather than running past the last panel. */
+        if (legendWanted('comparison')) { const legend = svgLegend(cellWidth * 0.025, y, scale, palette, 'comparison', false, width - cellWidth * 0.05); parts.push(legend.markup); used = legend.width + cellWidth * 0.06; }
         const title = provenanceValues().title;
         if (title) parts.push(caption(cellWidth * 0.025 + used, y, captionHeight * 0.36, 600, title));
       }
@@ -8033,7 +8044,8 @@ html>body{padding:0}</style>
       if (footer) {
         const y = canvas.height - footer / 2; const scale = captionHeight / 40;
         let used = 0;
-        if (legendWanted('comparison')) used = drawPlddtLegend(context, Math.round(cellWidth * 0.025), y, scale, palette, 'comparison') + Math.round(cellWidth * 0.06);
+        /* The footer band is as wide as the figure, so that is the legend's room — it wraps rather than running past the last panel. */
+        if (legendWanted('comparison')) used = drawPlddtLegend(context, Math.round(cellWidth * 0.025), y, scale, palette, 'comparison', false, false, canvas.width - Math.round(cellWidth * 0.05)) + Math.round(cellWidth * 0.06);
         const title = provenanceValues().title;
         if (title) {
           context.fillStyle = palette.ink; context.textBaseline = 'middle'; context.font = '600 ' + Math.round(captionHeight * 0.36) + 'px ' + figureFont();
@@ -10631,7 +10643,7 @@ applyBackground();
   offerSessionRestore();
   /* ?debug=1 exposes a few internals for the regression suite and for bug reports;
      it has no effect otherwise. */
-  if (new URLSearchParams(location.search).has('debug')) window.__viewerDebug = { viewer, pickAtomAt, displayedEntries, activeEntry, colorOptions, sceneSettings, contactResult: () => contactResult, residueData: () => residueData, msaAssets: () => msaAssets, entries: () => structures, nearbyResidues, assemblyDimensions, paeDomains, parseConfidenceBytes, methodsText, alignmentResults: () => alignmentResults, ensembleSpread: () => ensembleSpread, siteResults: () => siteResults, interfaceResults: () => interfaceResults, solventAccessibleArea, heavyAtoms, ligandGroups, architectureModel, domainSets, distinguishingNames, rmsdMatrix: () => rmsdMatrix, rmsdMedoid, scaleBarSpec, pixelsPerAngstrom, sceneCentre, exportDimensions, exportViewer: () => exportViewer, renderPublicationImage, furnitureLayout, legendWanted, figurePalette, figureScale, releaseExportViewer, labelRecords: () => labelRecords, labelPosition, labelHitAt, spotlightResidues: () => spotlightResidues, positionEffect: () => positionEffect, savedViews: () => savedViews, selectionRecords: () => selectionRecords };
+  if (new URLSearchParams(location.search).has('debug')) window.__viewerDebug = { viewer, pickAtomAt, displayedEntries, activeEntry, colorOptions, sceneSettings, contactResult: () => contactResult, residueData: () => residueData, msaAssets: () => msaAssets, entries: () => structures, nearbyResidues, assemblyDimensions, paeDomains, parseConfidenceBytes, methodsText, alignmentResults: () => alignmentResults, ensembleSpread: () => ensembleSpread, siteResults: () => siteResults, interfaceResults: () => interfaceResults, solventAccessibleArea, heavyAtoms, ligandGroups, architectureModel, domainSets, distinguishingNames, rmsdMatrix: () => rmsdMatrix, rmsdMedoid, scaleBarSpec, pixelsPerAngstrom, sceneCentre, exportDimensions, exportViewer: () => exportViewer, renderPublicationImage, furnitureLayout, legendMetrics, legendWanted, figurePalette, figureScale, releaseExportViewer, labelRecords: () => labelRecords, labelPosition, labelHitAt, spotlightResidues: () => spotlightResidues, positionEffect: () => positionEffect, savedViews: () => savedViews, selectionRecords: () => selectionRecords };
   applyTheme(readJson(themeKey, 'system'));
   selectToolTab('models');
   applyAppearance();
