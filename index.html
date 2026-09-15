@@ -1234,6 +1234,13 @@ html>body{padding:0}</style>
       <button class="btn" type="button" id="gpv-builder-svg" disabled data-tooltip="The same figure with vector captions, labels, legends and scale bars — editable in Illustrator or Inkscape">Download figure SVG</button>
       <span class="text-muted text-small" id="gpv-builder-estimate"></span>
     </div>
+    <div class="viz-controls">
+      <label class="form-label">Template name<input class="form-control" id="gpv-template-name" type="text" maxlength="60" placeholder="Main figures" data-tooltip="A name for the way this figure is presented — panels, captions, width, resolution, format and legend — so the next figure of the paper matches it"></label>
+      <button class="btn" type="button" id="gpv-template-save" disabled data-tooltip="Save the figure and output settings under this name in this browser; a name that already exists is replaced">Save template</button>
+      <label class="form-label">Saved templates<select class="form-select" id="gpv-template-list" data-tooltip="Templates saved in this browser. They carry presentation only — never the models, the ticked views, the camera or the colours — so one made for another project is safe to apply here"><option value="" disabled selected>No templates yet</option></select></label>
+      <button class="btn" type="button" id="gpv-template-apply" disabled data-tooltip="Put every builder and output control back to this template, so this figure is drawn exactly like the others in the set">Apply</button>
+      <button class="btn" type="button" id="gpv-template-delete" disabled data-tooltip="Forget this template in this browser; figures already downloaded are untouched">Delete</button>
+    </div>
     <details class="gpv-provenance" open><summary>Provenance and reproducible scene</summary><div class="viz-controls"><label class="form-label">Figure or project title<input class="form-control" id="gpv-project-title" type="text"></label><label class="form-label">Model source or run<input class="form-control" id="gpv-project-source" type="text" placeholder="Job, accession, or run ID"></label><label class="form-label">Method and version<input class="form-control" id="gpv-project-method" type="text" placeholder="For example AlphaFold 3"></label><label class="form-label">Notes<textarea class="form-control" id="gpv-project-notes" rows="2"></textarea></label></div><div class="viz-controls"><button class="btn" type="button" id="gpv-save-scene" disabled>Download scene JSON</button><label class="form-label">Restore scene JSON<input class="form-control" id="gpv-load-scene" type="file" accept=".json"></label></div><div class="viz-controls"><button class="btn" type="button" id="gpv-save-session" disabled data-tooltip="Save everything — models, confidence data, alignment, annotations, domains, views and settings — as one ZIP you can reopen later or on another computer">Save session file</button><label class="form-label">Open session file<input class="form-control" id="gpv-open-session" type="file" accept=".zip"></label><span class="text-muted text-small" id="gpv-session-note">A session file carries the models themselves, so it reopens with no other files. Scene JSON is the light alternative that expects the original files.</span></div></details>
   </section>
 
@@ -1301,6 +1308,7 @@ html>body{padding:0}</style>
         <li>Labels are draggable: pick up any label, callout or corner title in the 3D view with the mouse and put it where the figure needs it. A residue label keeps a thin leader line back to its residue, and <em>Reset</em> in its row puts it back. <em>Publish → Legend position</em> moves the colour legend to any corner, or stacks it down the left or right side.</li>
         <li><em>Label domains</em> (Annotate → Domains, or beside the PAE domains) writes each domain's name on the structure at its centroid, in the domain colour and with the legend's names; <em>Download architecture PNG/SVG</em> draws the linear domain diagram — one row per chain, coloured boxes with names and boundary residue numbers — which is also a composite-figure panel and an optional row under the panels of the figure builder.</li>
         <li><em>Publish → Figure builder</em> turns saved views into the panels of one lettered figure: tick the views to include, order them, caption each, choose the columns, and download PNG or SVG at the output width and resolution — each panel rendered from its own camera and colour scheme at the same text size, with its legend and scale bar. The figure is as wide as the chosen figure width however many panels it has.</li>
+        <li><em>Publish → Save template</em> keeps the whole presentation of a figure — panel columns, captions, panel letters, per-panel legends, the architecture row, the output mode with its width, resolution and text size, the figure format, and the legend position, legend switch and scale bar — under a name in this browser, and <em>Apply</em> puts every one of those controls back, so the second and third figures of a paper are drawn exactly like the first. A template holds no data: not the ticked views, the models, the camera, the colours or any file name, so one saved for an earlier project is safe to apply to this one. Up to 20 are kept; saving a name that already exists replaces it. The current settings also travel in the scene JSON and in share links.</li>
         <li><em>Edit labels</em> on the colour legend (or <em>Publish → Edit figure labels</em>) renames the legend title and entries as they will read on the figure — "N-lobe" for a PAE domain, a protein name for an entity — on screen, on every PNG, TIFF and SVG export and in the generated legend text; the data are untouched and the names travel with the scene.</li>
         <li><em>Publish → Write methods text</em> drafts a Methods paragraph stating exactly how the numbers on screen were computed (superposition, RMSD, RMSF, domains, contacts, dimensions, colour scales); every definition is cross-checked against Biopython in the repository's <code>VALIDATION.md</code>.</li>
         <li>The shared report reproduces the outline, depth cueing and faded chains, and shows the contact map beside the PAE heatmap when one was computed for a model in the report.</li>
@@ -1668,7 +1676,7 @@ html>body{padding:0}</style>
   let busyDepth = 0;
   let restoreMotion = null;
   const listPageSize = 60;
-  const viewerVersion = '2.39.0';
+  const viewerVersion = '2.40.0';
   const preferenceKey = 'protein-structure-viewer:preferences';
   const themeKey = 'protein-structure-viewer:theme';
   const labelColors = getComputedStyle(root);
@@ -6536,6 +6544,7 @@ html>body{padding:0}</style>
       positionCutoff: positionCutoff(),
       figureLabels: { ...figureLabels },
       figureBuilder: builderOptions(),
+      figureTemplate: figureTemplateSettings(),
       background: root.querySelector('#gpv-background').value,
       backgroundColor: root.querySelector('#gpv-background-color').value,
       hideBelow: hideBelow(),
@@ -6744,6 +6753,7 @@ html>body{padding:0}</style>
     if (Number.isFinite(Number(settings.positionCutoff))) root.querySelector('#gpv-position-cutoff').value = String(Math.min(12, Math.max(3, Number(settings.positionCutoff))));
     renderFitControls();
     applyBuilderOptions(settings.figureBuilder);
+    applyFigureTemplate(settings.figureTemplate);
     if ([0, 50, 70].includes(Number(settings.hideBelow))) root.querySelector('#gpv-hide-below').value = String(Number(settings.hideBelow));
     if (['stick', 'sphere', 'hide'].includes(settings.hetero)) root.querySelector('#gpv-hetero').value = settings.hetero;
     if (['none', 'translucent', 'opaque'].includes(settings.surface)) root.querySelector('#gpv-surface').value = settings.surface;
@@ -10322,6 +10332,138 @@ applyBackground();
     });
   })();
   applyLayout(false);
+  /* ---------- Figure templates ----------
+     Every figure of a paper has to match the others: the same panel grid, the same captions, the
+     same width and resolution, the same legend in the same corner. A template is exactly that
+     presentation, saved under a name in this browser and applied again in this session or a month
+     later. What a template deliberately does not hold is the data — no ticked views, no models, no
+     camera, no colours, no file names — so applying one to the next project is safe: it changes how
+     the figure is drawn, never what is in it. */
+
+  const figureTemplateKey = 'protein-structure-viewer:figure-templates';
+  const maxFigureTemplates = 20;
+
+  /* The controls a template carries: the figure builder's own options, the output plan
+     exportDimensions() reads (both the print fields and the pixel ones, so a template is meaningful
+     whichever mode it was saved in), the figure format, the figure font, and the legend and scale bar the export
+     consults through legendWanted() and scaleBarSpec(). */
+  const figureTemplateControls = [
+    '#gpv-panel-columns', '#gpv-builder-captions', '#gpv-builder-letters', '#gpv-builder-legends', '#gpv-builder-architecture',
+    '#gpv-export-mode', '#gpv-print-width', '#gpv-print-custom', '#gpv-print-aspect', '#gpv-print-dpi', '#gpv-print-text',
+    '#gpv-export-size', '#gpv-export-scale',
+    '#gpv-image-format', '#gpv-export-legend', '#gpv-legend-position', '#gpv-scale-bar', '#gpv-figure-font'
+  ];
+
+  function figureTemplateSettings() {
+    return Object.fromEntries(figureTemplateControls.map(selector => {
+      const control = root.querySelector(selector);
+      return [selector, control.type === 'checkbox' ? control.checked : control.value];
+    }));
+  }
+
+  function applyFigureTemplate(template) {
+    if (!template || typeof template !== 'object') return;
+    figureTemplateControls.forEach(selector => {
+      const control = root.querySelector(selector);
+      const value = template[selector];
+      if (control.type === 'checkbox') {
+        if (typeof value === 'boolean') siteFigureSet(selector, value);
+        return;
+      }
+      if (typeof value !== 'string') return;
+      /* Only values the control actually offers: a template written by an older version, or one
+         hand-edited in localStorage, must not put a control into a state nothing handles. */
+      if (control.tagName === 'SELECT' && ![...control.options].some(option => option.value === value)) return;
+      siteFigureSet(selector, value);
+    });
+    renderFigureBuilder();
+  }
+
+  /* What the template does to the figure, in the few words that fit in a status line. */
+  function figureTemplateSummary(settings) {
+    const columns = String(settings['#gpv-panel-columns'] || 'auto');
+    const grid = columns === 'auto' ? 'automatic columns' : columns + ' column' + (columns === '1' ? '' : 's');
+    if (settings['#gpv-export-mode'] === 'print') {
+      const width = settings['#gpv-print-width'] === 'custom' ? settings['#gpv-print-custom'] : settings['#gpv-print-width'];
+      return grid + ' · ' + width + ' mm at ' + settings['#gpv-print-dpi'] + ' dpi';
+    }
+    return grid + ' · ' + String(settings['#gpv-export-size'] || '').replace('x', ' × ') + ' px at ' + settings['#gpv-export-scale'] + '×';
+  }
+
+  const compareTemplateNames = (a, b) => a.name.localeCompare(b.name, undefined, { numeric: true, sensitivity: 'base' });
+
+  /* Stored templates, kept sorted by name and filtered to the records this version understands, so
+     a corrupt or foreign entry costs one template rather than the whole library. readJson and
+     writeJson swallow the exception a private window throws. */
+  function figureTemplates() {
+    const stored = readJson(figureTemplateKey, []);
+    if (!Array.isArray(stored)) return [];
+    return stored
+      .filter(item => item && typeof item === 'object' && typeof item.name === 'string' && item.name.trim() && item.settings && typeof item.settings === 'object')
+      .map(item => ({ name: item.name.trim().slice(0, 60), created: typeof item.created === 'string' ? item.created : '', settings: item.settings }))
+      .sort(compareTemplateNames)
+      .slice(0, maxFigureTemplates);
+  }
+
+  function renderFigureTemplates(preferred) {
+    const list = figureTemplates();
+    const select = root.querySelector('#gpv-template-list');
+    const wanted = preferred === undefined ? select.value : preferred;
+    select.replaceChildren();
+    if (!list.length) {
+      const empty = document.createElement('option');
+      empty.value = ''; empty.disabled = true; empty.selected = true; empty.textContent = 'No templates yet';
+      select.append(empty);
+    } else list.forEach(item => {
+      const option = document.createElement('option');
+      option.value = item.name; option.textContent = item.name;
+      select.append(option);
+    });
+    if (list.some(item => item.name === wanted)) select.value = wanted;
+    root.querySelector('#gpv-template-apply').disabled = !select.value;
+    root.querySelector('#gpv-template-delete').disabled = !select.value;
+    root.querySelector('#gpv-template-save').disabled = !root.querySelector('#gpv-template-name').value.trim();
+  }
+
+  function saveFigureTemplate() {
+    const name = root.querySelector('#gpv-template-name').value.trim().slice(0, 60);
+    if (!name) return;
+    const list = figureTemplates();
+    const existing = list.findIndex(item => item.name.toLowerCase() === name.toLowerCase());
+    /* Saving a name that is already taken is how a template gets corrected — overwrite it and say
+       so, rather than asking a question whose only sensible answer is yes. */
+    if (existing < 0 && list.length >= maxFigureTemplates) {
+      announce(maxFigureTemplates + ' templates is the limit · delete one before saving another', 'error');
+      return;
+    }
+    const settings = figureTemplateSettings();
+    const record = { name, created: new Date().toISOString(), settings };
+    if (existing >= 0) list[existing] = record; else list.push(record);
+    list.sort(compareTemplateNames);
+    writeJson(figureTemplateKey, list);
+    renderFigureTemplates(name);
+    announce('Template "' + name + '" ' + (existing >= 0 ? 'updated' : 'saved') + ' · ' + figureTemplateSummary(settings));
+  }
+
+  root.querySelector('#gpv-template-name').addEventListener('input', () => renderFigureTemplates());
+  root.querySelector('#gpv-template-name').addEventListener('keydown', event => { if (event.key === 'Enter') { event.preventDefault(); saveFigureTemplate(); } });
+  root.querySelector('#gpv-template-save').addEventListener('click', saveFigureTemplate);
+  root.querySelector('#gpv-template-list').addEventListener('change', () => renderFigureTemplates());
+  root.querySelector('#gpv-template-apply').addEventListener('click', () => {
+    const name = root.querySelector('#gpv-template-list').value;
+    const template = figureTemplates().find(item => item.name === name);
+    if (!template) return;
+    applyFigureTemplate(template.settings);
+    announce('Template "' + name + '" applied · ' + figureTemplateSummary(template.settings));
+  });
+  root.querySelector('#gpv-template-delete').addEventListener('click', () => {
+    const name = root.querySelector('#gpv-template-list').value;
+    if (!name) return;
+    writeJson(figureTemplateKey, figureTemplates().filter(item => item.name !== name));
+    renderFigureTemplates('');
+    announce('Template "' + name + '" deleted');
+  });
+  renderFigureTemplates();
   /* ---------- Tips ---------- */
 
   const tipsKey = 'protein-structure-viewer:tips-hidden';
@@ -10370,6 +10512,7 @@ applyBackground();
     'Drag any label in the 3D view to move it: a residue label keeps a leader line back to its residue, and Reset in its row puts it back. Publish → Legend position puts the colour legend in any corner or down one side.',
     'Annotate → Domains → Label domains writes each domain\'s name on the structure at its centroid; Download architecture PNG/SVG draws the linear domain diagram that goes under it.',
     'Publish → Figure builder: save a few views — overview, interface, a zoom — tick them, order them, caption them, and download one lettered figure at the journal width as PNG or SVG.',
+    'Publish → Save template keeps the whole presentation of a figure — columns, captions, letters, legends, width, resolution, text size, format and scale bar — under a name, and Apply puts it back, so figure 2 of a paper is drawn exactly like figure 1. Templates carry no models, views or colours, so one is safe to apply to the next project.',
     'Edit labels on the colour legend renames the legend title and entries for your figure — "N-lobe" instead of "D1" — on screen, on every export and in the legend text, without touching the data.',
     'Help (?) → How to cite gives the viewer and 3Dmol.js references; each GitHub release is archived on Zenodo with a DOI.',
     'Annotate → Per-residue data: drop a CSV of residue and value columns — conservation, mutational scores, ΔΔG — and colour the structure by it with a gradient legend that states the range.',

@@ -928,6 +928,7 @@
       positionCutoff: positionCutoff(),
       figureLabels: { ...figureLabels },
       figureBuilder: builderOptions(),
+      figureTemplate: figureTemplateSettings(),
       background: root.querySelector('#gpv-background').value,
       backgroundColor: root.querySelector('#gpv-background-color').value,
       hideBelow: hideBelow(),

@@ -2,6 +2,24 @@
 
 All notable changes to this project are recorded here.
 
+## 2.40.0
+
+- **Figure templates.** Every figure of a paper has to match the others, so the whole presentation of a
+  figure can now be saved under a name and applied again — in this session or a month later. Under the
+  figure builder in Publish: type a name, press **Save template**, and the panel columns, captions,
+  panel letters, per-panel legends and architecture row, the output mode with its width, aspect,
+  resolution and text size (and the pixel-mode size and scale), the figure format, the legend switch,
+  the legend position and the scale bar are all stored together in this browser. Pick the template and
+  press **Apply** and every one of those controls goes back to it, with a line saying what changed at a
+  glance — `Template "Main figures" applied · 2 columns · 178 mm at 300 dpi`. **Delete** forgets one.
+- **A template holds presentation, never data.** Not the ticked views, the models, the camera, the
+  colours or any file name — so a template saved for last year's project is safe to apply to this one:
+  it changes how the figure is drawn, never what is in it. Up to 20 templates are kept, sorted by name;
+  saving a name that already exists replaces it and says so. Private windows that refuse localStorage
+  cost the library, not the page.
+- **The current settings travel with the scene.** Scene JSON, session files and share links carry them
+  under `figureTemplate`, and restoring one puts the figure's presentation back with the structures.
+
 ## 2.39.0
 
 - **Compare a whole set of positions at once.** A binding site or an interface is several residues, so

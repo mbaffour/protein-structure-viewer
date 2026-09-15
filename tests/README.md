@@ -141,6 +141,10 @@ PSV_CHROMIUM=/opt/pw-browsers/chromium/chrome-linux/chrome npm test
 - Figure builder: with six saved views, unticking three and moving one up gives panels A–C in the order View 1, View 3,
   View 2; at 178 mm, 300 dpi and three columns the estimate and the PNG are 2100 px wide with a dpi chunk, and the SVG
   carries three images, the letters, the edited caption and the panels in builder order.
+- Figure templates: a distinctive configuration (three columns, captions `name`, no letters, no per-panel legends,
+  85 mm at 600 dpi) saved under a name survives changing every one of those controls to something else — Apply brings
+  each of them back and the builder estimate follows; the stored localStorage record carries the same values, and
+  Delete empties the select again.
 - Figure labels: the legend's Edit button opens the Publish editor listing the title and both domains; renaming the title
   and D1 changes the on-screen legend (ranges kept), the scene settings, the generated legend text and the SVG export;
   Reset restores the defaults and empties the scene's labels.

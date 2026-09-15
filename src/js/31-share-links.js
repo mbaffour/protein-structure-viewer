@@ -146,6 +146,7 @@
     if (Number.isFinite(Number(settings.positionCutoff))) root.querySelector('#gpv-position-cutoff').value = String(Math.min(12, Math.max(3, Number(settings.positionCutoff))));
     renderFitControls();
     applyBuilderOptions(settings.figureBuilder);
+    applyFigureTemplate(settings.figureTemplate);
     if ([0, 50, 70].includes(Number(settings.hideBelow))) root.querySelector('#gpv-hide-below').value = String(Number(settings.hideBelow));
     if (['stick', 'sphere', 'hide'].includes(settings.hetero)) root.querySelector('#gpv-hetero').value = settings.hetero;
     if (['none', 'translucent', 'opaque'].includes(settings.surface)) root.querySelector('#gpv-surface').value = settings.surface;

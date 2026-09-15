@@ -46,6 +46,7 @@
     'Drag any label in the 3D view to move it: a residue label keeps a leader line back to its residue, and Reset in its row puts it back. Publish → Legend position puts the colour legend in any corner or down one side.',
     'Annotate → Domains → Label domains writes each domain\'s name on the structure at its centroid; Download architecture PNG/SVG draws the linear domain diagram that goes under it.',
     'Publish → Figure builder: save a few views — overview, interface, a zoom — tick them, order them, caption them, and download one lettered figure at the journal width as PNG or SVG.',
+    'Publish → Save template keeps the whole presentation of a figure — columns, captions, letters, legends, width, resolution, text size, format and scale bar — under a name, and Apply puts it back, so figure 2 of a paper is drawn exactly like figure 1. Templates carry no models, views or colours, so one is safe to apply to the next project.',
     'Edit labels on the colour legend renames the legend title and entries for your figure — "N-lobe" instead of "D1" — on screen, on every export and in the legend text, without touching the data.',
     'Help (?) → How to cite gives the viewer and 3Dmol.js references; each GitHub release is archived on Zenodo with a DOI.',
     'Annotate → Per-residue data: drop a CSV of residue and value columns — conservation, mutational scores, ΔΔG — and colour the structure by it with a gradient legend that states the range.',

@@ -1487,6 +1487,81 @@ await step('the figure builder composes the ticked views into one lettered figur
   console.log('       3 of 6 views · 3 columns · PNG ' + width + ' × ' + height + ' at 300 dpi · SVG with 3 panels and vector captions');
   } finally { await restore(); }
 });
+await step('a figure template saves the whole presentation and puts it back over changed controls', async () => {
+  await tab('publish');
+  const rows = page.locator('#gpv-builder-rows tr');
+  /* Whatever happens below, leave the builder and export controls exactly as this step found them:
+     six views ticked, two columns, pixel output at 178 mm / 300 dpi / 8 pt behind it. */
+  const restore = async () => {
+    for (const index of [3, 4, 5]) await rows.nth(index).locator('input[type="checkbox"]').check();
+    await page.selectOption('#gpv-panel-columns', '2');
+    await page.selectOption('#gpv-builder-captions', 'both');
+    await page.check('#gpv-builder-letters'); await page.check('#gpv-builder-legends');
+    await page.selectOption('#gpv-export-mode', 'print');
+    await page.selectOption('#gpv-print-width', '178'); await page.selectOption('#gpv-print-dpi', '300'); await page.selectOption('#gpv-print-text', '8');
+    await page.selectOption('#gpv-export-mode', 'pixels');
+    await page.fill('#gpv-template-name', '');
+    await page.evaluate(() => { try { localStorage.removeItem('protein-structure-viewer:figure-templates'); } catch (error) { /* private mode */ } });
+    await page.waitForTimeout(200);
+  };
+  try {
+  /* A configuration nothing else in the suite uses, so nothing can pass by accident. */
+  await page.selectOption('#gpv-export-mode', 'print');
+  await page.selectOption('#gpv-panel-columns', '3');
+  await page.selectOption('#gpv-builder-captions', 'name');
+  await page.uncheck('#gpv-builder-letters'); await page.uncheck('#gpv-builder-legends');
+  await page.selectOption('#gpv-print-width', '85'); await page.selectOption('#gpv-print-dpi', '600');
+  await page.waitForTimeout(300);
+  await page.fill('#gpv-template-name', 'Main figures');
+  if (await page.isDisabled('#gpv-template-save')) throw new Error('Save is still disabled with a name typed');
+  await page.click('#gpv-template-save'); await page.waitForTimeout(300);
+  if ((await page.locator('#gpv-template-list').inputValue()) !== 'Main figures') throw new Error('the saved template is not selected');
+
+  /* Every control the template holds now goes somewhere else — the print fields first, while the
+     print mode still shows them. */
+  await page.selectOption('#gpv-panel-columns', '1');
+  await page.selectOption('#gpv-builder-captions', 'caption');
+  await page.check('#gpv-builder-letters'); await page.check('#gpv-builder-legends');
+  await page.selectOption('#gpv-print-width', '178'); await page.selectOption('#gpv-print-dpi', '300');
+  await page.selectOption('#gpv-export-mode', 'pixels');
+  await page.waitForTimeout(300);
+  const changed = await page.evaluate(() => ({
+    columns: document.querySelector('#gpv-panel-columns').value, captions: document.querySelector('#gpv-builder-captions').value,
+    letters: document.querySelector('#gpv-builder-letters').checked, legends: document.querySelector('#gpv-builder-legends').checked,
+    mode: document.querySelector('#gpv-export-mode').value, width: document.querySelector('#gpv-print-width').value, dpi: document.querySelector('#gpv-print-dpi').value
+  }));
+  if (changed.columns !== '1' || changed.captions !== 'caption' || !changed.letters || !changed.legends
+    || changed.mode !== 'pixels' || changed.width !== '178' || changed.dpi !== '300') throw new Error('controls did not change: ' + JSON.stringify(changed));
+
+  await page.selectOption('#gpv-template-list', 'Main figures');
+  await page.click('#gpv-template-apply'); await page.waitForTimeout(400);
+  const applied = await page.evaluate(() => ({
+    columns: document.querySelector('#gpv-panel-columns').value, captions: document.querySelector('#gpv-builder-captions').value,
+    letters: document.querySelector('#gpv-builder-letters').checked, legends: document.querySelector('#gpv-builder-legends').checked,
+    mode: document.querySelector('#gpv-export-mode').value, width: document.querySelector('#gpv-print-width').value, dpi: document.querySelector('#gpv-print-dpi').value,
+    scene: window.__viewerDebug.sceneSettings().figureTemplate
+  }));
+  if (applied.columns !== '3' || applied.captions !== 'name' || applied.letters || applied.legends || applied.mode !== 'print' || applied.width !== '85' || applied.dpi !== '600') throw new Error('applied template: ' + JSON.stringify(applied));
+  if (!applied.scene || applied.scene['#gpv-print-width'] !== '85') throw new Error('scene lacks the figure template: ' + JSON.stringify(applied.scene));
+  const estimate = (await page.locator('#gpv-builder-estimate').textContent()) || '';
+  /* 85 mm at 600 dpi is 2008 px, three cells of 669 px. */
+  if (!/3 columns · 2007 × \d+ px · 85 mm wide at 600 dpi · text 8 pt/.test(estimate)) throw new Error('estimate after apply: ' + estimate);
+
+  const stored = await page.evaluate(() => { try { return JSON.parse(localStorage.getItem('protein-structure-viewer:figure-templates') || 'null'); } catch (error) { return null; } });
+  if (!Array.isArray(stored) || stored.length !== 1 || stored[0].name !== 'Main figures' || !stored[0].created) throw new Error('stored templates: ' + JSON.stringify(stored));
+  const saved = stored[0].settings;
+  if (saved['#gpv-panel-columns'] !== '3' || saved['#gpv-builder-captions'] !== 'name' || saved['#gpv-builder-letters'] !== false || saved['#gpv-builder-legends'] !== false
+    || saved['#gpv-export-mode'] !== 'print' || saved['#gpv-print-width'] !== '85' || saved['#gpv-print-dpi'] !== '600') throw new Error('stored settings: ' + JSON.stringify(saved));
+  /* A template is presentation only: nothing about the data may be in the stored record. */
+  if (/camera|savedViews|models|View 1/.test(JSON.stringify(stored))) throw new Error('the stored template carries data: ' + JSON.stringify(stored));
+
+  await page.click('#gpv-template-delete'); await page.waitForTimeout(300);
+  const options = await page.locator('#gpv-template-list option').allTextContents();
+  if (options.length !== 1 || options[0] !== 'No templates yet') throw new Error('template list after delete: ' + options.join('|'));
+  if (!(await page.isDisabled('#gpv-template-apply')) || !(await page.isDisabled('#gpv-template-delete'))) throw new Error('Apply or Delete is still enabled with nothing selected');
+  console.log('       saved 3 columns · captions name · no letters or legends · 85 mm at 600 dpi · applied over changed controls · stored and deleted');
+  } finally { await restore(); }
+});
 await step('the main viewport survived seven off-screen renders', async () => {
   /* Regression: export used to leak a WebGL context per panel, and browsers
      silently discard the oldest context past their limit — the main one. */

@@ -656,6 +656,21 @@ and the estimate line gives the pixel size of the figure and of each panel befor
 builder options are part of the scene and which views are included travels with the saved views,
 so a session file or share link reproduces the figure.
 
+**Figure templates.** The figures of one paper have to match each other, so the whole presentation
+of a figure can be saved under a name and applied again — in this session or a month later. Type a
+name under the builder (*Main figures*, *Supplementary*) and press **Save template**: the panel
+columns, captions, panel letters, per-panel legends and architecture row, the output mode with its
+width, aspect, resolution and text size (and the pixel size and scale for pixel mode), the figure
+format, the legend switch, the legend position and the scale bar are stored together in this
+browser. Pick a template from **Saved templates** and press **Apply**, and every one of those
+controls goes back to it, with a line saying what changed at a glance — `Template "Main figures"
+applied · 2 columns · 178 mm at 300 dpi`. **Delete** forgets one. A template carries presentation
+only — never the ticked views, the models, the camera, the colours or any file name — so one saved
+for an earlier project is safe to apply here: it changes how the figure is drawn, never what is in
+it. Up to 20 are kept, listed by name; saving a name that already exists replaces it and says
+`updated`. The current settings also travel in the scene as `figureTemplate`, so a scene file,
+session file or share link reproduces the figure's presentation as well as its contents.
+
 **Reports.** **Share report** builds a standalone HTML file with the coordinate data embedded —
 including aligned positions if you superposed models, plus labels, measurements, and figure
 annotations. Choose whether it carries the models currently shown or every loaded model; the
