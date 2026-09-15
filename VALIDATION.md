@@ -2,7 +2,7 @@
 
 Every quantity the viewer reports was compared with an independent implementation on three real
 AlphaFold 3 runs. This file records the method, the results and the limits of the check, and how to
-rerun it on your own run. Last run: 2026-09-14, viewer 2.24.0.
+rerun it on your own run. Last run: 2026-09-15, viewer 2.37.0.
 
 ## Method
 
