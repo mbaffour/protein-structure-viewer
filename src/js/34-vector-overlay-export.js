@@ -84,10 +84,13 @@
     const scale = dimensions.textScale || Math.max(1, dimensions.width / 600);
     const palette = figurePalette(); const byId = entriesById(); const parts = [];
     const ink = labelColors.getPropertyValue('--card-foreground').trim() || '#111827';
+    /* The same resolver the PNG of this panel draws with, run on the same viewer and the same plan,
+       so the two files place every label on the same pixel. */
+    const placement = panelLabelPlacement(target, dimensions, shownIds);
     labelRecords.filter(label => shownIds.has(label.entryId)).forEach(label => {
       const anchor = labelAnchor(label, byId);
-      const position = shiftBy(anchor, label.offset);
-      if (labelOffsetLength(label) > 0.75) parts.push(svgLine(project(anchor), project(position), label.color || '#94a3b8', Math.max(1, scale), false));
+      const position = (placement && placement.get(label)) || shiftBy(anchor, label.offset);
+      if (leaderLength(anchor, position) > leaderMinimum) parts.push(svgLine(project(anchor), project(position), label.color || '#94a3b8', Math.max(1, scale), false));
       parts.push(svgLabel(project(position), label.text, (label.size || 12) * scale, label.color || ink, palette));
     });
     measurementRecords.forEach(record => {

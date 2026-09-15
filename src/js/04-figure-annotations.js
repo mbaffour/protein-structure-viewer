@@ -323,60 +323,107 @@
      structure it names however tangled the pile it started in. */
   const labelSeparationCap = 6;
 
+  /* Which boxes cover which is asked in three projections, and they do not agree. A figure panel is
+     not the stage enlarged: its camera frames the scene its own way, while its text is drawn at
+     overlayScale(plan) — at 178 mm, 300 dpi, 8 pt that is 2.78× the screen's text against a panel
+     only ~1.11× the stage, so a label is about two and a half times larger *relative to the
+     structure* on paper than on screen, and a pair that clears by a pixel on screen prints half on
+     top of each other. So the geometry below is measured against whichever projection is asking —
+     how it projects a point, its pixels per ångström, its camera and its text scale — and each
+     caller hands in its own. */
+  function labelBoxAt(projection, label, position) {
+    const screen = projection.project(position);
+    if (!screen || !Number.isFinite(screen.x) || !Number.isFinite(screen.y)) return null;
+    const size = (label.size || 12) * projection.scale;
+    labelMeasure.font = '500 ' + size + 'px ' + figureFont();
+    const halfWidth = Math.max(10 * projection.scale, labelMeasure.measureText(String(label.text || '')).width / 2 + size * 0.45);
+    return { x: screen.x, y: screen.y, halfWidth, halfHeight: size * 0.95 };
+  }
+
   function labelScreenBox(label, byId = entriesById()) {
     if (typeof viewer.modelToScreen !== 'function') return null;
-    const screen = viewer.modelToScreen(labelPosition(label, byId));
-    if (!screen || !Number.isFinite(screen.x) || !Number.isFinite(screen.y)) return null;
-    const size = label.size || 12;
-    labelMeasure.font = '500 ' + size + 'px ' + figureFont();
-    const halfWidth = Math.max(10, labelMeasure.measureText(String(label.text || '')).width / 2 + size * 0.45);
-    return { x: screen.x, y: screen.y, halfWidth, halfHeight: size * 0.95 };
+    return labelBoxAt({ project: point => viewer.modelToScreen(point), scale: 1 }, label, labelPosition(label, byId));
+  }
+
+  function screenProjection() {
+    if (typeof viewer.modelToScreen !== 'function') return null;
+    const perAngstrom = pixelsPerAngstrom(viewer);
+    if (!perAngstrom) return null;
+    return { project: point => viewer.modelToScreen(point), perAngstrom, view: typeof viewer.getView === 'function' ? viewer.getView() : [0, 0, 0, 0, 0, 0, 0, 1], scale: 1 };
+  }
+
+  /* The projection of one figure panel: the export viewer as the panel's camera has left it, and
+     the text size that panel's plan will draw at. Page coordinates or panel-local ones makes no
+     difference to which boxes overlap — the shift between them is the same for every label — so the
+     raw projection is enough, and what comes back out is a model-space position each drawer
+     projects its own way. */
+  function panelProjection(target, dimensions) {
+    if (!target || typeof target.modelToScreen !== 'function' || typeof target.getView !== 'function') return null;
+    const perAngstrom = pixelsPerAngstrom(target);
+    if (!perAngstrom) return null;
+    const height = dimensions && dimensions.height > 0 ? dimensions.height : 0;
+    return { project: point => target.modelToScreen(point), perAngstrom, view: target.getView(), scale: overlayScale(dimensions), frameHeight: height };
   }
 
   /* options.include picks the labels this press is allowed to move — the position labels, say, or
      only the ones it just added. options.keepPlaced (on unless asked otherwise) leaves a label the
      user has dragged exactly where the user put it. Either way every label on screen still counts as
      something to avoid: a label moved out of one collision must not land in another.
-     Returns null when the view cannot be projected yet, so the caller can say so rather than guess. */
-  function separateLabels(options = {}) {
-    if (typeof viewer.modelToScreen !== 'function') return null;
-    const perAngstrom = pixelsPerAngstrom(viewer);
-    if (!perAngstrom) return null;
+     options.write off resolves without moving anything: the run answers where the labels would go
+     and leaves labelRecords alone, which is how a panel gets its own placement without disturbing
+     the one on screen. Either way `placed` carries the resolved model-space position of every label
+     the run looked at. options.shown narrows the run to the labels one panel actually draws. */
+  function separateLabelsIn(projection, options = {}) {
     const byId = entriesById();
-    const shown = new Set(displayedEntries().map(entry => entry.id));
+    const shown = options.shown instanceof Set ? options.shown : new Set(displayedEntries().map(entry => entry.id));
     const order = new Map(structures.map((entry, index) => [entry.id, index]));
     const keepPlaced = options.keepPlaced !== false;
     const include = typeof options.include === 'function' ? options.include : () => true;
+    const write = options.write !== false;
+    const padding = labelSeparationPadding * projection.scale;
     const items = labelRecords.filter(label => shown.has(label.entryId)).map(label => ({
       label,
       movable: include(label) && !(keepPlaced && labelOffsetLength(label) > 0 && !label.autoPlaced),
       /* Ties are broken by the order the models were loaded, so the reference model's label is the
          one that keeps its place and the rest stack under it. */
       order: order.has(label.entryId) ? order.get(label.entryId) : structures.length,
-      shift: 0, applied: 0
+      shift: 0
     }));
-    if (items.length < 2) return { moved: 0, blocked: 0, overlapping: false };
+    const placed = new Map();
+    if (items.length < 2) return { moved: 0, blocked: 0, overlapping: false, placed };
     items.sort((a, b) => a.order - b.order);
     /* Which labels cover each other is a question about the current framing, and an offset this
-       routine wrote at some earlier one is this run's to recompute rather than to build on: putting
-       them back on their residues first makes a second press at the same camera a no-op instead of a
-       drift, and keeps the cap below a real bound on how far a label can end up from its residue. */
-    items.forEach(item => { if (item.movable && item.label.autoPlaced) { item.label.offset = null; delete item.label.autoPlaced; } });
-    const up = screenAxisInModelSpace(typeof viewer.getView === 'function' ? viewer.getView() : [0, 0, 0, 0, 0, 0, 0, 1], { x: 0, y: 1, z: 0 });
+       routine wrote at some earlier one is this run's to recompute rather than to build on: starting
+       from the residue again makes a second press at the same camera a no-op instead of a drift,
+       keeps the cap a real bound on how far a label can end up from its residue — and is what lets a
+       panel place a label for print without inheriting the screen's answer. */
+    items.forEach(item => {
+      item.base = item.movable && item.label.autoPlaced ? null : item.label.offset || null;
+      if (write && item.movable && item.label.autoPlaced) { item.label.offset = null; delete item.label.autoPlaced; }
+    });
+    const up = screenAxisInModelSpace(projection.view, { x: 0, y: 1, z: 0 });
+    /* Screen y grows downward, the model-space "up" axis does not: the same sign convention the drag
+       uses, so a separated label and a dragged one mean the same thing by their offset. */
+    const offsetFor = item => {
+      const base = item.base || { x: 0, y: 0, z: 0 };
+      const step = item.shift / projection.perAngstrom;
+      return { x: base.x - up.x * step, y: base.y - up.y * step, z: base.z - up.z * step };
+    };
+    const positionFor = item => shiftBy(labelAnchor(item.label, byId), offsetFor(item));
     let overlapping = false;
     let blocked = 0;
     for (let pass = 0; pass < labelSeparationPasses; pass += 1) {
       /* Re-projected every pass: a label that has just moved is in a new place, and the pixels it
          covers there are what the next collision has to be measured against. */
-      const boxes = items.map(item => labelScreenBox(item.label, byId));
+      const boxes = items.map(item => labelBoxAt(projection, item.label, positionFor(item)));
       let collided = false;
       blocked = 0;
       for (let i = 0; i < items.length; i += 1) {
         for (let j = i + 1; j < items.length; j += 1) {
           const a = boxes[i]; const b = boxes[j];
           if (!a || !b) continue;
-          if (Math.abs(b.x - a.x) >= a.halfWidth + b.halfWidth + labelSeparationPadding) continue;
-          const overlapY = a.halfHeight + b.halfHeight + labelSeparationPadding - Math.abs(b.y - a.y);
+          if (Math.abs(b.x - a.x) >= a.halfWidth + b.halfWidth + padding) continue;
+          const overlapY = a.halfHeight + b.halfHeight + padding - Math.abs(b.y - a.y);
           if (overlapY <= 0) continue;
           collided = true; overlapping = true;
           /* One of the pair keeps its place: the later model's label is the one that gives way, and
@@ -385,26 +432,73 @@
           if (mover < 0) { blocked += 1; continue; }
           const other = mover === j ? i : j;
           const away = boxes[mover].y >= boxes[other].y ? 1 : -1;
-          const cap = labelSeparationCap * boxes[mover].halfHeight * 2;
-          const wanted = Math.max(-cap, Math.min(cap, items[mover].shift + away * overlapY));
+          /* Six of the label's own heights — except that in a panel, at print text size, six heights
+             can be more than the whole cell: a site with a dozen positions compared at it cannot be
+             untangled however far the labels travel, and travelling that far only turns an overlap
+             into a label the reader never sees, or, in the SVG, one sitting over the next panel. So a
+             panel also bounds the travel by its own frame. The stage has no such frame — it scrolls
+             and turns — and keeps the rule it has always had. */
+          const cap = Math.min(labelSeparationCap * boxes[mover].halfHeight * 2, projection.frameHeight ? projection.frameHeight / 2 : Infinity);
+          let wanted = Math.max(-cap, Math.min(cap, items[mover].shift + away * overlapY));
+          if (projection.frameHeight) {
+            const wall = Math.min(boxes[mover].halfHeight, projection.frameHeight / 2);
+            const y = boxes[mover].y + wanted - items[mover].shift;
+            wanted += Math.max(wall, Math.min(projection.frameHeight - wall, y)) - y;
+          }
           boxes[mover].y += wanted - items[mover].shift;
           items[mover].shift = wanted;
         }
       }
       if (!collided) break;
-      items.forEach(item => {
-        const delta = item.shift - item.applied;
-        if (!delta) return;
-        /* Screen y grows downward, the model-space "up" axis does not: the same sign convention the
-           drag uses, so a separated label and a dragged one mean the same thing by their offset. */
-        const offset = item.label.offset || { x: 0, y: 0, z: 0 };
-        const step = delta / perAngstrom;
-        item.label.offset = { x: offset.x - up.x * step, y: offset.y - up.y * step, z: offset.z - up.z * step };
-        item.label.autoPlaced = true;
-        item.applied = item.shift;
-      });
     }
-    return { moved: items.filter(item => item.applied !== 0).length, blocked, overlapping };
+    items.forEach(item => {
+      placed.set(item.label, positionFor(item));
+      if (!write || !item.shift) return;
+      item.label.offset = offsetFor(item);
+      item.label.autoPlaced = true;
+    });
+    return { moved: items.filter(item => item.shift !== 0).length, blocked, overlapping, placed };
+  }
+
+  /* Returns null when the view cannot be projected yet, so the caller can say so rather than guess. */
+  function separateLabels(options = {}) {
+    const projection = screenProjection();
+    return projection ? separateLabelsIn(projection, options) : null;
+  }
+
+  /* Where one figure panel's labels belong, worked out in that panel's own camera and text size and
+     handed to the drawing pass as a position per label. The figure is a rendering, not an edit:
+     labelRecords is not touched, so exporting never moves a label on screen, and a label the user
+     placed by hand is left where the user put it here exactly as it is there. Null when the panel
+     cannot be projected — then it draws what the screen has rather than guessing. */
+  function panelLabelPlacement(target, dimensions, shownIds) {
+    const projection = panelProjection(target, dimensions);
+    if (!projection) return null;
+    const resolved = separateLabelsIn(projection, { write: false, shown: shownIds });
+    if (!resolved.placed.size) return null;
+    /* Taken only when it is an improvement on what the panel would otherwise have printed. Eleven
+       positions compared at one site is twenty-two boxes of print-size text in a cell that holds
+       six: no placement untangles that, and the greedy one can end up covering more than the
+       labels did where they were. Measured, so the panel is never made worse than it is today. */
+    const byId = entriesById();
+    const labels = [...resolved.placed.keys()];
+    const covered = positions => labelCoveredArea(labels.map(label => labelBoxAt(projection, label, positions(label))));
+    return covered(label => resolved.placed.get(label)) < covered(label => labelPosition(label, byId)) ? resolved.placed : null;
+  }
+
+  /* How much of itself a set of label boxes covers: the summed area of every overlapping pair. */
+  function labelCoveredArea(boxes) {
+    let total = 0;
+    for (let i = 0; i < boxes.length; i += 1) {
+      for (let j = i + 1; j < boxes.length; j += 1) {
+        const a = boxes[i]; const b = boxes[j];
+        if (!a || !b) continue;
+        const wide = Math.min(a.x + a.halfWidth, b.x + b.halfWidth) - Math.max(a.x - a.halfWidth, b.x - b.halfWidth);
+        const tall = Math.min(a.y + a.halfHeight, b.y + b.halfHeight) - Math.max(a.y - a.halfHeight, b.y - b.halfHeight);
+        if (wide > 0 && tall > 0) total += wide * tall;
+      }
+    }
+    return total;
   }
 
   let labelDrag = null;

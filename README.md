@@ -175,7 +175,10 @@ label keeps a leader line back to its residue and stores its move against the st
 camera can turn without losing the arrangement; *Reset* in its row puts it back. Labels that land on
 top of each other — one per model at the same residue of two superposed models — are stacked apart for
 you when a position is compared and when a site figure is built, and **Separate labels** does it again
-for the framing on screen; a label you moved by hand is left where you put it. **Legend position**
+for the framing on screen; a label you moved by hand is left where you put it. An exported figure
+works the arrangement out again for each panel, at the size that panel prints its text — print text is
+several times larger against the structure than screen text — without moving anything in the view.
+**Legend position**
 in Publish puts the colour legend in any corner or stacks it down the left or right side of the
 figure, on every export and on each panel of a built figure.
 

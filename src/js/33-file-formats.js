@@ -176,9 +176,14 @@
     const model = target.addModel(entry.text, entry.format);
     model.selectedAtoms({}).forEach((atom, index) => { const source = entry.atoms[index]; if (source) { atom.x = source.x; atom.y = source.y; atom.z = source.z; } });
     await applyModelStyle(model, entry, target);
-    if (overlays) drawOverlays(target, new Set([entry.id]), dimensions, false);
-    target.zoomTo();
-    if (camera && typeof target.setView === 'function') target.setView(camera);
+    const shownIds = new Set([entry.id]);
+    /* Camera first, then the overlays: this panel's labels are placed in this panel's projection,
+       which does not exist until the camera is on. The second zoomTo keeps the clipping planes this
+       panel has always had — they are computed with the overlay shapes in the scene. */
+    const frame = () => { target.zoomTo(); if (camera && typeof target.setView === 'function') target.setView(camera); };
+    frame();
+    if (overlays) drawOverlays(target, shownIds, dimensions, false, panelLabelPlacement(target, dimensions, shownIds));
+    frame();
     target.render();
     await afterPaint();
     return target.pngURI();

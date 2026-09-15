@@ -498,8 +498,17 @@ runs the pass over every label on screen whenever you want it — after turning 
 `3 labels moved apart` or `Labels already clear of each other`. The nudge is an ordinary offset: it keeps
 its leader line, **Reset** puts the label back, and ⌘Z undoes it. A label you have dragged yourself is
 never moved, only avoided, and no label travels more than six of its own heights, so one can never end up
-off the structure it names. Because the offset is a single model-space vector, panels that differ widely
-in zoom cannot all be cleared by one pass; drag the few that remain.
+off the structure it names.
+
+A figure is not the screen enlarged: at 178 mm and 8 pt the label text is drawn about 2.8× larger
+relative to the structure than it is on screen, so labels that clear each other in the view could still
+print on top of each other. Every panel of an exported figure therefore works its placement out again
+for itself, in that panel's own framing and at the size that panel prints its text — the PNG and the SVG
+of a figure agree exactly, each panel of a multi-panel figure gets its own answer, and nothing on screen
+moves: the export is a rendering, not an edit, and a label you have placed by hand is left where you put
+it there too. A panel keeps what you would otherwise have got whenever the new placement would not cover
+less: a site of a dozen positions is more print-size boxes than a panel can hold however they are
+arranged, and is best split over more panels.
 
 **Comparing positions across models.** Two runs of the same protein — a wild type and a point
 mutant — are the usual reason for loading two models of the same length. Select the residue in

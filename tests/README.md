@@ -121,6 +121,12 @@ PSV_CHROMIUM=/opt/pw-browsers/chromium/chrome-linux/chrome npm test
   that exactly one label was moved and neither is past the six-label-height cap, and then drags the label
   that stayed back over the other and presses **Separate labels** — the hand-placed offset must come
   through unchanged while the other label moves, and the button must be disabled once the labels are gone.
+- Labels at print size: the same pair is exported as a figure SVG at 85 mm / 300 dpi / 10 pt, where the
+  label text is drawn 3.5× its screen size. The step first checks the two labels do *not* cover each
+  other on screen, then reads the two label boxes out of the exported markup — the rect's width, the
+  text's centre and its font size — and requires that those boxes do not overlap either, which they did
+  before the placement was resolved per panel. It also compares every label's stored offset before and
+  after the export: a figure is a rendering, so the labels on screen must come through untouched.
 - The effect of a mutation: the same step then superposes the pair on `model_a` (with identifier mapping, because the
   fixture's two chains are identical poly-alanine and sequence matching is free to pair chain A with chain B) and
   compares again: the neighbourhood is measured, its first row is the site at residue 15, at least two neighbours fall

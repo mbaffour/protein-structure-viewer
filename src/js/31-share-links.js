@@ -590,9 +590,19 @@
       pending.push(applyModelStyle(model, entry, target));
     });
     await Promise.all(pending);
-    if (overlays) drawOverlays(target, new Set(displayedEntries().map(entry => entry.id)), dimensions);
-    target.zoomTo();
-    if (typeof viewer.getView === 'function' && typeof target.setView === 'function') target.setView(viewer.getView());
+    const shownIds = new Set(displayedEntries().map(entry => entry.id));
+    /* The camera goes on before the overlays are drawn, because where the labels of this panel
+       belong is a question about this panel's projection and there is no projection until the
+       camera is set. */
+    const frame = () => {
+      target.zoomTo();
+      if (typeof viewer.getView === 'function' && typeof target.setView === 'function') target.setView(viewer.getView());
+    };
+    frame();
+    if (overlays) drawOverlays(target, shownIds, dimensions, true, panelLabelPlacement(target, dimensions, shownIds));
+    /* zoomTo again afterwards: its lasting effect past setView is the near and far clipping planes,
+       and those have always been computed with the overlay shapes in the scene. */
+    frame();
     target.render();
     await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
     const uri = target.pngURI();

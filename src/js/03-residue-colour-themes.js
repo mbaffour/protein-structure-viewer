@@ -645,13 +645,17 @@
   }
   function labelPosition(label, byId = entriesById()) { return shiftBy(labelAnchor(label, byId), label.offset); }
   const leaderMinimum = 0.75;
+  function leaderLength(anchor, position) { return Math.hypot(position.x - anchor.x, position.y - anchor.y, position.z - anchor.z); }
   function leaderColor() { return labelColors.getPropertyValue('--muted-foreground').trim() || '#94a3b8'; }
-  function drawLabels(target, shownIds, scale = 1) {
+  /* `placement`, when a figure panel has resolved one (panelLabelPlacement), says where each label
+     goes in that panel — its text prints several times larger against the structure than on screen,
+     so the screen's placement is not the panel's. Without one the label sits at its own offset. */
+  function drawLabels(target, shownIds, scale = 1, placement = null) {
     const byId = entriesById();
     labelRecords.filter(label => shownIds.has(label.entryId)).forEach(label => {
       const anchor = labelAnchor(label, byId);
-      const position = shiftBy(anchor, label.offset);
-      if (labelOffsetLength(label) > leaderMinimum) target.addLine({ start: anchor, end: position, color: label.color || leaderColor(), linewidth: Math.max(1, Math.round(scale)) });
+      const position = (placement && placement.get(label)) || shiftBy(anchor, label.offset);
+      if (leaderLength(anchor, position) > leaderMinimum) target.addLine({ start: anchor, end: position, color: label.color || leaderColor(), linewidth: Math.max(1, Math.round(scale)) });
       target.addLabel(label.text, labelStyle(position, { color: label.color, size: label.size, scale }));
     });
     if (root.querySelector('#gpv-all-labels').checked) {
@@ -668,9 +672,9 @@
   /* Labels, measurements, and figure annotations share one pass so that adding
      any one of them never wipes the others, and so exports and comparison panels
      can draw the same overlays into their own viewers. */
-  function drawOverlays(target, shownIds, dimensions, includeScreenText = true) {
+  function drawOverlays(target, shownIds, dimensions, includeScreenText = true, placement = null) {
     const scale = overlayScale(dimensions);
-    drawLabels(target, shownIds, scale);
+    drawLabels(target, shownIds, scale, placement);
     drawMeasurements(target, shownIds, scale);
     drawAnnotations(target, shownIds, dimensions, includeScreenText);
   }

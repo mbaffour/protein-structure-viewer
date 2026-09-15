@@ -2,6 +2,39 @@
 
 All notable changes to this project are recorded here.
 
+## 2.44.0
+
+### Fixed
+
+- **Labels were placed for the screen and printed at a different size, so a figure could still go out
+  with one label on top of another.** 2.43.0 separates overlapping labels by measuring their boxes in
+  the live view — and a figure is not the live view enlarged. A print export draws label text at the
+  plan's text scale (2.78× at 178 mm, 300 dpi and 8 pt) while the panel's *geometry* is only about
+  1.11× the stage, so on paper a label is roughly two and a half times larger relative to the
+  structure than it is on screen: the *Make site figure* overview panel came out with the wild type's
+  `Thr15` covering 35 px of the mutant's 67 px-tall box, after a press that had just cleared them.
+  Worse, a label's offset is one model-space vector shared by every panel, so the nudge that separates
+  the overview's labels is the wrong size for the close-up beside it. Placement is now resolved **per
+  panel, at render time**, in that panel's own projection and at the text size that panel prints at,
+  and handed to the drawing pass as a position per label. The exported PNG and the exported SVG run
+  the same resolver on the same panel, so a figure's two files place every label on the same pixel.
+  Nothing on screen moves: `labelRecords` is not touched by an export, a label you placed by hand is
+  left alone in a panel exactly as it is on screen, and a panel whose viewer cannot be projected draws
+  what the screen has rather than guessing. Every panel of a multi-panel figure resolves
+  independently, which is the point — the overview and the close-up need different answers.
+- A label can no longer be pushed out of the panel it belongs to. Six of its own heights is most of a
+  figure cell once the text is print size, and a label shoved past the edge is one the reader never
+  sees — or, in the SVG, one sitting over the next panel. In a panel the travel now also stops at the
+  frame; on screen, which scrolls and turns, the rule is unchanged.
+
+### Known limits
+
+- A site with a dozen positions compared at it is twenty-two boxes of print-size text in a cell that
+  holds six, and no placement untangles that. A panel therefore takes the resolved placement only when
+  it measurably covers less of itself than what would otherwise have been printed, so a pile this
+  crowded is never made worse than it was — but it is still a pile. Compare fewer positions per panel,
+  or give the figure more panels.
+
 ## 2.43.0
 
 ### Fixed

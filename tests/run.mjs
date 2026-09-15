@@ -1179,6 +1179,89 @@ await step('the two labels one press puts at a site do not cover each other, and
     console.log('       both labels anchored within ' + anchorGap.toFixed(1) + ' px, separated to ' + Math.abs(boxes[0].y - boxes[1].y).toFixed(0) + ' px apart by moving ' + moved[0].text + ' ' + (moved[0].offset * placed.perAngstrom).toFixed(0) + ' px of a ' + capPixels.toFixed(0) + ' px cap · ' + said.trim().toLowerCase() + ' · the hand-placed ' + anchored.text + ' untouched at ' + kept.offset.toFixed(2) + ' Å');
   } finally { await cleanup(); }
 });
+await step('a figure exported for print separates the labels again at the size they are printed, and leaves the ones on screen where they are', async () => {
+  /* The same wild-type/mutant pair, and the same two labels the press above separates on screen. A
+     figure is not the stage enlarged: at 85 mm, 300 dpi and 10 pt the label text is drawn 3.5× the
+     size it has on screen while the panel is barely wider than the stage, so a pair that clears by a
+     pixel on screen prints half on top of each other unless the placement is worked out again at
+     print size. The assertion is on the exported file's own geometry — the boxes the SVG draws, read
+     out of the markup — and on the labels on screen being exactly where they were before the export,
+     because a figure is a rendering and not an edit. */
+  const original = (await readFile(join(work, 'model_a.pdb'), 'utf8')).split('\n');
+  const mutated = original.map(line => (/^ATOM/.test(line) && line[21] === 'A' && Number(line.slice(22, 26)) === 15 ? line.slice(0, 17) + 'GLY' + line.slice(20) : line)).join('\n');
+  const file = join(work, 'model_mutant.pdb'); await writeFile(file, mutated);
+  const startTab = await page.evaluate(() => (document.querySelector('[data-gpv-tab][aria-selected="true"]') || {}).dataset.gpvTab || 'models');
+  const startMode = await page.inputValue('#gpv-view-mode');
+  const startPlan = await page.evaluate(() => ({
+    mode: document.querySelector('#gpv-export-mode').value, width: document.querySelector('#gpv-print-width').value,
+    dpi: document.querySelector('#gpv-print-dpi').value, text: document.querySelector('#gpv-print-text').value
+  }));
+  const cleanup = async () => {
+    await tab('publish');
+    await page.selectOption('#gpv-print-width', startPlan.width); await page.selectOption('#gpv-print-dpi', startPlan.dpi);
+    await page.selectOption('#gpv-print-text', startPlan.text); await page.selectOption('#gpv-export-mode', startPlan.mode);
+    await tab('annotate');
+    if (await page.locator('#gpv-position-clear').count()) { await page.click('#gpv-position-clear'); await page.waitForTimeout(400); }
+    await tab('models');
+    const row = page.locator('#gpv-list .gpv-entry', { hasText: 'model_mutant' });
+    if (await row.count()) { await row.first().locator('button:has-text("Remove")').click(); await page.waitForTimeout(400); }
+    await page.click('#gpv-show-all'); await page.waitForTimeout(600);
+    await page.selectOption('#gpv-view-mode', startMode); await page.waitForTimeout(400);
+    await tab(startTab);
+  };
+  const covers = (a, b) => Math.abs(a.x - b.x) < a.halfWidth + b.halfWidth && Math.abs(a.y - b.y) < a.halfHeight + b.halfHeight;
+  /* Every label's offset and who put it there, as one string to compare before with after. */
+  const placements = async () => page.evaluate(() => window.__viewerDebug.labelRecords().map(label =>
+    label.key + '=' + (label.offset ? [label.offset.x, label.offset.y, label.offset.z].map(value => value.toFixed(9)).join(',') : 'none') + (label.autoPlaced ? ' auto' : '')).join(' | '));
+  try {
+    await tab('models'); await page.setInputFiles('#gpv-files', [file]); await page.waitForTimeout(1800);
+    await page.selectOption('#gpv-view-mode', 'overlay'); await page.waitForTimeout(300);
+    await page.evaluate(labels => {
+      [...document.querySelectorAll('#gpv-list .gpv-entry')].forEach(entry => {
+        const toggle = entry.querySelector('input[type="checkbox"]');
+        const wanted = labels.some(label => entry.textContent.includes(label));
+        if (toggle && toggle.checked !== wanted) toggle.click();
+      });
+    }, ['model_a.pdb', 'model_mutant.pdb']);
+    await page.waitForTimeout(900);
+    await tab('annotate');
+    await page.fill('#gpv-goto', 'A:15'); await page.click('#gpv-goto-run'); await page.waitForTimeout(500);
+    await page.click('#gpv-position-compare'); await page.waitForTimeout(1200);
+    const screen = await page.evaluate(() => window.__viewerDebug.labelRecords().filter(label => label.kind === 'position')
+      .map(label => ({ text: label.text, size: label.size || 12, box: window.__viewerDebug.labelScreenBox(label) })));
+    if (screen.length !== 2 || screen.some(item => !item.box)) throw new Error('the press did not leave two projectable position labels: ' + JSON.stringify(screen));
+    /* The screen is the easy case and it is already right — which is what makes the printed figure
+       the question this step is about. */
+    if (covers(screen[0].box, screen[1].box)) throw new Error('the two labels cover each other on screen, so this step cannot say anything about the print');
+    const before = await placements();
+    await tab('publish');
+    await page.selectOption('#gpv-export-mode', 'print'); await page.selectOption('#gpv-print-width', '85');
+    await page.selectOption('#gpv-print-dpi', '300'); await page.selectOption('#gpv-print-text', '10'); await page.waitForTimeout(400);
+    const download = page.waitForEvent('download', { timeout: 180000 });
+    await page.click('#gpv-svg');
+    const svg = await readFile(await (await download).path(), 'utf8');
+    const after = await placements();
+    if (after !== before) throw new Error('the export moved the labels on screen:\n  before ' + before + '\n  after  ' + after);
+    /* Each label is a box and its text in the markup: the text carries its centre and the size it is
+       set in, the rect beside it how wide it came out. */
+    const boxes = screen.map(item => {
+      /* Lazily up to the rect's own width, so the stroke-width further along the tag is not read as
+         the width of the box. */
+      const found = new RegExp('<g><rect [^>]*?width="([\\d.]+)"[^>]*/><text x="(-?[\\d.]+)" y="(-?[\\d.]+)"[^>]*font-size="([\\d.]+)"[^>]*>' + item.text + '</text></g>').exec(svg);
+      if (!found) throw new Error('the exported SVG has no label box for ' + item.text);
+      /* text-anchor="middle" with dominant-baseline="central", and the box is 1.6 times the type
+         size tall, so that is the half-height either side of the centre the markup gives. */
+      return { text: item.text, size: item.size, font: Number(found[4]), x: Number(found[2]), y: Number(found[3]), halfWidth: Number(found[1]) / 2, halfHeight: Number(found[4]) * 0.8 };
+    });
+    const smallest = Math.min(...boxes.map(box => box.font / box.size));
+    if (!(smallest > 2)) throw new Error('the print text is only ' + smallest.toFixed(2) + '× the screen size, so this export is not the print case the step is about');
+    if (covers(boxes[0], boxes[1])) {
+      const overlap = (boxes[0].halfHeight + boxes[1].halfHeight - Math.abs(boxes[0].y - boxes[1].y)).toFixed(1);
+      throw new Error('the exported figure prints ' + boxes[0].text + ' and ' + boxes[1].text + ' over each other by ' + overlap + ' px of a ' + (boxes[0].halfHeight * 2).toFixed(1) + ' px box: ' + JSON.stringify(boxes));
+    }
+    console.log('       label text printed at ' + smallest.toFixed(1) + '× its screen size, the two boxes ' + Math.abs(boxes[0].y - boxes[1].y).toFixed(0) + ' px apart in the SVG for a box ' + (boxes[0].halfHeight * 2).toFixed(0) + ' px tall · the labels on screen untouched by the export');
+  } finally { await cleanup(); }
+});
 await step('a set of positions is compared in one press: every site is labelled and one neighbourhood table covers them all', async () => {
   /* The same wild-type/mutant pair as the step above — a binding site or an interface is several
      residues, so the set is what the press has to take, not one residue at a time. */
