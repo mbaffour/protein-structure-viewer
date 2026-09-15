@@ -263,6 +263,8 @@
   root.querySelector('#gpv-report-offline').addEventListener('change', updateReportEstimate);
   root.querySelector('#gpv-confidence-csv').addEventListener('click', downloadConfidenceCsv);
   root.querySelector('#gpv-profile-svg').addEventListener('click', downloadProfileSvg);
+  root.querySelector('#gpv-rmsf-svg').addEventListener('click', downloadRmsfProfileSvg);
+  root.querySelector('#gpv-rmsf-png').addEventListener('click', () => { downloadRmsfProfilePng().catch(error => announce('Could not render the RMSF profile: ' + error.message, 'error')); });
   root.querySelector('#gpv-profile-png').addEventListener('click', () => { downloadProfilePng().catch(error => announce('Could not render the profile: ' + error.message, 'error')); });
   root.querySelector('#gpv-hide-below').addEventListener('change', () => { applyStyle(); updateStatus(hideBelow() ? 'Residues with pLDDT below ' + hideBelow() + ' hidden in the viewer, panels and exports' : 'Every residue shown'); });
   root.querySelector('#gpv-color-mode').addEventListener('change', () => { if (root.querySelector('#gpv-color-mode').value === 'deviation' && !alignmentResults.length) announce('Deviation colouring stays grey until you align: Compare → Align visible'); });

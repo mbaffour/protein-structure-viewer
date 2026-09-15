@@ -10,13 +10,14 @@
       profile: shown.some(item => item.scores.length),
       contacts: Boolean(contactResult && entry && contactResult.entryId === entry.id && contactResult.pairs.size),
       architecture: Boolean(entry && architectureModel(entry)),
-      matrix: Boolean(rmsdMatrix && rmsdMatrix.names.length >= 2)
+      matrix: Boolean(rmsdMatrix && rmsdMatrix.names.length >= 2),
+      rmsf: Boolean(ensembleSpread && ensembleSpread.values.size)
     };
   }
 
   function renderCompositeControls() {
     const available = compositeAvailability();
-    [['#gpv-composite-pae', available.pae], ['#gpv-composite-profile', available.profile], ['#gpv-composite-contacts', available.contacts], ['#gpv-composite-architecture', available.architecture], ['#gpv-composite-matrix', available.matrix]].forEach(([selector, ok]) => {
+    [['#gpv-composite-pae', available.pae], ['#gpv-composite-profile', available.profile], ['#gpv-composite-contacts', available.contacts], ['#gpv-composite-architecture', available.architecture], ['#gpv-composite-matrix', available.matrix], ['#gpv-composite-rmsf', available.rmsf]].forEach(([selector, ok]) => {
       const control = root.querySelector(selector); control.disabled = !ok; control.closest('label').title = ok ? '' : 'Not available for the current model';
     });
     root.querySelector('#gpv-composite').disabled = structures.length === 0;
@@ -57,7 +58,8 @@
       profile: available.profile && root.querySelector('#gpv-composite-profile').checked,
       contacts: available.contacts && root.querySelector('#gpv-composite-contacts').checked,
       architecture: available.architecture && root.querySelector('#gpv-composite-architecture').checked,
-      matrix: available.matrix && root.querySelector('#gpv-composite-matrix').checked
+      matrix: available.matrix && root.querySelector('#gpv-composite-matrix').checked,
+      rmsf: available.rmsf && root.querySelector('#gpv-composite-rmsf').checked
     };
     const columns = Math.max(1, Math.min(3, Number(root.querySelector('#gpv-composite-columns').value) || 2));
     const count = 1 + Object.values(wanted).filter(Boolean).length;
@@ -80,6 +82,10 @@
         if (profile) { const image = await loadImage('data:image/svg+xml;charset=utf-8,' + encodeURIComponent(profile.svg)); panels.push({ image, caption: 'Per-residue pLDDT' + (displayedEntries().filter(item => item.scores.length).length > 1 ? ' of the displayed models' : ''), aspect: profile.width / profile.height }); }
       }
       if (wanted.contacts) { const canvas = document.createElement('canvas'); drawContactMap(canvas, true, Math.max(1, Math.round(cell / 600 * 2))); panels.push({ image: canvas, caption: 'Contacts between chains ' + (contactResult.chainA || '—') + ' and ' + (contactResult.chainB || '—') + ' within ' + contactResult.cutoff + ' Å' }); }
+      if (wanted.rmsf) {
+        const profile = rmsfProfileSvg();
+        if (profile) { const image = await loadImage('data:image/svg+xml;charset=utf-8,' + encodeURIComponent(profile.svg)); panels.push({ image, caption: 'Per-residue Cα RMSF across ' + ensembleSpread.count + ' aligned models' }); }
+      }
       if (wanted.matrix) {
         const scale = figureScale(panelPlan); const pad = Math.round(16 * scale); const side = Math.min(cell, cellHeight) - pad * 2;
         const canvasM = document.createElement('canvas'); const metrics = rmsdMatrixMetrics(side, scale); canvasM.width = metrics.width + pad * 2; canvasM.height = metrics.height + pad * 2;

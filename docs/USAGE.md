@@ -425,6 +425,14 @@ figure goes into a slide or a manuscript draft without a file in between. Chrome
 image clipboard writes; Firefox and Safari may refuse, in which case the viewer says so and the
 download remains.
 
+**RMSF profile.** Once models are aligned, **RMSF profile SVG** and **RMSF profile PNG** plot the
+per-residue Cα root-mean-square fluctuation across the aligned models — the quantity *Model agreement*
+colouring paints — as one panel per chain: residue number along the bottom, RMSF in ångströms up the
+side, the agreement bands as pale stripes behind the trace so the stretches the models agree on are
+read at a glance, and the y-axis ceiling set just above the largest value. The SVG is editable text
+and paths; the PNG is rendered at the output width and resolution. The same plot can be ticked into the
+composite figure as the ensemble counterpart of the pLDDT profile.
+
 **Pairwise RMSD matrix.** **Compute matrix** under *Pairwise RMSD* superposes every shown model onto
 every other — up to twelve — with the same rules as *Align visible*: the residue mapping, the fit
 region and positional chain matching if switched on. Nothing on screen moves; the fits are computed on

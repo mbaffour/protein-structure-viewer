@@ -160,7 +160,9 @@ the Models list, **Emphasise** draws one model solid and the rest as faded thin 
 how an overlay of five predictions becomes a figure. **Compute matrix** superposes every shown model
 onto every other and tabulates the pairwise Cα RMSDs, exportable as CSV and as a heat map, so an
 ensemble figure can say which models agree; it marks the medoid, and **Use medoid as reference**
-superposes everything onto that model and emphasises it in one press. **Fit on** narrows what the rotation is
+superposes everything onto that model and emphasises it in one press. **RMSF profile** plots the
+per-residue Cα spread across the aligned models, one panel per chain, as SVG or PNG and as a
+composite-figure panel. **Fit on** narrows what the rotation is
 computed from — a chain, a residue range, or the residues you have selected — and the table reports
 the RMSD over that region beside the RMSD over everything matched, which is how a hinge or a moved
 domain is shown. Colour by *Cα deviation* to paint what moved, and by *Model agreement* for the

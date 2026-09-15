@@ -1053,6 +1053,8 @@ html>body{padding:0}</style>
       <button class="btn" type="button" id="gpv-restore" disabled>Restore coordinates</button>
       <span class="text-muted text-small" id="gpv-fit-state">The superposition uses every residue that matches between the models.</span>
       <button class="btn" type="button" id="gpv-alignment-csv" disabled>Download RMSD CSV</button>
+      <button class="btn" type="button" id="gpv-rmsf-svg" disabled data-tooltip="Per-residue Cα RMSF across the aligned models as a plot, one panel per chain with the agreement bands behind the trace — editable vector graphics">RMSF profile SVG</button>
+      <button class="btn" type="button" id="gpv-rmsf-png" disabled data-tooltip="The same RMSF plot as a PNG at the output width and resolution">RMSF profile PNG</button>
       <button class="btn" type="button" id="gpv-rmsf-csv" disabled data-tooltip="Per-residue Cα spread (RMSF) across the aligned models — the ensemble agreement the colour scheme shows">Download RMSF CSV</button>
     </div>
     <div class="viz-controls">
@@ -1161,6 +1163,7 @@ html>body{padding:0}</style>
       <label class="form-check form-switch"><input class="form-check-input" id="gpv-composite-contacts" type="checkbox" checked><span class="form-check-label">Contact map</span></label>
       <label class="form-check form-switch"><input class="form-check-input" id="gpv-composite-architecture" type="checkbox" checked><span class="form-check-label">Domain architecture</span></label>
       <label class="form-check form-switch"><input class="form-check-input" id="gpv-composite-matrix" type="checkbox" checked><span class="form-check-label">RMSD matrix</span></label>
+      <label class="form-check form-switch"><input class="form-check-input" id="gpv-composite-rmsf" type="checkbox" checked><span class="form-check-label">RMSF profile</span></label>
       <label class="form-label">Columns<select class="form-select" id="gpv-composite-columns"><option value="1">1</option><option value="2" selected>2</option><option value="3">3</option></select></label>
       <button class="btn" type="button" id="gpv-composite" disabled data-tooltip="One lettered figure at the chosen print size: the 3D view first, then the confidence panels you tick — the PAE heatmap, the pLDDT profile and the contact map when they are available">Download composite figure</button>
       <button class="btn" type="button" id="gpv-compare-svg" disabled data-tooltip="The stitched comparison figure with vector captions and annotations">Download comparison SVG</button>
@@ -1276,6 +1279,7 @@ html>body{padding:0}</style>
       </ul>
       <h3>Tips for figures and reviewers</h3>
       <ul>
+        <li>After <em>Align visible</em>, <em>RMSF profile SVG/PNG</em> plots the per-residue Cα spread across the aligned models, one panel per chain with the agreement bands behind the trace, and the same plot is a panel of the composite figure — the ensemble counterpart of the pLDDT profile.</li>
         <li><em>Compare → Pairwise RMSD → Compute matrix</em> superposes every shown model onto every other with the same rules as Align visible and tabulates the Cα RMSDs — which models of an ensemble agree, which is the odd one out — with a mean column, a ★ on the medoid, a CSV, a heat-map PNG or SVG with the values in the cells, and a panel for the composite figure. <em>Use medoid as reference</em> superposes everything onto that model and draws it solid against the rest.</li>
         <li><em>Compare → Match identical chains by position</em> re-pairs the chains of an assembly by where they sit after a first fit, so a model that puts the same subunit in a different place is compared against the copy it actually corresponds to; the chain mapping it chose is printed with each result.</li>
         <li><em>Compare → Fit on</em> superposes the visible models using only part of the structure — a chain, a residue range such as <code>A:20-140</code>, or the residues you have selected — and reports the RMSD over that region beside the RMSD over every matched residue, which is how a hinge or a shifted domain is shown.</li>

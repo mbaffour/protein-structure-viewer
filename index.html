@@ -1053,6 +1053,8 @@ html>body{padding:0}</style>
       <button class="btn" type="button" id="gpv-restore" disabled>Restore coordinates</button>
       <span class="text-muted text-small" id="gpv-fit-state">The superposition uses every residue that matches between the models.</span>
       <button class="btn" type="button" id="gpv-alignment-csv" disabled>Download RMSD CSV</button>
+      <button class="btn" type="button" id="gpv-rmsf-svg" disabled data-tooltip="Per-residue Cα RMSF across the aligned models as a plot, one panel per chain with the agreement bands behind the trace — editable vector graphics">RMSF profile SVG</button>
+      <button class="btn" type="button" id="gpv-rmsf-png" disabled data-tooltip="The same RMSF plot as a PNG at the output width and resolution">RMSF profile PNG</button>
       <button class="btn" type="button" id="gpv-rmsf-csv" disabled data-tooltip="Per-residue Cα spread (RMSF) across the aligned models — the ensemble agreement the colour scheme shows">Download RMSF CSV</button>
     </div>
     <div class="viz-controls">
@@ -1161,6 +1163,7 @@ html>body{padding:0}</style>
       <label class="form-check form-switch"><input class="form-check-input" id="gpv-composite-contacts" type="checkbox" checked><span class="form-check-label">Contact map</span></label>
       <label class="form-check form-switch"><input class="form-check-input" id="gpv-composite-architecture" type="checkbox" checked><span class="form-check-label">Domain architecture</span></label>
       <label class="form-check form-switch"><input class="form-check-input" id="gpv-composite-matrix" type="checkbox" checked><span class="form-check-label">RMSD matrix</span></label>
+      <label class="form-check form-switch"><input class="form-check-input" id="gpv-composite-rmsf" type="checkbox" checked><span class="form-check-label">RMSF profile</span></label>
       <label class="form-label">Columns<select class="form-select" id="gpv-composite-columns"><option value="1">1</option><option value="2" selected>2</option><option value="3">3</option></select></label>
       <button class="btn" type="button" id="gpv-composite" disabled data-tooltip="One lettered figure at the chosen print size: the 3D view first, then the confidence panels you tick — the PAE heatmap, the pLDDT profile and the contact map when they are available">Download composite figure</button>
       <button class="btn" type="button" id="gpv-compare-svg" disabled data-tooltip="The stitched comparison figure with vector captions and annotations">Download comparison SVG</button>
@@ -1276,6 +1279,7 @@ html>body{padding:0}</style>
       </ul>
       <h3>Tips for figures and reviewers</h3>
       <ul>
+        <li>After <em>Align visible</em>, <em>RMSF profile SVG/PNG</em> plots the per-residue Cα spread across the aligned models, one panel per chain with the agreement bands behind the trace, and the same plot is a panel of the composite figure — the ensemble counterpart of the pLDDT profile.</li>
         <li><em>Compare → Pairwise RMSD → Compute matrix</em> superposes every shown model onto every other with the same rules as Align visible and tabulates the Cα RMSDs — which models of an ensemble agree, which is the odd one out — with a mean column, a ★ on the medoid, a CSV, a heat-map PNG or SVG with the values in the cells, and a panel for the composite figure. <em>Use medoid as reference</em> superposes everything onto that model and draws it solid against the rest.</li>
         <li><em>Compare → Match identical chains by position</em> re-pairs the chains of an assembly by where they sit after a first fit, so a model that puts the same subunit in a different place is compared against the copy it actually corresponds to; the chain mapping it chose is printed with each result.</li>
         <li><em>Compare → Fit on</em> superposes the visible models using only part of the structure — a chain, a residue range such as <code>A:20-140</code>, or the residues you have selected — and reports the RMSD over that region beside the RMSD over every matched residue, which is how a hinge or a shifted domain is shown.</li>
@@ -1649,7 +1653,7 @@ html>body{padding:0}</style>
   let busyDepth = 0;
   let restoreMotion = null;
   const listPageSize = 60;
-  const viewerVersion = '2.33.0';
+  const viewerVersion = '2.34.0';
   const preferenceKey = 'protein-structure-viewer:preferences';
   const themeKey = 'protein-structure-viewer:theme';
   const labelColors = getComputedStyle(root);
@@ -4330,6 +4334,72 @@ html>body{padding:0}</style>
     return agreementBands.find(([limit]) => value < limit)[1];
   }
 
+  /* The RMSF profile: per-residue Cα spread across the aligned models, one panel per chain,
+     the agreement bands as stripes behind the trace so the reader sees at a glance which
+     stretches the models agree on. The ensemble figure's companion to the pLDDT profile. */
+  function rmsfProfileSvg() {
+    if (!ensembleSpread || !ensembleSpread.values.size) return null;
+    const byChain = new Map();
+    ensembleSpread.values.forEach((value, tag) => { const [chain, resi] = tag.split('|'); if (!byChain.has(chain)) byChain.set(chain, []); byChain.get(chain).push({ resi: Number(resi), value }); });
+    const chains = [...byChain.keys()].sort(compareChains).slice(0, 12);
+    if (!chains.length) return null;
+    const width = 1200; const left = 72; const right = 30; const top = 64; const rowHeight = 170; const gap = 40; const bottom = 40;
+    const height = top + chains.length * rowHeight + (chains.length - 1) * gap + bottom;
+    const ink = '#111827'; const muted = '#6b7280'; const grid = '#e5e7eb';
+    const ceiling = Math.max(1, Math.ceil(ensembleSpread.max * 1.05 * 2) / 2);
+    const parts = [];
+    const text = (x, y, value, size, anchor = 'start', weight = 400, fill = ink, extra = '') => '<text x="' + f(x) + '" y="' + f(y) + '" font-family="' + svgFont + '" font-size="' + size + '" font-weight="' + weight + '" text-anchor="' + anchor + '" fill="' + fill + '"' + extra + '>' + svgEscape(value) + '</text>';
+    parts.push('<g id="title">' + text(left, 32, (provenanceValues().title ? provenanceValues().title + ' · ' : '') + 'Per-residue Cα RMSF across ' + ensembleSpread.count + ' models', 20, 'start', 600) + '</g>');
+    parts.push('<g id="bands">');
+    let cursor = width - right; svgMeasure.font = '500 12px ' + svgFont;
+    [...agreementBands].reverse().forEach(([, color, label]) => { const labelWidth = svgMeasure.measureText(label).width; cursor -= labelWidth; parts.push(text(cursor, 34, label, 12, 'start', 500)); cursor -= 18; parts.push('<rect x="' + f(cursor) + '" y="24" width="12" height="12" rx="2" fill="' + color + '"/>'); cursor -= 16; });
+    parts.push('</g>');
+    const plotWidth = width - left - right;
+    chains.forEach((chain, index) => {
+      const y0 = top + index * (rowHeight + gap);
+      const residues = byChain.get(chain).sort((a, b) => a.resi - b.resi);
+      const minResi = residues[0].resi; const maxResi = residues[residues.length - 1].resi;
+      const x = resi => left + (maxResi === minResi ? 0 : (resi - minResi) / (maxResi - minResi) * plotWidth);
+      const y = value => y0 + rowHeight - Math.min(ceiling, value) / ceiling * rowHeight;
+      parts.push('<g id="chain-' + svgEscape(chain || 'none') + '">');
+      let low = 0;
+      agreementBands.forEach(([limit, color]) => { const high = Math.min(ceiling, limit); if (high > low) parts.push('<rect x="' + f(left) + '" y="' + f(y(high)) + '" width="' + f(plotWidth) + '" height="' + f(y(low) - y(high)) + '" fill="' + color + '" fill-opacity="0.12"/>'); low = high; });
+      const tickStep = ceiling <= 2 ? 0.5 : ceiling <= 5 ? 1 : ceiling <= 12 ? 2 : 5;
+      for (let value = 0; value <= ceiling + 1e-9; value += tickStep) {
+        parts.push('<line x1="' + f(left) + '" x2="' + f(left + plotWidth) + '" y1="' + f(y(value)) + '" y2="' + f(y(value)) + '" stroke="' + grid + '"/>');
+        parts.push(text(left - 8, y(value) + 4, String(Math.round(value * 10) / 10), 11, 'end', 400, muted));
+      }
+      const step = [10, 20, 25, 50, 100, 200, 250, 500, 1000].find(candidate => (maxResi - minResi) / candidate <= 14) || 1000;
+      for (let resi = Math.ceil(minResi / step) * step; resi <= maxResi; resi += step) {
+        parts.push('<line x1="' + f(x(resi)) + '" x2="' + f(x(resi)) + '" y1="' + f(y0 + rowHeight) + '" y2="' + f(y0 + rowHeight + 4) + '" stroke="' + muted + '"/>');
+        parts.push(text(x(resi), y0 + rowHeight + 17, String(resi), 11, 'middle', 400, muted));
+      }
+      parts.push('<rect x="' + f(left) + '" y="' + f(y0) + '" width="' + f(plotWidth) + '" height="' + f(rowHeight) + '" fill="none" stroke="' + muted + '"/>');
+      parts.push(text(left, y0 - 8, chain ? 'Chain ' + chain : 'Chain —', 13, 'start', 600));
+      parts.push(text(left - 52, y0 + rowHeight / 2, 'RMSF (Å)', 11, 'middle', 400, muted, ' transform="rotate(-90 ' + f(left - 52) + ' ' + f(y0 + rowHeight / 2) + ')"'));
+      const d = residues.map((item, position) => (position ? 'L' : 'M') + f(x(item.resi)) + ' ' + f(y(item.value))).join(' ');
+      parts.push('<path d="' + d + ' L' + f(x(maxResi)) + ' ' + f(y(0)) + ' L' + f(x(minResi)) + ' ' + f(y(0)) + ' Z" fill="' + ink + '" fill-opacity="0.08"/>');
+      parts.push('<path d="' + d + '" fill="none" stroke="' + ink + '" stroke-width="1.8" stroke-linejoin="round"/>');
+      parts.push('</g>');
+    });
+    return { svg: svgDocument(width, height, '#ffffff', parts.join('\n')), width, height };
+  }
+  function downloadRmsfProfileSvg() {
+    const profile = rmsfProfileSvg();
+    if (!profile) { announce('Align two or more models first (Compare → Align visible) to plot the RMSF', 'error'); return; }
+    downloadBlob(profile.svg, 'image/svg+xml', 'rmsf-profile.svg'); updateStatus('RMSF profile SVG downloaded');
+  }
+  async function downloadRmsfProfilePng() {
+    const profile = rmsfProfileSvg();
+    if (!profile) { announce('Align two or more models first (Compare → Align visible) to plot the RMSF', 'error'); return; }
+    const plan = exportDimensions(); const scale = Math.max(1, plan.width / profile.width);
+    const image = await loadImage('data:image/svg+xml;charset=utf-8,' + encodeURIComponent(profile.svg));
+    const canvas = document.createElement('canvas'); canvas.width = Math.round(profile.width * scale); canvas.height = Math.round(profile.height * scale);
+    canvas.getContext('2d').drawImage(image, 0, 0, canvas.width, canvas.height);
+    downloadBlob(await pngWithDpi(canvas.toDataURL('image/png'), plan.dpi), 'image/png', exportFileName('rmsf-profile', plan, 'png'));
+    updateStatus('RMSF profile PNG downloaded · ' + canvas.width + ' × ' + canvas.height + (plan.dpi ? ' at ' + plan.dpi + ' dpi' : ''));
+  }
+
   function downloadRmsfCsv() {
     if (!ensembleSpread) return;
     const rows = [['chain', 'resi', 'models', 'ca_rmsf_angstrom']];
@@ -4869,13 +4939,14 @@ html>body{padding:0}</style>
       profile: shown.some(item => item.scores.length),
       contacts: Boolean(contactResult && entry && contactResult.entryId === entry.id && contactResult.pairs.size),
       architecture: Boolean(entry && architectureModel(entry)),
-      matrix: Boolean(rmsdMatrix && rmsdMatrix.names.length >= 2)
+      matrix: Boolean(rmsdMatrix && rmsdMatrix.names.length >= 2),
+      rmsf: Boolean(ensembleSpread && ensembleSpread.values.size)
     };
   }
 
   function renderCompositeControls() {
     const available = compositeAvailability();
-    [['#gpv-composite-pae', available.pae], ['#gpv-composite-profile', available.profile], ['#gpv-composite-contacts', available.contacts], ['#gpv-composite-architecture', available.architecture], ['#gpv-composite-matrix', available.matrix]].forEach(([selector, ok]) => {
+    [['#gpv-composite-pae', available.pae], ['#gpv-composite-profile', available.profile], ['#gpv-composite-contacts', available.contacts], ['#gpv-composite-architecture', available.architecture], ['#gpv-composite-matrix', available.matrix], ['#gpv-composite-rmsf', available.rmsf]].forEach(([selector, ok]) => {
       const control = root.querySelector(selector); control.disabled = !ok; control.closest('label').title = ok ? '' : 'Not available for the current model';
     });
     root.querySelector('#gpv-composite').disabled = structures.length === 0;
@@ -4916,7 +4987,8 @@ html>body{padding:0}</style>
       profile: available.profile && root.querySelector('#gpv-composite-profile').checked,
       contacts: available.contacts && root.querySelector('#gpv-composite-contacts').checked,
       architecture: available.architecture && root.querySelector('#gpv-composite-architecture').checked,
-      matrix: available.matrix && root.querySelector('#gpv-composite-matrix').checked
+      matrix: available.matrix && root.querySelector('#gpv-composite-matrix').checked,
+      rmsf: available.rmsf && root.querySelector('#gpv-composite-rmsf').checked
     };
     const columns = Math.max(1, Math.min(3, Number(root.querySelector('#gpv-composite-columns').value) || 2));
     const count = 1 + Object.values(wanted).filter(Boolean).length;
@@ -4939,6 +5011,10 @@ html>body{padding:0}</style>
         if (profile) { const image = await loadImage('data:image/svg+xml;charset=utf-8,' + encodeURIComponent(profile.svg)); panels.push({ image, caption: 'Per-residue pLDDT' + (displayedEntries().filter(item => item.scores.length).length > 1 ? ' of the displayed models' : ''), aspect: profile.width / profile.height }); }
       }
       if (wanted.contacts) { const canvas = document.createElement('canvas'); drawContactMap(canvas, true, Math.max(1, Math.round(cell / 600 * 2))); panels.push({ image: canvas, caption: 'Contacts between chains ' + (contactResult.chainA || '—') + ' and ' + (contactResult.chainB || '—') + ' within ' + contactResult.cutoff + ' Å' }); }
+      if (wanted.rmsf) {
+        const profile = rmsfProfileSvg();
+        if (profile) { const image = await loadImage('data:image/svg+xml;charset=utf-8,' + encodeURIComponent(profile.svg)); panels.push({ image, caption: 'Per-residue Cα RMSF across ' + ensembleSpread.count + ' aligned models' }); }
+      }
       if (wanted.matrix) {
         const scale = figureScale(panelPlan); const pad = Math.round(16 * scale); const side = Math.min(cell, cellHeight) - pad * 2;
         const canvasM = document.createElement('canvas'); const metrics = rmsdMatrixMetrics(side, scale); canvasM.width = metrics.width + pad * 2; canvasM.height = metrics.height + pad * 2;
@@ -5981,6 +6057,7 @@ html>body{padding:0}</style>
     wrap.hidden = alignmentResults.length === 0;
     root.querySelector('#gpv-alignment-csv').disabled = alignmentResults.length === 0;
     root.querySelector('#gpv-rmsf-csv').disabled = !ensembleSpread;
+    root.querySelector('#gpv-rmsf-svg').disabled = !ensembleSpread; root.querySelector('#gpv-rmsf-png').disabled = !ensembleSpread;
     const body = root.querySelector('#gpv-alignment-results');
     body.replaceChildren();
     alignmentResults.forEach(result => {
@@ -9241,6 +9318,8 @@ applyBackground();
   root.querySelector('#gpv-report-offline').addEventListener('change', updateReportEstimate);
   root.querySelector('#gpv-confidence-csv').addEventListener('click', downloadConfidenceCsv);
   root.querySelector('#gpv-profile-svg').addEventListener('click', downloadProfileSvg);
+  root.querySelector('#gpv-rmsf-svg').addEventListener('click', downloadRmsfProfileSvg);
+  root.querySelector('#gpv-rmsf-png').addEventListener('click', () => { downloadRmsfProfilePng().catch(error => announce('Could not render the RMSF profile: ' + error.message, 'error')); });
   root.querySelector('#gpv-profile-png').addEventListener('click', () => { downloadProfilePng().catch(error => announce('Could not render the profile: ' + error.message, 'error')); });
   root.querySelector('#gpv-hide-below').addEventListener('change', () => { applyStyle(); updateStatus(hideBelow() ? 'Residues with pLDDT below ' + hideBelow() + ' hidden in the viewer, panels and exports' : 'Every residue shown'); });
   root.querySelector('#gpv-color-mode').addEventListener('change', () => { if (root.querySelector('#gpv-color-mode').value === 'deviation' && !alignmentResults.length) announce('Deviation colouring stays grey until you align: Compare → Align visible'); });

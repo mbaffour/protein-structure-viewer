@@ -493,6 +493,7 @@
     wrap.hidden = alignmentResults.length === 0;
     root.querySelector('#gpv-alignment-csv').disabled = alignmentResults.length === 0;
     root.querySelector('#gpv-rmsf-csv').disabled = !ensembleSpread;
+    root.querySelector('#gpv-rmsf-svg').disabled = !ensembleSpread; root.querySelector('#gpv-rmsf-png').disabled = !ensembleSpread;
     const body = root.querySelector('#gpv-alignment-results');
     body.replaceChildren();
     alignmentResults.forEach(result => {

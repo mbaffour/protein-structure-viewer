@@ -661,6 +661,21 @@ await step('the pairwise RMSD matrix agrees with the alignment table and exports
     console.log('       ' + n + ' × ' + n + ' · ' + Math.min(...off).toFixed(2) + ' to ' + Math.max(...off).toFixed(2) + ' Å · row of ' + reference.replace(/\.pdb$/, '') + ' matches the alignment table · medoid ' + medoid.name.replace(/\.pdb$/, '') + ' (mean ' + medoid.mean.toFixed(2) + ' Å) used as reference');
   } finally { await tab('models'); await page.selectOption('#gpv-view-mode', viewBefore); await page.waitForTimeout(300); await tab('compare'); }
 });
+await step('the RMSF profile plots one panel per chain with the agreement bands, as SVG, PNG and a composite panel', async () => {
+  await tab('compare');
+  if (await page.locator('#gpv-rmsf-svg').isDisabled()) { await page.click('#gpv-align'); await page.waitForTimeout(2500); }
+  if (await page.locator('#gpv-rmsf-svg').isDisabled()) throw new Error('RMSF profile buttons stayed disabled after aligning');
+  let download = page.waitForEvent('download', { timeout: 120000 }); await page.click('#gpv-rmsf-svg');
+  const svg = await readFile(await (await download).path(), 'utf8');
+  const chains = (svg.match(/<g id="chain-/g) || []).length; const traces = (svg.match(/stroke-width="1.8"/g) || []).length;
+  if (chains !== 2 || traces !== 2 || !/Per-residue Cα RMSF across \d+ models/.test(svg) || !/RMSF \(Å\)/.test(svg) || !/&lt;0\.5 Å/.test(svg)) throw new Error('RMSF SVG: ' + chains + ' chains, ' + traces + ' traces');
+  download = page.waitForEvent('download', { timeout: 120000 }); await page.click('#gpv-rmsf-png');
+  const png = await readFile(await (await download).path()); const width = png.readUInt32BE(16);
+  const expected = Number(((await page.locator('#gpv-export-estimate').textContent()) || '').match(/^(\d+) ×/)[1]);
+  if (width < 1200 || Math.abs(width - Math.max(1200, expected)) > 2) throw new Error('RMSF PNG width ' + width + ' against an estimate of ' + expected);
+  await tab('publish'); if (await page.locator('#gpv-composite-rmsf').isDisabled()) throw new Error('the composite figure does not offer the RMSF panel'); await tab('compare');
+  console.log('       2 chains · trace per chain · PNG ' + width + ' px wide · composite panel offered');
+});
 await step('the model legend drops the shared part of long run file names', async () => {
   const cases = await page.evaluate(() => {
     const shorten = window.__viewerDebug.distinguishingNames;

@@ -88,6 +88,8 @@ PSV_CHROMIUM=/opt/pw-browsers/chromium/chrome-linux/chrome npm test
   changes the varied column's value, keeps the ordering, and the dataset name, the debug hook and the methods text say
   "unweighted"; switching them back on puts "Henikoff & Henikoff, 1994" in the methods text.
 - PAE domains: the panel state and the figure legend call the segmentation a heuristic.
+- RMSF profile: after aligning, the SVG has one chain group and one trace per fixture chain, the title, the axis label
+  and the band legend; the PNG is at least the output width; the composite offers the panel.
 - Medoid: it is one of the two fixture models that share a backbone, its mean is the smallest, exactly one row carries
   the star, and Use medoid as reference sets the reference, re-superposes the others onto it and emphasises it.
 - Pairwise RMSD matrix: symmetric with a zero diagonal, the reference's row agrees with the alignment table to 0.005 Å,

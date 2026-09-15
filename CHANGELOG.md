@@ -2,6 +2,14 @@
 
 All notable changes to this project are recorded here.
 
+## 2.34.0
+
+- **RMSF profile.** After *Align visible*, **RMSF profile SVG** and **PNG** in Compare plot the per-residue Cα spread
+  across the aligned models — one panel per chain, the agreement bands (<0.5, 0.5–1, 1–2, 2–4, ≥4 Å) as stripes behind
+  the trace, residue ticks, the same layout as the pLDDT profile — as editable vector graphics or as a PNG at the output
+  width and resolution. The plot is also a panel of the composite figure, so an ensemble figure can carry the overlay,
+  the matrix and the per-residue agreement together.
+
 ## 2.33.0
 
 - **The medoid, and one click to use it.** The pairwise RMSD table gained a **Mean** column and marks with ★ the medoid:
