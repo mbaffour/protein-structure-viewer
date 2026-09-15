@@ -2,6 +2,28 @@
 
 All notable changes to this project are recorded here.
 
+## 2.39.0
+
+- **Compare a whole set of positions at once.** A binding site or an interface is several residues, so
+  Annotate takes the set: type it into **Positions** — `A:20-30, A:45`, or plain numbers and ranges for
+  the chain of the selected residue (or the only chain the models have) — and press **Compare these
+  positions**. Every position in the list is compared the way one position always was: the side chain
+  drawn in every shown model, a label there naming that model's own residue, one undo step for the whole
+  press, and one line saying what happened — `6 positions compared · 2 skipped (found in fewer than two of the shown models)`. A
+  position that only one shown model carries is skipped and counted rather than guessed at. Up to 40
+  positions per set.
+- **The effect table covers every compared site.** The neighbourhood table now opens with one row per
+  compared site, in the order they were given, followed by the *union* of their neighbourhoods — every
+  residue with a heavy atom within the cutoff of any site, each counted once, and never a site counted
+  as somebody else's neighbour. Its caption says how many sites and how many neighbours; the summary
+  adds the number of sites and, with several, reports the site movement as the mean across them. The
+  readout becomes one line for the set — `4 positions compared · A:20, A:21, A:24, A:45 · sites moved
+  3.10 Å on average in model_3 · 18 neighbours within 5 Å moved 2.40 Å` — and the figure legend and
+  methods text name the whole set and define the neighbourhood as the union.
+- **Make site figure follows the set.** With several positions compared the close-up frames all of them
+  and their shared neighbourhood, the panel is named **Sites** with the set readout as its caption, and
+  the overview reads *Superposed models, 4 sites marked*. With one position compared nothing changes.
+
 ## 2.38.1
 
 - **Fixed:** the site close-up frames the site with its neighbourhood (every residue within the effect

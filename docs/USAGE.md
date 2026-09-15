@@ -489,7 +489,7 @@ structure as the camera turns rather than sliding across the screen, and it trav
 sessions and share links and is undone with ⌘Z. **Reset** in the label's row puts it back on its
 residue; the arrow buttons in an annotation's row nudge its text by small steps for fine work.
 
-**Comparing one position across models.** Two runs of the same protein — a wild type and a point
+**Comparing positions across models.** Two runs of the same protein — a wild type and a point
 mutant — are the usual reason for loading two models of the same length. Select the residue in
 question (click it, pick it from the sequence strip, or type it into **Go to**) and press **Compare
 this position** in Annotate. In every shown model the viewer draws the side chain at that position as
@@ -529,6 +529,25 @@ links. The figure legend gains the sentence *After superposition the Cα at A:15
 model_mutant, and the 7 residues within 5 Å moved 0.31 Å on average*, and the methods text states the
 neighbourhood rule.
 
+**A whole set of positions at once.** A binding site, an interface or a loop is several residues, and
+comparing them one press at a time leaves an effect table about the last one rather than about the site.
+Type the set into **Positions** — `A:20-30, A:45`, `K:12`, or bare numbers and ranges like `20-30, 45`,
+which take the chain of the selected residue or the only chain the models have — and press **Compare
+these positions**. Spacing is free and chain names are matched case-insensitively against the chains the
+models carry. Each position is then compared exactly as a single one is: the side chain drawn in every
+shown model, a label naming that model's own residue, and the position added to the compared set; a
+position fewer than two shown models carry is skipped and counted, so the announcement reads
+`6 positions compared · 2 skipped (found in fewer than two of the shown models)`. The whole press is one undo step, and a set is
+capped at 40 positions. The effect table then covers the set: one row per compared site first, in the
+order they were given, then the **union** of their neighbourhoods — every residue with a heavy atom
+within the cutoff of *any* site, deduped, with a residue that is itself a site never listed as a
+neighbour — and a caption saying how many sites and how many neighbours. With several sites the
+readout is one line for the set, `4 positions compared · A:20, A:21, A:24, A:45 · sites moved 3.10 Å on
+average in model_3 · 18 neighbours within 5 Å moved 2.40 Å` (the list is cut with `…` past six), the
+site movement reported per model is the mean across the sites, and the legend and methods text name the
+whole set and define the neighbourhood as the union. **Highlight neighbourhood** and **Download effect
+CSV** work on the set unchanged — the CSV's `role` column reads `site` for every one of them.
+
 **Make site figure.** With a position compared, one press builds the whole figure. **Make site figure**
 saves two panels: **Overview**, every shown model solid with the superposition in frame and the site
 marked, and **Site A:15**, the camera on the compared residue in the reference model, backed off a
@@ -543,8 +562,9 @@ Both panels are ticked as the *only* two panels of the figure builder, in two co
 captions and a legend on each, and the Publish tab opens at the builder, so the next press is
 **Download figure PNG** or **Download figure SVG**. The screen goes back to what it was — solid, never
 left faded — the panels keep their own emphasis, and the whole press is a single ⌘Z. If several
-positions are compared, the figure is built around the first of them; compare the next one on its own
-and press again for its figure.
+positions are compared the figure covers all of them: the close-up frames every site and their shared
+neighbourhood, the panel is named **Sites** and captioned with the set readout, and the overview reads
+*Superposed models, 4 sites marked*.
 
 **Legend position.** The **Legend position** control in Publish decides where the colour legend is drawn
 on exports: any of the four corners, or stacked as a column down the **left** or **right** side, which

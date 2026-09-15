@@ -2,8 +2,9 @@
      The figure a mutation study ends up drawing is always the same two panels: an overview of the
      superposed models so the reader knows where the site is, and a close-up of the site itself with
      the side chains, each model's own residue named on it, and the wild type solid against the
-     mutants faded. Make site figure builds both from the position that was just compared — camera,
-     colouring, emphasis and captions — ticks them as the only two panels of the figure builder and
+     mutants faded. Make site figure builds both from the positions that have been compared — one of
+     them, or the whole set of a binding site — camera, colouring, emphasis and captions, ticks them
+     as the only two panels of the figure builder and
      opens Publish at it, so the press between "what did this mutation do?" and a figure file is
      Download figure PNG. Everything it does is one undo step. */
 
@@ -24,22 +25,28 @@
     control.dispatchEvent(new Event('change', { bubbles: true }));
   }
 
-  /* The residues the close-up frames: the site and every residue of the reference model with a heavy
-     atom within the effect cutoff of it. Framing the lone residue is what fills a large assembly's
-     panel with whatever ribbon happens to lie in front of the site; its neighbourhood is the context
-     that makes the close-up readable, and it is the same neighbourhood the effect table measures.
-     Those rows are reused when a superposition has been measured at this position; without one the
-     neighbourhood is found the same way, straight from the reference's own heavy atoms. */
+  /* The residues the close-up frames: the compared sites — one of them, or the whole set — and every
+     residue of the reference model with a heavy atom within the effect cutoff of any of them.
+     Framing the lone residue is what fills a large assembly's panel with whatever ribbon happens to
+     lie in front of the site; its neighbourhood is the context that makes the close-up readable, and
+     it is the same neighbourhood the effect table measures. Those rows are reused when a
+     superposition has been measured at these positions; without one the neighbourhood is found the
+     same way, straight from the reference's own heavy atoms. */
   function siteFigureNeighbourhood(reference, spot) {
-    const site = { chain: spot.chain || '', resi: spot.resi };
-    if (positionEffect && positionEffect.spot.chain === site.chain && positionEffect.spot.resi === site.resi && positionEffect.rows.length) {
+    const sites = (Array.isArray(spot) ? spot : [spot]).map(item => ({ chain: item.chain || '', resi: item.resi }));
+    const keys = new Set(sites.map(site => site.chain + '|' + site.resi));
+    const measured = positionEffect ? positionEffect.spots || [positionEffect.spot] : [];
+    /* The measured rows are reused only when the table is about exactly these sites; a table left
+       over from another position would frame the wrong part of the model. */
+    if (positionEffect && positionEffect.rows.length && measured.length === sites.length
+      && measured.every(item => keys.has((item.chain || '') + '|' + item.resi))) {
       return positionEffect.rows.map(row => ({ chain: row.chain || '', resi: row.resi }));
     }
     const cutoff = positionCutoff();
     const heavy = heavyAtoms(reference).filter(atom => !atom.hetflag);
-    const isSiteAtom = atom => (atom.chain || '') === site.chain && atom.resi === site.resi;
+    const isSiteAtom = atom => keys.has((atom.chain || '') + '|' + atom.resi);
     const targets = heavy.filter(isSiteAtom);
-    if (!targets.length) return [site];
+    if (!targets.length) return sites;
     const candidates = heavy.filter(atom => !isSiteAtom(atom));
     const grid = spatialGrid(candidates, cutoff);
     const limit = cutoff * cutoff;
@@ -50,7 +57,7 @@
       const key = (atom.chain || '') + '|' + atom.resi;
       if (!found.has(key)) found.set(key, { chain: atom.chain || '', resi: atom.resi });
     }));
-    return [site, ...found.values()];
+    return [...sites, ...found.values()];
   }
 
   /* The neighbourhood as one 3Dmol selection on the reference model: one sub-selection per chain,
@@ -74,9 +81,11 @@
     if (shown.length < 2) { announce('Show at least two models to make a site figure', 'error'); return; }
     const reference = siteFigureReference();
     if (!reference) { announce('Show at least two models to make a site figure', 'error'); return; }
-    /* Several compared positions make several figures; this press builds the first one. */
-    const spot = spotlightResidues[0];
-    const tag = positionTag(spot);
+    /* Every compared position is part of the same figure: a binding site is several residues, and a
+       panel of one of them with the rest out of frame answers nothing. */
+    const spots = spotlightResidues.map(item => ({ chain: item.chain || '', resi: item.resi }));
+    const single = spots.length === 1;
+    const tag = positionTag(spots[0]);
     const restore = captureViewState();
     remember('site figure');
     /* Per-model colouring is what makes the two panels readable: one colour per model, named in the
@@ -87,7 +96,7 @@
     /* Panel A — the overview: every shown model solid, the whole superposition in frame. */
     shown.forEach(entry => { entry.faded = false; });
     applyStyle(); fitPrimary(); viewer.render();
-    const overview = captureViewState('Overview', 'Superposed models, site ' + tag + ' marked');
+    const overview = captureViewState('Overview', single ? 'Superposed models, site ' + tag + ' marked' : 'Superposed models, ' + spots.length + ' sites marked');
     overview.inFigure = true;
 
     /* Panel B — the close-up: the reference solid, the others faded behind it, the camera on the
@@ -97,10 +106,10 @@
        the fold in behind a site that still fills the frame. */
     shown.forEach(entry => { entry.faded = entry !== reference; });
     applyStyle();
-    viewer.zoomTo(siteFigureSelection(reference, spot));
+    viewer.zoomTo(siteFigureSelection(reference, spots));
     if (typeof viewer.zoom === 'function') viewer.zoom(0.8);
     viewer.render();
-    const closeUp = captureViewState('Site ' + tag, String(positionReadout(spot) || tag).slice(0, 200));
+    const closeUp = captureViewState(single ? 'Site ' + tag : 'Sites', String((single ? positionReadout(spots[0]) : positionSetReadout()) || tag).slice(0, 200));
     closeUp.inFigure = true;
 
     /* Exactly these two panels, side by side, lettered and captioned. */

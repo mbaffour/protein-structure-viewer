@@ -173,6 +173,7 @@
     pendingScene = null;
     root.querySelector('#gpv-residue').textContent = 'Click any atom in the viewer to inspect it.';
     root.querySelector('#gpv-label-text').value = '';
+    root.querySelector('#gpv-position-set').value = '';
     root.querySelector('#gpv-add-label').disabled = true;
     root.querySelector('#gpv-position-compare').disabled = true;
     root.querySelector('#gpv-all-labels').checked = false;

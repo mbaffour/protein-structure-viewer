@@ -114,7 +114,12 @@
     };
     if (colourNotes[mode]) sentences.push(colourNotes[mode]);
     if (spotlightResidues.length) sentences.push('Position' + (spotlightResidues.length === 1 ? ' ' : 's ') + spotlightResidues.map(positionTag).join(', ') + ' w' + (spotlightResidues.length === 1 ? 'as' : 'ere') + ' compared across the shown models by ' + (alignmentResults.length ? 'the Cα pairing of the superposition, so each model contributes the residue the alignment places opposite the reference residue whatever its number' : 'matching chain and residue number, not by sequence alignment; an insertion or deletion between two predictions therefore shifts the position compared') + '.');
-    if (positionEffect) sentences.push('The neighbourhood of ' + positionTag(positionEffect.spot) + ' was defined as every residue of the reference model (' + positionEffect.reference + ') with any heavy atom within ' + positionEffect.cutoff + ' Å of any heavy atom of that residue, hydrogens excluded (' + positionEffect.summary.neighbourCount + ' residue' + (positionEffect.summary.neighbourCount === 1 ? '' : 's') + '); the deviation reported for the site and for each neighbour is the distance between paired Cα atoms after the superposition described above.');
+    if (positionEffect) {
+      /* One neighbourhood sentence however many sites the table covers: with a set it is the union of
+         their neighbourhoods, which is what the methods have to say to be reproducible. */
+      const sites = positionEffect.spots || [positionEffect.spot];
+      sentences.push('The neighbourhood of ' + (sites.length === 1 ? positionTag(sites[0]) : 'the ' + sites.length + ' compared positions (' + sites.map(positionTag).join(', ') + ')') + ' was defined as every residue of the reference model (' + positionEffect.reference + ') with any heavy atom within ' + positionEffect.cutoff + ' Å of any heavy atom of ' + (sites.length === 1 ? 'that residue' : 'any of them') + ', hydrogens excluded (' + positionEffect.summary.neighbourCount + ' residue' + (positionEffect.summary.neighbourCount === 1 ? '' : 's') + '); the deviation reported for ' + (sites.length === 1 ? 'the site' : 'each site') + ' and for each neighbour is the distance between paired Cα atoms after the superposition described above.');
+    }
     if (hideBelow()) sentences.push('Residues with pLDDT below ' + hideBelow() + ' were hidden from the figures.');
     const plan = exportDimensions();
     if (plan.mm) sentences.push('Figures were exported at ' + plan.mm + ' mm width and ' + plan.dpi + ' dpi' + (safePaletteOn ? ' using the Okabe–Ito colour-blind-safe palette' : '') + '.');

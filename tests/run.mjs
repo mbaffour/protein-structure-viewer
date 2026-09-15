@@ -1039,6 +1039,87 @@ await step('one position is compared across a wild-type and a mutant model: side
     console.log('       ' + state.trim() + ' · side chains and both labels in the SVG · ' + effect.summary.neighbourCount + ' neighbours within ' + effect.cutoff + ' Å measured, highlighted and exported · site figure: Overview + Site A:15 as panels A and B, PNG ' + figureWidth + ' px wide · cleared');
   } finally { await cleanup(); }
 });
+await step('a set of positions is compared in one press: every site is labelled and one neighbourhood table covers them all', async () => {
+  /* The same wild-type/mutant pair as the step above — a binding site or an interface is several
+     residues, so the set is what the press has to take, not one residue at a time. */
+  const original = (await readFile(join(work, 'model_a.pdb'), 'utf8')).split('\n');
+  const mutated = original.map(line => (/^ATOM/.test(line) && line[21] === 'A' && Number(line.slice(22, 26)) === 15 ? line.slice(0, 17) + 'GLY' + line.slice(20) : line)).join('\n');
+  if (mutated === original.join('\n')) throw new Error('the mutant fixture is identical to model_a — check the PDB columns');
+  const file = join(work, 'model_mutant.pdb'); await writeFile(file, mutated);
+  const startTab = await page.evaluate(() => (document.querySelector('[data-gpv-tab][aria-selected="true"]') || {}).dataset.gpvTab || 'models');
+  const startMode = await page.inputValue('#gpv-view-mode');
+  const startAlignmentMode = await page.inputValue('#gpv-alignment-mode');
+  const cleanup = async () => {
+    await tab('compare');
+    await page.selectOption('#gpv-alignment-mode', startAlignmentMode); await page.waitForTimeout(200);
+    await tab('annotate');
+    await page.fill('#gpv-position-set', '');
+    if (await page.locator('#gpv-position-clear').count()) { await page.click('#gpv-position-clear'); await page.waitForTimeout(300); }
+    await tab('models');
+    const row = page.locator('#gpv-list .gpv-entry', { hasText: 'model_mutant' });
+    if (await row.count()) { await row.first().locator('button:has-text("Remove")').click(); await page.waitForTimeout(400); }
+    await page.click('#gpv-show-all'); await page.waitForTimeout(600);
+    await page.selectOption('#gpv-view-mode', startMode); await page.waitForTimeout(400);
+    await tab(startTab);
+  };
+  try {
+    await tab('models'); await page.setInputFiles('#gpv-files', [file]); await page.waitForTimeout(1800);
+    await page.selectOption('#gpv-view-mode', 'overlay'); await page.waitForTimeout(300);
+    await page.evaluate(labels => {
+      [...document.querySelectorAll('#gpv-list .gpv-entry')].forEach(entry => {
+        const toggle = entry.querySelector('input[type="checkbox"]');
+        const wanted = labels.some(label => entry.textContent.includes(label));
+        if (toggle && toggle.checked !== wanted) toggle.click();
+      });
+    }, ['model_a.pdb', 'model_mutant.pdb']);
+    await page.waitForTimeout(900);
+    /* Identifier mapping for the same reason as the step above: the fixture's two chains are
+       identical poly-alanine, and sequence matching is free to pair A with B. */
+    await tab('compare');
+    await page.selectOption('#gpv-alignment-mode', 'identifier'); await page.waitForTimeout(200);
+    await page.evaluate(() => { const select = document.querySelector('#gpv-reference'); const option = [...select.options].find(item => /model_a\.pdb/.test(item.textContent)); select.value = option.value; select.dispatchEvent(new Event('change', { bubbles: true })); });
+    await page.click('#gpv-align'); await page.waitForTimeout(2500);
+    await tab('annotate');
+    const labelsBefore = await page.locator('#gpv-label-list .gpv-entry').count();
+    /* A range and a single position, mixed case and loose spacing — all of it has to be read. */
+    await page.fill('#gpv-position-set', 'a:12-14 , A:20');
+    await page.click('#gpv-position-set-run'); await page.waitForTimeout(1500);
+    const wanted = [['A', 12], ['A', 13], ['A', 14], ['A', 20]];
+    const spots = await page.evaluate(() => window.__viewerDebug.spotlightResidues());
+    if (spots.length !== wanted.length || spots.some((spot, index) => spot.chain !== wanted[index][0] || spot.resi !== wanted[index][1])) {
+      throw new Error('spotlight list: ' + JSON.stringify(spots));
+    }
+    /* One label per model per position, and no residue labelled twice. */
+    const positionLabels = await page.evaluate(() => window.__viewerDebug.labelRecords().filter(label => label.kind === 'position').map(label => label.entryId + '|' + label.chain + '|' + label.resi));
+    if (positionLabels.length !== 8) throw new Error(positionLabels.length + ' position labels, not 8 (4 positions × 2 models)');
+    if (new Set(positionLabels).size !== 8) throw new Error('a position was labelled twice: ' + JSON.stringify(positionLabels));
+    const perModel = [...positionLabels.reduce((counts, key) => counts.set(key.split('|')[0], (counts.get(key.split('|')[0]) || 0) + 1), new Map()).values()];
+    if (perModel.length !== 2 || perModel.some(count => count !== 4)) throw new Error('labels per model: ' + JSON.stringify(perModel));
+    if ((await page.locator('#gpv-label-list .gpv-entry').count()) - labelsBefore !== 8) throw new Error('the label list did not gain 8 rows');
+    /* One table for the set: four site rows, and neighbour rows that are the union of the four
+       neighbourhoods with no site counted as somebody else's neighbour. */
+    const effect = await page.evaluate(() => window.__viewerDebug.positionEffect());
+    if (!effect) throw new Error('no neighbourhood was measured for the set after Align visible');
+    if (effect.summary.siteCount !== wanted.length) throw new Error('summary.siteCount is ' + effect.summary.siteCount + ', not ' + wanted.length);
+    const siteRows = effect.rows.filter(row => row.isSite);
+    if (siteRows.length !== wanted.length) throw new Error(siteRows.length + ' site rows, not ' + wanted.length);
+    if (siteRows.some((row, index) => row.chain !== wanted[index][0] || row.resi !== wanted[index][1])) throw new Error('site rows: ' + JSON.stringify(siteRows.map(row => row.chain + ':' + row.resi)));
+    const siteKeys = new Set(siteRows.map(row => row.chain + '|' + row.resi));
+    const neighbourRows = effect.rows.filter(row => !row.isSite);
+    const both = neighbourRows.filter(row => siteKeys.has(row.chain + '|' + row.resi));
+    if (both.length) throw new Error('a compared site is also a neighbour row: ' + JSON.stringify(both.map(row => row.chain + ':' + row.resi)));
+    if (new Set(neighbourRows.map(row => row.chain + '|' + row.resi)).size !== neighbourRows.length) throw new Error('the union neighbourhood has duplicate rows');
+    if (effect.summary.neighbourCount !== neighbourRows.length) throw new Error('summary.neighbourCount is ' + effect.summary.neighbourCount + ', not the ' + neighbourRows.length + ' neighbour rows');
+    if (!effect.summary.neighbourCount) throw new Error('the four sites have no neighbours within ' + effect.cutoff + ' Å');
+    const state = (await page.locator('#gpv-position-state').textContent()) || '';
+    if (!new RegExp('^' + wanted.length + ' positions compared').test(state.trim())) throw new Error('the readout does not name the set: ' + state);
+    await page.click('#gpv-position-clear'); await page.waitForTimeout(600);
+    if (await page.evaluate(() => window.__viewerDebug.labelRecords().some(label => label.kind === 'position'))) throw new Error('clearing left position labels behind');
+    if ((await page.evaluate(() => window.__viewerDebug.spotlightResidues())).length) throw new Error('clearing left compared positions behind');
+    if ((await page.locator('#gpv-label-list .gpv-entry').count()) !== labelsBefore) throw new Error('clearing removed labels it did not place');
+    console.log('       ' + state.trim() + ' · ' + siteRows.length + ' site rows + ' + neighbourRows.length + ' union neighbours within ' + effect.cutoff + ' Å, none counted twice · 8 labels cleared');
+  } finally { await cleanup(); }
+});
 await step('the sequence strip shows both chains and selects a residue on click', async () => {
   await tab('models'); await page.selectOption('#gpv-view-mode', 'single'); await tab('annotate'); await page.waitForTimeout(500);
   const canvases = page.locator('#gpv-sequence-rows canvas');

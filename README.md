@@ -176,7 +176,7 @@ camera can turn without losing the arrangement; *Reset* in its row puts it back.
 in Publish puts the colour legend in any corner or stacks it down the left or right side of the
 figure, on every export and on each panel of a built figure.
 
-## Comparing one position across models
+## Comparing positions across models
 
 Loaded a wild type and a point mutant from two prediction runs? Select the residue and press
 **Compare this position** in Annotate. Every shown model gets the side chain drawn at that position,
@@ -193,6 +193,13 @@ neighbourhood table of every residue of the reference model with a heavy atom wi
 with the site first, a neighbourhood mean at the bottom, and a one-line summary — *site moved 0.42 Å
 in model_mutant · 7 neighbours within 5 Å moved 0.31 Å on average*. **Highlight neighbourhood** turns
 those residues into a normal highlight selection and **Download effect CSV** exports the table.
+A site is rarely one residue: type a set into **Positions** — `A:20-30, A:45`, or bare numbers and
+ranges for the chain of the selected residue — and **Compare these positions** compares all of them in
+one press (up to 40), skipping and counting any that only one shown model carries. The table then opens
+with one row per site and follows with the union of their neighbourhoods, each residue counted once,
+and the readout becomes one line for the set: *4 positions compared · A:20, A:21, A:24, A:45 · sites
+moved 3.10 Å on average in model_3 · 18 neighbours within 5 Å moved 2.40 Å*.
+
 **Make site figure** then turns the comparison into a finished two-panel figure in one press — an
 overview of the superposed models with the site marked, and a close-up with the side chains, a label per
 model and the wild type solid against the others faded — ticked, lettered and captioned in the figure

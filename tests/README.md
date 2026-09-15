@@ -122,6 +122,12 @@ PSV_CHROMIUM=/opt/pw-browsers/chromium/chrome-linux/chrome npm test
   carries one row per residue plus the summary row, the readout states how far the site moved, Highlight neighbourhood
   adds one `#f97316` selection per chain of the neighbourhood, and the effect CSV starts `"chain","resi","resn","role"`
   with a `site` row for residue 15; clearing removes the table and disables both buttons.
+- A set of positions in one press: the same wild-type/mutant pair is superposed with identifier mapping and
+  `a:12-14 , A:20` typed into Positions; Compare these positions leaves exactly those four spots in the order
+  given, one `position` label per model per position (eight, none repeated, four per model), an effect table
+  whose `summary.siteCount` and site-row count are both four, no residue appearing as both a site row and a
+  neighbour row, `summary.neighbourCount` equal to the number of non-site rows, and a readout opening
+  `4 positions compared`; Clear compared positions takes the eight labels and the four spots back.
 - Make site figure: the same step then presses it and checks that exactly two saved views are added, named
   `Overview` and `Site A:15`, that those two are the only ones ticked into the figure (letters A and B, every
   earlier view `—`), that the Publish tab is open with two panel columns, and that the figure PNG downloads at

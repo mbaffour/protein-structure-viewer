@@ -960,6 +960,8 @@ html>body{padding:0}</style>
     </div>
     <div class="viz-controls">
       <button class="btn" type="button" id="gpv-position-compare" disabled data-tooltip="Show the side chain at the selected position in every shown model, label each model&#39;s residue there, and say whether they differ — positions are matched by the alignment pairing when the models are superposed, otherwise by chain and residue number">Compare this position</button>
+      <label class="form-label">Positions<input class="form-control" id="gpv-position-set" type="text" placeholder="A:20-30, A:45" data-tooltip="A comma-separated set of positions: A:20-30, A:45, or plain numbers like 20-30 and 45, which use the chain of the selected residue (or the only chain the models have)" aria-label="Positions to compare, as a comma-separated list of chains, numbers and ranges"></label>
+      <button class="btn" type="button" id="gpv-position-set-run" data-tooltip="Compare every position in the list across the shown models in one press — a binding site or an interface is several residues — and measure one neighbourhood table covering all of them">Compare these positions</button>
       <label class="form-check form-switch"><input class="form-check-input" id="gpv-position-sticks" type="checkbox" checked><span class="form-check-label">Side chains at compared positions</span></label>
       <label class="form-label">Neighbourhood (Å)<input class="form-control" id="gpv-position-cutoff" type="number" min="3" max="12" step="0.5" value="5" data-tooltip="Residues of the reference model with any heavy atom this close to the compared residue are the neighbourhood whose movement is measured"></label>
       <button class="btn" type="button" id="gpv-position-highlight" disabled data-tooltip="Highlight the neighbourhood of the compared position on the reference model">Highlight neighbourhood</button>
@@ -1290,7 +1292,7 @@ html>body{padding:0}</style>
       </ul>
       <h3>Tips for figures and reviewers</h3>
       <ul>
-        <li><em>Annotate → Compare this position</em> takes the residue you have selected and, in every shown model, draws its side chain, writes that model’s own residue on it (Arg273, His273) and states whether the models agree — the one-press check on a wild-type and mutant pair. Positions are matched by the Cα pairing of the superposition once the models are aligned, and by chain and residue number otherwise. After <em>Align visible</em> the same press also measures what the substitution did: a neighbourhood table of every residue with a heavy atom within the cutoff of the site, each row giving its Cα deviation from the reference in every other model, with <em>Highlight neighbourhood</em> and an effect CSV. <em>Make site figure</em> then turns the comparison into a finished two-panel figure in one press: panel A an overview of the superposed models with the site marked, panel B a close-up of the site with the side chains and each model’s label, the reference model solid and the others faded. Both are saved as views, ticked as the only two panels of the figure builder in two columns, and the Publish tab opens at the builder ready for <em>Download figure PNG</em> or <em>SVG</em>; ⌘Z takes the two panels back.</li>
+        <li><em>Annotate → Compare this position</em> takes the residue you have selected and, in every shown model, draws its side chain, writes that model’s own residue on it (Arg273, His273) and states whether the models agree — the one-press check on a wild-type and mutant pair. Positions are matched by the Cα pairing of the superposition once the models are aligned, and by chain and residue number otherwise. After <em>Align visible</em> the same press also measures what the substitution did: a neighbourhood table of every residue with a heavy atom within the cutoff of the site, each row giving its Cα deviation from the reference in every other model, with <em>Highlight neighbourhood</em> and an effect CSV. A binding site is several residues, so the same block takes a set: type <em>A:20-30, A:45</em> (or bare numbers and ranges, which use the chain of the selected residue) into <em>Positions</em> and press <em>Compare these positions</em> — every one of them is compared in one press and one undo step, up to 40, any that fewer than two shown models carry being skipped and counted, and the table then opens with a row per site followed by the union of their neighbourhoods. <em>Make site figure</em> then turns the comparison into a finished two-panel figure in one press: panel A an overview of the superposed models with the site marked, panel B a close-up of the site with the side chains and each model’s label, the reference model solid and the others faded. Both are saved as views, ticked as the only two panels of the figure builder in two columns, and the Publish tab opens at the builder ready for <em>Download figure PNG</em> or <em>SVG</em>; ⌘Z takes the two panels back.</li>
         <li><em>Publish → Figure format</em> saves the same figure as PNG or TIFF with the resolution in the file, as a PDF whose page is the physical size you chose, or as JPEG or WebP for slides; <em>Download figure SVG</em> stays the vector option with editable text.</li>
         <li>After <em>Align visible</em>, <em>RMSF profile SVG/PNG</em> plots the per-residue Cα spread across the aligned models, one panel per chain with the agreement bands behind the trace, and the same plot is a panel of the composite figure — the ensemble counterpart of the pLDDT profile.</li>
         <li><em>Compare → Pairwise RMSD → Compute matrix</em> superposes every shown model onto every other with the same rules as Align visible and tabulates the Cα RMSDs — which models of an ensemble agree, which is the odd one out — with a mean column, a ★ on the medoid, a CSV, a heat-map PNG or SVG with the values in the cells, and a panel for the composite figure. <em>Use medoid as reference</em> superposes everything onto that model and draws it solid against the rest.</li>
@@ -1666,7 +1668,7 @@ html>body{padding:0}</style>
   let busyDepth = 0;
   let restoreMotion = null;
   const listPageSize = 60;
-  const viewerVersion = '2.38.1';
+  const viewerVersion = '2.39.0';
   const preferenceKey = 'protein-structure-viewer:preferences';
   const themeKey = 'protein-structure-viewer:theme';
   const labelColors = getComputedStyle(root);
@@ -5420,7 +5422,12 @@ html>body{padding:0}</style>
     };
     if (colourNotes[mode]) sentences.push(colourNotes[mode]);
     if (spotlightResidues.length) sentences.push('Position' + (spotlightResidues.length === 1 ? ' ' : 's ') + spotlightResidues.map(positionTag).join(', ') + ' w' + (spotlightResidues.length === 1 ? 'as' : 'ere') + ' compared across the shown models by ' + (alignmentResults.length ? 'the Cα pairing of the superposition, so each model contributes the residue the alignment places opposite the reference residue whatever its number' : 'matching chain and residue number, not by sequence alignment; an insertion or deletion between two predictions therefore shifts the position compared') + '.');
-    if (positionEffect) sentences.push('The neighbourhood of ' + positionTag(positionEffect.spot) + ' was defined as every residue of the reference model (' + positionEffect.reference + ') with any heavy atom within ' + positionEffect.cutoff + ' Å of any heavy atom of that residue, hydrogens excluded (' + positionEffect.summary.neighbourCount + ' residue' + (positionEffect.summary.neighbourCount === 1 ? '' : 's') + '); the deviation reported for the site and for each neighbour is the distance between paired Cα atoms after the superposition described above.');
+    if (positionEffect) {
+      /* One neighbourhood sentence however many sites the table covers: with a set it is the union of
+         their neighbourhoods, which is what the methods have to say to be reproducible. */
+      const sites = positionEffect.spots || [positionEffect.spot];
+      sentences.push('The neighbourhood of ' + (sites.length === 1 ? positionTag(sites[0]) : 'the ' + sites.length + ' compared positions (' + sites.map(positionTag).join(', ') + ')') + ' was defined as every residue of the reference model (' + positionEffect.reference + ') with any heavy atom within ' + positionEffect.cutoff + ' Å of any heavy atom of ' + (sites.length === 1 ? 'that residue' : 'any of them') + ', hydrogens excluded (' + positionEffect.summary.neighbourCount + ' residue' + (positionEffect.summary.neighbourCount === 1 ? '' : 's') + '); the deviation reported for ' + (sites.length === 1 ? 'the site' : 'each site') + ' and for each neighbour is the distance between paired Cα atoms after the superposition described above.');
+    }
     if (hideBelow()) sentences.push('Residues with pLDDT below ' + hideBelow() + ' were hidden from the figures.');
     const plan = exportDimensions();
     if (plan.mm) sentences.push('Figures were exported at ' + plan.mm + ' mm width and ' + plan.dpi + ' dpi' + (safePaletteOn ? ' using the Okabe–Ito colour-blind-safe palette' : '') + '.');
@@ -9132,10 +9139,24 @@ applyBackground();
     return Math.min(12, Math.max(3, Number(root.querySelector('#gpv-position-cutoff').value) || 5));
   }
 
+  /* The sites the measured effect covers, and whether it is the one site being asked about. A set
+     measured over several sites reports a mean, which is not an answer about any one of them, so the
+     single-position readout and legend stay silent unless the table is about that position alone. */
+  const positionEffectSites = () => (positionEffect ? positionEffect.spots || [positionEffect.spot] : []);
+  function positionEffectIsOnly(spot) {
+    const sites = positionEffectSites();
+    return sites.length === 1 && (sites[0].chain || '') === (spot.chain || '') && sites[0].resi === spot.resi;
+  }
+  /* 'A:15', or '4 compared sites' once the table covers a set. */
+  function positionEffectSubject() {
+    const sites = positionEffectSites();
+    return sites.length === 1 ? positionTag(sites[0]) : sites.length + ' compared sites';
+  }
+
   /* What the substitution did, as the tail of the readout line. */
   function positionEffectTail(spot) {
     if (!alignmentResults.length) return ' · Align visible first to measure what moved';
-    if (!positionEffect || positionEffect.spot.chain !== spot.chain || positionEffect.spot.resi !== spot.resi) return '';
+    if (!positionEffect || !positionEffectIsOnly(spot)) return '';
     const parts = [];
     const site = positionEffect.summary.siteDeviation
       .map((value, index) => (Number.isFinite(value) ? value.toFixed(2) + ' Å in ' + positionEffect.models[index] : null))
@@ -9177,9 +9198,13 @@ applyBackground();
     return lead + parts.slice(0, -1).join(', ') + ' and ' + parts[parts.length - 1] + '.';
   }
 
-  /* The effect sentence for the figure legend, when the neighbourhood has been measured. */
+  /* The effect sentence for the figure legend, when the neighbourhood has been measured. A table
+     measured over a set says the same thing about all of its sites at once, so the sentence is
+     written once — for the first of them — rather than repeated under every position. */
   function positionEffectLegend(spot) {
-    if (!positionEffect || positionEffect.spot.chain !== spot.chain || positionEffect.spot.resi !== spot.resi) return null;
+    if (!positionEffect) return null;
+    const sites = positionEffectSites();
+    if ((sites[0].chain || '') !== (spot.chain || '') || sites[0].resi !== spot.resi) return null;
     const site = positionEffect.summary.siteDeviation
       .map((value, index) => (Number.isFinite(value) ? value.toFixed(2) + ' Å in ' + positionEffect.models[index] : null))
       .filter(Boolean);
@@ -9190,24 +9215,36 @@ applyBackground();
       ? ', and the ' + positionEffect.summary.neighbourCount + ' residue' + (positionEffect.summary.neighbourCount === 1 ? '' : 's')
         + ' within ' + positionEffect.cutoff + ' Å moved ' + mean(moved).toFixed(2) + ' Å on average'
       : '';
-    return 'After superposition the Cα at ' + positionTag(spot) + ' moved ' + joined + neighbours + '.';
+    const subject = sites.length === 1
+      ? 'the Cα at ' + positionTag(sites[0]) + ' moved '
+      : 'the Cα atoms at the ' + sites.length + ' compared positions (' + sites.map(positionTag).join(', ') + ') moved on average ';
+    return 'After superposition ' + subject + joined + neighbours + '.';
   }
 
   /* ---- The local effect of a substitution ----
      The neighbourhood is every residue of the reference model with a heavy atom within the cutoff of
      the spotlighted residue; for the site and each of those neighbours the table reports how far the
      corresponding Cα of every other shown model sits from the reference after the superposition.
-     That is the answer to "what did this mutation do?" in the only terms the models support. */
+     That is the answer to "what did this mutation do?" in the only terms the models support.
+     A binding site or an interface is several residues, so the argument may also be a set of spots:
+     every one of them becomes a site row, and the neighbourhood is the union of theirs, with a
+     residue that is itself a site never counted as somebody else's neighbour. */
   function computePositionEffect(spot) {
+    const asked = (Array.isArray(spot) ? spot : [spot]).map(item => ({ chain: item.chain || '', resi: item.resi }));
+    if (!asked.length) return null;
     const reference = positionReference();
     if (!reference) return null;
     const others = displayedEntries().filter(entry => entry.model && entry !== reference);
     if (!others.length) return null;
-    const site = positionAtomIn(reference, spot.chain, spot.resi, null);
-    if (!site) return null;
+    /* A position the reference itself does not carry has nothing to measure from and is dropped, so
+       spots and site rows describe the same residues in the same order. */
+    const sites = asked.map(item => ({ spot: item, atom: positionAtomIn(reference, item.chain, item.resi, null) })).filter(item => item.atom);
+    if (!sites.length) return null;
+    const site = sites[0].atom;
     const cutoff = positionCutoff();
     const heavy = heavyAtoms(reference).filter(atom => !atom.hetflag);
-    const isSiteAtom = atom => (atom.chain || '') === (site.chain || '') && atom.resi === site.resi;
+    const siteTags = new Set(sites.map(item => residueTag(item.atom)));
+    const isSiteAtom = atom => siteTags.has(residueTag(atom));
     const siteAtoms = heavy.filter(isSiteAtom);
     if (!siteAtoms.length) return null;
     const candidates = heavy.filter(atom => !isSiteAtom(atom));
@@ -9235,18 +9272,26 @@ applyBackground();
     const rank = row => (row.mean === null ? -1 : row.mean);
     const neighbours = [...found.values()].map(atom => rowFor(atom, false))
       .sort((a, b) => rank(b) - rank(a) || compareChains(a.chain, b.chain) || a.resi - b.resi);
+    const siteRows = sites.map(item => rowFor(item.atom, true));
+    const siteDeviations = siteRows.map(row => row.deviations);
+    const acrossModels = values => others.map((entry, index) => {
+      const finite = values.map(row => row[index]).filter(Number.isFinite);
+      return finite.length ? mean(finite) : null;
+    });
     const summary = {
-      siteDeviation: deviationsOf(site),
-      neighbourMean: others.map((entry, index) => {
-        const values = neighbours.map(row => row.deviations[index]).filter(Number.isFinite);
-        return values.length ? mean(values) : null;
-      }),
+      siteCount: sites.length,
+      siteDeviations,
+      /* One site keeps its own distances; several report the mean across them, which is what the
+         readout and the legend can honestly say about a set. */
+      siteDeviation: sites.length === 1 ? deviationsOf(site) : acrossModels(siteDeviations),
+      neighbourMean: acrossModels(neighbours.map(row => row.deviations)),
       neighbourCount: neighbours.length
     };
     return {
-      spot: { chain: spot.chain, resi: spot.resi }, cutoff,
+      spots: sites.map(item => ({ chain: item.spot.chain, resi: item.spot.resi })),
+      spot: { chain: sites[0].spot.chain, resi: sites[0].spot.resi }, cutoff,
       reference: allNames[0], models: allNames.slice(1),
-      rows: [rowFor(site, true), ...neighbours], summary
+      rows: [...siteRows, ...neighbours], summary
     };
   }
 
@@ -9259,6 +9304,18 @@ applyBackground();
     root.querySelector('#gpv-position-csv').disabled = !positionEffect;
     wrap.hidden = !positionEffect;
     if (!positionEffect) return;
+    /* What the table is of: a set makes "the compared position" wrong, and the union count is the
+       only honest way to read the neighbour rows once several sites share them. */
+    const table = wrap.querySelector('table');
+    const sites = positionEffectSites();
+    const caption = 'Effect of ' + sites.length + ' compared position' + (sites.length === 1 ? ' ' + positionTag(sites[0]) : 's')
+      + ' · ' + positionEffect.summary.neighbourCount + ' neighbour' + (positionEffect.summary.neighbourCount === 1 ? '' : 's') + ' within ' + positionEffect.cutoff + ' Å';
+    if (table) {
+      let heading = table.querySelector('caption');
+      if (!heading) { heading = document.createElement('caption'); heading.className = 'text-muted text-small'; heading.style.textAlign = 'left'; table.prepend(heading); }
+      heading.textContent = caption;
+      table.setAttribute('aria-label', caption);
+    }
     const headRow = document.createElement('tr');
     const corner = document.createElement('th'); corner.textContent = 'Residue'; headRow.append(corner);
     positionEffect.models.forEach(name => {
@@ -9296,7 +9353,7 @@ applyBackground();
     const reference = positionReference();
     if (!reference) { announce('Align visible first — the neighbourhood is measured on the reference model', 'error'); return; }
     const neighbours = positionEffect.rows.filter(row => !row.isSite);
-    if (!neighbours.length) { announce('No residues within ' + positionEffect.cutoff + ' Å of ' + positionTag(positionEffect.spot) + ' to highlight'); return; }
+    if (!neighbours.length) { announce('No residues within ' + positionEffect.cutoff + ' Å of ' + positionEffectSubject() + ' to highlight'); return; }
     remember('neighbourhood');
     const byChain = new Map();
     neighbours.forEach(row => { if (!byChain.has(row.chain)) byChain.set(row.chain, []); byChain.get(row.chain).push(row.resi); });
@@ -9306,7 +9363,7 @@ applyBackground();
     }));
     renderSelectionList(); applyStyle();
     updateStatus(neighbours.length + ' residue' + (neighbours.length === 1 ? '' : 's') + ' within ' + positionEffect.cutoff + ' Å of '
-      + positionTag(positionEffect.spot) + ' highlighted on ' + displayName(reference) + ' · manage it in the Selections list');
+      + positionEffectSubject() + ' highlighted on ' + displayName(reference) + ' · manage it in the Selections list');
   }
 
   function downloadPositionEffectCsv() {
@@ -9319,19 +9376,58 @@ applyBackground();
     announce('Effect CSV downloaded · ' + positionEffect.summary.neighbourCount + ' neighbour' + (positionEffect.summary.neighbourCount === 1 ? '' : 's') + ' within ' + positionEffect.cutoff + ' Å');
   }
 
+  /* A set of compared positions as one line: how many, which ones, and what the superposition says
+     they did. One readout per position would run off the panel — and off the figure caption — as
+     soon as a binding site's worth of them is compared, so the list is cut after six. */
+  function positionSetReadout() {
+    const tags = spotlightResidues.map(positionTag);
+    const parts = [spotlightResidues.length + ' positions compared', tags.length > 6 ? tags.slice(0, 6).join(', ') + ', …' : tags.join(', ')];
+    if (!alignmentResults.length) parts.push('Align visible first to measure what moved');
+    else if (positionEffect) {
+      const sites = positionEffectSites();
+      const average = sites.length > 1 ? ' on average' : '';
+      const moved = positionEffect.summary.siteDeviation
+        .map((value, index) => (Number.isFinite(value) ? value.toFixed(2) + ' Å' + average + ' in ' + positionEffect.models[index] : null))
+        .filter(Boolean);
+      if (moved.length) parts.push((sites.length === spotlightResidues.length ? 'sites' : positionEffectSubject()) + ' moved ' + moved.join(', '));
+      const neighbours = positionEffect.summary.neighbourMean.filter(Number.isFinite);
+      if (positionEffect.summary.neighbourCount && neighbours.length) {
+        parts.push(positionEffect.summary.neighbourCount + ' neighbours within ' + positionEffect.cutoff + ' Å moved ' + mean(neighbours).toFixed(2) + ' Å');
+      }
+    }
+    return parts.join(' · ');
+  }
+
   function renderPositionState(message = null) {
     const state = root.querySelector('#gpv-position-state');
     const figure = root.querySelector('#gpv-position-figure');
     if (figure) figure.disabled = !spotlightResidues.length;
     if (message) { state.textContent = message; return; }
     if (!spotlightResidues.length) { state.textContent = 'Select a residue, then compare it across the shown models.'; return; }
-    state.textContent = spotlightResidues.map(positionReadout).join('  ·  ');
+    state.textContent = spotlightResidues.length === 1 ? positionReadout(spotlightResidues[0]) : positionSetReadout();
   }
 
   /* Comparing needs a residue to compare and at least two models to compare it in. */
   function updatePositionCompare() {
     const button = root.querySelector('#gpv-position-compare');
     if (button) button.disabled = !selectedResidue || displayedEntries().filter(entry => entry.model).length < 2;
+  }
+
+  /* One position joins the compared set: spotlighted once, and labelled in every model that has it,
+     each model writing its own residue. Shared by the one-position press and the set press so both
+     leave exactly the same records behind. */
+  function addComparedPosition(spot, found) {
+    if (!spotlightResidues.some(item => item.chain === spot.chain && item.resi === spot.resi)) spotlightResidues.push({ chain: spot.chain, resi: spot.resi });
+    found.forEach(({ entry, atom }) => {
+      const key = residueKey(entry.id, atom.chain || '', atom.resi);
+      const record = {
+        entryId: entry.id, chain: atom.chain || '', resi: atom.resi, resn: atom.resn || 'RES', atom: 'CA',
+        x: atom.x, y: atom.y, z: atom.z, key,
+        text: positionResidueName(atom.resn) + atom.resi, color: entry.color, size: 15, kind: 'position'
+      };
+      const index = labelRecords.findIndex(label => label.key === key);
+      if (index >= 0) labelRecords[index] = { ...labelRecords[index], ...record }; else labelRecords.push(record);
+    });
   }
 
   function comparePosition() {
@@ -9345,22 +9441,99 @@ applyBackground();
       return;
     }
     remember('position comparison');
-    if (!spotlightResidues.some(spot => spot.chain === chain && spot.resi === resi)) spotlightResidues.push({ chain, resi });
-    found.forEach(({ entry, atom }) => {
-      const key = residueKey(entry.id, atom.chain || '', atom.resi);
-      const record = {
-        entryId: entry.id, chain: atom.chain || '', resi: atom.resi, resn: atom.resn || 'RES', atom: 'CA',
-        x: atom.x, y: atom.y, z: atom.z, key,
-        text: positionResidueName(atom.resn) + atom.resi, color: entry.color, size: 15, kind: 'position'
-      };
-      const index = labelRecords.findIndex(label => label.key === key);
-      if (index >= 0) labelRecords[index] = { ...labelRecords[index], ...record }; else labelRecords.push(record);
-    });
+    addComparedPosition({ chain, resi }, found);
     positionEffect = alignmentResults.length ? computePositionEffect({ chain, resi }) : null;
     renderPositionEffect();
     renderLabelList(); applyStyle(); rebuildOverlays();
     renderPositionState();
     announce(positionReadout({ chain, resi }));
+  }
+
+  /* ---- A whole set of positions at once ----
+     A binding site, an interface or a loop is several residues, and comparing them one press at a
+     time leaves one effect table per press — an answer about the last residue rather than about the
+     site. The set is typed the way it is written down in a paper. */
+  const positionSetLimit = 40;
+
+  /* The chain a bare number belongs to: the one the selected residue is in, or the single chain the
+     shown models carry. Anything else is genuinely ambiguous, and is said so rather than guessed. */
+  function positionSetChain() {
+    if (selectedResidue && selectedResidue.chain) return selectedResidue.chain;
+    const chains = new Set();
+    displayedEntries().filter(entry => entry.model).forEach(entry => entry.atoms.forEach(atom => { if (!atom.hetflag) chains.add(atom.chain || ''); }));
+    return chains.size === 1 ? [...chains][0] : null;
+  }
+
+  /* "A:20-30, A:45", "20-30, 45", "k:12" → the spots, or the reason the text could not be read.
+     Chain names are matched against the chains the shown models actually carry, case-insensitively,
+     so a lower-case k finds chain K; an unknown name is kept as typed and simply finds nothing. */
+  function parsePositionSet(text) {
+    const value = String(text || '').trim();
+    const hint = 'write them as A:20-30, A:45, or 20-30 for the chain of the selected residue';
+    if (!value) return { error: 'Type the positions to compare — ' + hint };
+    const chains = new Map();
+    displayedEntries().filter(entry => entry.model).forEach(entry => entry.atoms.forEach(atom => {
+      const chain = atom.chain || '';
+      if (!chains.has(chain.toLowerCase())) chains.set(chain.toLowerCase(), chain);
+    }));
+    const spots = [];
+    const seen = new Set();
+    /* Resolved on the first bare number, and only then: a fully qualified list needs no chain and
+       must not be refused for want of one. */
+    let fallback;
+    for (const part of value.split(',')) {
+      const item = part.trim();
+      if (!item) continue;
+      const match = item.match(/^(?:([A-Za-z0-9]{1,4})\s*:\s*)?(-?\d+)(?:\s*-\s*(-?\d+))?$/);
+      if (!match) return { error: 'Could not read "' + item + '" — ' + hint };
+      let chain;
+      if (match[1] !== undefined) chain = chains.has(match[1].toLowerCase()) ? chains.get(match[1].toLowerCase()) : match[1];
+      else {
+        if (fallback === undefined) fallback = positionSetChain();
+        if (fallback === null) return { error: '"' + item + '" does not say which chain — select a residue first, or write the chain: A:' + match[2] };
+        chain = fallback;
+      }
+      const start = Number(match[2]);
+      const end = match[3] === undefined ? start : Number(match[3]);
+      const step = start <= end ? 1 : -1;
+      for (let resi = start; ; resi += step) {
+        const key = chain + '|' + resi;
+        if (!seen.has(key)) { seen.add(key); spots.push({ chain, resi }); }
+        if (spots.length > positionSetLimit) return { error: 'That is more than ' + positionSetLimit + ' positions — compare a smaller set', spots: null };
+        if (resi === end) break;
+      }
+    }
+    if (!spots.length) return { error: 'Type the positions to compare — ' + hint };
+    return { spots };
+  }
+
+  function compareManyPositions() {
+    if (displayedEntries().filter(entry => entry.model).length < 2) { announce('Show at least two models to compare positions across them', 'error'); return; }
+    const parsed = parsePositionSet(root.querySelector('#gpv-position-set').value);
+    if (parsed.error) { announce(parsed.error, 'error'); return; }
+    /* A position only one model has cannot be compared; it is counted and named in the announcement
+       rather than silently dropped, because a mistyped chain looks exactly like a real gap. */
+    const compared = [];
+    let skipped = 0;
+    parsed.spots.forEach(spot => {
+      const found = positionAtoms(spot.chain, spot.resi);
+      if (found.length < 2) { skipped += 1; return; }
+      compared.push({ spot, found });
+    });
+    if (!compared.length) {
+      announce('None of those ' + parsed.spots.length + ' positions is in at least two of the shown models · check the chain and the numbering', 'error');
+      return;
+    }
+    remember('position set');
+    compared.forEach(item => addComparedPosition(item.spot, item.found));
+    /* One table for the whole set, and it covers every position compared so far — the site rows and
+       the readout then describe the same residues. */
+    positionEffect = alignmentResults.length ? computePositionEffect(spotlightResidues) : null;
+    renderPositionEffect();
+    renderLabelList(); applyStyle(); rebuildOverlays();
+    renderPositionState();
+    announce(compared.length + ' position' + (compared.length === 1 ? '' : 's') + ' compared'
+      + (skipped ? ' · ' + skipped + ' skipped (found in fewer than two of the shown models)' : ''));
   }
 
   function clearPositions() {
@@ -9375,12 +9548,14 @@ applyBackground();
   }
 
   root.querySelector('#gpv-position-compare').addEventListener('click', comparePosition);
+  root.querySelector('#gpv-position-set-run').addEventListener('click', compareManyPositions);
+  root.querySelector('#gpv-position-set').addEventListener('keydown', event => { if (event.key === 'Enter') { event.preventDefault(); compareManyPositions(); } });
   root.querySelector('#gpv-position-clear').addEventListener('click', clearPositions);
   root.querySelector('#gpv-position-highlight').addEventListener('click', highlightNeighbourhood);
   root.querySelector('#gpv-position-csv').addEventListener('click', downloadPositionEffectCsv);
   root.querySelector('#gpv-position-cutoff').addEventListener('change', () => {
     if (!positionEffect) return;
-    positionEffect = computePositionEffect(positionEffect.spot);
+    positionEffect = computePositionEffect(positionEffectSites());
     renderPositionEffect();
     renderPositionState();
     updateStatus('Neighbourhood measured within ' + positionCutoff() + ' Å');
@@ -9393,8 +9568,9 @@ applyBackground();
      The figure a mutation study ends up drawing is always the same two panels: an overview of the
      superposed models so the reader knows where the site is, and a close-up of the site itself with
      the side chains, each model's own residue named on it, and the wild type solid against the
-     mutants faded. Make site figure builds both from the position that was just compared — camera,
-     colouring, emphasis and captions — ticks them as the only two panels of the figure builder and
+     mutants faded. Make site figure builds both from the positions that have been compared — one of
+     them, or the whole set of a binding site — camera, colouring, emphasis and captions, ticks them
+     as the only two panels of the figure builder and
      opens Publish at it, so the press between "what did this mutation do?" and a figure file is
      Download figure PNG. Everything it does is one undo step. */
 
@@ -9415,22 +9591,28 @@ applyBackground();
     control.dispatchEvent(new Event('change', { bubbles: true }));
   }
 
-  /* The residues the close-up frames: the site and every residue of the reference model with a heavy
-     atom within the effect cutoff of it. Framing the lone residue is what fills a large assembly's
-     panel with whatever ribbon happens to lie in front of the site; its neighbourhood is the context
-     that makes the close-up readable, and it is the same neighbourhood the effect table measures.
-     Those rows are reused when a superposition has been measured at this position; without one the
-     neighbourhood is found the same way, straight from the reference's own heavy atoms. */
+  /* The residues the close-up frames: the compared sites — one of them, or the whole set — and every
+     residue of the reference model with a heavy atom within the effect cutoff of any of them.
+     Framing the lone residue is what fills a large assembly's panel with whatever ribbon happens to
+     lie in front of the site; its neighbourhood is the context that makes the close-up readable, and
+     it is the same neighbourhood the effect table measures. Those rows are reused when a
+     superposition has been measured at these positions; without one the neighbourhood is found the
+     same way, straight from the reference's own heavy atoms. */
   function siteFigureNeighbourhood(reference, spot) {
-    const site = { chain: spot.chain || '', resi: spot.resi };
-    if (positionEffect && positionEffect.spot.chain === site.chain && positionEffect.spot.resi === site.resi && positionEffect.rows.length) {
+    const sites = (Array.isArray(spot) ? spot : [spot]).map(item => ({ chain: item.chain || '', resi: item.resi }));
+    const keys = new Set(sites.map(site => site.chain + '|' + site.resi));
+    const measured = positionEffect ? positionEffect.spots || [positionEffect.spot] : [];
+    /* The measured rows are reused only when the table is about exactly these sites; a table left
+       over from another position would frame the wrong part of the model. */
+    if (positionEffect && positionEffect.rows.length && measured.length === sites.length
+      && measured.every(item => keys.has((item.chain || '') + '|' + item.resi))) {
       return positionEffect.rows.map(row => ({ chain: row.chain || '', resi: row.resi }));
     }
     const cutoff = positionCutoff();
     const heavy = heavyAtoms(reference).filter(atom => !atom.hetflag);
-    const isSiteAtom = atom => (atom.chain || '') === site.chain && atom.resi === site.resi;
+    const isSiteAtom = atom => keys.has((atom.chain || '') + '|' + atom.resi);
     const targets = heavy.filter(isSiteAtom);
-    if (!targets.length) return [site];
+    if (!targets.length) return sites;
     const candidates = heavy.filter(atom => !isSiteAtom(atom));
     const grid = spatialGrid(candidates, cutoff);
     const limit = cutoff * cutoff;
@@ -9441,7 +9623,7 @@ applyBackground();
       const key = (atom.chain || '') + '|' + atom.resi;
       if (!found.has(key)) found.set(key, { chain: atom.chain || '', resi: atom.resi });
     }));
-    return [site, ...found.values()];
+    return [...sites, ...found.values()];
   }
 
   /* The neighbourhood as one 3Dmol selection on the reference model: one sub-selection per chain,
@@ -9465,9 +9647,11 @@ applyBackground();
     if (shown.length < 2) { announce('Show at least two models to make a site figure', 'error'); return; }
     const reference = siteFigureReference();
     if (!reference) { announce('Show at least two models to make a site figure', 'error'); return; }
-    /* Several compared positions make several figures; this press builds the first one. */
-    const spot = spotlightResidues[0];
-    const tag = positionTag(spot);
+    /* Every compared position is part of the same figure: a binding site is several residues, and a
+       panel of one of them with the rest out of frame answers nothing. */
+    const spots = spotlightResidues.map(item => ({ chain: item.chain || '', resi: item.resi }));
+    const single = spots.length === 1;
+    const tag = positionTag(spots[0]);
     const restore = captureViewState();
     remember('site figure');
     /* Per-model colouring is what makes the two panels readable: one colour per model, named in the
@@ -9478,7 +9662,7 @@ applyBackground();
     /* Panel A — the overview: every shown model solid, the whole superposition in frame. */
     shown.forEach(entry => { entry.faded = false; });
     applyStyle(); fitPrimary(); viewer.render();
-    const overview = captureViewState('Overview', 'Superposed models, site ' + tag + ' marked');
+    const overview = captureViewState('Overview', single ? 'Superposed models, site ' + tag + ' marked' : 'Superposed models, ' + spots.length + ' sites marked');
     overview.inFigure = true;
 
     /* Panel B — the close-up: the reference solid, the others faded behind it, the camera on the
@@ -9488,10 +9672,10 @@ applyBackground();
        the fold in behind a site that still fills the frame. */
     shown.forEach(entry => { entry.faded = entry !== reference; });
     applyStyle();
-    viewer.zoomTo(siteFigureSelection(reference, spot));
+    viewer.zoomTo(siteFigureSelection(reference, spots));
     if (typeof viewer.zoom === 'function') viewer.zoom(0.8);
     viewer.render();
-    const closeUp = captureViewState('Site ' + tag, String(positionReadout(spot) || tag).slice(0, 200));
+    const closeUp = captureViewState(single ? 'Site ' + tag : 'Sites', String((single ? positionReadout(spots[0]) : positionSetReadout()) || tag).slice(0, 200));
     closeUp.inFigure = true;
 
     /* Exactly these two panels, side by side, lettered and captioned. */
@@ -9839,6 +10023,7 @@ applyBackground();
     pendingScene = null;
     root.querySelector('#gpv-residue').textContent = 'Click any atom in the viewer to inspect it.';
     root.querySelector('#gpv-label-text').value = '';
+    root.querySelector('#gpv-position-set').value = '';
     root.querySelector('#gpv-add-label').disabled = true;
     root.querySelector('#gpv-position-compare').disabled = true;
     root.querySelector('#gpv-all-labels').checked = false;
@@ -10181,7 +10366,7 @@ applyBackground();
     'Publish → Print size exports at a stated width (85 or 178 mm) and resolution (300 or 600 dpi), writes the dpi into the PNG or TIFF, and sizes labels in points — what a journal checks.',
     'Appearance → Colour-blind-safe palette switches chains and domains to Okabe–Ito colours; a scale bar of 10–100 Å goes bottom-right of every export from Publish → Scale bar.',
     'Publish → Figure format saves the figure as PNG, TIFF, PDF, JPEG or WebP; the PDF page is the physical size you chose, and the SVG button keeps the text editable.',
-    'Annotate → Compare this position: pick the mutated residue, press the button, and every shown model gets its side chain drawn and its own residue named — Ala15 against Gly15 — with the difference stated in one line. After Align visible the same press adds the neighbourhood table: how far the site and every residue within the cutoff moved, with Highlight neighbourhood and an effect CSV. Make site figure then builds the whole figure in one press: an overview panel with the site marked and a close-up with the reference solid and the others faded, ticked and lettered in the figure builder ready to download.',
+    'Annotate → Compare this position: pick the mutated residue, press the button, and every shown model gets its side chain drawn and its own residue named — Ala15 against Gly15 — with the difference stated in one line. After Align visible the same press adds the neighbourhood table: how far the site and every residue within the cutoff moved, with Highlight neighbourhood and an effect CSV. A binding site is several residues: type A:20-30, A:45 into Positions and Compare these positions compares the whole set in one press, with one table covering every site and the union of their neighbourhoods. Make site figure then builds the whole figure in one press: an overview panel with the site marked and a close-up with the reference solid and the others faded, ticked and lettered in the figure builder ready to download.',
     'Drag any label in the 3D view to move it: a residue label keeps a leader line back to its residue, and Reset in its row puts it back. Publish → Legend position puts the colour legend in any corner or down one side.',
     'Annotate → Domains → Label domains writes each domain\'s name on the structure at its centroid; Download architecture PNG/SVG draws the linear domain diagram that goes under it.',
     'Publish → Figure builder: save a few views — overview, interface, a zoom — tick them, order them, caption them, and download one lettered figure at the journal width as PNG or SVG.',
