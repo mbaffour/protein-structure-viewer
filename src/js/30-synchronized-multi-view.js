@@ -633,6 +633,14 @@
     const finite = rmsdMatrix.values.flat().filter((value, index) => Number.isFinite(value) && index % (shown.length + 1) !== 0);
     announce('Pairwise RMSD matrix · ' + shown.length + ' models · ' + (finite.length ? Math.min(...finite).toFixed(2) + ' to ' + Math.max(...finite).toFixed(2) + ' Å' : 'no pair could be fitted') + (rmsdMatrix.fitRegion ? ' · fitted on ' + rmsdMatrix.fitRegion : '') + (byPosition ? ' · chains matched by position' : ''));
   }
+  /* The medoid: the shown model with the lowest mean RMSD to the others — the one an ensemble
+     figure should show, and the one to superpose the rest onto. */
+  function rmsdMedoid() {
+    if (!rmsdMatrix) return null;
+    const means = rmsdMatrix.values.map((row, i) => { const others = row.filter((value, j) => j !== i && Number.isFinite(value)); return others.length ? others.reduce((sum, value) => sum + value, 0) / others.length : NaN; });
+    let best = -1; means.forEach((value, index) => { if (Number.isFinite(value) && (best < 0 || value < means[best])) best = index; });
+    return best < 0 ? null : { index: best, name: rmsdMatrix.names[best], mean: means[best], means };
+  }
   function rmsdMatrixMaximum() {
     const finite = rmsdMatrix.values.flat().filter(Number.isFinite);
     return Math.max(0.01, ...finite);
@@ -645,10 +653,11 @@
     const head = root.querySelector('#gpv-rmsd-matrix-head'); const body = root.querySelector('#gpv-rmsd-matrix-body'); head.replaceChildren(); body.replaceChildren();
     const headRow = document.createElement('tr'); headRow.append(document.createElement('th'));
     rmsdMatrix.short.forEach((name, index) => { const th = document.createElement('th'); th.className = 'text-end'; th.textContent = name; th.title = rmsdMatrix.names[index]; headRow.append(th); });
+    const meanHead = document.createElement('th'); meanHead.className = 'text-end'; meanHead.textContent = 'Mean'; meanHead.title = 'Mean RMSD to the other models; ★ marks the medoid, the model closest to all the others'; headRow.append(meanHead);
     head.append(headRow);
-    const maximum = rmsdMatrixMaximum();
+    const maximum = rmsdMatrixMaximum(); const medoid = rmsdMedoid();
     rmsdMatrix.values.forEach((row, i) => {
-      const tr = document.createElement('tr'); const th = document.createElement('th'); th.scope = 'row'; th.textContent = rmsdMatrix.short[i]; th.title = rmsdMatrix.names[i]; tr.append(th);
+      const tr = document.createElement('tr'); const th = document.createElement('th'); th.scope = 'row'; th.textContent = (medoid && medoid.index === i ? '★ ' : '') + rmsdMatrix.short[i]; th.title = rmsdMatrix.names[i] + (medoid && medoid.index === i ? ' · medoid' : ''); tr.append(th);
       row.forEach((value, j) => {
         const td = document.createElement('td'); td.className = 'text-end';
         if (i === j) td.textContent = '—';
@@ -656,9 +665,13 @@
         else { td.textContent = value.toFixed(2); td.style.background = gradientColor(dataScales.heat, value / maximum); td.style.color = value / maximum > 0.55 ? '#ffffff' : '#111827'; td.title = rmsdMatrix.counts[i][j] + ' Cα pairs' + (rmsdMatrix.mappings[i][j] ? ' · ' + rmsdMatrix.mappings[i][j] : ''); }
         tr.append(td);
       });
+      const meanCell = document.createElement('td'); meanCell.className = 'text-end'; meanCell.style.fontWeight = medoid && medoid.index === i ? '700' : '';
+      meanCell.textContent = medoid && Number.isFinite(medoid.means[i]) ? medoid.means[i].toFixed(2) : '—'; tr.append(meanCell);
       body.append(tr);
     });
-    state.textContent = rmsdMatrix.names.length + ' models · Cα RMSD after superposing each pair · ' + (rmsdMatrix.mapping === 'sequence' ? 'sequence-aware mapping' : 'chain and residue identifiers') + (rmsdMatrix.fitRegion ? ' · fitted on ' + rmsdMatrix.fitRegion + ', RMSD over all matched pairs' : '') + (rmsdMatrix.byPosition ? ' · identical chains matched by position' : '') + ' · hover a cell for the pair count and chain mapping';
+    root.querySelector('#gpv-rmsd-medoid').disabled = !medoid;
+    root.querySelector('#gpv-rmsd-medoid').textContent = medoid ? 'Use ' + rmsdMatrix.short[medoid.index] + ' as reference' : 'Use medoid as reference';
+    state.textContent = (medoid ? 'Medoid ' + rmsdMatrix.short[medoid.index] + ' · mean ' + medoid.mean.toFixed(2) + ' Å to the others · ' : '') + rmsdMatrix.names.length + ' models · Cα RMSD after superposing each pair · ' + (rmsdMatrix.mapping === 'sequence' ? 'sequence-aware mapping' : 'chain and residue identifiers') + (rmsdMatrix.fitRegion ? ' · fitted on ' + rmsdMatrix.fitRegion + ', RMSD over all matched pairs' : '') + (rmsdMatrix.byPosition ? ' · identical chains matched by position' : '') + ' · hover a cell for the pair count and chain mapping';
   }
   function downloadRmsdMatrixCsv() {
     if (!rmsdMatrix) return;
@@ -742,6 +755,19 @@
     }
     announce('RMSD matrix ' + kind.toUpperCase() + ' downloaded · ' + rmsdMatrix.names.length + ' × ' + rmsdMatrix.names.length + ' · ' + width + ' × ' + height + ' px' + (plan.dpi ? ' at ' + plan.dpi + ' dpi' : ''));
   }
+  /* One click: superpose everything onto the medoid and draw it solid against the rest. */
+  function useMedoidAsReference() {
+    const medoid = rmsdMedoid(); if (!medoid) return;
+    const entry = structures.find(item => displayName(item) === medoid.name && item.model);
+    if (!entry) { announce('The medoid model is no longer loaded', 'error'); return; }
+    const select = root.querySelector('#gpv-reference'); select.value = String(entry.id); select.dispatchEvent(new Event('change', { bubbles: true }));
+    alignVisible();
+    remember('emphasis');
+    structures.filter(item => item.visible && item.model).forEach(item => { item.faded = item !== entry; });
+    renderList(); applyStyle(); renderSequenceSoon();
+    announce(displayName(entry) + ' is the medoid (mean ' + medoid.mean.toFixed(2) + ' Å to the others) · models superposed onto it and it is drawn solid');
+  }
+  root.querySelector('#gpv-rmsd-medoid').addEventListener('click', useMedoidAsReference);
   root.querySelector('#gpv-rmsd-matrix-run').addEventListener('click', computeRmsdMatrix);
   root.querySelector('#gpv-rmsd-matrix-csv').addEventListener('click', downloadRmsdMatrixCsv);
   root.querySelector('#gpv-rmsd-matrix-png').addEventListener('click', () => downloadRmsdMatrix('png'));

@@ -630,6 +630,22 @@ await step('the pairwise RMSD matrix agrees with the alignment table and exports
     const reference = table[0][1]; const r = matrix.names.indexOf(reference); if (r < 0) throw new Error('reference ' + reference + ' not in the matrix ' + matrix.names.join(', '));
     table.forEach(cells => { const c = matrix.names.indexOf(cells[0]); if (c < 0) return; const tableRmsd = Number(cells[4]); if (Math.abs(matrix.values[r][c] - tableRmsd) > 0.005) throw new Error(cells[0] + ': matrix ' + matrix.values[r][c].toFixed(3) + ' against table ' + tableRmsd); });
     const shown = await page.locator('#gpv-rmsd-matrix-body tr').count(); if (shown !== n) throw new Error('table rows ' + shown + ' for ' + n + ' models');
+    /* The medoid is the model with the lowest mean RMSD to the others; here a and b share a backbone, so it is one of them. */
+    const medoid = await page.evaluate(() => window.__viewerDebug.rmsdMedoid());
+    if (!medoid || !/model_[ab]\.pdb/.test(medoid.name)) throw new Error('medoid: ' + JSON.stringify(medoid));
+    const means = matrix.values.map((row, i) => row.filter((value, j) => j !== i).reduce((sum, value) => sum + value, 0) / (n - 1));
+    if (Math.abs(medoid.mean - Math.min(...means)) > 1e-9) throw new Error('medoid mean ' + medoid.mean + ' is not the smallest of ' + means.map(value => value.toFixed(3)).join(', '));
+    const starred = await page.locator('#gpv-rmsd-matrix-body th').allTextContents(); if (starred.filter(text => text.startsWith('★')).length !== 1) throw new Error('exactly one row should carry the medoid star: ' + JSON.stringify(starred));
+    const button = (await page.locator('#gpv-rmsd-medoid').textContent()) || ''; if (!/^Use .* as reference$/.test(button) || await page.locator('#gpv-rmsd-medoid').isDisabled()) throw new Error('medoid button: ' + button);
+    await page.click('#gpv-rmsd-medoid'); await page.waitForTimeout(2500);
+    const afterMedoid = await page.evaluate(() => { const d = window.__viewerDebug; const select = document.querySelector('#gpv-reference'); const referenceName = select.selectedOptions[0].textContent; const shownEntries = d.entries().filter(entry => entry.visible && entry.model); return { referenceName, faded: shownEntries.map(entry => Boolean(entry.faded)), solid: shownEntries.filter(entry => !entry.faded).map(entry => entry.name), rows: d.alignmentResults().length }; });
+    if (!afterMedoid.referenceName.includes(medoid.name)) throw new Error('the reference was not set to the medoid: ' + afterMedoid.referenceName);
+    if (afterMedoid.solid.length !== 1 || afterMedoid.solid[0] !== medoid.name || afterMedoid.faded.filter(Boolean).length !== n - 1) throw new Error('emphasis after medoid: ' + JSON.stringify(afterMedoid));
+    if (afterMedoid.rows !== n - 1) throw new Error('models were not re-superposed onto the medoid: ' + afterMedoid.rows + ' results');
+    /* Put the emphasis and the reference back for the steps that follow. */
+    await page.evaluate(() => { [...document.querySelectorAll('#gpv-list .gpv-entry input[aria-label^="Fade"]')].forEach(input => { if (input.checked) input.click(); }); });
+    await page.evaluate(() => { const select = document.querySelector('#gpv-reference'); const option = [...select.options].find(item => /model_a\.pdb/.test(item.textContent)); select.value = option.value; select.dispatchEvent(new Event('change', { bubbles: true })); });
+    await page.click('#gpv-align'); await page.waitForTimeout(2500);
     let download = page.waitForEvent('download', { timeout: 60000 }); await page.click('#gpv-rmsd-matrix-csv');
     const csv = await readFile(await (await download).path(), 'utf8');
     if (!csv.startsWith('"model",') || !/"ca_pairs"/.test(csv) || !/chains_by_position=/.test(csv)) throw new Error('matrix CSV: ' + csv.slice(0, 120));
@@ -642,7 +658,7 @@ await step('the pairwise RMSD matrix agrees with the alignment table and exports
     await page.click('#gpv-methods-text'); await page.waitForTimeout(300);
     if (!/Pairwise Cα RMSDs between the \d+ (shown )?models/.test(await page.inputValue('#gpv-methods-field'))) throw new Error('the methods text does not describe the matrix');
     const off = matrix.values.flatMap((row, i) => row.filter((value, j) => j > i));
-    console.log('       ' + n + ' × ' + n + ' · ' + Math.min(...off).toFixed(2) + ' to ' + Math.max(...off).toFixed(2) + ' Å · row of ' + reference.replace(/\.pdb$/, '') + ' matches the alignment table');
+    console.log('       ' + n + ' × ' + n + ' · ' + Math.min(...off).toFixed(2) + ' to ' + Math.max(...off).toFixed(2) + ' Å · row of ' + reference.replace(/\.pdb$/, '') + ' matches the alignment table · medoid ' + medoid.name.replace(/\.pdb$/, '') + ' (mean ' + medoid.mean.toFixed(2) + ' Å) used as reference');
   } finally { await tab('models'); await page.selectOption('#gpv-view-mode', viewBefore); await page.waitForTimeout(300); await tab('compare'); }
 });
 await step('the model legend drops the shared part of long run file names', async () => {

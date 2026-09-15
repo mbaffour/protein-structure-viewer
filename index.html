@@ -1058,6 +1058,7 @@ html>body{padding:0}</style>
     <div class="viz-controls">
       <span class="text-small text-muted">Pairwise RMSD</span>
       <button class="btn" type="button" id="gpv-rmsd-matrix-run" disabled data-tooltip="Superpose every shown model onto every other, with the residue mapping, fit region and chain matching set above, and tabulate the Cα RMSDs — nothing on screen moves">Compute matrix</button>
+      <button class="btn" type="button" id="gpv-rmsd-medoid" disabled data-tooltip="Make the medoid — the model with the lowest mean RMSD to the others — the alignment reference, superpose everything onto it and draw it solid with the rest faded">Use medoid as reference</button>
       <button class="btn" type="button" id="gpv-rmsd-matrix-csv" disabled>Download matrix CSV</button>
       <button class="btn" type="button" id="gpv-rmsd-matrix-png" disabled data-tooltip="The matrix as a heat map at the output resolution, values in the cells and a colour bar">Download matrix PNG</button>
       <button class="btn" type="button" id="gpv-rmsd-matrix-svg" disabled data-tooltip="The same heat map as editable vector graphics">Download matrix SVG</button>
@@ -1275,7 +1276,7 @@ html>body{padding:0}</style>
       </ul>
       <h3>Tips for figures and reviewers</h3>
       <ul>
-        <li><em>Compare → Pairwise RMSD → Compute matrix</em> superposes every shown model onto every other with the same rules as Align visible and tabulates the Cα RMSDs — which models of an ensemble agree, which is the odd one out — with a CSV, a heat-map PNG or SVG with the values in the cells, and a panel for the composite figure.</li>
+        <li><em>Compare → Pairwise RMSD → Compute matrix</em> superposes every shown model onto every other with the same rules as Align visible and tabulates the Cα RMSDs — which models of an ensemble agree, which is the odd one out — with a mean column, a ★ on the medoid, a CSV, a heat-map PNG or SVG with the values in the cells, and a panel for the composite figure. <em>Use medoid as reference</em> superposes everything onto that model and draws it solid against the rest.</li>
         <li><em>Compare → Match identical chains by position</em> re-pairs the chains of an assembly by where they sit after a first fit, so a model that puts the same subunit in a different place is compared against the copy it actually corresponds to; the chain mapping it chose is printed with each result.</li>
         <li><em>Compare → Fit on</em> superposes the visible models using only part of the structure — a chain, a residue range such as <code>A:20-140</code>, or the residues you have selected — and reports the RMSD over that region beside the RMSD over every matched residue, which is how a hinge or a shifted domain is shown.</li>
         <li>Labels are draggable: pick up any label, callout or corner title in the 3D view with the mouse and put it where the figure needs it. A residue label keeps a thin leader line back to its residue, and <em>Reset</em> in its row puts it back. <em>Publish → Legend position</em> moves the colour legend to any corner, or stacks it down the left or right side.</li>
@@ -1648,7 +1649,7 @@ html>body{padding:0}</style>
   let busyDepth = 0;
   let restoreMotion = null;
   const listPageSize = 60;
-  const viewerVersion = '2.32.0';
+  const viewerVersion = '2.33.0';
   const preferenceKey = 'protein-structure-viewer:preferences';
   const themeKey = 'protein-structure-viewer:theme';
   const labelColors = getComputedStyle(root);
@@ -5285,7 +5286,7 @@ html>body{padding:0}</style>
     if (alignmentResults.length) {
       const bySequence = alignmentResults[0].method !== 'chain/residue IDs';
       sentences.push('Models were superposed on ' + alignmentResults[0].reference + ' by least-squares (Kabsch) fitting of Cα atoms paired by ' + (bySequence ? 'global Needleman–Wunsch alignment of each chain pair (match +2, mismatch −1, gap −2), chains being matched greedily by sequence identity' : 'chain and residue identifier') + (alignmentResults[0].fitRegion ? '; the rotation was computed from ' + alignmentResults[0].fitRegion + ' alone' : '') + '; RMSD is reported over all paired Cα atoms without outlier rejection' + (alignmentResults[0].fitRegion ? ', and separately over the fitted region' : '') + ' (' + alignmentResults.map(result => result.name + ': n = ' + result.count + ', ' + result.rmsd.toFixed(2) + ' Å').join('; ') + ').');
-      if (rmsdMatrix && rmsdMatrix.names.length >= 2) { const off = rmsdMatrix.values.flatMap((row, i) => row.filter((value, j) => j > i && Number.isFinite(value))); if (off.length) sentences.push('Pairwise Cα RMSDs between the ' + rmsdMatrix.names.length + ' shown models were obtained by superposing each pair independently with the same pairing rules' + (rmsdMatrix.fitRegion ? ', the rotation computed from ' + rmsdMatrix.fitRegion : '') + (rmsdMatrix.byPosition ? ', identical chains re-paired by position after a first fit' : '') + ', and range from ' + Math.min(...off).toFixed(2) + ' to ' + Math.max(...off).toFixed(2) + ' Å over all paired Cα atoms.'); }
+      if (rmsdMatrix && rmsdMatrix.names.length >= 2) { const off = rmsdMatrix.values.flatMap((row, i) => row.filter((value, j) => j > i && Number.isFinite(value))); if (off.length) sentences.push('Pairwise Cα RMSDs between the ' + rmsdMatrix.names.length + ' shown models were obtained by superposing each pair independently with the same pairing rules' + (rmsdMatrix.fitRegion ? ', the rotation computed from ' + rmsdMatrix.fitRegion : '') + (rmsdMatrix.byPosition ? ', identical chains re-paired by position after a first fit' : '') + ', and range from ' + Math.min(...off).toFixed(2) + ' to ' + Math.max(...off).toFixed(2) + ' Å over all paired Cα atoms' + (rmsdMedoid() ? '; ' + rmsdMedoid().name + ' has the lowest mean RMSD to the other models (' + rmsdMedoid().mean.toFixed(2) + ' Å) and is the medoid of the set' : '') + '.'); }
       sentences.push('Per-residue Cα deviation is the distance between paired Cα atoms after superposition.');
     }
     if (ensembleSpread) sentences.push('Model agreement was expressed per residue as the Cα root-mean-square fluctuation about the mean Cα position across the ' + ensembleSpread.count + ' superposed models, for residues present in at least two models.');
@@ -6120,6 +6121,14 @@ html>body{padding:0}</style>
     const finite = rmsdMatrix.values.flat().filter((value, index) => Number.isFinite(value) && index % (shown.length + 1) !== 0);
     announce('Pairwise RMSD matrix · ' + shown.length + ' models · ' + (finite.length ? Math.min(...finite).toFixed(2) + ' to ' + Math.max(...finite).toFixed(2) + ' Å' : 'no pair could be fitted') + (rmsdMatrix.fitRegion ? ' · fitted on ' + rmsdMatrix.fitRegion : '') + (byPosition ? ' · chains matched by position' : ''));
   }
+  /* The medoid: the shown model with the lowest mean RMSD to the others — the one an ensemble
+     figure should show, and the one to superpose the rest onto. */
+  function rmsdMedoid() {
+    if (!rmsdMatrix) return null;
+    const means = rmsdMatrix.values.map((row, i) => { const others = row.filter((value, j) => j !== i && Number.isFinite(value)); return others.length ? others.reduce((sum, value) => sum + value, 0) / others.length : NaN; });
+    let best = -1; means.forEach((value, index) => { if (Number.isFinite(value) && (best < 0 || value < means[best])) best = index; });
+    return best < 0 ? null : { index: best, name: rmsdMatrix.names[best], mean: means[best], means };
+  }
   function rmsdMatrixMaximum() {
     const finite = rmsdMatrix.values.flat().filter(Number.isFinite);
     return Math.max(0.01, ...finite);
@@ -6132,10 +6141,11 @@ html>body{padding:0}</style>
     const head = root.querySelector('#gpv-rmsd-matrix-head'); const body = root.querySelector('#gpv-rmsd-matrix-body'); head.replaceChildren(); body.replaceChildren();
     const headRow = document.createElement('tr'); headRow.append(document.createElement('th'));
     rmsdMatrix.short.forEach((name, index) => { const th = document.createElement('th'); th.className = 'text-end'; th.textContent = name; th.title = rmsdMatrix.names[index]; headRow.append(th); });
+    const meanHead = document.createElement('th'); meanHead.className = 'text-end'; meanHead.textContent = 'Mean'; meanHead.title = 'Mean RMSD to the other models; ★ marks the medoid, the model closest to all the others'; headRow.append(meanHead);
     head.append(headRow);
-    const maximum = rmsdMatrixMaximum();
+    const maximum = rmsdMatrixMaximum(); const medoid = rmsdMedoid();
     rmsdMatrix.values.forEach((row, i) => {
-      const tr = document.createElement('tr'); const th = document.createElement('th'); th.scope = 'row'; th.textContent = rmsdMatrix.short[i]; th.title = rmsdMatrix.names[i]; tr.append(th);
+      const tr = document.createElement('tr'); const th = document.createElement('th'); th.scope = 'row'; th.textContent = (medoid && medoid.index === i ? '★ ' : '') + rmsdMatrix.short[i]; th.title = rmsdMatrix.names[i] + (medoid && medoid.index === i ? ' · medoid' : ''); tr.append(th);
       row.forEach((value, j) => {
         const td = document.createElement('td'); td.className = 'text-end';
         if (i === j) td.textContent = '—';
@@ -6143,9 +6153,13 @@ html>body{padding:0}</style>
         else { td.textContent = value.toFixed(2); td.style.background = gradientColor(dataScales.heat, value / maximum); td.style.color = value / maximum > 0.55 ? '#ffffff' : '#111827'; td.title = rmsdMatrix.counts[i][j] + ' Cα pairs' + (rmsdMatrix.mappings[i][j] ? ' · ' + rmsdMatrix.mappings[i][j] : ''); }
         tr.append(td);
       });
+      const meanCell = document.createElement('td'); meanCell.className = 'text-end'; meanCell.style.fontWeight = medoid && medoid.index === i ? '700' : '';
+      meanCell.textContent = medoid && Number.isFinite(medoid.means[i]) ? medoid.means[i].toFixed(2) : '—'; tr.append(meanCell);
       body.append(tr);
     });
-    state.textContent = rmsdMatrix.names.length + ' models · Cα RMSD after superposing each pair · ' + (rmsdMatrix.mapping === 'sequence' ? 'sequence-aware mapping' : 'chain and residue identifiers') + (rmsdMatrix.fitRegion ? ' · fitted on ' + rmsdMatrix.fitRegion + ', RMSD over all matched pairs' : '') + (rmsdMatrix.byPosition ? ' · identical chains matched by position' : '') + ' · hover a cell for the pair count and chain mapping';
+    root.querySelector('#gpv-rmsd-medoid').disabled = !medoid;
+    root.querySelector('#gpv-rmsd-medoid').textContent = medoid ? 'Use ' + rmsdMatrix.short[medoid.index] + ' as reference' : 'Use medoid as reference';
+    state.textContent = (medoid ? 'Medoid ' + rmsdMatrix.short[medoid.index] + ' · mean ' + medoid.mean.toFixed(2) + ' Å to the others · ' : '') + rmsdMatrix.names.length + ' models · Cα RMSD after superposing each pair · ' + (rmsdMatrix.mapping === 'sequence' ? 'sequence-aware mapping' : 'chain and residue identifiers') + (rmsdMatrix.fitRegion ? ' · fitted on ' + rmsdMatrix.fitRegion + ', RMSD over all matched pairs' : '') + (rmsdMatrix.byPosition ? ' · identical chains matched by position' : '') + ' · hover a cell for the pair count and chain mapping';
   }
   function downloadRmsdMatrixCsv() {
     if (!rmsdMatrix) return;
@@ -6229,6 +6243,19 @@ html>body{padding:0}</style>
     }
     announce('RMSD matrix ' + kind.toUpperCase() + ' downloaded · ' + rmsdMatrix.names.length + ' × ' + rmsdMatrix.names.length + ' · ' + width + ' × ' + height + ' px' + (plan.dpi ? ' at ' + plan.dpi + ' dpi' : ''));
   }
+  /* One click: superpose everything onto the medoid and draw it solid against the rest. */
+  function useMedoidAsReference() {
+    const medoid = rmsdMedoid(); if (!medoid) return;
+    const entry = structures.find(item => displayName(item) === medoid.name && item.model);
+    if (!entry) { announce('The medoid model is no longer loaded', 'error'); return; }
+    const select = root.querySelector('#gpv-reference'); select.value = String(entry.id); select.dispatchEvent(new Event('change', { bubbles: true }));
+    alignVisible();
+    remember('emphasis');
+    structures.filter(item => item.visible && item.model).forEach(item => { item.faded = item !== entry; });
+    renderList(); applyStyle(); renderSequenceSoon();
+    announce(displayName(entry) + ' is the medoid (mean ' + medoid.mean.toFixed(2) + ' Å to the others) · models superposed onto it and it is drawn solid');
+  }
+  root.querySelector('#gpv-rmsd-medoid').addEventListener('click', useMedoidAsReference);
   root.querySelector('#gpv-rmsd-matrix-run').addEventListener('click', computeRmsdMatrix);
   root.querySelector('#gpv-rmsd-matrix-csv').addEventListener('click', downloadRmsdMatrixCsv);
   root.querySelector('#gpv-rmsd-matrix-png').addEventListener('click', () => downloadRmsdMatrix('png'));
@@ -9539,7 +9566,7 @@ applyBackground();
   offerSessionRestore();
   /* ?debug=1 exposes a few internals for the regression suite and for bug reports;
      it has no effect otherwise. */
-  if (new URLSearchParams(location.search).has('debug')) window.__viewerDebug = { viewer, pickAtomAt, displayedEntries, activeEntry, colorOptions, sceneSettings, contactResult: () => contactResult, residueData: () => residueData, msaAssets: () => msaAssets, entries: () => structures, nearbyResidues, assemblyDimensions, paeDomains, parseConfidenceBytes, methodsText, alignmentResults: () => alignmentResults, ensembleSpread: () => ensembleSpread, siteResults: () => siteResults, interfaceResults: () => interfaceResults, solventAccessibleArea, heavyAtoms, ligandGroups, architectureModel, domainSets, distinguishingNames, rmsdMatrix: () => rmsdMatrix, labelRecords: () => labelRecords, labelPosition, labelHitAt };
+  if (new URLSearchParams(location.search).has('debug')) window.__viewerDebug = { viewer, pickAtomAt, displayedEntries, activeEntry, colorOptions, sceneSettings, contactResult: () => contactResult, residueData: () => residueData, msaAssets: () => msaAssets, entries: () => structures, nearbyResidues, assemblyDimensions, paeDomains, parseConfidenceBytes, methodsText, alignmentResults: () => alignmentResults, ensembleSpread: () => ensembleSpread, siteResults: () => siteResults, interfaceResults: () => interfaceResults, solventAccessibleArea, heavyAtoms, ligandGroups, architectureModel, domainSets, distinguishingNames, rmsdMatrix: () => rmsdMatrix, rmsdMedoid, labelRecords: () => labelRecords, labelPosition, labelHitAt };
   applyTheme(readJson(themeKey, 'system'));
   selectToolTab('models');
   applyAppearance();

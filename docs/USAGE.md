@@ -432,9 +432,13 @@ copies. The table tints each cell from white to red by RMSD; hovering a cell giv
 pairs and the chain mapping that pair used. **Download matrix CSV** writes the values, the pair counts
 and the settings; **Download matrix PNG** and **SVG** draw the heat map at the output resolution with
 the values in the cells and a colour bar, and the same panel can be ticked into the composite figure.
-The methods text gains a sentence stating how the pairs were superposed and the range of values.
-Recompute after aligning on a different region or changing the mapping; the state line says which
-settings the current matrix used.
+The **Mean** column gives each model's mean RMSD to the others and ★ marks the **medoid**, the
+model closest to all the rest — usually the one to show, and not necessarily the top-ranked one.
+**Use medoid as reference** sets it as the alignment reference, superposes every shown model onto it,
+and draws it solid with the others faded, in one press. The methods text gains a sentence stating
+how the pairs were superposed, the range of values and which model is the medoid. Recompute after
+aligning on a different region or changing the mapping; the state line says which settings the
+current matrix used.
 
 **Emphasising one model.** An overlay of several models drawn identically is a tangle. Each row of the
 Models list carries a fade switch, and **Emphasise** fades every other shown model in one press: the

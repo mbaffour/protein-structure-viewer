@@ -2,6 +2,14 @@
 
 All notable changes to this project are recorded here.
 
+## 2.33.0
+
+- **The medoid, and one click to use it.** The pairwise RMSD table gained a **Mean** column and marks with ★ the medoid:
+  the model with the lowest mean RMSD to all the others, the one an ensemble figure should show. **Use medoid as
+  reference** makes it the alignment reference, superposes every shown model onto it and draws it solid with the rest
+  faded, in one press; the methods text names it. On a run whose top-ranked model is the odd one out, this is the
+  difference between showing the outlier and showing the consensus.
+
 ## 2.32.0
 
 - **Pairwise RMSD matrix.** *Compare → Pairwise RMSD → Compute matrix* superposes every shown model onto every other

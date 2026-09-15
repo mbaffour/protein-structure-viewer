@@ -1058,6 +1058,7 @@ html>body{padding:0}</style>
     <div class="viz-controls">
       <span class="text-small text-muted">Pairwise RMSD</span>
       <button class="btn" type="button" id="gpv-rmsd-matrix-run" disabled data-tooltip="Superpose every shown model onto every other, with the residue mapping, fit region and chain matching set above, and tabulate the Cα RMSDs — nothing on screen moves">Compute matrix</button>
+      <button class="btn" type="button" id="gpv-rmsd-medoid" disabled data-tooltip="Make the medoid — the model with the lowest mean RMSD to the others — the alignment reference, superpose everything onto it and draw it solid with the rest faded">Use medoid as reference</button>
       <button class="btn" type="button" id="gpv-rmsd-matrix-csv" disabled>Download matrix CSV</button>
       <button class="btn" type="button" id="gpv-rmsd-matrix-png" disabled data-tooltip="The matrix as a heat map at the output resolution, values in the cells and a colour bar">Download matrix PNG</button>
       <button class="btn" type="button" id="gpv-rmsd-matrix-svg" disabled data-tooltip="The same heat map as editable vector graphics">Download matrix SVG</button>
@@ -1275,7 +1276,7 @@ html>body{padding:0}</style>
       </ul>
       <h3>Tips for figures and reviewers</h3>
       <ul>
-        <li><em>Compare → Pairwise RMSD → Compute matrix</em> superposes every shown model onto every other with the same rules as Align visible and tabulates the Cα RMSDs — which models of an ensemble agree, which is the odd one out — with a CSV, a heat-map PNG or SVG with the values in the cells, and a panel for the composite figure.</li>
+        <li><em>Compare → Pairwise RMSD → Compute matrix</em> superposes every shown model onto every other with the same rules as Align visible and tabulates the Cα RMSDs — which models of an ensemble agree, which is the odd one out — with a mean column, a ★ on the medoid, a CSV, a heat-map PNG or SVG with the values in the cells, and a panel for the composite figure. <em>Use medoid as reference</em> superposes everything onto that model and draws it solid against the rest.</li>
         <li><em>Compare → Match identical chains by position</em> re-pairs the chains of an assembly by where they sit after a first fit, so a model that puts the same subunit in a different place is compared against the copy it actually corresponds to; the chain mapping it chose is printed with each result.</li>
         <li><em>Compare → Fit on</em> superposes the visible models using only part of the structure — a chain, a residue range such as <code>A:20-140</code>, or the residues you have selected — and reports the RMSD over that region beside the RMSD over every matched residue, which is how a hinge or a shifted domain is shown.</li>
         <li>Labels are draggable: pick up any label, callout or corner title in the 3D view with the mouse and put it where the figure needs it. A residue label keeps a thin leader line back to its residue, and <em>Reset</em> in its row puts it back. <em>Publish → Legend position</em> moves the colour legend to any corner, or stacks it down the left or right side.</li>
