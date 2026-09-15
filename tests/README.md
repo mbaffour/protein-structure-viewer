@@ -88,6 +88,8 @@ PSV_CHROMIUM=/opt/pw-browsers/chromium/chrome-linux/chrome npm test
   changes the varied column's value, keeps the ordering, and the dataset name, the debug hook and the methods text say
   "unweighted"; switching them back on puts "Henikoff & Henikoff, 1994" in the methods text.
 - PAE domains: the panel state and the figure legend call the segmentation a heuristic.
+- Emphasis: Emphasise on one model fades every other shown model and thins its ribbon, pressing it again restores them
+  all, and the scene carries the faded flag.
 - Identical chains by position: a copy of the fixture with its two chains renamed A↔B aligns badly while chains are
   paired by sequence, and lands under half that RMSD with positional matching, which reports the mapping A→B; B→A.
 - Model legend names: a run's file names reduce to model_0 … model_4 (the stem is given back a boundary at a time when

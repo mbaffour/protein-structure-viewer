@@ -2,6 +2,14 @@
 
 All notable changes to this project are recorded here.
 
+## 2.31.0
+
+- **Emphasise one model in a superposition.** Each row of the Models list gained a fade switch and an **Emphasise**
+  button: the model you emphasise is drawn solid while every other shown model fades towards the paper and is drawn as
+  a thin ribbon, which is what an overlay of five predictions needs to be readable. Pressing Emphasise on a model that
+  is already alone puts them all back. Faded models dim in the sequence strip too, and the state travels with scenes,
+  sessions, share links and the shared report.
+
 ## 2.30.0
 
 - **Match identical chains by position.** In an assembly of identical subunits every chain pairs equally well by

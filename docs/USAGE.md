@@ -425,6 +425,14 @@ figure goes into a slide or a manuscript draft without a file in between. Chrome
 image clipboard writes; Firefox and Safari may refuse, in which case the viewer says so and the
 download remains.
 
+**Emphasising one model.** An overlay of several models drawn identically is a tangle. Each row of the
+Models list carries a fade switch, and **Emphasise** fades every other shown model in one press: the
+emphasised model keeps its colour and full ribbon while the others are mixed towards the paper and
+drawn thin, so the figure reads as one subject against context. Pressing **Emphasise** again on a
+model that is already the only solid one puts them all back. Fading is per model and independent of
+the per-chain fading in the composition table, it dims the sequence strip as well, and it is carried
+by scenes, session files, share links and the shared report.
+
 **Assemblies of identical subunits.** When several chains share a sequence, every chain pairs equally
 well with every copy, and the pairing falls back on the order the chains appear in each file. A prediction that puts the same
 subunit in a different position is then measured against the wrong copy, and the RMSD says more about

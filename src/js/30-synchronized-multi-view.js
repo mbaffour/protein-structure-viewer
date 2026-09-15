@@ -745,6 +745,7 @@
       color: entry.color,
       label: entry.label || '',
       hiddenChains: entry.hiddenChains || [],
+      ...(entry.faded ? { faded: true } : {}),
       ...(entry.fetchId ? { fetch: entry.fetchId } : {})
     })));
     const scene = {

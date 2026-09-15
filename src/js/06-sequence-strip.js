@@ -223,7 +223,7 @@
         const name = document.createElement('span'); name.className = 'gpv-sequence-chain';
         const chainName = row.chain ? 'Chain ' + row.chain : 'No chain';
         const hiddenChain = (entry.hiddenChains || []).includes(row.chain);
-        const fadedChain = (entry.fadedChains || []).includes(row.chain);
+        const fadedChain = Boolean(entry.faded) || (entry.fadedChains || []).includes(row.chain);
         name.textContent = (multi ? clipText(displayName(entry), 14) + ' · ' + (row.chain || '—') : chainName) + (hiddenChain ? ' · hidden' : fadedChain ? ' · faded' : '');
         name.title = displayName(entry) + ' · ' + chainName + ' · ' + row.residues.length + ' residues';
         const canvas = document.createElement('canvas'); canvas.dataset.chain = row.chain; canvas.dataset.entryId = String(entry.id);

@@ -121,6 +121,7 @@
       if (typeof modelRecord.label === 'string') entry.label = modelRecord.label.trim().slice(0, 120);
       entry.hiddenChains = Array.isArray(modelRecord.hiddenChains) ? modelRecord.hiddenChains.map(String).slice(0, 200) : [];
       entry.fadedChains = Array.isArray(modelRecord.fadedChains) ? modelRecord.fadedChains.map(String).slice(0, 200) : [];
+      entry.faded = modelRecord.faded === true;
       if (modelRecord.sha256) {
         const actual = entry.hash || await sha256(entry.text);
         if (actual && actual !== modelRecord.sha256) hashWarnings += 1;

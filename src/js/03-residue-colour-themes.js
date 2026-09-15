@@ -60,12 +60,15 @@
 
   /* Faded chains keep their colour scheme but are blended most of the way into the paper,
      which spotlights one subunit without the per-model opacity limits of cartoon rendering. */
+  /* Fading pushes colour towards the paper: per chain, to spotlight the rest of a model, or for a
+     whole model, so one model of a superposition reads as the subject and the others as context. */
   function fadeOptions(entry, options) {
     const faded = entry.fadedChains || [];
-    if (!faded.length) return options;
+    if (!faded.length && !entry.faded) return options;
     const background = backgroundSpec(); const paper = background.alpha === 0 ? '#ffffff' : background.color;
     const colorOf = options.colorfunc ? options.colorfunc : options.color ? () => options.color : null;
     if (!colorOf) return options;
+    if (entry.faded) return { colorfunc: atom => mixHex(colorOf(atom), paper, 0.72) };
     return { colorfunc: atom => faded.includes(atom.chain || '') ? mixHex(colorOf(atom), paper, 0.72) : colorOf(atom) };
   }
 
@@ -93,6 +96,14 @@
     const representation = root.querySelector('#gpv-style').value;
     const options = { ...colorOptions(entry) };
     if (representation === 'line') options.linewidth = 2;
+    /* A faded model is also drawn thinner, so an overlay of five predictions reads as one subject
+       against context rather than as a tangle of equals. */
+    if (entry.faded) {
+      if (representation === 'cartoon') { options.thickness = 0.15; options.arrows = false; }
+      if (representation === 'line') options.linewidth = 1;
+      if (representation === 'stick') options.radius = 0.08;
+      if (representation === 'sphere') options.scale = 0.3;
+    }
     const style = {};
     style[representation] = options;
     return style;
@@ -362,6 +373,28 @@
       color.setAttribute('aria-label', 'Color for ' + entry.name);
       color.addEventListener('input', () => { entry.color = color.value; root.querySelector('#gpv-color-mode').value = 'structure'; applyStyle(); });
 
+      const fadeLabel = document.createElement('label');
+      fadeLabel.className = 'form-check form-switch';
+      fadeLabel.title = 'Draw this model faded and thin, as context behind the others';
+      const fade = document.createElement('input');
+      fade.className = 'form-check-input'; fade.type = 'checkbox'; fade.checked = Boolean(entry.faded);
+      fade.setAttribute('aria-label', 'Fade ' + entry.name);
+      fade.addEventListener('change', () => { remember('model fade'); entry.faded = fade.checked; applyStyle(); renderSequenceSoon(); });
+      fadeLabel.append(fade);
+
+      const focus = document.createElement('button');
+      focus.className = 'btn btn-ghost'; focus.type = 'button'; focus.textContent = 'Emphasise';
+      focus.title = 'Draw this model solid and fade every other shown model';
+      focus.setAttribute('aria-label', 'Emphasise ' + entry.name);
+      focus.addEventListener('click', () => {
+        remember('emphasis');
+        const shown = structures.filter(item => item.visible && item.model);
+        const alone = entry.faded === false && shown.every(item => item === entry || item.faded);
+        shown.forEach(item => { item.faded = alone ? false : item !== entry; });
+        renderList(); applyStyle(); renderSequenceSoon();
+        updateStatus(alone ? 'Every shown model is drawn solid again' : displayName(entry) + ' is drawn solid, the other shown models faded');
+      });
+
       const remove = document.createElement('button');
       remove.className = 'btn btn-ghost';
       remove.type = 'button';
@@ -381,7 +414,7 @@
         applyStyle();
       });
 
-      row.append(visibleLabel, copy, score, color, rename, remove);
+      row.append(visibleLabel, copy, score, color, fadeLabel, focus, rename, remove);
       list.append(row);
     });
   }

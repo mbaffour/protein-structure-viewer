@@ -1636,7 +1636,7 @@ html>body{padding:0}</style>
   let busyDepth = 0;
   let restoreMotion = null;
   const listPageSize = 60;
-  const viewerVersion = '2.30.0';
+  const viewerVersion = '2.31.0';
   const preferenceKey = 'protein-structure-viewer:preferences';
   const themeKey = 'protein-structure-viewer:theme';
   const labelColors = getComputedStyle(root);
@@ -2288,12 +2288,15 @@ html>body{padding:0}</style>
 
   /* Faded chains keep their colour scheme but are blended most of the way into the paper,
      which spotlights one subunit without the per-model opacity limits of cartoon rendering. */
+  /* Fading pushes colour towards the paper: per chain, to spotlight the rest of a model, or for a
+     whole model, so one model of a superposition reads as the subject and the others as context. */
   function fadeOptions(entry, options) {
     const faded = entry.fadedChains || [];
-    if (!faded.length) return options;
+    if (!faded.length && !entry.faded) return options;
     const background = backgroundSpec(); const paper = background.alpha === 0 ? '#ffffff' : background.color;
     const colorOf = options.colorfunc ? options.colorfunc : options.color ? () => options.color : null;
     if (!colorOf) return options;
+    if (entry.faded) return { colorfunc: atom => mixHex(colorOf(atom), paper, 0.72) };
     return { colorfunc: atom => faded.includes(atom.chain || '') ? mixHex(colorOf(atom), paper, 0.72) : colorOf(atom) };
   }
 
@@ -2321,6 +2324,14 @@ html>body{padding:0}</style>
     const representation = root.querySelector('#gpv-style').value;
     const options = { ...colorOptions(entry) };
     if (representation === 'line') options.linewidth = 2;
+    /* A faded model is also drawn thinner, so an overlay of five predictions reads as one subject
+       against context rather than as a tangle of equals. */
+    if (entry.faded) {
+      if (representation === 'cartoon') { options.thickness = 0.15; options.arrows = false; }
+      if (representation === 'line') options.linewidth = 1;
+      if (representation === 'stick') options.radius = 0.08;
+      if (representation === 'sphere') options.scale = 0.3;
+    }
     const style = {};
     style[representation] = options;
     return style;
@@ -2590,6 +2601,28 @@ html>body{padding:0}</style>
       color.setAttribute('aria-label', 'Color for ' + entry.name);
       color.addEventListener('input', () => { entry.color = color.value; root.querySelector('#gpv-color-mode').value = 'structure'; applyStyle(); });
 
+      const fadeLabel = document.createElement('label');
+      fadeLabel.className = 'form-check form-switch';
+      fadeLabel.title = 'Draw this model faded and thin, as context behind the others';
+      const fade = document.createElement('input');
+      fade.className = 'form-check-input'; fade.type = 'checkbox'; fade.checked = Boolean(entry.faded);
+      fade.setAttribute('aria-label', 'Fade ' + entry.name);
+      fade.addEventListener('change', () => { remember('model fade'); entry.faded = fade.checked; applyStyle(); renderSequenceSoon(); });
+      fadeLabel.append(fade);
+
+      const focus = document.createElement('button');
+      focus.className = 'btn btn-ghost'; focus.type = 'button'; focus.textContent = 'Emphasise';
+      focus.title = 'Draw this model solid and fade every other shown model';
+      focus.setAttribute('aria-label', 'Emphasise ' + entry.name);
+      focus.addEventListener('click', () => {
+        remember('emphasis');
+        const shown = structures.filter(item => item.visible && item.model);
+        const alone = entry.faded === false && shown.every(item => item === entry || item.faded);
+        shown.forEach(item => { item.faded = alone ? false : item !== entry; });
+        renderList(); applyStyle(); renderSequenceSoon();
+        updateStatus(alone ? 'Every shown model is drawn solid again' : displayName(entry) + ' is drawn solid, the other shown models faded');
+      });
+
       const remove = document.createElement('button');
       remove.className = 'btn btn-ghost';
       remove.type = 'button';
@@ -2609,7 +2642,7 @@ html>body{padding:0}</style>
         applyStyle();
       });
 
-      row.append(visibleLabel, copy, score, color, rename, remove);
+      row.append(visibleLabel, copy, score, color, fadeLabel, focus, rename, remove);
       list.append(row);
     });
   }
@@ -3679,7 +3712,7 @@ html>body{padding:0}</style>
         const name = document.createElement('span'); name.className = 'gpv-sequence-chain';
         const chainName = row.chain ? 'Chain ' + row.chain : 'No chain';
         const hiddenChain = (entry.hiddenChains || []).includes(row.chain);
-        const fadedChain = (entry.fadedChains || []).includes(row.chain);
+        const fadedChain = Boolean(entry.faded) || (entry.fadedChains || []).includes(row.chain);
         name.textContent = (multi ? clipText(displayName(entry), 14) + ' · ' + (row.chain || '—') : chainName) + (hiddenChain ? ' · hidden' : fadedChain ? ' · faded' : '');
         name.title = displayName(entry) + ' · ' + chainName + ' · ' + row.residues.length + ' residues';
         const canvas = document.createElement('canvas'); canvas.dataset.chain = row.chain; canvas.dataset.entryId = String(entry.id);
@@ -6175,6 +6208,7 @@ html>body{padding:0}</style>
       color: entry.color,
       label: entry.label || '',
       hiddenChains: entry.hiddenChains || [],
+      ...(entry.faded ? { faded: true } : {}),
       ...(entry.fetchId ? { fetch: entry.fetchId } : {})
     })));
     const scene = {
@@ -6316,6 +6350,7 @@ html>body{padding:0}</style>
       if (typeof modelRecord.label === 'string') entry.label = modelRecord.label.trim().slice(0, 120);
       entry.hiddenChains = Array.isArray(modelRecord.hiddenChains) ? modelRecord.hiddenChains.map(String).slice(0, 200) : [];
       entry.fadedChains = Array.isArray(modelRecord.fadedChains) ? modelRecord.fadedChains.map(String).slice(0, 200) : [];
+      entry.faded = modelRecord.faded === true;
       if (modelRecord.sha256) {
         const actual = entry.hash || await sha256(entry.text);
         if (actual && actual !== modelRecord.sha256) hashWarnings += 1;
@@ -7853,7 +7888,7 @@ html>body{padding:0}</style>
       color: entry.color,
       rank: entry.rank,
       hiddenChains: entry.hiddenChains || [],
-      fadedChains: entry.fadedChains || [],
+      fadedChains: entry.fadedChains || [], faded: Boolean(entry.faded),
       confidence: reportConfidence(entry),
       coords: reportCoordinates(entry),
       shapes: reportShapes(entry),
@@ -8038,6 +8073,11 @@ function styleSpec(s) {
   if (mode === 'annotated') { const lookup = domainLookupFor(s); options = { colorfunc: a => { const r = lookup.get((a.chain || '') + '|' + a.resi); return r ? r.color : '#9ca3af'; } }; }
   if (mode === 'spectrum') options = { colorscheme: 'spectrum' };
   if (mode === 'element') options = { colorscheme: 'default' };
+  if (s.faded) {
+    const paper = paperColor(); const colorOf = options.colorfunc || (options.color ? () => options.color : null);
+    if (colorOf) options = { colorfunc: a => mixHex(colorOf(a), paper, 0.72) };
+    if (rep === 'cartoon') { options.thickness = 0.15; options.arrows = false; }
+  }
   if (Array.isArray(s.fadedChains) && s.fadedChains.length) {
     const paper = paperColor(), colorOf = options.colorfunc ? options.colorfunc : options.color ? (() => options.color) : null;
     if (colorOf) options = { colorfunc: a => s.fadedChains.includes(a.chain || '') ? mixHex(colorOf(a), paper, 0.72) : colorOf(a) };

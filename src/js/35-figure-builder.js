@@ -279,7 +279,7 @@
       color: entry.color,
       rank: entry.rank,
       hiddenChains: entry.hiddenChains || [],
-      fadedChains: entry.fadedChains || [],
+      fadedChains: entry.fadedChains || [], faded: Boolean(entry.faded),
       confidence: reportConfidence(entry),
       coords: reportCoordinates(entry),
       shapes: reportShapes(entry),
@@ -464,6 +464,11 @@ function styleSpec(s) {
   if (mode === 'annotated') { const lookup = domainLookupFor(s); options = { colorfunc: a => { const r = lookup.get((a.chain || '') + '|' + a.resi); return r ? r.color : '#9ca3af'; } }; }
   if (mode === 'spectrum') options = { colorscheme: 'spectrum' };
   if (mode === 'element') options = { colorscheme: 'default' };
+  if (s.faded) {
+    const paper = paperColor(); const colorOf = options.colorfunc || (options.color ? () => options.color : null);
+    if (colorOf) options = { colorfunc: a => mixHex(colorOf(a), paper, 0.72) };
+    if (rep === 'cartoon') { options.thickness = 0.15; options.arrows = false; }
+  }
   if (Array.isArray(s.fadedChains) && s.fadedChains.length) {
     const paper = paperColor(), colorOf = options.colorfunc ? options.colorfunc : options.color ? (() => options.color) : null;
     if (colorOf) options = { colorfunc: a => s.fadedChains.includes(a.chain || '') ? mixHex(colorOf(a), paper, 0.72) : colorOf(a) };

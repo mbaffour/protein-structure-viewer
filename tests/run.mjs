@@ -520,6 +520,28 @@ await step('identifier alignment mode also runs', async () => {
   if ((await page.locator('#gpv-alignment-results tr').count()) < 2) throw new Error('no rows');
   await page.selectOption('#gpv-alignment-mode', 'sequence');
 });
+await step('Emphasise draws one model solid, fades and thins the others, and pressing it again restores them', async () => {
+  await tab('models'); await page.click('#gpv-show-all'); await page.waitForTimeout(500);
+  const rows = page.locator('#gpv-list .gpv-entry');
+  if ((await rows.count()) < 3) throw new Error('expected at least three models, found ' + (await rows.count()));
+  await rows.nth(0).locator('button:has-text("Emphasise")').click(); await page.waitForTimeout(700);
+  const state = await page.evaluate(() => {
+    const d = window.__viewerDebug; const shown = d.entries().filter(entry => entry.visible && entry.model);
+    const luminance = hex => { const v = hex.slice(1); return [0, 2, 4].map(i => parseInt(v.slice(i, i + 2), 16) / 255).reduce((sum, c, i) => sum + c * [0.2126, 0.7152, 0.0722][i], 0); };
+    const other = shown[1]; const atom = other.atoms.find(item => item.atom === 'CA');
+    const drawn = () => { const options = d.colorOptions(other); return options.colorfunc ? options.colorfunc(atom) : options.color; };
+    const fadedColour = drawn(); other.faded = false; const plainColour = drawn(); other.faded = true;
+    return { flags: shown.map(entry => Boolean(entry.faded)), fadedLuminance: luminance(fadedColour), plainLuminance: luminance(plainColour) };
+  });
+  if (state.flags[0] !== false || !state.flags.slice(1).every(Boolean)) throw new Error('fade flags after Emphasise: ' + JSON.stringify(state.flags));
+  if (!(state.fadedLuminance > state.plainLuminance + 0.05)) throw new Error('the faded model is not drawn lighter: ' + state.fadedLuminance.toFixed(3) + ' against ' + state.plainLuminance.toFixed(3));
+  const switches = await rows.locator('input[aria-label^="Fade"]').evaluateAll(list => list.map(input => input.checked));
+  if (switches[0] !== false || !switches.slice(1).every(Boolean)) throw new Error('fade switches do not reflect the emphasis: ' + JSON.stringify(switches));
+  await rows.nth(0).locator('button:has-text("Emphasise")').click(); await page.waitForTimeout(700);
+  const restored = await page.evaluate(() => window.__viewerDebug.entries().filter(entry => entry.visible && entry.model).every(entry => !entry.faded));
+  if (!restored) throw new Error('pressing Emphasise again did not restore the other models');
+  console.log('       emphasised the first model · the others drawn at luminance ' + state.fadedLuminance.toFixed(2) + ' against ' + state.plainLuminance.toFixed(2) + ' · restored');
+});
 await step('identical chains are re-paired by position when a model places the same subunit elsewhere', async () => {
   /* The fixture's two chains carry the same sequence, so every chain pairs equally well and the
      pairing falls back on the order the chains appear in the file. This copy swaps both the chain
