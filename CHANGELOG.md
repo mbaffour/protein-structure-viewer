@@ -2,6 +2,12 @@
 
 All notable changes to this project are recorded here.
 
+## 2.31.1
+
+- **Fixed: the Model legend showed full colours for faded models.** With one model emphasised, the others are drawn as
+  pale tints but their legend swatches kept the full colour. The swatch is now the tint that is on the page, and the
+  on-screen entry says "faded".
+
 ## 2.31.0
 
 - **Emphasise one model in a superposition.** Each row of the Models list gained a fade switch and an **Emphasise**

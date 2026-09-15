@@ -521,26 +521,43 @@ await step('identifier alignment mode also runs', async () => {
   await page.selectOption('#gpv-alignment-mode', 'sequence');
 });
 await step('Emphasise draws one model solid, fades and thins the others, and pressing it again restores them', async () => {
-  await tab('models'); await page.click('#gpv-show-all'); await page.waitForTimeout(500);
+  await tab('models'); await page.click('#gpv-show-all'); await page.waitForTimeout(400);
+  const viewBefore = await page.inputValue('#gpv-view-mode'); await page.selectOption('#gpv-view-mode', 'overlay'); await page.waitForTimeout(600);
   const rows = page.locator('#gpv-list .gpv-entry');
   if ((await rows.count()) < 3) throw new Error('expected at least three models, found ' + (await rows.count()));
-  await rows.nth(0).locator('button:has-text("Emphasise")').click(); await page.waitForTimeout(700);
-  const state = await page.evaluate(() => {
-    const d = window.__viewerDebug; const shown = d.entries().filter(entry => entry.visible && entry.model);
-    const luminance = hex => { const v = hex.slice(1); return [0, 2, 4].map(i => parseInt(v.slice(i, i + 2), 16) / 255).reduce((sum, c, i) => sum + c * [0.2126, 0.7152, 0.0722][i], 0); };
-    const other = shown[1]; const atom = other.atoms.find(item => item.atom === 'CA');
-    const drawn = () => { const options = d.colorOptions(other); return options.colorfunc ? options.colorfunc(atom) : options.color; };
-    const fadedColour = drawn(); other.faded = false; const plainColour = drawn(); other.faded = true;
-    return { flags: shown.map(entry => Boolean(entry.faded)), fadedLuminance: luminance(fadedColour), plainLuminance: luminance(plainColour) };
-  });
-  if (state.flags[0] !== false || !state.flags.slice(1).every(Boolean)) throw new Error('fade flags after Emphasise: ' + JSON.stringify(state.flags));
-  if (!(state.fadedLuminance > state.plainLuminance + 0.05)) throw new Error('the faded model is not drawn lighter: ' + state.fadedLuminance.toFixed(3) + ' against ' + state.plainLuminance.toFixed(3));
-  const switches = await rows.locator('input[aria-label^="Fade"]').evaluateAll(list => list.map(input => input.checked));
-  if (switches[0] !== false || !switches.slice(1).every(Boolean)) throw new Error('fade switches do not reflect the emphasis: ' + JSON.stringify(switches));
-  await rows.nth(0).locator('button:has-text("Emphasise")').click(); await page.waitForTimeout(700);
-  const restored = await page.evaluate(() => window.__viewerDebug.entries().filter(entry => entry.visible && entry.model).every(entry => !entry.faded));
-  if (!restored) throw new Error('pressing Emphasise again did not restore the other models');
-  console.log('       emphasised the first model · the others drawn at luminance ' + state.fadedLuminance.toFixed(2) + ' against ' + state.plainLuminance.toFixed(2) + ' · restored');
+  /* Whatever happens, no model may stay faded for the steps that follow. */
+  const cleanup = async () => {
+    await tab('models');
+    const fades = rows.locator('input[aria-label^="Fade"]');
+    for (let index = 0; index < await fades.count(); index += 1) if (await fades.nth(index).isChecked()) await fades.nth(index).click();
+    await page.selectOption('#gpv-view-mode', viewBefore); await page.waitForTimeout(400);
+  };
+  try {
+    await rows.nth(0).locator('button:has-text("Emphasise")').click(); await page.waitForTimeout(700);
+    const state = await page.evaluate(() => {
+      const d = window.__viewerDebug; const shown = d.entries().filter(entry => entry.visible && entry.model);
+      const luminance = hex => { const v = hex.slice(1); return [0, 2, 4].map(i => parseInt(v.slice(i, i + 2), 16) / 255).reduce((sum, c, i) => sum + c * [0.2126, 0.7152, 0.0722][i], 0); };
+      const other = shown[1]; const atom = other.atoms.find(item => item.atom === 'CA');
+      const drawn = () => { const options = d.colorOptions(other); return options.colorfunc ? options.colorfunc(atom) : options.color; };
+      const fadedColour = drawn(); other.faded = false; const plainColour = drawn(); other.faded = true;
+      return { flags: shown.map(entry => Boolean(entry.faded)), fadedLuminance: luminance(fadedColour), plainLuminance: luminance(plainColour) };
+    });
+    if (state.flags[0] !== false || !state.flags.slice(1).every(Boolean)) throw new Error('fade flags after Emphasise: ' + JSON.stringify(state.flags));
+    if (!(state.fadedLuminance > state.plainLuminance + 0.05)) throw new Error('the faded model is not drawn lighter: ' + state.fadedLuminance.toFixed(3) + ' against ' + state.plainLuminance.toFixed(3));
+    const switches = await rows.locator('input[aria-label^="Fade"]').evaluateAll(list => list.map(input => input.checked));
+    if (switches[0] !== false || !switches.slice(1).every(Boolean)) throw new Error('fade switches do not reflect the emphasis: ' + JSON.stringify(switches));
+    /* The Model legend (overlay view, colour per structure) shows the tint the faded models are drawn in. */
+    await tab('appearance'); const modeBefore = await page.inputValue('#gpv-color-mode'); await page.selectOption('#gpv-color-mode', 'structure'); await page.waitForTimeout(500);
+    const legend = await page.evaluate(() => { const d = window.__viewerDebug; const shown = d.displayedEntries().filter(entry => entry.model); const swatches = [...document.querySelectorAll('#gpv-plddt-legend .gpv-swatch')].map(el => getComputedStyle(el).backgroundColor); const rgb = hex => { const v = hex.slice(1); return 'rgb(' + [0, 2, 4].map(i => parseInt(v.slice(i, i + 2), 16)).join(', ') + ')'; }; return { swatches, full: shown.map(entry => rgb(entry.color)), text: document.querySelector('#gpv-plddt-legend').textContent }; });
+    if (legend.swatches.length < 3) throw new Error('the Model legend did not appear: ' + JSON.stringify(legend));
+    if (legend.swatches[0] !== legend.full[0]) throw new Error('the emphasised model lost its colour in the legend: ' + legend.swatches[0] + ' against ' + legend.full[0]);
+    if (legend.swatches[1] === legend.full[1] || !/faded/.test(legend.text)) throw new Error('the legend does not show the faded tint: ' + JSON.stringify(legend));
+    await page.selectOption('#gpv-color-mode', modeBefore); await page.waitForTimeout(300); await tab('models');
+    await rows.nth(0).locator('button:has-text("Emphasise")').click(); await page.waitForTimeout(700);
+    const restored = await page.evaluate(() => window.__viewerDebug.entries().filter(entry => entry.visible && entry.model).every(entry => !entry.faded));
+    if (!restored) throw new Error('pressing Emphasise again did not restore the other models');
+    console.log('       emphasised the first model · the others drawn at luminance ' + state.fadedLuminance.toFixed(2) + ' against ' + state.plainLuminance.toFixed(2) + ' · legend shows the tint · restored');
+  } finally { await cleanup(); }
 });
 await step('identical chains are re-paired by position when a model places the same subunit elsewhere', async () => {
   /* The fixture's two chains carry the same sequence, so every chain pairs equally well and the

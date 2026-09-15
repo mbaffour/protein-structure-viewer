@@ -761,7 +761,9 @@
     if (mode === 'structure' && kind !== 'comparison') {
       if (shown.length < 2 || shown.length > 8) return null;
       const names = distinguishingNames(shown.map(displayName));
-      return { title: 'Model', items: shown.map((entry, index) => [entry.color, names[index], displayName(entry)]) };
+      /* A faded model is drawn as a tint, so its swatch is that tint — the legend shows what is on the page. */
+      const background = backgroundSpec(); const paper = background.alpha === 0 ? '#ffffff' : background.color;
+      return { title: 'Model', items: shown.map((entry, index) => [entry.faded ? mixHex(entry.color, paper, 0.72) : entry.color, names[index], displayName(entry) + (entry.faded ? ' · faded' : '')]) };
     }
     return null;
   }
