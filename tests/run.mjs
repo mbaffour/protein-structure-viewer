@@ -520,6 +520,59 @@ await step('identifier alignment mode also runs', async () => {
   if ((await page.locator('#gpv-alignment-results tr').count()) < 2) throw new Error('no rows');
   await page.selectOption('#gpv-alignment-mode', 'sequence');
 });
+await step('identical chains are re-paired by position when a model places the same subunit elsewhere', async () => {
+  /* The fixture's two chains carry the same sequence, so every chain pairs equally well and the
+     pairing falls back on the order the chains appear in the file. This copy swaps both the chain
+     names and that order, which is what a prediction placing the same subunit elsewhere looks like:
+     pairing then compares each chain with the wrong copy, and positional matching undoes it. */
+  const original = (await readFile(join(work, 'model_a.pdb'), 'utf8')).split('\n');
+  const isAtom = line => /^(ATOM|HETATM)/.test(line) && 'AB'.includes(line[21]);
+  const rename = (line, chain) => line.slice(0, 21) + chain + line.slice(22);
+  const swapped = [
+    ...original.filter(line => isAtom(line) && line[21] === 'B').map(line => rename(line, 'A')),
+    'TER',
+    ...original.filter(line => isAtom(line) && line[21] === 'A').map(line => rename(line, 'B')),
+    'TER', 'END', ''
+  ].join('\n');
+  const file = join(work, 'model_swapped.pdb'); await writeFile(file, swapped);
+  const cleanup = async () => {
+    await tab('compare'); await page.uncheck('#gpv-chain-position');
+    await tab('models');
+    const row = page.locator('#gpv-list .gpv-entry', { hasText: 'model_swapped' });
+    if (await row.count()) { await row.first().locator('button:has-text("Remove")').click(); await page.waitForTimeout(400); }
+    await page.click('#gpv-show-all'); await page.waitForTimeout(600);
+    await tab('compare'); await page.click('#gpv-align'); await page.waitForTimeout(2500);
+  };
+  try {
+    await tab('models'); await page.setInputFiles('#gpv-files', [file]); await page.waitForTimeout(1800);
+    const only = async names => page.evaluate(labels => {
+      [...document.querySelectorAll('#gpv-list .gpv-entry')].forEach(entry => {
+        const toggle = entry.querySelector('input[type="checkbox"]');
+        const wanted = labels.some(label => entry.textContent.includes(label));
+        if (toggle && toggle.checked !== wanted) toggle.click();
+      });
+    }, names);
+    await only(['model_a.pdb', 'model_swapped.pdb']); await page.waitForTimeout(900);
+    await tab('compare');
+    await page.evaluate(() => { const select = document.querySelector('#gpv-reference'); const option = [...select.options].find(item => /model_a\.pdb/.test(item.textContent)); select.value = option.value; select.dispatchEvent(new Event('change', { bubbles: true })); });
+    await page.waitForTimeout(300);
+    const rowFor = async () => {
+      const rows = await page.locator('#gpv-alignment-results tr').evaluateAll(list => list.map(row => [...row.querySelectorAll('th,td')].map(cell => cell.textContent)));
+      const row = rows.find(cells => /model_swapped/.test(cells[0]));
+      if (!row) throw new Error('no row for the swapped model: ' + JSON.stringify(rows));
+      return { rmsd: Number(row[4]), mapping: row[7] };
+    };
+    await page.uncheck('#gpv-chain-position'); await page.click('#gpv-align'); await page.waitForTimeout(3000);
+    const byName = await rowFor();
+    await page.check('#gpv-chain-position'); await page.click('#gpv-align'); await page.waitForTimeout(3000);
+    const byPosition = await rowFor();
+    if (!(byName.rmsd > 1)) throw new Error('pairing in file order should compare the wrong copies: RMSD ' + byName.rmsd);
+    if (!(byPosition.rmsd < byName.rmsd / 2)) throw new Error('pairing by position did not improve the fit: ' + byPosition.rmsd + ' against ' + byName.rmsd);
+    if (!/A→B/.test(byPosition.mapping) || !/B→A/.test(byPosition.mapping)) throw new Error('the chain mapping was not swapped: ' + byPosition.mapping);
+    if (!/matched by position/.test(byPosition.mapping)) throw new Error('the method does not say chains were matched by position: ' + byPosition.mapping);
+    console.log('       swapped copies: ' + byName.rmsd.toFixed(2) + ' Å in file order → ' + byPosition.rmsd.toFixed(2) + ' Å by position · ' + byPosition.mapping);
+  } finally { await cleanup(); }
+});
 await step('the model legend drops the shared part of long run file names', async () => {
   const cases = await page.evaluate(() => {
     const shorten = window.__viewerDebug.distinguishingNames;

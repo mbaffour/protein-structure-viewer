@@ -425,6 +425,17 @@ figure goes into a slide or a manuscript draft without a file in between. Chrome
 image clipboard writes; Firefox and Safari may refuse, in which case the viewer says so and the
 download remains.
 
+**Assemblies of identical subunits.** When several chains share a sequence, every chain pairs equally
+well with every copy, and the pairing falls back on the order the chains appear in each file. A prediction that puts the same
+subunit in a different position is then measured against the wrong copy, and the RMSD says more about
+the bookkeeping than about the models. **Match identical chains by position** fits once, re-pairs
+chains of identical sequence by the distance between their centroids (nearest first, each chain used
+once), and fits again, keeping the new pairing only when it brings the models closer. The mapping it
+chose — `K→L; L→K` — is printed with each result and in the RMSD CSV, because the matching is greedy:
+where subunits sit closer to each other than to their counterparts it can still choose badly, and you
+should read the mapping before trusting the number. The switch is off by default, so numbers from
+earlier versions are reproduced exactly.
+
 **Fitting on a region.** By default **Align visible** computes the superposition from every residue
 that matches between the models. **Fit on** changes that to a chain (`A`), a residue range
 (`A:20-140`, or `20-140` across all chains), or **the selected residues** — whatever you have

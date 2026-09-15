@@ -153,7 +153,9 @@ interface contact map beside the PAE heatmap when one was computed for a model i
 ## Superposing models
 
 Compare → **Align visible** superposes every shown model onto the reference by Kabsch fitting of
-Cα atoms paired by sequence or by residue identifier. **Fit on** narrows what the rotation is
+Cα atoms paired by sequence or by residue identifier. For assemblies of identical subunits,
+**Match identical chains by position** re-pairs the chains by where they sit after a first fit, so a
+model that places the same subunit differently is compared against the copy it corresponds to. **Fit on** narrows what the rotation is
 computed from — a chain, a residue range, or the residues you have selected — and the table reports
 the RMSD over that region beside the RMSD over everything matched, which is how a hinge or a moved
 domain is shown. Colour by *Cα deviation* to paint what moved, and by *Model agreement* for the

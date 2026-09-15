@@ -343,6 +343,45 @@
     };
   }
 
+  /* Matching identical chains by where they sit.
+     In an assembly of identical subunits every chain pair scores the same identity, so pairing by
+     sequence alone is arbitrary: a prediction that places the same subunit in a different position
+     is then compared against the wrong copy and the RMSD means nothing. After a first fit this
+     re-pairs chains of identical sequence by the distance between their centroids — nearest first,
+     each chain used once — and the superposition is computed again from the new pairing. Greedy,
+     not optimal: with subunits closer to each other than to their partners it can still choose
+     badly, which is why it is an option and the chain mapping is printed in the results. */
+  function positionalPairs(reference, target) {
+    const referenceChains = residueChains(reference);
+    const targetChains = residueChains(target);
+    const centroidOf = residues => {
+      const total = residues.length || 1;
+      return residues.reduce((sum, residue) => ({ x: sum.x + residue.atom.x / total, y: sum.y + residue.atom.y / total, z: sum.z + residue.atom.z / total }), { x: 0, y: 0, z: 0 });
+    };
+    const referenceList = [...referenceChains].map(([chain, residues]) => ({ chain, residues, sequence: residues.map(residue => residue.letter).join(''), centre: centroidOf(residues) }));
+    const targetList = [...targetChains].map(([chain, residues]) => ({ chain, residues, sequence: residues.map(residue => residue.letter).join(''), centre: centroidOf(residues) }));
+    const candidates = [];
+    referenceList.forEach(left => targetList.forEach(right => {
+      candidates.push({ left, right, same: left.sequence === right.sequence, distance: Math.hypot(left.centre.x - right.centre.x, left.centre.y - right.centre.y, left.centre.z - right.centre.z) });
+    }));
+    candidates.sort((a, b) => (Number(b.same) - Number(a.same)) || (a.distance - b.distance));
+    const usedReference = new Set(); const usedTarget = new Set(); const selected = [];
+    candidates.forEach(candidate => {
+      if (usedReference.has(candidate.left.chain) || usedTarget.has(candidate.right.chain)) return;
+      usedReference.add(candidate.left.chain); usedTarget.add(candidate.right.chain);
+      selected.push(candidate);
+    });
+    const aligned = selected.map(candidate => ({ referenceChain: candidate.left.chain, targetChain: candidate.right.chain, ...alignSequences(candidate.left.residues, candidate.right.residues) }));
+    const pairs = aligned.flatMap(candidate => candidate.pairs);
+    const matches = aligned.reduce((sum, candidate) => sum + Math.round(candidate.identity * candidate.pairs.length), 0);
+    return {
+      pairs,
+      method: 'sequence alignment with chains matched by position',
+      identity: pairs.length ? matches / pairs.length : 0,
+      chainPairs: aligned.map(candidate => (candidate.referenceChain || '—') + '→' + (candidate.targetChain || '—')).join('; ')
+    };
+  }
+
   function caPairs(reference, target) {
     return root.querySelector('#gpv-alignment-mode').value === 'sequence' ? sequencePairs(reference, target) : identifierPairs(reference, target);
   }
@@ -400,8 +439,8 @@
       + matrix[0][2] * (matrix[1][0] * matrix[2][1] - matrix[1][1] * matrix[2][0]);
   }
 
-  function alignEntry(reference, target, matcher = null) {
-    const pairing = caPairs(reference, target);
+  function alignEntry(reference, target, matcher = null, pairingOverride = null) {
+    const pairing = pairingOverride || caPairs(reference, target);
     const pairs = pairing.pairs;
     if (pairs.length < 3) return null;
     /* Fit on the region when enough of it matched; otherwise fall back to every pair and say so. */
@@ -497,9 +536,16 @@
     const results = [];
     const matcher = fitMatcher();
     reference.deviationSamples = new Map();
+    const byPosition = root.querySelector('#gpv-chain-position').checked;
     targets.forEach(entry => {
       if (entry !== reference) {
-        const result = alignEntry(reference, entry, matcher);
+        let result = alignEntry(reference, entry, matcher);
+        /* Second pass: with the models roughly on top of each other, re-pair identical chains by
+           position and fit again. Kept only when it actually brings the models closer. */
+        if (result && byPosition) {
+          const repaired = alignEntry(reference, entry, matcher, positionalPairs(reference, entry));
+          if (repaired && repaired.rmsd <= result.rmsd) result = repaired;
+        }
         if (result) results.push(result);
       }
     });
@@ -656,6 +702,7 @@
       fog: root.querySelector('#gpv-fog').checked,
       labelStyle: root.querySelector('#gpv-label-style').value,
       legendPosition: root.querySelector('#gpv-legend-position').value,
+      chainsByPosition: root.querySelector('#gpv-chain-position').checked,
       fitScope: root.querySelector('#gpv-fit-scope').value,
       fitRegion: root.querySelector('#gpv-fit-region').value,
       figureLabels: { ...figureLabels },

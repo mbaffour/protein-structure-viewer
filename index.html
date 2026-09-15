@@ -1048,6 +1048,7 @@ html>body{padding:0}</style>
       <label class="form-label">Residue mapping<select class="form-select" id="gpv-alignment-mode"><option value="sequence">Sequence-aware</option><option value="identifier">Chain and residue IDs</option></select></label>
       <label class="form-label">Fit on<select class="form-select" id="gpv-fit-scope" data-tooltip="Superpose using only part of the structure — one chain, a residue range, or the current selections — and read the RMSD both over that region and over every matched residue"><option value="all" selected>All matched residues</option><option value="region">A chain or residue range…</option><option value="selection">The selected residues</option></select></label>
       <label class="form-label">Region<input class="form-control" id="gpv-fit-region" type="text" placeholder="A, A:20-140 or 20-140" maxlength="120" disabled></label>
+      <label class="form-check form-switch"><input class="form-check-input" id="gpv-chain-position" type="checkbox"><span class="form-check-label" data-tooltip="For assemblies of identical subunits: after a first fit, pair chains of the same sequence by where they sit rather than by name or order, then fit again. Without it, a model that places the same subunit differently is compared against the wrong copy">Match identical chains by position</span></label>
       <button class="btn" type="button" id="gpv-align" disabled>Align visible</button>
       <button class="btn" type="button" id="gpv-restore" disabled>Restore coordinates</button>
       <span class="text-muted text-small" id="gpv-fit-state">The superposition uses every residue that matches between the models.</span>
@@ -1264,6 +1265,7 @@ html>body{padding:0}</style>
       </ul>
       <h3>Tips for figures and reviewers</h3>
       <ul>
+        <li><em>Compare → Match identical chains by position</em> re-pairs the chains of an assembly by where they sit after a first fit, so a model that puts the same subunit in a different place is compared against the copy it actually corresponds to; the chain mapping it chose is printed with each result.</li>
         <li><em>Compare → Fit on</em> superposes the visible models using only part of the structure — a chain, a residue range such as <code>A:20-140</code>, or the residues you have selected — and reports the RMSD over that region beside the RMSD over every matched residue, which is how a hinge or a shifted domain is shown.</li>
         <li>Labels are draggable: pick up any label, callout or corner title in the 3D view with the mouse and put it where the figure needs it. A residue label keeps a thin leader line back to its residue, and <em>Reset</em> in its row puts it back. <em>Publish → Legend position</em> moves the colour legend to any corner, or stacks it down the left or right side.</li>
         <li><em>Label domains</em> (Annotate → Domains, or beside the PAE domains) writes each domain's name on the structure at its centroid, in the domain colour and with the legend's names; <em>Download architecture PNG/SVG</em> draws the linear domain diagram — one row per chain, coloured boxes with names and boundary residue numbers — which is also a composite-figure panel and an optional row under the panels of the figure builder.</li>
@@ -1634,7 +1636,7 @@ html>body{padding:0}</style>
   let busyDepth = 0;
   let restoreMotion = null;
   const listPageSize = 60;
-  const viewerVersion = '2.29.1';
+  const viewerVersion = '2.30.0';
   const preferenceKey = 'protein-structure-viewer:preferences';
   const themeKey = 'protein-structure-viewer:theme';
   const labelColors = getComputedStyle(root);
@@ -5771,6 +5773,45 @@ html>body{padding:0}</style>
     };
   }
 
+  /* Matching identical chains by where they sit.
+     In an assembly of identical subunits every chain pair scores the same identity, so pairing by
+     sequence alone is arbitrary: a prediction that places the same subunit in a different position
+     is then compared against the wrong copy and the RMSD means nothing. After a first fit this
+     re-pairs chains of identical sequence by the distance between their centroids — nearest first,
+     each chain used once — and the superposition is computed again from the new pairing. Greedy,
+     not optimal: with subunits closer to each other than to their partners it can still choose
+     badly, which is why it is an option and the chain mapping is printed in the results. */
+  function positionalPairs(reference, target) {
+    const referenceChains = residueChains(reference);
+    const targetChains = residueChains(target);
+    const centroidOf = residues => {
+      const total = residues.length || 1;
+      return residues.reduce((sum, residue) => ({ x: sum.x + residue.atom.x / total, y: sum.y + residue.atom.y / total, z: sum.z + residue.atom.z / total }), { x: 0, y: 0, z: 0 });
+    };
+    const referenceList = [...referenceChains].map(([chain, residues]) => ({ chain, residues, sequence: residues.map(residue => residue.letter).join(''), centre: centroidOf(residues) }));
+    const targetList = [...targetChains].map(([chain, residues]) => ({ chain, residues, sequence: residues.map(residue => residue.letter).join(''), centre: centroidOf(residues) }));
+    const candidates = [];
+    referenceList.forEach(left => targetList.forEach(right => {
+      candidates.push({ left, right, same: left.sequence === right.sequence, distance: Math.hypot(left.centre.x - right.centre.x, left.centre.y - right.centre.y, left.centre.z - right.centre.z) });
+    }));
+    candidates.sort((a, b) => (Number(b.same) - Number(a.same)) || (a.distance - b.distance));
+    const usedReference = new Set(); const usedTarget = new Set(); const selected = [];
+    candidates.forEach(candidate => {
+      if (usedReference.has(candidate.left.chain) || usedTarget.has(candidate.right.chain)) return;
+      usedReference.add(candidate.left.chain); usedTarget.add(candidate.right.chain);
+      selected.push(candidate);
+    });
+    const aligned = selected.map(candidate => ({ referenceChain: candidate.left.chain, targetChain: candidate.right.chain, ...alignSequences(candidate.left.residues, candidate.right.residues) }));
+    const pairs = aligned.flatMap(candidate => candidate.pairs);
+    const matches = aligned.reduce((sum, candidate) => sum + Math.round(candidate.identity * candidate.pairs.length), 0);
+    return {
+      pairs,
+      method: 'sequence alignment with chains matched by position',
+      identity: pairs.length ? matches / pairs.length : 0,
+      chainPairs: aligned.map(candidate => (candidate.referenceChain || '—') + '→' + (candidate.targetChain || '—')).join('; ')
+    };
+  }
+
   function caPairs(reference, target) {
     return root.querySelector('#gpv-alignment-mode').value === 'sequence' ? sequencePairs(reference, target) : identifierPairs(reference, target);
   }
@@ -5828,8 +5869,8 @@ html>body{padding:0}</style>
       + matrix[0][2] * (matrix[1][0] * matrix[2][1] - matrix[1][1] * matrix[2][0]);
   }
 
-  function alignEntry(reference, target, matcher = null) {
-    const pairing = caPairs(reference, target);
+  function alignEntry(reference, target, matcher = null, pairingOverride = null) {
+    const pairing = pairingOverride || caPairs(reference, target);
     const pairs = pairing.pairs;
     if (pairs.length < 3) return null;
     /* Fit on the region when enough of it matched; otherwise fall back to every pair and say so. */
@@ -5925,9 +5966,16 @@ html>body{padding:0}</style>
     const results = [];
     const matcher = fitMatcher();
     reference.deviationSamples = new Map();
+    const byPosition = root.querySelector('#gpv-chain-position').checked;
     targets.forEach(entry => {
       if (entry !== reference) {
-        const result = alignEntry(reference, entry, matcher);
+        let result = alignEntry(reference, entry, matcher);
+        /* Second pass: with the models roughly on top of each other, re-pair identical chains by
+           position and fit again. Kept only when it actually brings the models closer. */
+        if (result && byPosition) {
+          const repaired = alignEntry(reference, entry, matcher, positionalPairs(reference, entry));
+          if (repaired && repaired.rmsd <= result.rmsd) result = repaired;
+        }
         if (result) results.push(result);
       }
     });
@@ -6084,6 +6132,7 @@ html>body{padding:0}</style>
       fog: root.querySelector('#gpv-fog').checked,
       labelStyle: root.querySelector('#gpv-label-style').value,
       legendPosition: root.querySelector('#gpv-legend-position').value,
+      chainsByPosition: root.querySelector('#gpv-chain-position').checked,
       fitScope: root.querySelector('#gpv-fit-scope').value,
       fitRegion: root.querySelector('#gpv-fit-region').value,
       figureLabels: { ...figureLabels },
@@ -6284,6 +6333,7 @@ html>body{padding:0}</style>
     if (['boxed', 'plain'].includes(settings.labelStyle)) root.querySelector('#gpv-label-style').value = settings.labelStyle;
     setFigureLabels(settings.figureLabels);
     if (['bottom-left', 'bottom-right', 'top-left', 'top-right', 'left', 'right'].includes(settings.legendPosition)) root.querySelector('#gpv-legend-position').value = settings.legendPosition;
+    if (typeof settings.chainsByPosition === 'boolean') root.querySelector('#gpv-chain-position').checked = settings.chainsByPosition;
     if (['all', 'region', 'selection'].includes(settings.fitScope)) root.querySelector('#gpv-fit-scope').value = settings.fitScope;
     if (typeof settings.fitRegion === 'string') root.querySelector('#gpv-fit-region').value = settings.fitRegion.slice(0, 120);
     renderFitControls();

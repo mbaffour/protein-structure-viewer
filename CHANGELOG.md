@@ -2,6 +2,16 @@
 
 All notable changes to this project are recorded here.
 
+## 2.30.0
+
+- **Match identical chains by position.** In an assembly of identical subunits every chain pairs equally well by
+  sequence, so the pairing is arbitrary: a model that places the same subunit somewhere else is compared against the
+  wrong copy and its RMSD means nothing. The new switch in Compare does a first fit, re-pairs chains of identical
+  sequence by the distance between their centroids — nearest first, each chain used once — and fits again, keeping the
+  result only when it brings the models closer. The chain mapping it chose is printed with every result and in the CSV.
+  It is off by default, so existing numbers and the cross-validation are unchanged, and the matching is greedy rather
+  than optimal, which is why the mapping is always shown.
+
 ## 2.29.1
 
 - **The Model legend names the models again.** Overlaying the five models of one AlphaFold run gave a legend of five
