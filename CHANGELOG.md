@@ -2,6 +2,11 @@
 
 All notable changes to this project are recorded here.
 
+## 2.38.1
+
+- **Fixed:** the site close-up frames the site with its neighbourhood (every residue within the effect
+  cutoff), not the lone residue, so a compared position in a large assembly keeps its context.
+
 ## 2.38.0
 
 - **Make site figure.** The figure a mutation study ends up drawing is always the same two panels, so

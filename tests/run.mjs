@@ -992,6 +992,26 @@ await step('one position is compared across a wild-type and a mutant model: side
     if (added[0].name !== 'Overview' || added[1].name !== 'Site A:15') throw new Error('panel names: ' + added.map(view => view.name).join(', '));
     if (!added.every(view => view.included)) throw new Error('the two site figure panels are not both ticked');
     if (views.slice(0, viewsBefore).some(view => view.included)) throw new Error('an earlier saved view is still ticked into the figure');
+    /* The close-up frames the site with its neighbourhood, not the lone residue: its camera must be
+       wider than the one zoomTo() gives for residue A:15 alone. getView()[3] is the zoom — larger is
+       tighter — and the live camera is put back exactly as it was before the measurement. */
+    const frames = await page.evaluate(index => {
+      const viewer = window.__viewerDebug.viewer;
+      const saved = window.__viewerDebug.savedViews()[index].camera;
+      const before = viewer.getView();
+      let lone = null;
+      try {
+        const shown = window.__viewerDebug.displayedEntries().filter(entry => entry.model);
+        const chosen = Number(document.querySelector('#gpv-reference').value);
+        const model = shown.find(entry => entry.id === chosen) || shown[0];
+        viewer.zoomTo({ model: model.model.getID(), chain: 'A', resi: 15 });
+        lone = viewer.getView()[3];
+      } finally { viewer.setView(before); }
+      return { closeUp: saved ? saved[3] : null, lone, before, after: viewer.getView() };
+    }, views.length - 1);
+    if (!Number.isFinite(frames.closeUp) || !Number.isFinite(frames.lone)) throw new Error('camera zooms: ' + JSON.stringify(frames));
+    if (!(frames.closeUp < frames.lone)) throw new Error('the site close-up is framed at zoom ' + frames.closeUp + ', no wider than the lone residue at ' + frames.lone);
+    if (frames.after.some((value, index) => Math.abs(value - frames.before[index]) > 1e-6)) throw new Error('measuring the lone-residue frame left the camera moved');
     const builderLetters = await page.locator('#gpv-builder-rows .gpv-builder-letter').allTextContents();
     const expectedLetters = [...Array(viewsBefore).fill('—'), 'A', 'B'];
     if (builderLetters.join('') !== expectedLetters.join('')) throw new Error('builder letters: ' + builderLetters.join(',') + ' not ' + expectedLetters.join(','));

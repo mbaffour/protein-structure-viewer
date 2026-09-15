@@ -533,7 +533,10 @@ neighbourhood rule.
 saves two panels: **Overview**, every shown model solid with the superposition in frame and the site
 marked, and **Site A:15**, the camera on the compared residue in the reference model, backed off a
 little so the neighbours stay in the panel, with the side chains drawn, each model's own residue
-labelled, and the reference — the wild type — solid against every other shown model faded. It needs a
+labelled, and the reference — the wild type — solid against every other shown model faded. The close-up
+is framed on the site *and its neighbourhood* — every residue with a heavy atom within the
+**Neighbourhood (Å)** cutoff of it — not the lone residue, so a position in a large assembly keeps the
+context around it instead of filling the panel with the nearest wall of ribbon. It needs a
 compared position and at least two shown models; it switches colouring to one colour per model and turns
 **Side chains at compared positions** on. The close-up takes the comparison readout as its caption.
 Both panels are ticked as the *only* two panels of the figure builder, in two columns with letters,

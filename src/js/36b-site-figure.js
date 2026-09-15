@@ -24,6 +24,50 @@
     control.dispatchEvent(new Event('change', { bubbles: true }));
   }
 
+  /* The residues the close-up frames: the site and every residue of the reference model with a heavy
+     atom within the effect cutoff of it. Framing the lone residue is what fills a large assembly's
+     panel with whatever ribbon happens to lie in front of the site; its neighbourhood is the context
+     that makes the close-up readable, and it is the same neighbourhood the effect table measures.
+     Those rows are reused when a superposition has been measured at this position; without one the
+     neighbourhood is found the same way, straight from the reference's own heavy atoms. */
+  function siteFigureNeighbourhood(reference, spot) {
+    const site = { chain: spot.chain || '', resi: spot.resi };
+    if (positionEffect && positionEffect.spot.chain === site.chain && positionEffect.spot.resi === site.resi && positionEffect.rows.length) {
+      return positionEffect.rows.map(row => ({ chain: row.chain || '', resi: row.resi }));
+    }
+    const cutoff = positionCutoff();
+    const heavy = heavyAtoms(reference).filter(atom => !atom.hetflag);
+    const isSiteAtom = atom => (atom.chain || '') === site.chain && atom.resi === site.resi;
+    const targets = heavy.filter(isSiteAtom);
+    if (!targets.length) return [site];
+    const candidates = heavy.filter(atom => !isSiteAtom(atom));
+    const grid = spatialGrid(candidates, cutoff);
+    const limit = cutoff * cutoff;
+    const found = new Map();
+    targets.forEach(target => grid.near(target).forEach(index => {
+      const atom = candidates[index];
+      if (squaredDistance(atom, target) > limit) return;
+      const key = (atom.chain || '') + '|' + atom.resi;
+      if (!found.has(key)) found.set(key, { chain: atom.chain || '', resi: atom.resi });
+    }));
+    return [site, ...found.values()];
+  }
+
+  /* The neighbourhood as one 3Dmol selection on the reference model: one sub-selection per chain,
+     or-ed together when the site's surroundings cross a chain boundary, which on an assembly they
+     usually do. */
+  function siteFigureSelection(reference, spot) {
+    const byChain = new Map();
+    siteFigureNeighbourhood(reference, spot).forEach(item => {
+      if (!byChain.has(item.chain)) byChain.set(item.chain, []);
+      byChain.get(item.chain).push(item.resi);
+    });
+    const parts = [...byChain.entries()].map(([chain, residues]) => (chain ? { chain, resi: residues } : { resi: residues }));
+    const selection = { model: reference.model.getID() };
+    if (parts.length === 1) Object.assign(selection, parts[0]); else selection.or = parts;
+    return selection;
+  }
+
   function makeSiteFigure() {
     const shown = displayedEntries().filter(entry => entry.model);
     if (!spotlightResidues.length) { announce('Compare a position first — the site figure is built around it', 'error'); return; }
@@ -47,14 +91,14 @@
     overview.inFigure = true;
 
     /* Panel B — the close-up: the reference solid, the others faded behind it, the camera on the
-       site itself. zoomTo() frames the residue alone; backing off a little brings its neighbours
-       and the rest of the fold into the panel, which is what makes the close-up legible. */
+       site and its neighbourhood. Framing the lone residue is far too tight on a real assembly — the
+       panel comes back a wall of ribbon with the site lost inside it — so the camera is fitted to
+       every residue within the effect cutoff and then backed off a little, which brings the rest of
+       the fold in behind a site that still fills the frame. */
     shown.forEach(entry => { entry.faded = entry !== reference; });
     applyStyle();
-    const selection = { model: reference.model.getID(), resi: spot.resi };
-    if (spot.chain) selection.chain = spot.chain;
-    viewer.zoomTo(selection);
-    if (typeof viewer.zoom === 'function') viewer.zoom(0.6);
+    viewer.zoomTo(siteFigureSelection(reference, spot));
+    if (typeof viewer.zoom === 'function') viewer.zoom(0.8);
     viewer.render();
     const closeUp = captureViewState('Site ' + tag, String(positionReadout(spot) || tag).slice(0, 200));
     closeUp.inFigure = true;
