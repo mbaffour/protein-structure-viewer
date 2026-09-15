@@ -226,6 +226,17 @@
   root.querySelector('#gpv-add-label').addEventListener('click', addOrEditLabel);
   root.querySelector('#gpv-label-text').addEventListener('keydown', event => { if (event.key === 'Enter') addOrEditLabel(); });
   root.querySelector('#gpv-all-labels').addEventListener('change', () => rebuildOverlays());
+  root.querySelector('#gpv-labels-separate').addEventListener('click', () => {
+    remember('separate labels');
+    const result = separateLabels();
+    /* Without a projection there is no way to know which boxes overlap; saying so beats moving
+       labels on a guess. */
+    if (!result) { announce('Cannot measure the label positions yet — render the view first', 'error'); return; }
+    renderLabelList(); rebuildOverlays();
+    if (result.moved) announce(result.moved + ' label' + (result.moved === 1 ? '' : 's') + ' moved apart');
+    else if (result.blocked) announce('The labels still overlapping are ones you placed by hand — drag them, or Reset a row first');
+    else announce('Labels already clear of each other');
+  });
   root.querySelector('#gpv-clear-labels').addEventListener('click', () => {
     if (labelRecords.length) remember('clearing labels');
     labelRecords = [];

@@ -111,6 +111,11 @@
     viewer.zoomTo(siteFigureSelection(reference, spots));
     if (typeof viewer.zoom === 'function') viewer.zoom(0.8);
     viewer.render();
+    /* Which labels cover each other is a question about the framing, and this panel's framing is not
+       the one the position was compared at; separate them again here, against the camera the panel
+       will actually be drawn with. */
+    separateLabels({ include: label => label.kind === 'position' });
+    rebuildOverlays();
     const closeUp = captureViewState(single ? 'Site ' + tag : 'Sites', String((single ? positionReadout(spots[0]) : positionSetReadout()) || tag).slice(0, 200));
     closeUp.inFigure = true;
 

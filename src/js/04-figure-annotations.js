@@ -308,6 +308,105 @@
     return best;
   }
 
+  /* ---- Separating labels that landed on top of each other ----
+     Compare this position writes one label per model at the same residue, and superposed models hold
+     those atoms within a few ångström of each other: at anything but a close-up zoom the two boxes
+     cover the same pixels and the press produces a figure that has to be repaired by hand — dozens
+     of times over for a compared set. The boxes are measured exactly as the drag hit-test measures
+     them, and the ones that collide are nudged down the screen into a stack. The nudge is written to
+     the same `offset` the mouse writes, so it stays editable, resets from the label's own row,
+     travels in the scene and undoes with the press that made it — and past leaderMinimum it grows
+     the leader line back to the residue that says which label belongs to which. */
+  const labelSeparationPadding = 3;
+  const labelSeparationPasses = 6;
+  /* A label may travel six of its own heights and no further, so one can never end up off the
+     structure it names however tangled the pile it started in. */
+  const labelSeparationCap = 6;
+
+  function labelScreenBox(label, byId = entriesById()) {
+    if (typeof viewer.modelToScreen !== 'function') return null;
+    const screen = viewer.modelToScreen(labelPosition(label, byId));
+    if (!screen || !Number.isFinite(screen.x) || !Number.isFinite(screen.y)) return null;
+    const size = label.size || 12;
+    labelMeasure.font = '500 ' + size + 'px ' + figureFont();
+    const halfWidth = Math.max(10, labelMeasure.measureText(String(label.text || '')).width / 2 + size * 0.45);
+    return { x: screen.x, y: screen.y, halfWidth, halfHeight: size * 0.95 };
+  }
+
+  /* options.include picks the labels this press is allowed to move — the position labels, say, or
+     only the ones it just added. options.keepPlaced (on unless asked otherwise) leaves a label the
+     user has dragged exactly where the user put it. Either way every label on screen still counts as
+     something to avoid: a label moved out of one collision must not land in another.
+     Returns null when the view cannot be projected yet, so the caller can say so rather than guess. */
+  function separateLabels(options = {}) {
+    if (typeof viewer.modelToScreen !== 'function') return null;
+    const perAngstrom = pixelsPerAngstrom(viewer);
+    if (!perAngstrom) return null;
+    const byId = entriesById();
+    const shown = new Set(displayedEntries().map(entry => entry.id));
+    const order = new Map(structures.map((entry, index) => [entry.id, index]));
+    const keepPlaced = options.keepPlaced !== false;
+    const include = typeof options.include === 'function' ? options.include : () => true;
+    const items = labelRecords.filter(label => shown.has(label.entryId)).map(label => ({
+      label,
+      movable: include(label) && !(keepPlaced && labelOffsetLength(label) > 0 && !label.autoPlaced),
+      /* Ties are broken by the order the models were loaded, so the reference model's label is the
+         one that keeps its place and the rest stack under it. */
+      order: order.has(label.entryId) ? order.get(label.entryId) : structures.length,
+      shift: 0, applied: 0
+    }));
+    if (items.length < 2) return { moved: 0, blocked: 0, overlapping: false };
+    items.sort((a, b) => a.order - b.order);
+    /* Which labels cover each other is a question about the current framing, and an offset this
+       routine wrote at some earlier one is this run's to recompute rather than to build on: putting
+       them back on their residues first makes a second press at the same camera a no-op instead of a
+       drift, and keeps the cap below a real bound on how far a label can end up from its residue. */
+    items.forEach(item => { if (item.movable && item.label.autoPlaced) { item.label.offset = null; delete item.label.autoPlaced; } });
+    const up = screenAxisInModelSpace(typeof viewer.getView === 'function' ? viewer.getView() : [0, 0, 0, 0, 0, 0, 0, 1], { x: 0, y: 1, z: 0 });
+    let overlapping = false;
+    let blocked = 0;
+    for (let pass = 0; pass < labelSeparationPasses; pass += 1) {
+      /* Re-projected every pass: a label that has just moved is in a new place, and the pixels it
+         covers there are what the next collision has to be measured against. */
+      const boxes = items.map(item => labelScreenBox(item.label, byId));
+      let collided = false;
+      blocked = 0;
+      for (let i = 0; i < items.length; i += 1) {
+        for (let j = i + 1; j < items.length; j += 1) {
+          const a = boxes[i]; const b = boxes[j];
+          if (!a || !b) continue;
+          if (Math.abs(b.x - a.x) >= a.halfWidth + b.halfWidth + labelSeparationPadding) continue;
+          const overlapY = a.halfHeight + b.halfHeight + labelSeparationPadding - Math.abs(b.y - a.y);
+          if (overlapY <= 0) continue;
+          collided = true; overlapping = true;
+          /* One of the pair keeps its place: the later model's label is the one that gives way, and
+             only if both are locked is there nothing to be done about the collision. */
+          const mover = items[j].movable ? j : items[i].movable ? i : -1;
+          if (mover < 0) { blocked += 1; continue; }
+          const other = mover === j ? i : j;
+          const away = boxes[mover].y >= boxes[other].y ? 1 : -1;
+          const cap = labelSeparationCap * boxes[mover].halfHeight * 2;
+          const wanted = Math.max(-cap, Math.min(cap, items[mover].shift + away * overlapY));
+          boxes[mover].y += wanted - items[mover].shift;
+          items[mover].shift = wanted;
+        }
+      }
+      if (!collided) break;
+      items.forEach(item => {
+        const delta = item.shift - item.applied;
+        if (!delta) return;
+        /* Screen y grows downward, the model-space "up" axis does not: the same sign convention the
+           drag uses, so a separated label and a dragged one mean the same thing by their offset. */
+        const offset = item.label.offset || { x: 0, y: 0, z: 0 };
+        const step = delta / perAngstrom;
+        item.label.offset = { x: offset.x - up.x * step, y: offset.y - up.y * step, z: offset.z - up.z * step };
+        item.label.autoPlaced = true;
+        item.applied = item.shift;
+      });
+    }
+    return { moved: items.filter(item => item.applied !== 0).length, blocked, overlapping };
+  }
+
   let labelDrag = null;
   function startLabelDrag(item, event) {
     remember('label position');
@@ -333,6 +432,8 @@
         y: offset.y + (right.y * dx - up.y * dy) * step,
         z: offset.z + (right.z * dx - up.z * dy) * step
       };
+      /* Once a hand has been on it the placement is the user's, and Separate labels leaves it alone. */
+      if (drag.item.kind === 'label') delete record.autoPlaced;
     }
     rebuildOverlays();
   }

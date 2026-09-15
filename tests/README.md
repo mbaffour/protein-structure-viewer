@@ -115,6 +115,12 @@ PSV_CHROMIUM=/opt/pw-browsers/chromium/chrome-linux/chrome npm test
   beside the original; selecting A:15 with Go to and pressing Compare this position gives a readout naming both models
   and their residues with `differs`, one entry in the spotlight list, exactly two new labels reading `Ala15` and `Gly15`,
   and both of those texts in the figure SVG; Clear compared positions removes them and empties the list.
+- Labels at one site do not cover each other: the wild-type/mutant pair shares its coordinates exactly, so
+  the two labels Compare this position writes at A:15 are anchored to the same pixel; the step checks the
+  anchors are within 4 px of each other, that the two measured screen boxes nonetheless do not overlap,
+  that exactly one label was moved and neither is past the six-label-height cap, and then drags the label
+  that stayed back over the other and presses **Separate labels** — the hand-placed offset must come
+  through unchanged while the other label moves, and the button must be disabled once the labels are gone.
 - The effect of a mutation: the same step then superposes the pair on `model_a` (with identifier mapping, because the
   fixture's two chains are identical poly-alanine and sequence matching is free to pair chain A with chain B) and
   compares again: the neighbourhood is measured, its first row is the site at residue 15, at least two neighbours fall

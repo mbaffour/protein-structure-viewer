@@ -1083,6 +1083,102 @@ await step('one position is compared across a wild-type and a mutant model: side
     console.log('       ' + state.trim() + ' · side chains and both labels in the SVG · ' + effect.summary.neighbourCount + ' neighbours within ' + effect.cutoff + ' Å measured, highlighted and exported · site figure: Overview + Site A:15 + Deviation as panels A, B and C in three columns, PNG ' + figureWidth + ' px wide, colour mode back to ' + startColorMode + ' · two panels again with the deviation panel off · cleared');
   } finally { await cleanup(); }
 });
+await step('the two labels one press puts at a site do not cover each other, and a label placed by hand is left where it was put', async () => {
+  /* The same wild-type/mutant pair: byte-identical coordinates apart from the residue name at A:15,
+     so the two models are already perfectly superposed and the two labels that Compare this position
+     writes there are anchored to the very same point on screen. That is the pile the press has to
+     come out of by itself. */
+  const original = (await readFile(join(work, 'model_a.pdb'), 'utf8')).split('\n');
+  const mutated = original.map(line => (/^ATOM/.test(line) && line[21] === 'A' && Number(line.slice(22, 26)) === 15 ? line.slice(0, 17) + 'GLY' + line.slice(20) : line)).join('\n');
+  const file = join(work, 'model_mutant.pdb'); await writeFile(file, mutated);
+  const startTab = await page.evaluate(() => (document.querySelector('[data-gpv-tab][aria-selected="true"]') || {}).dataset.gpvTab || 'models');
+  const startMode = await page.inputValue('#gpv-view-mode');
+  const cleanup = async () => {
+    await tab('annotate');
+    if (await page.locator('#gpv-position-clear').count()) { await page.click('#gpv-position-clear'); await page.waitForTimeout(400); }
+    await tab('models');
+    const row = page.locator('#gpv-list .gpv-entry', { hasText: 'model_mutant' });
+    if (await row.count()) { await row.first().locator('button:has-text("Remove")').click(); await page.waitForTimeout(400); }
+    await page.click('#gpv-show-all'); await page.waitForTimeout(600);
+    await page.selectOption('#gpv-view-mode', startMode); await page.waitForTimeout(400);
+    await tab(startTab);
+  };
+  /* Two boxes cover each other when they overlap on both axes — the test the viewer itself applies,
+     written out here so the assertion does not borrow the code it is checking. */
+  const covers = (a, b) => Math.abs(a.x - b.x) < a.halfWidth + b.halfWidth && Math.abs(a.y - b.y) < a.halfHeight + b.halfHeight;
+  const read = async () => page.evaluate(() => {
+    const d = window.__viewerDebug;
+    if (typeof d.labelScreenBox !== 'function') return null;
+    return {
+      perAngstrom: d.pixelsPerAngstrom(d.viewer), scrollX, scrollY,
+      labels: d.labelRecords().filter(label => label.kind === 'position').map(label => ({
+        text: label.text,
+        offset: label.offset ? Math.hypot(label.offset.x, label.offset.y, label.offset.z) : 0,
+        /* The record keeps the residue's own coordinates, so the anchor can be projected without
+           the offset and the two labels shown to have started in the same place. */
+        anchor: d.viewer.modelToScreen({ x: label.x, y: label.y, z: label.z }),
+        box: d.labelScreenBox(label)
+      }))
+    };
+  });
+  const labelsBefore = await page.locator('#gpv-label-list .gpv-entry').count();
+  try {
+    await tab('models'); await page.setInputFiles('#gpv-files', [file]); await page.waitForTimeout(1800);
+    await page.selectOption('#gpv-view-mode', 'overlay'); await page.waitForTimeout(300);
+    await page.evaluate(labels => {
+      [...document.querySelectorAll('#gpv-list .gpv-entry')].forEach(entry => {
+        const toggle = entry.querySelector('input[type="checkbox"]');
+        const wanted = labels.some(label => entry.textContent.includes(label));
+        if (toggle && toggle.checked !== wanted) toggle.click();
+      });
+    }, ['model_a.pdb', 'model_mutant.pdb']);
+    await page.waitForTimeout(900);
+    await tab('annotate');
+    await page.fill('#gpv-goto', 'A:15'); await page.click('#gpv-goto-run'); await page.waitForTimeout(500);
+    await page.click('#gpv-position-compare'); await page.waitForTimeout(1200);
+    const placed = await read();
+    if (!placed) throw new Error('the debug hook exposes no labelScreenBox, so this build cannot measure whether two labels cover each other');
+    if (placed.labels.length !== 2) throw new Error('the press left ' + placed.labels.length + ' position labels, not 2');
+    const boxes = placed.labels.map(item => item.box);
+    if (boxes.some(box => !box)) throw new Error('a position label does not project to the screen: ' + JSON.stringify(boxes));
+    const anchors = placed.labels.map(item => item.anchor);
+    const anchorGap = Math.hypot(anchors[0].x - anchors[1].x, anchors[0].y - anchors[1].y);
+    if (anchorGap > 4) throw new Error('the two labels are anchored ' + anchorGap.toFixed(1) + ' px apart, so this is not the pile the step is about');
+    if (covers(boxes[0], boxes[1])) throw new Error('one press left the two labels at A:15 covering each other: ' + JSON.stringify(boxes));
+    /* Separated, not flung: the reference model's label keeps its place on the residue and the other
+       one is moved, by no more than the six label heights the viewer allows itself. */
+    const capPixels = 6 * 2 * Math.max(...boxes.map(box => box.halfHeight));
+    const moved = placed.labels.filter(item => item.offset > 0);
+    if (!moved.length) throw new Error('the boxes are clear of each other but no label carries an offset, so nothing was separated');
+    if (moved.length !== 1) throw new Error(moved.length + ' labels were moved; one of a colliding pair is meant to keep its place');
+    placed.labels.forEach(item => {
+      const pixels = item.offset * placed.perAngstrom;
+      if (pixels > capPixels + 4) throw new Error(item.text + ' was moved ' + pixels.toFixed(0) + ' px, past the ' + capPixels.toFixed(0) + ' px cap');
+    });
+    /* A placement of the user's own is never overridden: drag the label that stayed back over the
+       one that moved, and the press must move the other one instead and leave the drag alone. */
+    const anchored = placed.labels.find(item => item.offset === 0);
+    const grab = { x: anchored.box.x - placed.scrollX, y: anchored.box.y - placed.scrollY };
+    await page.mouse.move(grab.x, grab.y); await page.waitForTimeout(300);
+    await page.mouse.down();
+    await page.mouse.move(grab.x, grab.y + Math.round(anchored.box.halfHeight), { steps: 8 });
+    await page.mouse.up(); await page.waitForTimeout(500);
+    const dragged = (await read()).labels.find(item => item.text === anchored.text);
+    if (!dragged.offset) throw new Error('the drag left ' + anchored.text + ' without an offset');
+    if (await page.locator('#gpv-labels-separate').isDisabled()) throw new Error('Separate labels is disabled with two labels on screen');
+    await page.click('#gpv-labels-separate'); await page.waitForTimeout(600);
+    const after = await read();
+    const kept = after.labels.find(item => item.text === anchored.text);
+    if (Math.abs(kept.offset - dragged.offset) > 1e-6) throw new Error(anchored.text + ' was placed by hand at ' + dragged.offset.toFixed(2) + ' Å and the press moved it to ' + kept.offset.toFixed(2) + ' Å');
+    const afterBoxes = after.labels.map(item => item.box);
+    if (covers(afterBoxes[0], afterBoxes[1])) throw new Error('Separate labels left the two labels covering each other: ' + JSON.stringify(afterBoxes));
+    const said = (await page.locator('#gpv-state').textContent()) || '';
+    if (!/^(\d+ labels? moved apart|Labels already clear of each other)$/.test(said.trim())) throw new Error('Separate labels said: ' + said);
+    await page.click('#gpv-position-clear'); await page.waitForTimeout(500);
+    if (labelsBefore === 0 && !(await page.locator('#gpv-labels-separate').isDisabled())) throw new Error('Separate labels stayed enabled with no labels left');
+    console.log('       both labels anchored within ' + anchorGap.toFixed(1) + ' px, separated to ' + Math.abs(boxes[0].y - boxes[1].y).toFixed(0) + ' px apart by moving ' + moved[0].text + ' ' + (moved[0].offset * placed.perAngstrom).toFixed(0) + ' px of a ' + capPixels.toFixed(0) + ' px cap · ' + said.trim().toLowerCase() + ' · the hand-placed ' + anchored.text + ' untouched at ' + kept.offset.toFixed(2) + ' Å');
+  } finally { await cleanup(); }
+});
 await step('a set of positions is compared in one press: every site is labelled and one neighbourhood table covers them all', async () => {
   /* The same wild-type/mutant pair as the step above — a binding site or an interface is several
      residues, so the set is what the press has to take, not one residue at a time. */

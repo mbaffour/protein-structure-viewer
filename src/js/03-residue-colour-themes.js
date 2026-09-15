@@ -595,6 +595,8 @@
   function renderLabelList() {
     renderSequenceSoon();
     const list = root.querySelector('#gpv-label-list'); list.replaceChildren();
+    const separate = root.querySelector('#gpv-labels-separate');
+    if (separate) separate.disabled = !labelRecords.length;
     labelRecords.forEach(label => {
       const entry = entryById(label.entryId);
       const row = document.createElement('div'); row.className = 'gpv-entry';
@@ -621,7 +623,7 @@
       show.addEventListener('click', () => { if (!entry || !entry.model) return; const selection = { model: entry.model.getID(), resi: label.resi }; if (label.chain) selection.chain = label.chain; viewer.zoomTo(selection); viewer.render(); syncViewsFrom(viewer); });
       const reset = document.createElement('button'); reset.className = 'btn btn-ghost'; reset.type = 'button'; reset.textContent = 'Reset';
       reset.title = 'Put the label back on its residue'; reset.disabled = labelOffsetLength(label) === 0;
-      reset.addEventListener('click', () => { remember('label position'); label.offset = null; renderLabelList(); rebuildOverlays(); updateStatus('Label put back on its residue'); });
+      reset.addEventListener('click', () => { remember('label position'); label.offset = null; delete label.autoPlaced; renderLabelList(); rebuildOverlays(); updateStatus('Label put back on its residue'); });
       const remove = document.createElement('button'); remove.className = 'btn btn-ghost'; remove.type = 'button'; remove.textContent = 'Remove';
       remove.addEventListener('click', () => { remember('label removal'); labelRecords = labelRecords.filter(item => item !== label); renderLabelList(); rebuildOverlays(); updateStatus('Label removed'); });
       tools.append(size, color, show, reset, remove);

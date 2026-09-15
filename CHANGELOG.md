@@ -2,6 +2,44 @@
 
 All notable changes to this project are recorded here.
 
+## 2.43.0
+
+### Fixed
+
+- **Labels made at one site no longer land on top of each other.** *Compare this position* writes one
+  label per model at the same residue, and superposed models hold those atoms within a few ångström of
+  each other, so at anything but a close-up framing the two boxes covered the same pixels: the wild
+  type's `Ala15` sat on the mutant's `Gly15` with only a sliver of the second showing. The figure could
+  be repaired by dragging the labels apart, but a single press should not produce a figure that needs
+  repairing — and *Compare these positions* over a binding site makes dozens of the same pile at once.
+  Overlaps are now resolved automatically. Each label's box is measured the way the drag hit-test
+  measures it — the figure font, the label's own size, the residue's projected position — and boxes that
+  cover each other are nudged apart down the screen, the reference model's label keeping its place and
+  the others stacking under it. The nudge is written to the same `offset` a drag writes, so it stays
+  editable, goes back with **Reset** in the label's row, travels in scenes, sessions and share links, and
+  is undone with the press that made it; past 0.75 Å it grows the leader line that says which label
+  belongs to which residue. A label you have placed yourself is never moved, only avoided. The pass runs
+  at the end of *Compare this position* and *Compare these positions*, and again inside *Make site
+  figure* once the close-up camera is set, because the framing decides which labels collide. It is
+  bounded: at most six passes, and no label travels more than six of its own heights, so one can never
+  end up off the structure it names.
+
+### Added
+
+- **Separate labels**, next to *Clear labels* in Annotate, runs the same pass over every label on
+  screen at the current framing and says what it did — `3 labels moved apart`, or `Labels already clear
+  of each other`. It is disabled when there are no labels, and if the view cannot be projected yet it
+  says so rather than moving anything on a guess.
+
+### Known limits
+
+- The separation is measured against the framing it runs at, and a label's offset is one model-space
+  vector shared by every panel of a figure. A figure whose panels differ widely in zoom cannot have all
+  of them cleared by one set of offsets. Print exports compound this: at 300 dpi and 8 pt the figure
+  draws label text about 2.8× larger relative to the model than the screen does, so a pair that clears
+  on screen can still touch on paper. Separating a site of ten or more positions helps a great deal but
+  does not always finish the job — the cap stops before a crowded stack is fully unpicked.
+
 ## 2.42.0
 
 ### Fixed

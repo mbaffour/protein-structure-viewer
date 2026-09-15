@@ -385,6 +385,9 @@
     addComparedPosition({ chain, resi }, found);
     positionEffect = alignmentResults.length ? computePositionEffect({ chain, resi }) : null;
     renderPositionEffect();
+    /* One label per model at one residue of superposed models is a pile by construction; stack them
+       before the view is rebuilt so the press produces a figure, not a repair job. */
+    separateLabels({ include: label => label.kind === 'position' });
     renderLabelList(); applyStyle(); rebuildOverlays();
     renderPositionState();
     announce(positionReadout({ chain, resi }));
@@ -471,6 +474,9 @@
        the readout then describe the same residues. */
     positionEffect = alignmentResults.length ? computePositionEffect(spotlightResidues) : null;
     renderPositionEffect();
+    /* A set of nearby positions is a pile per site and, at a whole-model framing, one pile of piles;
+       the same pass untangles every compared label, not only the ones this press added. */
+    separateLabels({ include: label => label.kind === 'position' });
     renderLabelList(); applyStyle(); rebuildOverlays();
     renderPositionState();
     announce(compared.length + ' position' + (compared.length === 1 ? '' : 's') + ' compared'

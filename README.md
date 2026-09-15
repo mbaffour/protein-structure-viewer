@@ -172,7 +172,10 @@ per-residue RMSF across the whole ensemble.
 
 Labels are draggable: pick one up in the 3D view and put it where the figure needs it. A residue
 label keeps a leader line back to its residue and stores its move against the structure, so the
-camera can turn without losing the arrangement; *Reset* in its row puts it back. **Legend position**
+camera can turn without losing the arrangement; *Reset* in its row puts it back. Labels that land on
+top of each other — one per model at the same residue of two superposed models — are stacked apart for
+you when a position is compared and when a site figure is built, and **Separate labels** does it again
+for the framing on screen; a label you moved by hand is left where you put it. **Legend position**
 in Publish puts the colour legend in any corner or stacks it down the left or right side of the
 figure, on every export and on each panel of a built figure.
 

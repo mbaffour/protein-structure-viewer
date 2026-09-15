@@ -489,6 +489,18 @@ structure as the camera turns rather than sliding across the screen, and it trav
 sessions and share links and is undone with ⌘Z. **Reset** in the label's row puts it back on its
 residue; the arrow buttons in an annotation's row nudge its text by small steps for fine work.
 
+**Separating labels that overlap.** One label per model at the same residue of superposed models is a
+pile by construction, so *Compare this position* and *Compare these positions* untangle what they place:
+each label's box is measured at the current framing and the ones that cover each other are stacked down
+the screen, the reference model's label keeping its place. *Make site figure* does the same again for the
+close-up, because the framing decides which labels collide. **Separate labels**, beside *Clear labels*,
+runs the pass over every label on screen whenever you want it — after turning the model, say — and reports
+`3 labels moved apart` or `Labels already clear of each other`. The nudge is an ordinary offset: it keeps
+its leader line, **Reset** puts the label back, and ⌘Z undoes it. A label you have dragged yourself is
+never moved, only avoided, and no label travels more than six of its own heights, so one can never end up
+off the structure it names. Because the offset is a single model-space vector, panels that differ widely
+in zoom cannot all be cleared by one pass; drag the few that remain.
+
 **Comparing positions across models.** Two runs of the same protein — a wild type and a point
 mutant — are the usual reason for loading two models of the same length. Select the residue in
 question (click it, pick it from the sequence strip, or type it into **Go to**) and press **Compare
