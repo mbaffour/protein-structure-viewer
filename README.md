@@ -183,8 +183,16 @@ Loaded a wild type and a point mutant from two prediction runs? Select the resid
 a label naming that model's own residue there — `Ala15` against `Gly15`, in the model's colour — and
 a one-line readout saying whether the models agree or exactly how they differ. The sticks are part of
 the style, so every panel and export shows them, and the labels behave like any other residue label.
-Positions are matched by chain and residue number, so an insertion or deletion between two runs
-shifts them; the methods text says as much.
+Positions are matched by the Cα pairing of the superposition once the models have been aligned, and by
+chain and residue number otherwise, so a construct that numbers the same residue differently is still
+compared correctly; the methods text says which rule was used.
+
+After **Align visible**, the same press measures what the substitution did to its surroundings: a
+neighbourhood table of every residue of the reference model with a heavy atom within the cutoff
+(default 5 Å) of the site, each row giving its Cα deviation from the reference in every other model,
+with the site first, a neighbourhood mean at the bottom, and a one-line summary — *site moved 0.42 Å
+in model_mutant · 7 neighbours within 5 Å moved 0.31 Å on average*. **Highlight neighbourhood** turns
+those residues into a normal highlight selection and **Download effect CSV** exports the table.
 
 ## Domain figures
 

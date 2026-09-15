@@ -876,9 +876,22 @@ await step('one position is compared across a wild-type and a mutant model: side
   const file = join(work, 'model_mutant.pdb'); await writeFile(file, mutated);
   const startTab = await page.evaluate(() => (document.querySelector('[data-gpv-tab][aria-selected="true"]') || {}).dataset.gpvTab || 'models');
   const startMode = await page.inputValue('#gpv-view-mode');
+  /* Highlight neighbourhood adds one selection per chain of the neighbourhood; the finally takes
+     back exactly those rows so the rest of the suite starts from the selections it left. */
+  let neighbourhoodRows = 0;
+  const startAlignmentMode = await page.inputValue('#gpv-alignment-mode');
   const cleanup = async () => {
+    await tab('compare');
+    await page.selectOption('#gpv-alignment-mode', startAlignmentMode); await page.waitForTimeout(200);
     await tab('annotate');
     if (await page.locator('#gpv-position-clear').count()) { await page.click('#gpv-position-clear'); await page.waitForTimeout(300); }
+    while (neighbourhoodRows > 0) {
+      const row = page.locator('#gpv-selection-list .gpv-entry').last();
+      if (!(await row.count())) break;
+      await row.locator('button:has-text("Remove")').click(); await page.waitForTimeout(200);
+      neighbourhoodRows -= 1;
+    }
+    neighbourhoodRows = 0;
     await tab('models');
     const row = page.locator('#gpv-list .gpv-entry', { hasText: 'model_mutant' });
     if (await row.count()) { await row.first().locator('button:has-text("Remove")').click(); await page.waitForTimeout(400); }
@@ -915,12 +928,51 @@ await step('one position is compared across a wild-type and a mutant model: side
     await page.click('#gpv-svg');
     const svg = await readFile(await (await download).path(), 'utf8');
     if (!/>Ala15</.test(svg) || !/>Gly15</.test(svg)) throw new Error('the figure SVG does not carry both residue labels');
+    /* Superpose the pair on the wild type, then compare again: the same press now measures what the
+       substitution did — how far the site and the residues around it moved. The mutant carries the
+       same coordinates as model_a, so every deviation must be finite and near zero.
+       The fixture's two chains are identical poly-alanine, so sequence-based chain matching is free
+       to pair chain A of one model with chain B of the other (it does, and the fit is then 3.4 Å
+       out); identifier mapping is the honest choice for a wild-type/mutant pair that shares its
+       numbering, and it is restored afterwards because the mode is a saved preference. */
+    await tab('compare');
+    await page.selectOption('#gpv-alignment-mode', 'identifier'); await page.waitForTimeout(200);
+    await page.evaluate(() => { const select = document.querySelector('#gpv-reference'); const option = [...select.options].find(item => /model_a\.pdb/.test(item.textContent)); select.value = option.value; select.dispatchEvent(new Event('change', { bubbles: true })); });
+    await page.click('#gpv-align'); await page.waitForTimeout(2500);
     await tab('annotate');
+    await page.fill('#gpv-goto', 'A:15'); await page.click('#gpv-goto-run'); await page.waitForTimeout(500);
+    await page.click('#gpv-position-compare'); await page.waitForTimeout(900);
+    const effect = await page.evaluate(() => window.__viewerDebug.positionEffect());
+    if (!effect) throw new Error('no neighbourhood was measured after Align visible');
+    if (!effect.rows[0].isSite || effect.rows[0].resi !== 15) throw new Error('the first row is not the site: ' + JSON.stringify(effect.rows[0]));
+    if (effect.summary.neighbourCount < 2) throw new Error('only ' + effect.summary.neighbourCount + ' neighbours within ' + effect.cutoff + ' Å');
+    effect.summary.siteDeviation.forEach((value, index) => {
+      if (!Number.isFinite(value) || value < 0 || value >= 0.5) throw new Error('site deviation against ' + effect.models[index] + ' is ' + value + ', which is not a small finite distance');
+    });
+    const effectRows = await page.locator('#gpv-position-effect-body tr').count();
+    if (effectRows !== effect.rows.length + 1) throw new Error('the effect table has ' + effectRows + ' body rows, not ' + (effect.rows.length + 1) + ' (rows plus the summary)');
+    const effectState = (await page.locator('#gpv-position-state').textContent()) || '';
+    if (!/site moved [\d.]+ Å/.test(effectState)) throw new Error('the readout does not state what moved: ' + effectState);
+    const chains = new Set(effect.rows.filter(row => !row.isSite).map(row => row.chain)).size;
+    const selectionsBefore = await page.locator('#gpv-selection-list .gpv-entry').count();
+    await page.click('#gpv-position-highlight'); await page.waitForTimeout(700);
+    neighbourhoodRows = (await page.locator('#gpv-selection-list .gpv-entry').count()) - selectionsBefore;
+    if (neighbourhoodRows !== chains) throw new Error('Highlight neighbourhood added ' + neighbourhoodRows + ' selections, not ' + chains + ' (one per chain of the neighbourhood)');
+    const colours = await page.evaluate(count => window.__viewerDebug.selectionRecords().slice(-count).map(record => record.color), neighbourhoodRows);
+    if (colours.some(colour => colour !== '#f97316')) throw new Error('the neighbourhood was highlighted in ' + JSON.stringify(colours));
+    const effectCsv = page.waitForEvent('download', { timeout: 120000 });
+    await page.click('#gpv-position-csv');
+    const csv = await readFile(await (await effectCsv).path(), 'utf8');
+    const csvLines = csv.split('\n');
+    if (!csvLines[0].startsWith('"chain","resi","resn","role"')) throw new Error('effect CSV header: ' + csvLines[0]);
+    if (!csvLines.slice(1).some(line => /^"[^"]*","15","[^"]*","site"/.test(line))) throw new Error('the effect CSV has no site row for residue 15');
     await page.click('#gpv-position-clear'); await page.waitForTimeout(600);
+    if (await page.evaluate(() => window.__viewerDebug.positionEffect())) throw new Error('clearing left the measured neighbourhood behind');
+    if (!(await page.locator('#gpv-position-effect-wrap').isHidden())) throw new Error('clearing left the effect table on screen');
     if (await page.evaluate(() => window.__viewerDebug.labelRecords().some(label => label.kind === 'position'))) throw new Error('clearing left position labels behind');
     if ((await page.evaluate(() => window.__viewerDebug.spotlightResidues())).length) throw new Error('clearing left compared positions behind');
     if ((await page.locator('#gpv-label-list .gpv-entry').count()) !== labelsBefore) throw new Error('clearing removed labels it did not place');
-    console.log('       ' + state.trim() + ' · side chains and both labels in the SVG · cleared');
+    console.log('       ' + state.trim() + ' · side chains and both labels in the SVG · ' + effect.summary.neighbourCount + ' neighbours within ' + effect.cutoff + ' Å measured, highlighted and exported · cleared');
   } finally { await cleanup(); }
 });
 await step('the sequence strip shows both chains and selects a residue on click', async () => {

@@ -115,6 +115,13 @@ PSV_CHROMIUM=/opt/pw-browsers/chromium/chrome-linux/chrome npm test
   beside the original; selecting A:15 with Go to and pressing Compare this position gives a readout naming both models
   and their residues with `differs`, one entry in the spotlight list, exactly two new labels reading `Ala15` and `Gly15`,
   and both of those texts in the figure SVG; Clear compared positions removes them and empties the list.
+- The effect of a mutation: the same step then superposes the pair on `model_a` (with identifier mapping, because the
+  fixture's two chains are identical poly-alanine and sequence matching is free to pair chain A with chain B) and
+  compares again: the neighbourhood is measured, its first row is the site at residue 15, at least two neighbours fall
+  within the cutoff, every site deviation is a small finite distance (the mutant shares the backbone), the table body
+  carries one row per residue plus the summary row, the readout states how far the site moved, Highlight neighbourhood
+  adds one `#f97316` selection per chain of the neighbourhood, and the effect CSV starts `"chain","resi","resn","role"`
+  with a `site` row for residue 15; clearing removes the table and disables both buttons.
 - Domain labels and architecture: on the block-diagonal PAE model, Label domains adds exactly two labels, D1 and D2, at
   the domain centroids; the architecture model reads two chains with one domain run each; the SVG carries the chain rows,
   names and residue numbers, the PNG is as wide as the export estimate says; the composite offers the panel, the builder

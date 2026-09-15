@@ -503,10 +503,31 @@ labels, and **Clear compared positions** removes only the labels and sticks the 
 leaving your own labels alone. The labels are ordinary residue labels — drag them, recolour them,
 resize them, undo with ⌘Z — and the comparison travels with scenes, sessions and share links. The
 generated figure legend names the position and what each model has there, and the methods text
-records how the comparison was made. **Positions are matched by chain and residue number**, which is
-what two runs of one sequence share; there is no sequence alignment behind it, so an insertion or a
-deletion between the two runs shifts the numbering and the comparison follows the numbers rather than
-the residues. For models of different lengths, align them first and check what actually lines up.
+records how the comparison was made. **Positions are matched by the alignment pairing when the models
+are superposed, and by chain and residue number otherwise.** Once **Align visible** has run, the
+selected residue is taken in the reference model and each other model contributes the residue the
+superposition paired with it — the pairing that was actually fitted on, fit region and positional
+chain matching included — so a construct that numbers the same residue differently is still compared
+correctly, and the labels and the readout name the number each model carries (`Ala15` against
+`Gly17`). Without an alignment the numbers are all there is to go on, and an insertion or a deletion
+between two runs shifts them; the readout says `Align visible first to measure what moved`.
+
+**What the substitution did to its surroundings.** After a superposition, the same press also measures
+the local effect. **Neighbourhood (Å)** (3–12, default 5) defines the neighbourhood: every residue of
+the reference model with any heavy atom that close to any heavy atom of the compared residue. The
+table under the controls gives one row for the site (bold, marked *(site)*) and one for each
+neighbour, with a column per other shown model holding that residue's Cα deviation from the reference
+after the fit, the rows ordered by how far they moved and closed by a **Neighbourhood mean** row; the
+readout adds `site moved 0.42 Å in model_mutant · 7 neighbours within 5 Å moved 0.31 Å on average`.
+A substitution that only swaps a side chain leaves a table of near-zero deviations; one that shifts a
+helix shows it residue by residue. **Highlight neighbourhood** puts the neighbours into the Selections
+list as an ordinary orange highlight on the reference model — one row per chain, so it can be
+recoloured, removed or undone — and **Download effect CSV** writes `chain,resi,resn,role` with
+`role` reading `site` or `neighbour`, plus one deviation column per model. Change the cutoff and the
+table is measured again; the value is remembered between sessions and travels in scenes and share
+links. The figure legend gains the sentence *After superposition the Cα at A:15 moved 0.42 Å in
+model_mutant, and the 7 residues within 5 Å moved 0.31 Å on average*, and the methods text states the
+neighbourhood rule.
 
 **Legend position.** The **Legend position** control in Publish decides where the colour legend is drawn
 on exports: any of the four corners, or stacked as a column down the **left** or **right** side, which

@@ -3,7 +3,7 @@
   const persistedControls = [
     '#gpv-style', '#gpv-color-mode', '#gpv-projection', '#gpv-outline', '#gpv-label-style', '#gpv-background', '#gpv-background-color', '#gpv-hetero',
     '#gpv-export-mode', '#gpv-print-width', '#gpv-print-aspect', '#gpv-print-dpi', '#gpv-print-text', '#gpv-figure-font', '#gpv-scale-bar', '#gpv-legend-position', '#gpv-image-format',
-    '#gpv-view-mode', '#gpv-order', '#gpv-alignment-mode', '#gpv-fit-scope', '#gpv-export-size', '#gpv-export-scale',
+    '#gpv-view-mode', '#gpv-order', '#gpv-alignment-mode', '#gpv-fit-scope', '#gpv-position-cutoff', '#gpv-export-size', '#gpv-export-scale',
     '#gpv-panel-columns', '#gpv-video-length', '#gpv-cycle-speed', '#gpv-speed', '#gpv-report-scope'
   ];
 
@@ -151,7 +151,7 @@
     selectedResidue = null;
     clearHistory();
     labelRecords = [];
-    spotlightResidues = []; renderPositionState();
+    spotlightResidues = []; positionEffect = null; renderPositionEffect(); renderPositionState();
     domainRecords = []; domainVersion += 1;
     residueData = null; nearbyResult = null; renderDataState();
     selectionRecords = [];

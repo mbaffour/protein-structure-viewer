@@ -2,6 +2,34 @@
 
 All notable changes to this project are recorded here.
 
+## 2.37.0
+
+- **Fixed: a rejected positional re-pairing left the model in the rejected superposition.** With *Match identical
+  chains by position* on, the second pass re-fitted the model to test the new pairing and, when that pairing was worse
+  and discarded, the coordinates, deviations and reference samples from the discarded fit stayed applied while the
+  table reported the first fit. The re-pairing is now evaluated without moving anything and applied only when it wins.
+  Found by the subagent building this release.
+- **The effect of a mutation.** Superpose a wild-type and a mutant run with *Align visible*, then press
+  **Compare this position** on the mutated residue: besides the side chains and the per-model labels, the
+  viewer now measures what the substitution did to the structure around it. A **neighbourhood table** under
+  the controls lists the site and every residue of the reference model with any heavy atom within the
+  cutoff (**Neighbourhood (Å)**, 3–12, default 5) of it, one column per other shown model giving that
+  residue's Cα deviation from the reference after the superposition, sorted with the site first and then by
+  how far each neighbour moved, with a *Neighbourhood mean* row at the bottom. The readout gains the summary
+  — `site moved 0.42 Å in model_mutant · 7 neighbours within 5 Å moved 0.31 Å on average` — and so do the
+  figure legend and the methods text, which state the neighbourhood rule and that the deviations are
+  distances between paired Cα atoms after the fit. **Highlight neighbourhood** turns the neighbours into an
+  ordinary highlight selection on the reference model (one record per chain, orange, undoable), and
+  **Download effect CSV** writes `chain,resi,resn,role` plus one deviation column per model. The cutoff is
+  remembered between sessions and travels in scenes and share links.
+- **Positions are matched by the alignment pairing when the models are superposed**, and by chain and residue
+  number otherwise. Compare this position now looks the selected residue up in the reference model and finds
+  each other model's corresponding residue through the Cα pairing that *Align visible* actually fitted on —
+  including any fit region and positional chain re-matching — so a construct that numbers the same residue
+  differently is compared correctly, and the labels and the readout name the number each model really carries
+  (`Ala15` against `Gly17`). Without an alignment the old rule stands, and the readout says
+  `Align visible first to measure what moved`.
+
 ## 2.36.0
 
 - **Compare this position across models.** A mutation study loads the same protein twice — one run of

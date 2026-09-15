@@ -228,7 +228,7 @@
   }
 
   function restoreCoordinates(shouldRender = true) {
-    structures.forEach(entry => { entry.deviations = null; });
+    structures.forEach(entry => { entry.deviations = null; entry.alignedPairs = null; });
     ensembleSpread = null;
     structures.filter(entry => entry.model).forEach(entry => entry.atoms.forEach((atom, index) => {
       const original = entry.originalAtoms[index];
@@ -467,6 +467,10 @@
       atom.z = transformed[2] + referenceCenter[2];
     });
     target.deviations = new Map();
+    /* The pairing this fit used, kept as reference residue tag → the target's own atom: the
+       correspondence behind every deviation, and what Compare this position looks a residue up
+       through when the two models number their residues differently. */
+    target.alignedPairs = new Map();
     if (!reference.deviationSamples) reference.deviationSamples = new Map();
     const fitSet = fitPairs === pairs ? null : new Set(fitPairs.map(pair => pair[1]));
     let fitSquaredError = 0;
@@ -477,6 +481,7 @@
       const distance = Math.sqrt(dx * dx + dy * dy + dz * dz);
       target.deviations.set(residueTag(pair[1]), distance);
       const tag = residueTag(pair[0]);
+      if (!target.alignedPairs.has(tag)) target.alignedPairs.set(tag, pair[1]);
       reference.deviationSamples.set(tag, [...(reference.deviationSamples.get(tag) || []), distance]);
       if (!fitSet || fitSet.has(pair[1])) fitSquaredError += dx * dx + dy * dy + dz * dz;
       return sum + dx * dx + dy * dy + dz * dz;
@@ -540,12 +545,20 @@
     const byPosition = root.querySelector('#gpv-chain-position').checked;
     targets.forEach(entry => {
       if (entry !== reference) {
+        const samplesBefore = new Map([...reference.deviationSamples].map(([tag, list]) => [tag, [...list]]));
         let result = alignEntry(reference, entry, matcher);
         /* Second pass: with the models roughly on top of each other, re-pair identical chains by
-           position and fit again. Kept only when it actually brings the models closer. */
+           position. The re-pairing is evaluated on the fitted coordinates without moving anything
+           and applied only when it brings the models closer — a rejected pass must leave no trace
+           in the coordinates, the deviations or the reference's samples. */
         if (result && byPosition) {
-          const repaired = alignEntry(reference, entry, matcher, positionalPairs(reference, entry));
-          if (repaired && repaired.rmsd <= result.rmsd) result = repaired;
+          const repairing = positionalPairs(reference, entry);
+          const region = matcher ? repairing.pairs.filter(pair => matcher.test(pair[0])) : [];
+          const trial = repairing.pairs.length >= 3 ? kabschFit(region.length >= 3 ? region : repairing.pairs) : null;
+          if (trial && rmsdUnder(trial, repairing.pairs) <= result.rmsd) {
+            reference.deviationSamples = samplesBefore;
+            result = alignEntry(reference, entry, matcher, repairing) || result;
+          }
         }
         if (result) results.push(result);
       }
@@ -912,6 +925,7 @@
       chainsByPosition: root.querySelector('#gpv-chain-position').checked,
       fitScope: root.querySelector('#gpv-fit-scope').value,
       fitRegion: root.querySelector('#gpv-fit-region').value,
+      positionCutoff: positionCutoff(),
       figureLabels: { ...figureLabels },
       figureBuilder: builderOptions(),
       background: root.querySelector('#gpv-background').value,

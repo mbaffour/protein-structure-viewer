@@ -959,11 +959,15 @@ html>body{padding:0}</style>
       <button class="btn btn-ghost" type="button" id="gpv-clear-labels">Clear labels</button>
     </div>
     <div class="viz-controls">
-      <button class="btn" type="button" id="gpv-position-compare" disabled data-tooltip="Show the side chain at the selected position in every shown model, label each model&#39;s residue there, and say whether they differ — positions are matched by chain and residue number">Compare this position</button>
+      <button class="btn" type="button" id="gpv-position-compare" disabled data-tooltip="Show the side chain at the selected position in every shown model, label each model&#39;s residue there, and say whether they differ — positions are matched by the alignment pairing when the models are superposed, otherwise by chain and residue number">Compare this position</button>
       <label class="form-check form-switch"><input class="form-check-input" id="gpv-position-sticks" type="checkbox" checked><span class="form-check-label">Side chains at compared positions</span></label>
+      <label class="form-label">Neighbourhood (Å)<input class="form-control" id="gpv-position-cutoff" type="number" min="3" max="12" step="0.5" value="5" data-tooltip="Residues of the reference model with any heavy atom this close to the compared residue are the neighbourhood whose movement is measured"></label>
+      <button class="btn" type="button" id="gpv-position-highlight" disabled data-tooltip="Highlight the neighbourhood of the compared position on the reference model">Highlight neighbourhood</button>
+      <button class="btn btn-ghost" type="button" id="gpv-position-csv" disabled data-tooltip="Cα deviation of the site and of every neighbour, one column per model">Download effect CSV</button>
       <button class="btn btn-ghost" type="button" id="gpv-position-clear">Clear compared positions</button>
       <span class="text-muted text-small" id="gpv-position-state">Select a residue, then compare it across the shown models.</span>
     </div>
+    <div class="table-responsive" id="gpv-position-effect-wrap" hidden><table class="table table-sm" aria-label="Effect of the compared position"><thead id="gpv-position-effect-head"></thead><tbody id="gpv-position-effect-body"></tbody></table></div>
     <div class="gpv-list" id="gpv-label-list" aria-label="Residue labels"></div>
     <div class="viz-controls">
       <label class="form-label gpv-current-label">Selection model<select class="form-select" id="gpv-selection-model" disabled><option>No models loaded</option></select></label>
@@ -1285,7 +1289,7 @@ html>body{padding:0}</style>
       </ul>
       <h3>Tips for figures and reviewers</h3>
       <ul>
-        <li><em>Annotate → Compare this position</em> takes the residue you have selected and, in every shown model, draws its side chain, writes that model’s own residue on it (Arg273, His273) and states whether the models agree — the one-press check on a wild-type and mutant pair. Positions are matched by chain and residue number, so an insertion or deletion between two runs shifts them.</li>
+        <li><em>Annotate → Compare this position</em> takes the residue you have selected and, in every shown model, draws its side chain, writes that model’s own residue on it (Arg273, His273) and states whether the models agree — the one-press check on a wild-type and mutant pair. Positions are matched by the Cα pairing of the superposition once the models are aligned, and by chain and residue number otherwise. After <em>Align visible</em> the same press also measures what the substitution did: a neighbourhood table of every residue with a heavy atom within the cutoff of the site, each row giving its Cα deviation from the reference in every other model, with <em>Highlight neighbourhood</em> and an effect CSV.</li>
         <li><em>Publish → Figure format</em> saves the same figure as PNG or TIFF with the resolution in the file, as a PDF whose page is the physical size you chose, or as JPEG or WebP for slides; <em>Download figure SVG</em> stays the vector option with editable text.</li>
         <li>After <em>Align visible</em>, <em>RMSF profile SVG/PNG</em> plots the per-residue Cα spread across the aligned models, one panel per chain with the agreement bands behind the trace, and the same plot is a panel of the composite figure — the ensemble counterpart of the pLDDT profile.</li>
         <li><em>Compare → Pairwise RMSD → Compute matrix</em> superposes every shown model onto every other with the same rules as Align visible and tabulates the Cα RMSDs — which models of an ensemble agree, which is the odd one out — with a mean column, a ★ on the medoid, a CSV, a heat-map PNG or SVG with the values in the cells, and a panel for the composite figure. <em>Use medoid as reference</em> superposes everything onto that model and draws it solid against the rest.</li>
@@ -1661,7 +1665,7 @@ html>body{padding:0}</style>
   let busyDepth = 0;
   let restoreMotion = null;
   const listPageSize = 60;
-  const viewerVersion = '2.36.0';
+  const viewerVersion = '2.37.0';
   const preferenceKey = 'protein-structure-viewer:preferences';
   const themeKey = 'protein-structure-viewer:theme';
   const labelColors = getComputedStyle(root);
@@ -5352,7 +5356,10 @@ html>body{padding:0}</style>
     const shownIds = new Set(shown.map(entry => entry.id));
     const labels = labelRecords.filter(label => shownIds.has(label.entryId));
     if (labels.length) sentences.push('Labelled residues: ' + labels.map(label => label.text).join(', ') + '.');
-    spotlightResidues.forEach(spot => { const sentence = positionSentence(spot); if (sentence) sentences.push(sentence); });
+    spotlightResidues.forEach(spot => {
+      const sentence = positionSentence(spot); if (sentence) sentences.push(sentence);
+      const effect = positionEffectLegend(spot); if (effect) sentences.push(effect);
+    });
     const highlights = selectionRecords.filter(record => record.action === 'highlight' && shownIds.has(record.entryId));
     if (highlights.length) sentences.push('Highlighted residues: ' + highlights.map(record => (record.chain ? 'chain ' + record.chain + ' ' : '') + compactRange(record.residues)).join('; ') + '.');
     const measurements = measurementRecords.filter(record => record.points.every(point => shownIds.has(point.entryId)));
@@ -5408,7 +5415,8 @@ html>body{padding:0}</style>
       data: residueData ? 'Per-residue values (' + residueData.name + ') were mapped linearly onto a ' + ({ viridis: 'viridis', diverging: 'diverging blue–white–red', heat: 'white–red' })[residueData.scale] + ' scale between the minimum and maximum of the data.' : null
     };
     if (colourNotes[mode]) sentences.push(colourNotes[mode]);
-    if (spotlightResidues.length) sentences.push('Position' + (spotlightResidues.length === 1 ? ' ' : 's ') + spotlightResidues.map(positionTag).join(', ') + ' w' + (spotlightResidues.length === 1 ? 'as' : 'ere') + ' compared across the shown models by matching chain and residue number, not by sequence alignment; an insertion or deletion between two predictions therefore shifts the position compared.');
+    if (spotlightResidues.length) sentences.push('Position' + (spotlightResidues.length === 1 ? ' ' : 's ') + spotlightResidues.map(positionTag).join(', ') + ' w' + (spotlightResidues.length === 1 ? 'as' : 'ere') + ' compared across the shown models by ' + (alignmentResults.length ? 'the Cα pairing of the superposition, so each model contributes the residue the alignment places opposite the reference residue whatever its number' : 'matching chain and residue number, not by sequence alignment; an insertion or deletion between two predictions therefore shifts the position compared') + '.');
+    if (positionEffect) sentences.push('The neighbourhood of ' + positionTag(positionEffect.spot) + ' was defined as every residue of the reference model (' + positionEffect.reference + ') with any heavy atom within ' + positionEffect.cutoff + ' Å of any heavy atom of that residue, hydrogens excluded (' + positionEffect.summary.neighbourCount + ' residue' + (positionEffect.summary.neighbourCount === 1 ? '' : 's') + '); the deviation reported for the site and for each neighbour is the distance between paired Cα atoms after the superposition described above.');
     if (hideBelow()) sentences.push('Residues with pLDDT below ' + hideBelow() + ' were hidden from the figures.');
     const plan = exportDimensions();
     if (plan.mm) sentences.push('Figures were exported at ' + plan.mm + ' mm width and ' + plan.dpi + ' dpi' + (safePaletteOn ? ' using the Okabe–Ito colour-blind-safe palette' : '') + '.');
@@ -5817,7 +5825,7 @@ html>body{padding:0}</style>
   }
 
   function restoreCoordinates(shouldRender = true) {
-    structures.forEach(entry => { entry.deviations = null; });
+    structures.forEach(entry => { entry.deviations = null; entry.alignedPairs = null; });
     ensembleSpread = null;
     structures.filter(entry => entry.model).forEach(entry => entry.atoms.forEach((atom, index) => {
       const original = entry.originalAtoms[index];
@@ -6056,6 +6064,10 @@ html>body{padding:0}</style>
       atom.z = transformed[2] + referenceCenter[2];
     });
     target.deviations = new Map();
+    /* The pairing this fit used, kept as reference residue tag → the target's own atom: the
+       correspondence behind every deviation, and what Compare this position looks a residue up
+       through when the two models number their residues differently. */
+    target.alignedPairs = new Map();
     if (!reference.deviationSamples) reference.deviationSamples = new Map();
     const fitSet = fitPairs === pairs ? null : new Set(fitPairs.map(pair => pair[1]));
     let fitSquaredError = 0;
@@ -6066,6 +6078,7 @@ html>body{padding:0}</style>
       const distance = Math.sqrt(dx * dx + dy * dy + dz * dz);
       target.deviations.set(residueTag(pair[1]), distance);
       const tag = residueTag(pair[0]);
+      if (!target.alignedPairs.has(tag)) target.alignedPairs.set(tag, pair[1]);
       reference.deviationSamples.set(tag, [...(reference.deviationSamples.get(tag) || []), distance]);
       if (!fitSet || fitSet.has(pair[1])) fitSquaredError += dx * dx + dy * dy + dz * dz;
       return sum + dx * dx + dy * dy + dz * dz;
@@ -6129,12 +6142,20 @@ html>body{padding:0}</style>
     const byPosition = root.querySelector('#gpv-chain-position').checked;
     targets.forEach(entry => {
       if (entry !== reference) {
+        const samplesBefore = new Map([...reference.deviationSamples].map(([tag, list]) => [tag, [...list]]));
         let result = alignEntry(reference, entry, matcher);
         /* Second pass: with the models roughly on top of each other, re-pair identical chains by
-           position and fit again. Kept only when it actually brings the models closer. */
+           position. The re-pairing is evaluated on the fitted coordinates without moving anything
+           and applied only when it brings the models closer — a rejected pass must leave no trace
+           in the coordinates, the deviations or the reference's samples. */
         if (result && byPosition) {
-          const repaired = alignEntry(reference, entry, matcher, positionalPairs(reference, entry));
-          if (repaired && repaired.rmsd <= result.rmsd) result = repaired;
+          const repairing = positionalPairs(reference, entry);
+          const region = matcher ? repairing.pairs.filter(pair => matcher.test(pair[0])) : [];
+          const trial = repairing.pairs.length >= 3 ? kabschFit(region.length >= 3 ? region : repairing.pairs) : null;
+          if (trial && rmsdUnder(trial, repairing.pairs) <= result.rmsd) {
+            reference.deviationSamples = samplesBefore;
+            result = alignEntry(reference, entry, matcher, repairing) || result;
+          }
         }
         if (result) results.push(result);
       }
@@ -6501,6 +6522,7 @@ html>body{padding:0}</style>
       chainsByPosition: root.querySelector('#gpv-chain-position').checked,
       fitScope: root.querySelector('#gpv-fit-scope').value,
       fitRegion: root.querySelector('#gpv-fit-region').value,
+      positionCutoff: positionCutoff(),
       figureLabels: { ...figureLabels },
       figureBuilder: builderOptions(),
       background: root.querySelector('#gpv-background').value,
@@ -6707,6 +6729,7 @@ html>body{padding:0}</style>
     if (typeof settings.chainsByPosition === 'boolean') root.querySelector('#gpv-chain-position').checked = settings.chainsByPosition;
     if (['all', 'region', 'selection'].includes(settings.fitScope)) root.querySelector('#gpv-fit-scope').value = settings.fitScope;
     if (typeof settings.fitRegion === 'string') root.querySelector('#gpv-fit-region').value = settings.fitRegion.slice(0, 120);
+    if (Number.isFinite(Number(settings.positionCutoff))) root.querySelector('#gpv-position-cutoff').value = String(Math.min(12, Math.max(3, Number(settings.positionCutoff))));
     renderFitControls();
     applyBuilderOptions(settings.figureBuilder);
     if ([0, 50, 70].includes(Number(settings.hideBelow))) root.querySelector('#gpv-hide-below').value = String(Number(settings.hideBelow));
@@ -6727,6 +6750,7 @@ html>body{padding:0}</style>
     spotlightResidues = (Array.isArray(scene.positions) ? scene.positions : []).slice(0, 200)
       .map(record => ({ chain: String(record && record.chain || '').slice(0, 4), resi: Number(record && record.resi) }))
       .filter(spot => Number.isFinite(spot.resi));
+    positionEffect = null; renderPositionEffect();
     renderPositionState();
     selectionRecords = (scene.selections || []).map(record => {
       const entry = byName.get(record.model); if (!entry) return null;
@@ -9016,12 +9040,16 @@ applyBackground();
 
   /* ---------- Position comparison ----------
      A mutation study loads the same protein twice — one run of the wild type, one of the point
-     mutant — and the question is what sits at one position in each. Compare this position takes the
-     selected residue and, in every shown model, draws the side chain there, writes that model's own
-     residue on it, and states whether the models agree. Positions are matched by chain and residue
-     number alone, which is what two runs of the same sequence share; an insertion or deletion
-     between the runs shifts the numbering and the comparison follows the numbers, not the residues. */
+     mutant — and the question is what sits at one position in each, and what that substitution did
+     to the structure around it. Compare this position takes the selected residue and, in every shown
+     model, draws the side chain there, writes that model's own residue on it, and states whether the
+     models agree. Corresponding residues are found by the alignment pairing when the models have
+     been superposed — so an insertion or a deletion between the runs no longer derails the
+     comparison — and by chain and residue number otherwise, which is what two runs of the same
+     sequence share. After a superposition the neighbourhood table adds the second half of the
+     answer: how far the site and every residue around it moved. */
   let spotlightResidues = [];
+  let positionEffect = null;
 
   /* ARG → Arg: the three-letter code as it is written in a figure label. */
   function positionResidueName(resn) {
@@ -9030,13 +9058,83 @@ applyBackground();
   }
   const positionTag = spot => (spot.chain ? spot.chain + ':' : '') + spot.resi;
 
+  /* The model every other model is compared against: the reference of the superposition that is
+     current, when it is one of the shown models. Without one there is nothing to pair through. */
+  function positionReference() {
+    if (!alignmentResults.length) return null;
+    const reference = entryById(Number(root.querySelector('#gpv-reference').value));
+    if (!reference || !reference.model) return null;
+    return displayedEntries().includes(reference) ? reference : null;
+  }
+
+  /* The Cα pairing the superposition used, as reference residue tag → the target's own atom.
+     Align visible records the pairing it fitted on, which is the honest one: it carries the fit
+     region and any positional chain re-matching. A model that was not part of that fit falls back to
+     rebuilding the pairing with caPairs(), cached against the alignment that is current so a residue
+     costs one lookup however many neighbours are asked for. */
+  let positionPairCache = { token: null, maps: new Map() };
+  function positionPairing(reference, entry) {
+    if (entry.deviations && entry.alignedPairs instanceof Map) return entry.alignedPairs;
+    if (positionPairCache.token !== alignmentResults) positionPairCache = { token: alignmentResults, maps: new Map() };
+    const key = reference.id + '|' + entry.id + '|' + root.querySelector('#gpv-alignment-mode').value;
+    if (!positionPairCache.maps.has(key)) {
+      const map = new Map();
+      try {
+        caPairs(reference, entry).pairs.forEach(pair => {
+          const tag = residueTag(pair[0]);
+          if (!map.has(tag)) map.set(tag, pair[1]);
+        });
+      } catch (error) { /* a model with too few Cα atoms simply has no pairing */ }
+      positionPairCache.maps.set(key, map);
+    }
+    return positionPairCache.maps.get(key);
+  }
+
+  /* The atom one model carries at a position: the residue the alignment placed opposite the
+     reference's, whatever its number, and the same chain and number when there is no pairing. */
+  function positionAtomIn(entry, chain, resi, reference) {
+    if (reference && entry !== reference) {
+      const partner = positionPairing(reference, entry).get((chain || '') + '|' + resi);
+      if (partner) return partner;
+    }
+    const candidates = entry.atoms.filter(atom => !atom.hetflag && atom.resi === resi && (atom.chain || '') === (chain || ''));
+    return candidates.find(item => item.atom === 'CA') || candidates[0] || null;
+  }
+
   /* Every shown model that has this position, with the atom the label hangs on. */
   function positionAtoms(chain, resi) {
+    const reference = positionReference();
     return displayedEntries().filter(entry => entry.model).map(entry => {
-      const candidates = entry.atoms.filter(atom => !atom.hetflag && atom.resi === resi && (atom.chain || '') === (chain || ''));
-      const atom = candidates.find(item => item.atom === 'CA') || candidates[0];
+      const atom = positionAtomIn(entry, chain, resi, reference);
       return atom ? { entry, atom } : null;
     }).filter(Boolean);
+  }
+
+  /* Ala, or Ala17 when that model numbers the corresponding residue differently. */
+  function positionIdentity(spot, item) {
+    const name = positionResidueName(item.atom.resn);
+    return item.atom.resi === spot.resi ? name : name + item.atom.resi;
+  }
+
+  function positionCutoff() {
+    return Math.min(12, Math.max(3, Number(root.querySelector('#gpv-position-cutoff').value) || 5));
+  }
+
+  /* What the substitution did, as the tail of the readout line. */
+  function positionEffectTail(spot) {
+    if (!alignmentResults.length) return ' · Align visible first to measure what moved';
+    if (!positionEffect || positionEffect.spot.chain !== spot.chain || positionEffect.spot.resi !== spot.resi) return '';
+    const parts = [];
+    const site = positionEffect.summary.siteDeviation
+      .map((value, index) => (Number.isFinite(value) ? value.toFixed(2) + ' Å in ' + positionEffect.models[index] : null))
+      .filter(Boolean);
+    if (site.length) parts.push('site moved ' + site.join(', '));
+    const moved = positionEffect.summary.neighbourMean.filter(Number.isFinite);
+    if (positionEffect.summary.neighbourCount && moved.length) {
+      parts.push(positionEffect.summary.neighbourCount + ' neighbour' + (positionEffect.summary.neighbourCount === 1 ? '' : 's')
+        + ' within ' + positionEffect.cutoff + ' Å moved ' + mean(moved).toFixed(2) + ' Å on average');
+    }
+    return parts.length ? ' · ' + parts.join(' · ') : '';
   }
 
   /* The readout: one line naming the position, what each model has there, and whether they differ. */
@@ -9044,11 +9142,14 @@ applyBackground();
     const found = positionAtoms(spot.chain, spot.resi);
     if (!found.length) return positionTag(spot) + ' · in none of the shown models';
     const identities = found.map(item => positionResidueName(item.atom.resn));
+    const renumbered = found.some(item => item.atom.resi !== spot.resi);
     const tag = positionTag(spot);
-    if (new Set(identities).size === 1) return tag + ' · ' + identities[0] + ' in all ' + found.length + ' model' + (found.length === 1 ? '' : 's');
+    const tail = positionEffectTail(spot);
+    if (new Set(identities).size === 1 && !renumbered) return tag + ' · ' + identities[0] + ' in all ' + found.length + ' model' + (found.length === 1 ? '' : 's') + tail;
     const names = distinguishingNames(found.map(item => displayName(item.entry)));
-    const parts = found.map((item, index) => names[index] + ' ' + identities[index]);
-    return tag + ' · ' + (found.length === 2 ? parts[0] + ' → ' + parts[1] : parts.join(' · ')) + ' · differs';
+    const parts = found.map((item, index) => names[index] + ' ' + positionIdentity(spot, item));
+    const verdict = new Set(identities).size === 1 ? 'same residue, numbered differently' : 'differs';
+    return tag + ' · ' + (found.length === 2 ? parts[0] + ' → ' + parts[1] : parts.join(' · ')) + ' · ' + verdict + tail;
   }
 
   /* The same comparison as a sentence for the figure legend. */
@@ -9058,10 +9159,152 @@ applyBackground();
     const drawn = root.querySelector('#gpv-position-sticks').checked ? 'is drawn as side-chain sticks and labelled' : 'is labelled';
     const identities = found.map(item => positionResidueName(item.atom.resn));
     const lead = 'Position ' + positionTag(spot) + ' ' + drawn + ' in every model; it is ';
-    if (new Set(identities).size === 1) return lead + identities[0] + ' in all ' + found.length + ' of them.';
+    if (new Set(identities).size === 1 && !found.some(item => item.atom.resi !== spot.resi)) return lead + identities[0] + ' in all ' + found.length + ' of them.';
     const names = distinguishingNames(found.map(item => displayName(item.entry)));
-    const parts = found.map((item, index) => identities[index] + ' in ' + names[index]);
+    const parts = found.map((item, index) => positionIdentity(spot, item) + ' in ' + names[index]);
     return lead + parts.slice(0, -1).join(', ') + ' and ' + parts[parts.length - 1] + '.';
+  }
+
+  /* The effect sentence for the figure legend, when the neighbourhood has been measured. */
+  function positionEffectLegend(spot) {
+    if (!positionEffect || positionEffect.spot.chain !== spot.chain || positionEffect.spot.resi !== spot.resi) return null;
+    const site = positionEffect.summary.siteDeviation
+      .map((value, index) => (Number.isFinite(value) ? value.toFixed(2) + ' Å in ' + positionEffect.models[index] : null))
+      .filter(Boolean);
+    if (!site.length) return null;
+    const joined = site.length === 1 ? site[0] : site.slice(0, -1).join(', ') + ' and ' + site[site.length - 1];
+    const moved = positionEffect.summary.neighbourMean.filter(Number.isFinite);
+    const neighbours = positionEffect.summary.neighbourCount && moved.length
+      ? ', and the ' + positionEffect.summary.neighbourCount + ' residue' + (positionEffect.summary.neighbourCount === 1 ? '' : 's')
+        + ' within ' + positionEffect.cutoff + ' Å moved ' + mean(moved).toFixed(2) + ' Å on average'
+      : '';
+    return 'After superposition the Cα at ' + positionTag(spot) + ' moved ' + joined + neighbours + '.';
+  }
+
+  /* ---- The local effect of a substitution ----
+     The neighbourhood is every residue of the reference model with a heavy atom within the cutoff of
+     the spotlighted residue; for the site and each of those neighbours the table reports how far the
+     corresponding Cα of every other shown model sits from the reference after the superposition.
+     That is the answer to "what did this mutation do?" in the only terms the models support. */
+  function computePositionEffect(spot) {
+    const reference = positionReference();
+    if (!reference) return null;
+    const others = displayedEntries().filter(entry => entry.model && entry !== reference);
+    if (!others.length) return null;
+    const site = positionAtomIn(reference, spot.chain, spot.resi, null);
+    if (!site) return null;
+    const cutoff = positionCutoff();
+    const heavy = heavyAtoms(reference).filter(atom => !atom.hetflag);
+    const isSiteAtom = atom => (atom.chain || '') === (site.chain || '') && atom.resi === site.resi;
+    const siteAtoms = heavy.filter(isSiteAtom);
+    if (!siteAtoms.length) return null;
+    const candidates = heavy.filter(atom => !isSiteAtom(atom));
+    const grid = spatialGrid(candidates, cutoff);
+    const limit = cutoff * cutoff;
+    const found = new Map();
+    siteAtoms.forEach(target => grid.near(target).forEach(index => {
+      const atom = candidates[index];
+      if (squaredDistance(atom, target) > limit) return;
+      const tag = residueTag(atom);
+      if (!found.has(tag)) found.set(tag, atom);
+    }));
+    const allNames = distinguishingNames([reference, ...others].map(displayName));
+    const deviationsOf = atom => others.map(entry => {
+      if (!entry.deviations) return null;
+      const partner = positionPairing(reference, entry).get(residueTag(atom));
+      const value = partner ? entry.deviations.get(residueTag(partner)) : undefined;
+      return Number.isFinite(value) ? value : null;
+    });
+    const rowFor = (atom, isSite) => {
+      const deviations = deviationsOf(atom);
+      const finite = deviations.filter(Number.isFinite);
+      return { chain: atom.chain || '', resi: atom.resi, resn: atom.resn || 'RES', isSite, deviations, mean: finite.length ? mean(finite) : null };
+    };
+    const rank = row => (row.mean === null ? -1 : row.mean);
+    const neighbours = [...found.values()].map(atom => rowFor(atom, false))
+      .sort((a, b) => rank(b) - rank(a) || compareChains(a.chain, b.chain) || a.resi - b.resi);
+    const summary = {
+      siteDeviation: deviationsOf(site),
+      neighbourMean: others.map((entry, index) => {
+        const values = neighbours.map(row => row.deviations[index]).filter(Number.isFinite);
+        return values.length ? mean(values) : null;
+      }),
+      neighbourCount: neighbours.length
+    };
+    return {
+      spot: { chain: spot.chain, resi: spot.resi }, cutoff,
+      reference: allNames[0], models: allNames.slice(1),
+      rows: [rowFor(site, true), ...neighbours], summary
+    };
+  }
+
+  function renderPositionEffect() {
+    const wrap = root.querySelector('#gpv-position-effect-wrap');
+    const head = root.querySelector('#gpv-position-effect-head');
+    const body = root.querySelector('#gpv-position-effect-body');
+    head.replaceChildren(); body.replaceChildren();
+    root.querySelector('#gpv-position-highlight').disabled = !positionEffect;
+    root.querySelector('#gpv-position-csv').disabled = !positionEffect;
+    wrap.hidden = !positionEffect;
+    if (!positionEffect) return;
+    const headRow = document.createElement('tr');
+    const corner = document.createElement('th'); corner.textContent = 'Residue'; headRow.append(corner);
+    positionEffect.models.forEach(name => {
+      const cell = document.createElement('th'); cell.className = 'text-end';
+      cell.textContent = 'Cα Δ (Å) vs ' + name; headRow.append(cell);
+    });
+    head.append(headRow);
+    const numberCell = (value, bold) => {
+      const cell = document.createElement('td'); cell.className = 'text-end';
+      cell.textContent = Number.isFinite(value) ? value.toFixed(2) : '—';
+      if (bold) cell.style.fontWeight = '700';
+      return cell;
+    };
+    positionEffect.rows.forEach(row => {
+      const tr = document.createElement('tr');
+      const label = document.createElement('th'); label.scope = 'row';
+      label.textContent = (row.chain ? row.chain + ':' : '') + positionResidueName(row.resn) + row.resi + (row.isSite ? ' (site)' : '');
+      if (row.isSite) label.style.fontWeight = '700';
+      tr.append(label);
+      row.deviations.forEach(value => tr.append(numberCell(value, row.isSite)));
+      body.append(tr);
+    });
+    const summaryRow = document.createElement('tr');
+    const summaryLabel = document.createElement('th'); summaryLabel.scope = 'row';
+    summaryLabel.textContent = 'Neighbourhood mean (' + positionEffect.summary.neighbourCount + ' residue' + (positionEffect.summary.neighbourCount === 1 ? '' : 's') + ')';
+    summaryRow.append(summaryLabel);
+    positionEffect.summary.neighbourMean.forEach(value => summaryRow.append(numberCell(value, false)));
+    body.append(summaryRow);
+  }
+
+  /* The neighbourhood as an ordinary highlight selection on the reference model, one record per
+     chain, so it can be recoloured, removed and undone like any other. */
+  function highlightNeighbourhood() {
+    if (!positionEffect) return;
+    const reference = positionReference();
+    if (!reference) { announce('Align visible first — the neighbourhood is measured on the reference model', 'error'); return; }
+    const neighbours = positionEffect.rows.filter(row => !row.isSite);
+    if (!neighbours.length) { announce('No residues within ' + positionEffect.cutoff + ' Å of ' + positionTag(positionEffect.spot) + ' to highlight'); return; }
+    remember('neighbourhood');
+    const byChain = new Map();
+    neighbours.forEach(row => { if (!byChain.has(row.chain)) byChain.set(row.chain, []); byChain.get(row.chain).push(row.resi); });
+    byChain.forEach((residues, chain) => selectionRecords.push({
+      id: nextAnnotationId++, entryId: reference.id, chain,
+      residues: residues.sort((a, b) => a - b), action: 'highlight', color: '#f97316'
+    }));
+    renderSelectionList(); applyStyle();
+    updateStatus(neighbours.length + ' residue' + (neighbours.length === 1 ? '' : 's') + ' within ' + positionEffect.cutoff + ' Å of '
+      + positionTag(positionEffect.spot) + ' highlighted on ' + displayName(reference) + ' · manage it in the Selections list');
+  }
+
+  function downloadPositionEffectCsv() {
+    if (!positionEffect) return;
+    const quote = value => '"' + String(value ?? '').replace(/"/g, '""') + '"';
+    const rows = [['chain', 'resi', 'resn', 'role', ...positionEffect.models.map(name => 'ca_deviation_angstrom_' + name)]];
+    positionEffect.rows.forEach(row => rows.push([row.chain, row.resi, row.resn, row.isSite ? 'site' : 'neighbour',
+      ...row.deviations.map(value => (Number.isFinite(value) ? value.toFixed(3) : ''))]));
+    downloadBlob(rows.map(row => row.map(quote).join(',')).join('\n'), 'text/csv', 'position-effect.csv');
+    announce('Effect CSV downloaded · ' + positionEffect.summary.neighbourCount + ' neighbour' + (positionEffect.summary.neighbourCount === 1 ? '' : 's') + ' within ' + positionEffect.cutoff + ' Å');
   }
 
   function renderPositionState(message = null) {
@@ -9099,16 +9342,18 @@ applyBackground();
       const index = labelRecords.findIndex(label => label.key === key);
       if (index >= 0) labelRecords[index] = { ...labelRecords[index], ...record }; else labelRecords.push(record);
     });
+    positionEffect = alignmentResults.length ? computePositionEffect({ chain, resi }) : null;
+    renderPositionEffect();
     renderLabelList(); applyStyle(); rebuildOverlays();
-    const readout = positionReadout({ chain, resi });
     renderPositionState();
-    announce(readout);
+    announce(positionReadout({ chain, resi }));
   }
 
   function clearPositions() {
     if (!spotlightResidues.length && !labelRecords.some(label => label.kind === 'position')) { announce('No compared positions to clear'); return; }
     remember('compared positions');
     spotlightResidues = [];
+    positionEffect = null; renderPositionEffect();
     labelRecords = labelRecords.filter(label => label.kind !== 'position');
     renderLabelList(); applyStyle(); rebuildOverlays();
     renderPositionState();
@@ -9117,6 +9362,15 @@ applyBackground();
 
   root.querySelector('#gpv-position-compare').addEventListener('click', comparePosition);
   root.querySelector('#gpv-position-clear').addEventListener('click', clearPositions);
+  root.querySelector('#gpv-position-highlight').addEventListener('click', highlightNeighbourhood);
+  root.querySelector('#gpv-position-csv').addEventListener('click', downloadPositionEffectCsv);
+  root.querySelector('#gpv-position-cutoff').addEventListener('change', () => {
+    if (!positionEffect) return;
+    positionEffect = computePositionEffect(positionEffect.spot);
+    renderPositionEffect();
+    renderPositionState();
+    updateStatus('Neighbourhood measured within ' + positionCutoff() + ' Å');
+  });
   root.querySelector('#gpv-position-sticks').addEventListener('change', () => {
     applyStyle();
     updateStatus(root.querySelector('#gpv-position-sticks').checked ? 'Side chains drawn at the compared positions' : 'Side chains at the compared positions hidden');
@@ -9274,7 +9528,7 @@ applyBackground();
   const persistedControls = [
     '#gpv-style', '#gpv-color-mode', '#gpv-projection', '#gpv-outline', '#gpv-label-style', '#gpv-background', '#gpv-background-color', '#gpv-hetero',
     '#gpv-export-mode', '#gpv-print-width', '#gpv-print-aspect', '#gpv-print-dpi', '#gpv-print-text', '#gpv-figure-font', '#gpv-scale-bar', '#gpv-legend-position', '#gpv-image-format',
-    '#gpv-view-mode', '#gpv-order', '#gpv-alignment-mode', '#gpv-fit-scope', '#gpv-export-size', '#gpv-export-scale',
+    '#gpv-view-mode', '#gpv-order', '#gpv-alignment-mode', '#gpv-fit-scope', '#gpv-position-cutoff', '#gpv-export-size', '#gpv-export-scale',
     '#gpv-panel-columns', '#gpv-video-length', '#gpv-cycle-speed', '#gpv-speed', '#gpv-report-scope'
   ];
 
@@ -9422,7 +9676,7 @@ applyBackground();
     selectedResidue = null;
     clearHistory();
     labelRecords = [];
-    spotlightResidues = []; renderPositionState();
+    spotlightResidues = []; positionEffect = null; renderPositionEffect(); renderPositionState();
     domainRecords = []; domainVersion += 1;
     residueData = null; nearbyResult = null; renderDataState();
     selectionRecords = [];
@@ -9786,7 +10040,7 @@ applyBackground();
     'Publish → Print size exports at a stated width (85 or 178 mm) and resolution (300 or 600 dpi), writes the dpi into the PNG or TIFF, and sizes labels in points — what a journal checks.',
     'Appearance → Colour-blind-safe palette switches chains and domains to Okabe–Ito colours; a scale bar of 10–100 Å goes bottom-right of every export from Publish → Scale bar.',
     'Publish → Figure format saves the figure as PNG, TIFF, PDF, JPEG or WebP; the PDF page is the physical size you chose, and the SVG button keeps the text editable.',
-    'Annotate → Compare this position: pick the mutated residue, press the button, and every shown model gets its side chain drawn and its own residue named — Ala15 against Gly15 — with the difference stated in one line.',
+    'Annotate → Compare this position: pick the mutated residue, press the button, and every shown model gets its side chain drawn and its own residue named — Ala15 against Gly15 — with the difference stated in one line. After Align visible the same press adds the neighbourhood table: how far the site and every residue within the cutoff moved, with Highlight neighbourhood and an effect CSV.',
     'Drag any label in the 3D view to move it: a residue label keeps a leader line back to its residue, and Reset in its row puts it back. Publish → Legend position puts the colour legend in any corner or down one side.',
     'Annotate → Domains → Label domains writes each domain\'s name on the structure at its centroid; Download architecture PNG/SVG draws the linear domain diagram that goes under it.',
     'Publish → Figure builder: save a few views — overview, interface, a zoom — tick them, order them, caption them, and download one lettered figure at the journal width as PNG or SVG.',
@@ -9866,7 +10120,7 @@ applyBackground();
   offerSessionRestore();
   /* ?debug=1 exposes a few internals for the regression suite and for bug reports;
      it has no effect otherwise. */
-  if (new URLSearchParams(location.search).has('debug')) window.__viewerDebug = { viewer, pickAtomAt, displayedEntries, activeEntry, colorOptions, sceneSettings, contactResult: () => contactResult, residueData: () => residueData, msaAssets: () => msaAssets, entries: () => structures, nearbyResidues, assemblyDimensions, paeDomains, parseConfidenceBytes, methodsText, alignmentResults: () => alignmentResults, ensembleSpread: () => ensembleSpread, siteResults: () => siteResults, interfaceResults: () => interfaceResults, solventAccessibleArea, heavyAtoms, ligandGroups, architectureModel, domainSets, distinguishingNames, rmsdMatrix: () => rmsdMatrix, rmsdMedoid, scaleBarSpec, pixelsPerAngstrom, sceneCentre, exportDimensions, exportViewer: () => exportViewer, renderPublicationImage, furnitureLayout, legendWanted, figurePalette, figureScale, releaseExportViewer, labelRecords: () => labelRecords, labelPosition, labelHitAt, spotlightResidues: () => spotlightResidues };
+  if (new URLSearchParams(location.search).has('debug')) window.__viewerDebug = { viewer, pickAtomAt, displayedEntries, activeEntry, colorOptions, sceneSettings, contactResult: () => contactResult, residueData: () => residueData, msaAssets: () => msaAssets, entries: () => structures, nearbyResidues, assemblyDimensions, paeDomains, parseConfidenceBytes, methodsText, alignmentResults: () => alignmentResults, ensembleSpread: () => ensembleSpread, siteResults: () => siteResults, interfaceResults: () => interfaceResults, solventAccessibleArea, heavyAtoms, ligandGroups, architectureModel, domainSets, distinguishingNames, rmsdMatrix: () => rmsdMatrix, rmsdMedoid, scaleBarSpec, pixelsPerAngstrom, sceneCentre, exportDimensions, exportViewer: () => exportViewer, renderPublicationImage, furnitureLayout, legendWanted, figurePalette, figureScale, releaseExportViewer, labelRecords: () => labelRecords, labelPosition, labelHitAt, spotlightResidues: () => spotlightResidues, positionEffect: () => positionEffect, selectionRecords: () => selectionRecords };
   applyTheme(readJson(themeKey, 'system'));
   selectToolTab('models');
   applyAppearance();
