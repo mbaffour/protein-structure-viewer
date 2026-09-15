@@ -203,7 +203,9 @@ moved 3.10 Å on average in model_3 · 18 neighbours within 5 Å moved 2.40 Å*.
 **Make site figure** then turns the comparison into a finished two-panel figure in one press — an
 overview of the superposed models with the site marked, and a close-up with the side chains, a label per
 model and the wild type solid against the others faded — ticked, lettered and captioned in the figure
-builder ready to download as PNG or SVG.
+builder ready to download as PNG or SVG. With the models superposed it adds a third panel, the same
+close-up coloured by Cα deviation from the reference so the reader sees how far each part of the site
+moved, with the band scale as its legend; **Deviation panel** turns it off.
 
 ## Domain figures
 

@@ -1,10 +1,12 @@
   /* ---------- Site figure ----------
-     The figure a mutation study ends up drawing is always the same two panels: an overview of the
-     superposed models so the reader knows where the site is, and a close-up of the site itself with
-     the side chains, each model's own residue named on it, and the wild type solid against the
-     mutants faded. Make site figure builds both from the positions that have been compared — one of
-     them, or the whole set of a binding site — camera, colouring, emphasis and captions, ticks them
-     as the only two panels of the figure builder and
+     The figure a mutation study ends up drawing is always the same panels: an overview of the
+     superposed models so the reader knows where the site is, a close-up of the site itself with the
+     side chains, each model's own residue named on it, and the wild type solid against the mutants
+     faded, and — once the models have been superposed — a third of that same close-up coloured by
+     how far each residue moved, which is the question the other two only point at. Make site figure
+     builds them from the positions that have been compared — one of them, or the whole set of a
+     binding site — camera, colouring, emphasis and captions, ticks them as the only panels of the
+     figure builder and
      opens Publish at it, so the press between "what did this mutation do?" and a figure file is
      Download figure PNG. Everything it does is one undo step. */
 
@@ -112,25 +114,53 @@
     const closeUp = captureViewState(single ? 'Site ' + tag : 'Sites', String((single ? positionReadout(spots[0]) : positionSetReadout()) || tag).slice(0, 200));
     closeUp.inFigure = true;
 
-    /* Exactly these two panels, side by side, lettered and captioned. */
+    /* Panel C — what moved: the same close-up framing, recoloured by Cα deviation from the reference,
+       so the panel that shows where the site is is followed by one that shows how far each part of it
+       travelled. The camera is left exactly where the close-up put it — the two panels are only worth
+       reading side by side if they frame the same thing — and every model is drawn solid, because
+       fading the models whose movement is being measured would hide the measurement. It needs a
+       superposition: without one every residue is unmatched grey, which is no panel at all. */
+    const wantsDeviation = root.querySelector('#gpv-position-figure-deviation').checked;
+    let deviation = null;
+    if (wantsDeviation && alignmentResults.length) {
+      shown.forEach(entry => { entry.faded = false; });
+      siteFigureSet('#gpv-color-mode', 'deviation');
+      applyStyle(); viewer.render();
+      const names = distinguishingNames(shown.map(displayName));
+      const referenceName = names[shown.indexOf(reference)] || displayName(reference);
+      deviation = captureViewState('Deviation', 'Cα deviation from ' + referenceName + ' after superposition · blue under 1 Å to red 8 Å and over');
+      deviation.inFigure = true;
+    }
+
+    /* Exactly these panels, side by side, lettered and captioned. */
     savedViews.forEach(view => { view.inFigure = false; });
     savedViews.push(overview, closeUp);
-    siteFigureSet('#gpv-panel-columns', '2');
+    if (deviation) savedViews.push(deviation);
+    siteFigureSet('#gpv-panel-columns', deviation ? '3' : '2');
     siteFigureSet('#gpv-builder-captions', 'both');
     siteFigureSet('#gpv-builder-letters', true);
     siteFigureSet('#gpv-builder-legends', true);
     renderSavedViews();
 
-    /* The panels keep their own emphasis; the screen goes back to what it was, solid, so nobody is
+    /* The panels keep their own emphasis; the screen goes back to what it was — its colour mode
+       included, so the deviation panel does not leave the viewer recoloured — and solid, so nobody is
        left looking at a faded model wondering what happened. */
     applyViewState(restore);
     displayedEntries().filter(entry => entry.model).forEach(entry => { entry.faded = false; });
     applyStyle();
+    /* The panels set the colour mode through the control, which saves it as a preference on the way
+       past; applyViewState puts the control back but says nothing to the store, so without this the
+       next session would open in the deviation colours the figure used and the user never chose. */
+    savePreferences();
 
     root.querySelector('[data-gpv-tab="publish"]').click();
     const heading = root.querySelector('#gpv-builder-heading');
     if (heading) heading.scrollIntoView({ block: 'start' });
-    announce('Site figure ready · two panels in the figure builder · download it as PNG or SVG');
+    /* Asking for the deviation panel without a superposition is not an error — the two panels are
+       still the figure that was wanted — so the line says what is missing rather than refusing. */
+    announce(deviation ? 'Site figure ready · three panels in the figure builder · download it as PNG or SVG'
+      : wantsDeviation ? 'Site figure ready · two panels · align the models to add the deviation panel'
+        : 'Site figure ready · two panels in the figure builder · download it as PNG or SVG');
   }
 
   root.querySelector('#gpv-position-figure').addEventListener('click', makeSiteFigure);

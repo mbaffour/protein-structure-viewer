@@ -128,12 +128,17 @@ PSV_CHROMIUM=/opt/pw-browsers/chromium/chrome-linux/chrome npm test
   whose `summary.siteCount` and site-row count are both four, no residue appearing as both a site row and a
   neighbour row, `summary.neighbourCount` equal to the number of non-site rows, and a readout opening
   `4 positions compared`; Clear compared positions takes the eight labels and the four spots back.
-- Make site figure: the same step then presses it and checks that exactly two saved views are added, named
-  `Overview` and `Site A:15`, that those two are the only ones ticked into the figure (letters A and B, every
-  earlier view `—`), that the Publish tab is open with two panel columns, and that the figure PNG downloads at
-  the two-column width the export estimate implies with `2-panels` in its name; the step then clears the
-  comparison, which disables the button again, and takes both views back so the figure builder step still
-  finds six included views.
+- Make site figure: the same step then presses it, with the models superposed and **Deviation panel** on, and
+  checks that exactly three saved views are added, named `Overview`, `Site A:15` and `Deviation`, that those
+  three are the only ones ticked into the figure (letters A, B and C, every earlier view `—`), that the
+  Publish tab is open with three panel columns, that the `Deviation` view stored `colorMode` `deviation` with
+  every model unfaded, that the live colour mode is back to what it was before the press, and that the figure
+  PNG downloads at the three-column width the export estimate implies with `3-panels` in its name.
+- The deviation panel switched off: the same step presses *Make site figure* a second time with
+  `#gpv-position-figure-deviation` unticked and checks the unchanged two-panel behaviour — two views,
+  `Overview` and `Site A:15`, letters A and B, two panel columns. The step then clears the comparison, which
+  disables the button again, and takes every view it added back so the figure builder step still finds six
+  included views.
 - Domain labels and architecture: on the block-diagonal PAE model, Label domains adds exactly two labels, D1 and D2, at
   the domain centroids; the architecture model reads two chains with one domain run each; the SVG carries the chain rows,
   names and residue numbers, the PNG is as wide as the export estimate says; the composite offers the panel, the builder

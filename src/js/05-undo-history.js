@@ -34,8 +34,8 @@
     annotationRecords = state.annotations.filter(record => record.points.every(alive));
     domainRecords = (state.domains || []).filter(record => record.scope === 'all' || alive(record)); domainVersion += 1;
     spotlightResidues = state.positions || [];
-    /* Saved views are records too: Make site figure adds two of them in one press, and undo has to
-       take them back with the rest of the state that press changed. */
+    /* Saved views are records too: Make site figure adds two or three of them in one press, and undo
+       has to take them back with the rest of the state that press changed. */
     if (Array.isArray(state.views)) savedViews = state.views;
     renderLabelList(); renderSelectionList(); renderMeasurementList(); renderAnnotationList(); renderDomainList(); renderPositionState(); renderSavedViews();
     applyStyle();

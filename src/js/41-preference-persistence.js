@@ -4,11 +4,17 @@
     '#gpv-style', '#gpv-color-mode', '#gpv-projection', '#gpv-outline', '#gpv-label-style', '#gpv-background', '#gpv-background-color', '#gpv-hetero',
     '#gpv-export-mode', '#gpv-print-width', '#gpv-print-aspect', '#gpv-print-dpi', '#gpv-print-text', '#gpv-figure-font', '#gpv-scale-bar', '#gpv-legend-position', '#gpv-image-format',
     '#gpv-view-mode', '#gpv-order', '#gpv-alignment-mode', '#gpv-fit-scope', '#gpv-position-cutoff', '#gpv-export-size', '#gpv-export-scale',
-    '#gpv-panel-columns', '#gpv-video-length', '#gpv-cycle-speed', '#gpv-speed', '#gpv-report-scope'
+    '#gpv-panel-columns', '#gpv-video-length', '#gpv-cycle-speed', '#gpv-speed', '#gpv-report-scope',
+    '#gpv-position-figure-deviation'
   ];
 
   function savePreferences() {
-    writeJson(preferenceKey, Object.fromEntries(persistedControls.map(selector => [selector, root.querySelector(selector).value])));
+    /* A switch is remembered by its state, not by its value — a checkbox's value is "on" whether it
+       is ticked or not. */
+    writeJson(preferenceKey, Object.fromEntries(persistedControls.map(selector => {
+      const control = root.querySelector(selector);
+      return [selector, control.type === 'checkbox' ? control.checked : control.value];
+    })));
   }
 
   function restorePreferences() {
@@ -17,6 +23,7 @@
     persistedControls.forEach(selector => {
       const control = root.querySelector(selector);
       const value = stored[selector];
+      if (control.type === 'checkbox') { if (typeof value === 'boolean') control.checked = value; return; }
       if (typeof value !== 'string') return;
       /* Only accept values the control actually offers, so a stale or hand-edited
          preference cannot put a control into an unhandled state. */

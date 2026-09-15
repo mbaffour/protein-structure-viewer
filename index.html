@@ -966,7 +966,8 @@ html>body{padding:0}</style>
       <label class="form-label">Neighbourhood (Å)<input class="form-control" id="gpv-position-cutoff" type="number" min="3" max="12" step="0.5" value="5" data-tooltip="Residues of the reference model with any heavy atom this close to the compared residue are the neighbourhood whose movement is measured"></label>
       <button class="btn" type="button" id="gpv-position-highlight" disabled data-tooltip="Highlight the neighbourhood of the compared position on the reference model">Highlight neighbourhood</button>
       <button class="btn btn-ghost" type="button" id="gpv-position-csv" disabled data-tooltip="Cα deviation of the site and of every neighbour, one column per model">Download effect CSV</button>
-      <button class="btn" type="button" id="gpv-position-figure" disabled data-tooltip="Build a two-panel figure around the compared position: an overview of the superposed models with the site marked, and a close-up with the side chains, one label per model, and the reference drawn solid against the others faded — both saved as figure panels in Publish">Make site figure</button>
+      <button class="btn" type="button" id="gpv-position-figure" disabled data-tooltip="Build a figure around the compared position: an overview of the superposed models with the site marked, and a close-up with the side chains, one label per model, and the reference drawn solid against the others faded — saved as figure panels in Publish">Make site figure</button>
+      <label class="form-check form-switch"><input class="form-check-input" id="gpv-position-figure-deviation" type="checkbox" checked><span class="form-check-label" data-tooltip="Add a third panel to the site figure: the same close-up, every model solid and coloured by how far each residue moved from the reference (blue under 1 Å to red 8 Å and over), with the band scale as its legend. Needs a superposition — align the models first, or the figure comes back as the usual two panels">Deviation panel</span></label>
       <button class="btn btn-ghost" type="button" id="gpv-position-clear">Clear compared positions</button>
       <span class="text-muted text-small" id="gpv-position-state">Select a residue, then compare it across the shown models.</span>
     </div>
@@ -1299,7 +1300,7 @@ html>body{padding:0}</style>
       </ul>
       <h3>Tips for figures and reviewers</h3>
       <ul>
-        <li><em>Annotate → Compare this position</em> takes the residue you have selected and, in every shown model, draws its side chain, writes that model’s own residue on it (Arg273, His273) and states whether the models agree — the one-press check on a wild-type and mutant pair. Positions are matched by the Cα pairing of the superposition once the models are aligned, and by chain and residue number otherwise. After <em>Align visible</em> the same press also measures what the substitution did: a neighbourhood table of every residue with a heavy atom within the cutoff of the site, each row giving its Cα deviation from the reference in every other model, with <em>Highlight neighbourhood</em> and an effect CSV. A binding site is several residues, so the same block takes a set: type <em>A:20-30, A:45</em> (or bare numbers and ranges, which use the chain of the selected residue) into <em>Positions</em> and press <em>Compare these positions</em> — every one of them is compared in one press and one undo step, up to 40, any that fewer than two shown models carry being skipped and counted, and the table then opens with a row per site followed by the union of their neighbourhoods. <em>Make site figure</em> then turns the comparison into a finished two-panel figure in one press: panel A an overview of the superposed models with the site marked, panel B a close-up of the site with the side chains and each model’s label, the reference model solid and the others faded. Both are saved as views, ticked as the only two panels of the figure builder in two columns, and the Publish tab opens at the builder ready for <em>Download figure PNG</em> or <em>SVG</em>; ⌘Z takes the two panels back.</li>
+        <li><em>Annotate → Compare this position</em> takes the residue you have selected and, in every shown model, draws its side chain, writes that model’s own residue on it (Arg273, His273) and states whether the models agree — the one-press check on a wild-type and mutant pair. Positions are matched by the Cα pairing of the superposition once the models are aligned, and by chain and residue number otherwise. After <em>Align visible</em> the same press also measures what the substitution did: a neighbourhood table of every residue with a heavy atom within the cutoff of the site, each row giving its Cα deviation from the reference in every other model, with <em>Highlight neighbourhood</em> and an effect CSV. A binding site is several residues, so the same block takes a set: type <em>A:20-30, A:45</em> (or bare numbers and ranges, which use the chain of the selected residue) into <em>Positions</em> and press <em>Compare these positions</em> — every one of them is compared in one press and one undo step, up to 40, any that fewer than two shown models carry being skipped and counted, and the table then opens with a row per site followed by the union of their neighbourhoods. <em>Make site figure</em> then turns the comparison into a finished two-panel figure in one press: panel A an overview of the superposed models with the site marked, panel B a close-up of the site with the side chains and each model’s label, the reference model solid and the others faded. With the models superposed and <em>Deviation panel</em> on, a panel C follows: the same close-up, every model solid and coloured by how far each residue moved from the reference, blue under 1 Å to red 8 Å and over, with the band scale as its legend. The panels are saved as views, ticked as the only panels of the figure builder in two columns (three with the deviation panel), and the Publish tab opens at the builder ready for <em>Download figure PNG</em> or <em>SVG</em>; ⌘Z takes the whole press back.</li>
         <li><em>Publish → Figure format</em> saves the same figure as PNG or TIFF with the resolution in the file, as a PDF whose page is the physical size you chose, or as JPEG or WebP for slides; <em>Download figure SVG</em> stays the vector option with editable text.</li>
         <li>After <em>Align visible</em>, <em>RMSF profile SVG/PNG</em> plots the per-residue Cα spread across the aligned models, one panel per chain with the agreement bands behind the trace, and the same plot is a panel of the composite figure — the ensemble counterpart of the pLDDT profile.</li>
         <li><em>Compare → Pairwise RMSD → Compute matrix</em> superposes every shown model onto every other with the same rules as Align visible and tabulates the Cα RMSDs — which models of an ensemble agree, which is the odd one out — with a mean column, a ★ on the medoid, a CSV, a heat-map PNG or SVG with the values in the cells, and a panel for the composite figure. <em>Use medoid as reference</em> superposes everything onto that model and draws it solid against the rest.</li>
@@ -1676,7 +1677,7 @@ html>body{padding:0}</style>
   let busyDepth = 0;
   let restoreMotion = null;
   const listPageSize = 60;
-  const viewerVersion = '2.40.0';
+  const viewerVersion = '2.41.0';
   const preferenceKey = 'protein-structure-viewer:preferences';
   const themeKey = 'protein-structure-viewer:theme';
   const labelColors = getComputedStyle(root);
@@ -3520,8 +3521,8 @@ html>body{padding:0}</style>
     annotationRecords = state.annotations.filter(record => record.points.every(alive));
     domainRecords = (state.domains || []).filter(record => record.scope === 'all' || alive(record)); domainVersion += 1;
     spotlightResidues = state.positions || [];
-    /* Saved views are records too: Make site figure adds two of them in one press, and undo has to
-       take them back with the rest of the state that press changed. */
+    /* Saved views are records too: Make site figure adds two or three of them in one press, and undo
+       has to take them back with the rest of the state that press changed. */
     if (Array.isArray(state.views)) savedViews = state.views;
     renderLabelList(); renderSelectionList(); renderMeasurementList(); renderAnnotationList(); renderDomainList(); renderPositionState(); renderSavedViews();
     applyStyle();
@@ -5365,6 +5366,9 @@ html>body{padding:0}</style>
     const hetero = root.querySelector('#gpv-hetero').value;
     if (hetero !== 'hide' && shown.some(entry => entry.atoms.some(atom => atom.hetflag && !isWater(atom)))) sentences.push('Ligands and ions are drawn as ' + (hetero === 'sphere' ? 'spheres' : 'sticks') + '; water is omitted.');
     if (alignmentResults.length) sentences.push('Models were superposed on ' + alignmentResults[0].reference + ' by ' + alignmentResults[0].method + (alignmentResults[0].fitRegion ? ', fitting on ' + alignmentResults[0].fitRegion : '') + ' (' + alignmentResults.map(result => result.name + ': ' + result.count + ' Cα pairs, RMSD ' + result.rmsd.toFixed(2) + ' Å' + (result.fitRegion ? '; fitted region ' + result.fitCount + ' Cα, RMSD ' + result.fitRmsd.toFixed(2) + ' Å' : '')).join('; ') + ').');
+    /* A deviation panel in the figure needs its own sentence even when the main view is coloured
+       some other way: the reader is looking at colours the surrounding text never explains. */
+    if (alignmentResults.length && figurePanelsSelected().some(view => view.colorMode === 'deviation')) sentences.push('One panel is coloured by Cα deviation from ' + alignmentResults[0].reference + ' after superposition — the distance between each residue’s Cα and the one the alignment pairs it with — in five bands (<1 Å blue, 1–2 Å green, 2–4 Å yellow, 4–8 Å orange, ≥8 Å red; unmatched residues grey), so a residue’s colour is how far it moved.');
     if (rmsdMatrix && rmsdMatrix.names.length >= 2) { const off = rmsdMatrix.values.flatMap((row, i) => row.filter((value, j) => j > i && Number.isFinite(value))); if (off.length) sentences.push('Pairwise Cα RMSDs between the ' + rmsdMatrix.names.length + ' models were computed by superposing each pair (Kabsch, ' + (rmsdMatrix.mapping === 'sequence' ? 'sequence-aware residue mapping' : 'chain and residue identifiers') + (rmsdMatrix.fitRegion ? ', fitted on ' + rmsdMatrix.fitRegion : '') + (rmsdMatrix.byPosition ? ', identical chains matched by position' : '') + ') and range from ' + Math.min(...off).toFixed(2) + ' to ' + Math.max(...off).toFixed(2) + ' Å.'); }
     if (root.querySelector('#gpv-side-by-side').checked && comparePanels.length) sentences.push('Panels share one orientation' + (root.querySelector('#gpv-sync-mode').value === 'full' ? ' and zoom' : '') + '.');
     const shownIds = new Set(shown.map(entry => entry.id));
@@ -5409,6 +5413,7 @@ html>body{padding:0}</style>
       sentences.push('Models were superposed on ' + alignmentResults[0].reference + ' by least-squares (Kabsch) fitting of Cα atoms paired by ' + (bySequence ? 'global Needleman–Wunsch alignment of each chain pair (match +2, mismatch −1, gap −2), chains being matched greedily by sequence identity' : 'chain and residue identifier') + (alignmentResults[0].fitRegion ? '; the rotation was computed from ' + alignmentResults[0].fitRegion + ' alone' : '') + '; RMSD is reported over all paired Cα atoms without outlier rejection' + (alignmentResults[0].fitRegion ? ', and separately over the fitted region' : '') + ' (' + alignmentResults.map(result => result.name + ': n = ' + result.count + ', ' + result.rmsd.toFixed(2) + ' Å').join('; ') + ').');
       if (rmsdMatrix && rmsdMatrix.names.length >= 2) { const off = rmsdMatrix.values.flatMap((row, i) => row.filter((value, j) => j > i && Number.isFinite(value))); if (off.length) sentences.push('Pairwise Cα RMSDs between the ' + rmsdMatrix.names.length + ' shown models were obtained by superposing each pair independently with the same pairing rules' + (rmsdMatrix.fitRegion ? ', the rotation computed from ' + rmsdMatrix.fitRegion : '') + (rmsdMatrix.byPosition ? ', identical chains re-paired by position after a first fit' : '') + ', and range from ' + Math.min(...off).toFixed(2) + ' to ' + Math.max(...off).toFixed(2) + ' Å over all paired Cα atoms' + (rmsdMedoid() ? '; ' + rmsdMedoid().name + ' has the lowest mean RMSD to the other models (' + rmsdMedoid().mean.toFixed(2) + ' Å) and is the medoid of the set' : '') + '.'); }
       sentences.push('Per-residue Cα deviation is the distance between paired Cα atoms after superposition.');
+      if (figurePanelsSelected().some(view => view.colorMode === 'deviation')) sentences.push('One figure panel maps that deviation onto the models in five bands (<1, 1–2, 2–4, 4–8 and ≥8 Å), residues the alignment did not pair being left grey.');
     }
     if (ensembleSpread) sentences.push('Model agreement was expressed per residue as the Cα root-mean-square fluctuation about the mean Cα position across the ' + ensembleSpread.count + ' superposed models, for residues present in at least two models.');
     if (contactResult && contactResult.pairs.size) { const target = entryById(contactResult.entryId); sentences.push('Inter-chain contacts between chains ' + (contactResult.chainA || '—') + ' and ' + (contactResult.chainB || '—') + (target ? ' of ' + displayName(target) : '') + ' were defined as residue pairs with ' + (contactResult.mode === 'ca' ? 'Cα atoms' : 'any pair of heavy atoms') + ' within ' + contactResult.cutoff + ' Å; ' + contactResult.pairs.size + ' residue pairs (' + contactResult.residuesA.length + ' residues on chain ' + (contactResult.chainA || '—') + ', ' + contactResult.residuesB.length + ' on chain ' + (contactResult.chainB || '—') + ') met the criterion.'); }
@@ -9575,12 +9580,14 @@ applyBackground();
     updateStatus(root.querySelector('#gpv-position-sticks').checked ? 'Side chains drawn at the compared positions' : 'Side chains at the compared positions hidden');
   });
   /* ---------- Site figure ----------
-     The figure a mutation study ends up drawing is always the same two panels: an overview of the
-     superposed models so the reader knows where the site is, and a close-up of the site itself with
-     the side chains, each model's own residue named on it, and the wild type solid against the
-     mutants faded. Make site figure builds both from the positions that have been compared — one of
-     them, or the whole set of a binding site — camera, colouring, emphasis and captions, ticks them
-     as the only two panels of the figure builder and
+     The figure a mutation study ends up drawing is always the same panels: an overview of the
+     superposed models so the reader knows where the site is, a close-up of the site itself with the
+     side chains, each model's own residue named on it, and the wild type solid against the mutants
+     faded, and — once the models have been superposed — a third of that same close-up coloured by
+     how far each residue moved, which is the question the other two only point at. Make site figure
+     builds them from the positions that have been compared — one of them, or the whole set of a
+     binding site — camera, colouring, emphasis and captions, ticks them as the only panels of the
+     figure builder and
      opens Publish at it, so the press between "what did this mutation do?" and a figure file is
      Download figure PNG. Everything it does is one undo step. */
 
@@ -9688,25 +9695,53 @@ applyBackground();
     const closeUp = captureViewState(single ? 'Site ' + tag : 'Sites', String((single ? positionReadout(spots[0]) : positionSetReadout()) || tag).slice(0, 200));
     closeUp.inFigure = true;
 
-    /* Exactly these two panels, side by side, lettered and captioned. */
+    /* Panel C — what moved: the same close-up framing, recoloured by Cα deviation from the reference,
+       so the panel that shows where the site is is followed by one that shows how far each part of it
+       travelled. The camera is left exactly where the close-up put it — the two panels are only worth
+       reading side by side if they frame the same thing — and every model is drawn solid, because
+       fading the models whose movement is being measured would hide the measurement. It needs a
+       superposition: without one every residue is unmatched grey, which is no panel at all. */
+    const wantsDeviation = root.querySelector('#gpv-position-figure-deviation').checked;
+    let deviation = null;
+    if (wantsDeviation && alignmentResults.length) {
+      shown.forEach(entry => { entry.faded = false; });
+      siteFigureSet('#gpv-color-mode', 'deviation');
+      applyStyle(); viewer.render();
+      const names = distinguishingNames(shown.map(displayName));
+      const referenceName = names[shown.indexOf(reference)] || displayName(reference);
+      deviation = captureViewState('Deviation', 'Cα deviation from ' + referenceName + ' after superposition · blue under 1 Å to red 8 Å and over');
+      deviation.inFigure = true;
+    }
+
+    /* Exactly these panels, side by side, lettered and captioned. */
     savedViews.forEach(view => { view.inFigure = false; });
     savedViews.push(overview, closeUp);
-    siteFigureSet('#gpv-panel-columns', '2');
+    if (deviation) savedViews.push(deviation);
+    siteFigureSet('#gpv-panel-columns', deviation ? '3' : '2');
     siteFigureSet('#gpv-builder-captions', 'both');
     siteFigureSet('#gpv-builder-letters', true);
     siteFigureSet('#gpv-builder-legends', true);
     renderSavedViews();
 
-    /* The panels keep their own emphasis; the screen goes back to what it was, solid, so nobody is
+    /* The panels keep their own emphasis; the screen goes back to what it was — its colour mode
+       included, so the deviation panel does not leave the viewer recoloured — and solid, so nobody is
        left looking at a faded model wondering what happened. */
     applyViewState(restore);
     displayedEntries().filter(entry => entry.model).forEach(entry => { entry.faded = false; });
     applyStyle();
+    /* The panels set the colour mode through the control, which saves it as a preference on the way
+       past; applyViewState puts the control back but says nothing to the store, so without this the
+       next session would open in the deviation colours the figure used and the user never chose. */
+    savePreferences();
 
     root.querySelector('[data-gpv-tab="publish"]').click();
     const heading = root.querySelector('#gpv-builder-heading');
     if (heading) heading.scrollIntoView({ block: 'start' });
-    announce('Site figure ready · two panels in the figure builder · download it as PNG or SVG');
+    /* Asking for the deviation panel without a superposition is not an error — the two panels are
+       still the figure that was wanted — so the line says what is missing rather than refusing. */
+    announce(deviation ? 'Site figure ready · three panels in the figure builder · download it as PNG or SVG'
+      : wantsDeviation ? 'Site figure ready · two panels · align the models to add the deviation panel'
+        : 'Site figure ready · two panels in the figure builder · download it as PNG or SVG');
   }
 
   root.querySelector('#gpv-position-figure').addEventListener('click', makeSiteFigure);
@@ -9864,11 +9899,17 @@ applyBackground();
     '#gpv-style', '#gpv-color-mode', '#gpv-projection', '#gpv-outline', '#gpv-label-style', '#gpv-background', '#gpv-background-color', '#gpv-hetero',
     '#gpv-export-mode', '#gpv-print-width', '#gpv-print-aspect', '#gpv-print-dpi', '#gpv-print-text', '#gpv-figure-font', '#gpv-scale-bar', '#gpv-legend-position', '#gpv-image-format',
     '#gpv-view-mode', '#gpv-order', '#gpv-alignment-mode', '#gpv-fit-scope', '#gpv-position-cutoff', '#gpv-export-size', '#gpv-export-scale',
-    '#gpv-panel-columns', '#gpv-video-length', '#gpv-cycle-speed', '#gpv-speed', '#gpv-report-scope'
+    '#gpv-panel-columns', '#gpv-video-length', '#gpv-cycle-speed', '#gpv-speed', '#gpv-report-scope',
+    '#gpv-position-figure-deviation'
   ];
 
   function savePreferences() {
-    writeJson(preferenceKey, Object.fromEntries(persistedControls.map(selector => [selector, root.querySelector(selector).value])));
+    /* A switch is remembered by its state, not by its value — a checkbox's value is "on" whether it
+       is ticked or not. */
+    writeJson(preferenceKey, Object.fromEntries(persistedControls.map(selector => {
+      const control = root.querySelector(selector);
+      return [selector, control.type === 'checkbox' ? control.checked : control.value];
+    })));
   }
 
   function restorePreferences() {
@@ -9877,6 +9918,7 @@ applyBackground();
     persistedControls.forEach(selector => {
       const control = root.querySelector(selector);
       const value = stored[selector];
+      if (control.type === 'checkbox') { if (typeof value === 'boolean') control.checked = value; return; }
       if (typeof value !== 'string') return;
       /* Only accept values the control actually offers, so a stale or hand-edited
          preference cannot put a control into an unhandled state. */
@@ -10508,7 +10550,7 @@ applyBackground();
     'Publish → Print size exports at a stated width (85 or 178 mm) and resolution (300 or 600 dpi), writes the dpi into the PNG or TIFF, and sizes labels in points — what a journal checks.',
     'Appearance → Colour-blind-safe palette switches chains and domains to Okabe–Ito colours; a scale bar of 10–100 Å goes bottom-right of every export from Publish → Scale bar.',
     'Publish → Figure format saves the figure as PNG, TIFF, PDF, JPEG or WebP; the PDF page is the physical size you chose, and the SVG button keeps the text editable.',
-    'Annotate → Compare this position: pick the mutated residue, press the button, and every shown model gets its side chain drawn and its own residue named — Ala15 against Gly15 — with the difference stated in one line. After Align visible the same press adds the neighbourhood table: how far the site and every residue within the cutoff moved, with Highlight neighbourhood and an effect CSV. A binding site is several residues: type A:20-30, A:45 into Positions and Compare these positions compares the whole set in one press, with one table covering every site and the union of their neighbourhoods. Make site figure then builds the whole figure in one press: an overview panel with the site marked and a close-up with the reference solid and the others faded, ticked and lettered in the figure builder ready to download.',
+    'Annotate → Compare this position: pick the mutated residue, press the button, and every shown model gets its side chain drawn and its own residue named — Ala15 against Gly15 — with the difference stated in one line. After Align visible the same press adds the neighbourhood table: how far the site and every residue within the cutoff moved, with Highlight neighbourhood and an effect CSV. A binding site is several residues: type A:20-30, A:45 into Positions and Compare these positions compares the whole set in one press, with one table covering every site and the union of their neighbourhoods. Make site figure then builds the whole figure in one press: an overview panel with the site marked and a close-up with the reference solid and the others faded, ticked and lettered in the figure builder ready to download. After Align visible it adds a third panel — the same close-up coloured by how far each residue moved, blue under 1 Å to red 8 Å and over — unless you turn Deviation panel off.',
     'Drag any label in the 3D view to move it: a residue label keeps a leader line back to its residue, and Reset in its row puts it back. Publish → Legend position puts the colour legend in any corner or down one side.',
     'Annotate → Domains → Label domains writes each domain\'s name on the structure at its centroid; Download architecture PNG/SVG draws the linear domain diagram that goes under it.',
     'Publish → Figure builder: save a few views — overview, interface, a zoom — tick them, order them, caption them, and download one lettered figure at the journal width as PNG or SVG.',

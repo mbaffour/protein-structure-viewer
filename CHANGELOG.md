@@ -2,6 +2,23 @@
 
 All notable changes to this project are recorded here.
 
+## 2.41.0
+
+- **A third site-figure panel: what moved.** *Make site figure* answered where the site is and which
+  residue each model has there; with the models superposed it now also answers how far each part of it
+  travelled. A **Deviation** panel follows the close-up, framed on exactly the same thing, every model
+  drawn solid — fading the models whose movement is being measured would hide the measurement — and
+  coloured by Cα deviation from the reference after superposition: blue under 1 Å through green, yellow
+  and orange to red at 8 Å and over, residues the alignment did not pair grey. Its legend is that band
+  scale and its caption names the reference, so the panel reads on its own in a paper.
+- **On by default, one switch away.** **Deviation panel** sits beside *Make site figure* in Annotate and
+  is remembered between sessions. With it on the figure is three panels in three columns; with it off,
+  or with no superposition, it is the same two panels in two columns as before — pressing it unaligned
+  is not an error, the line simply reads *align the models to add the deviation panel*. The figure
+  legend and the methods text gain a sentence defining the bands whenever the panel is in the figure,
+  the viewer's own colour mode is put back after the press along with the camera and the emphasis, and
+  the whole press is still a single ⌘Z.
+
 ## 2.40.0
 
 - **Figure templates.** Every figure of a paper has to match the others, so the whole presentation of a

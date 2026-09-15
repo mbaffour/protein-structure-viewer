@@ -549,7 +549,7 @@ whole set and define the neighbourhood as the union. **Highlight neighbourhood**
 CSV** work on the set unchanged — the CSV's `role` column reads `site` for every one of them.
 
 **Make site figure.** With a position compared, one press builds the whole figure. **Make site figure**
-saves two panels: **Overview**, every shown model solid with the superposition in frame and the site
+saves **Overview**, every shown model solid with the superposition in frame and the site
 marked, and **Site A:15**, the camera on the compared residue in the reference model, backed off a
 little so the neighbours stay in the panel, with the side chains drawn, each model's own residue
 labelled, and the reference — the wild type — solid against every other shown model faded. The close-up
@@ -558,8 +558,18 @@ is framed on the site *and its neighbourhood* — every residue with a heavy ato
 context around it instead of filling the panel with the nearest wall of ribbon. It needs a
 compared position and at least two shown models; it switches colouring to one colour per model and turns
 **Side chains at compared positions** on. The close-up takes the comparison readout as its caption.
-Both panels are ticked as the *only* two panels of the figure builder, in two columns with letters,
-captions and a legend on each, and the Publish tab opens at the builder, so the next press is
+With the models superposed and **Deviation panel** on (it is on by default), a third panel follows:
+**Deviation**, the close-up framed exactly as panel B but with every model drawn solid and coloured by
+Cα deviation from the reference — the distance between paired Cα atoms after the superposition — blue
+under 1 Å through green, yellow and orange to red at 8 Å and over, residues the alignment did not pair
+grey. Panel B says where the site is and which residue each model has there; panel C says how far each
+part of it moved. Its legend is the band scale, its caption names the reference, and the figure legend
+and methods text gain a sentence defining the bands. Without a superposition the press is not an error:
+the figure comes back as the usual two panels and the line reads *align the models to add the deviation
+panel*. The viewer's own colour mode is put back afterwards, exactly as the camera and the emphasis are.
+The panels are ticked as the *only* panels of the figure builder, in two columns — three with the
+deviation panel — with letters, captions and a legend on each, and the Publish tab opens at the
+builder, so the next press is
 **Download figure PNG** or **Download figure SVG**. The screen goes back to what it was — solid, never
 left faded — the panels keep their own emphasis, and the whole press is a single ⌘Z. If several
 positions are compared the figure covers all of them: the close-up frames every site and their shared

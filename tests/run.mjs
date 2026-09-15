@@ -879,25 +879,37 @@ await step('one position is compared across a wild-type and a mutant model: side
   /* Highlight neighbourhood adds one selection per chain of the neighbourhood; the finally takes
      back exactly those rows so the rest of the suite starts from the selections it left. */
   let neighbourhoodRows = 0;
-  /* Make site figure saves two views and unticks every other one; the finally takes both back and
-     re-ticks the rest, so the later figure builder step still finds six included views. */
+  /* Make site figure saves its panels and unticks every other one; every press is taken back by
+     name and the rest re-ticked, so the later figure builder step still finds six included views. */
   let siteFigureViews = 0;
-  const startAlignmentMode = await page.inputValue('#gpv-alignment-mode');
-  const cleanup = async () => {
-    if (siteFigureViews) {
-      await tab('publish');
-      for (const name of ['Site A:15', 'Overview']) {
-        /* A string hasText is case-insensitive and 'Site A:15' would match the Overview's caption 'site A:15 marked'. */
-        const row = page.locator('#gpv-saved-views .gpv-entry', { hasText: new RegExp('· ' + name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + ' —') });
-        if (await row.count()) { await row.first().locator('button:has-text("Remove")').click(); await page.waitForTimeout(250); }
-      }
-      const ticks = page.locator('#gpv-builder-rows input[type="checkbox"]');
-      for (let index = 0; index < (await ticks.count()); index += 1) { await ticks.nth(index).check(); await page.waitForTimeout(120); }
-      siteFigureViews = 0;
+  let siteFigureNames = [];
+  const takeSiteFigureBack = async () => {
+    if (!siteFigureViews) return;
+    await tab('publish');
+    for (const name of [...siteFigureNames].reverse()) {
+      /* A string hasText is case-insensitive and 'Site A:15' would match the Overview's caption 'site A:15 marked'. */
+      const row = page.locator('#gpv-saved-views .gpv-entry', { hasText: new RegExp('· ' + name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + ' —') });
+      if (await row.count()) { await row.first().locator('button:has-text("Remove")').click(); await page.waitForTimeout(250); }
     }
+    const ticks = page.locator('#gpv-builder-rows input[type="checkbox"]');
+    for (let index = 0; index < (await ticks.count()); index += 1) { await ticks.nth(index).check(); await page.waitForTimeout(120); }
+    siteFigureViews = 0; siteFigureNames = [];
+  };
+  const startAlignmentMode = await page.inputValue('#gpv-alignment-mode');
+  const startColorMode = await page.inputValue('#gpv-color-mode');
+  const startColumns = await page.inputValue('#gpv-panel-columns');
+  const startDeviationPanel = await page.isChecked('#gpv-position-figure-deviation');
+  const cleanup = async () => {
+    await takeSiteFigureBack();
+    /* The deviation panel press moves the panel columns and the colour mode; both are preferences
+       the rest of the suite reads, so they go back whether or not the views were saved. */
+    await tab('publish');
+    await page.selectOption('#gpv-panel-columns', startColumns); await page.waitForTimeout(150);
+    await page.evaluate(mode => { const select = document.querySelector('#gpv-color-mode'); if (select.value !== mode) { select.value = mode; select.dispatchEvent(new Event('change', { bubbles: true })); } }, startColorMode);
     await tab('compare');
     await page.selectOption('#gpv-alignment-mode', startAlignmentMode); await page.waitForTimeout(200);
     await tab('annotate');
+    await page.setChecked('#gpv-position-figure-deviation', startDeviationPanel); await page.waitForTimeout(150);
     if (await page.locator('#gpv-position-clear').count()) { await page.click('#gpv-position-clear'); await page.waitForTimeout(300); }
     while (neighbourhoodRows > 0) {
       const row = page.locator('#gpv-selection-list .gpv-entry').last();
@@ -980,18 +992,26 @@ await step('one position is compared across a wild-type and a mutant model: side
     const csvLines = csv.split('\n');
     if (!csvLines[0].startsWith('"chain","resi","resn","role"')) throw new Error('effect CSV header: ' + csvLines[0]);
     if (!csvLines.slice(1).some(line => /^"[^"]*","15","[^"]*","site"/.test(line))) throw new Error('the effect CSV has no site row for residue 15');
-    /* One press turns the compared position into the finished two-panel figure: an overview and a
-       close-up, the only two panels ticked in the builder, with Publish open at it. */
+    /* One press turns the compared position into the finished figure: an overview, a close-up and —
+       the models being superposed, with the switch on — a third panel of the same close-up coloured
+       by how far each residue moved, the only panels ticked in the builder, with Publish open at it. */
     const viewsBefore = await page.evaluate(() => window.__viewerDebug.savedViews().length);
     if (await page.locator('#gpv-position-figure').isDisabled()) throw new Error('Make site figure stayed disabled with a position compared');
+    await page.check('#gpv-position-figure-deviation'); await page.waitForTimeout(150);
     await page.click('#gpv-position-figure'); await page.waitForTimeout(1500);
-    const views = await page.evaluate(() => window.__viewerDebug.savedViews().map(view => ({ name: view.name, included: view.inFigure !== false })));
+    const views = await page.evaluate(() => window.__viewerDebug.savedViews().map(view => ({ name: view.name, included: view.inFigure !== false, colorMode: view.colorMode, faded: view.faded })));
     siteFigureViews = views.length - viewsBefore;
-    if (siteFigureViews !== 2) throw new Error('Make site figure added ' + siteFigureViews + ' saved views, not 2');
+    siteFigureNames = views.slice(viewsBefore).map(view => view.name);
+    if (siteFigureViews !== 3) throw new Error('Make site figure added ' + siteFigureViews + ' saved views, not 3');
     const added = views.slice(viewsBefore);
-    if (added[0].name !== 'Overview' || added[1].name !== 'Site A:15') throw new Error('panel names: ' + added.map(view => view.name).join(', '));
-    if (!added.every(view => view.included)) throw new Error('the two site figure panels are not both ticked');
+    if (added.map(view => view.name).join(', ') !== 'Overview, Site A:15, Deviation') throw new Error('panel names: ' + added.map(view => view.name).join(', '));
+    if (!added.every(view => view.included)) throw new Error('the three site figure panels are not all ticked');
     if (views.slice(0, viewsBefore).some(view => view.included)) throw new Error('an earlier saved view is still ticked into the figure');
+    /* The deviation panel is the measurement: it is coloured by it, and it fades nothing, because a
+       faded model is the one whose movement the reader is being shown. */
+    if (added[2].colorMode !== 'deviation') throw new Error('the deviation panel stored colour mode ' + added[2].colorMode);
+    if (Object.values(added[2].faded || {}).some(Boolean)) throw new Error('the deviation panel fades a model: ' + JSON.stringify(added[2].faded));
+    if ((await page.inputValue('#gpv-color-mode')) !== startColorMode) throw new Error('the press left the viewer coloured by ' + (await page.inputValue('#gpv-color-mode')) + ', not ' + startColorMode);
     /* The close-up frames the site with its neighbourhood, not the lone residue: its camera must be
        wider than the one zoomTo() gives for residue A:15 alone. getView()[3] is the zoom — larger is
        tighter — and the live camera is put back exactly as it was before the measurement. */
@@ -1008,15 +1028,21 @@ await step('one position is compared across a wild-type and a mutant model: side
         lone = viewer.getView()[3];
       } finally { viewer.setView(before); }
       return { closeUp: saved ? saved[3] : null, lone, before, after: viewer.getView() };
-    }, views.length - 1);
+    }, viewsBefore + 1);
     if (!Number.isFinite(frames.closeUp) || !Number.isFinite(frames.lone)) throw new Error('camera zooms: ' + JSON.stringify(frames));
     if (!(frames.closeUp < frames.lone)) throw new Error('the site close-up is framed at zoom ' + frames.closeUp + ', no wider than the lone residue at ' + frames.lone);
     if (frames.after.some((value, index) => Math.abs(value - frames.before[index]) > 1e-6)) throw new Error('measuring the lone-residue frame left the camera moved');
+    /* The deviation panel is only readable beside the close-up because it frames the same thing. */
+    const sameCamera = await page.evaluate(index => {
+      const [closeUp, deviation] = [window.__viewerDebug.savedViews()[index].camera, window.__viewerDebug.savedViews()[index + 1].camera];
+      return Array.isArray(closeUp) && Array.isArray(deviation) && closeUp.every((value, at) => Math.abs(value - deviation[at]) < 1e-6);
+    }, viewsBefore + 1);
+    if (!sameCamera) throw new Error('the deviation panel does not keep the close-up camera');
     const builderLetters = await page.locator('#gpv-builder-rows .gpv-builder-letter').allTextContents();
-    const expectedLetters = [...Array(viewsBefore).fill('—'), 'A', 'B'];
+    const expectedLetters = [...Array(viewsBefore).fill('—'), 'A', 'B', 'C'];
     if (builderLetters.join('') !== expectedLetters.join('')) throw new Error('builder letters: ' + builderLetters.join(',') + ' not ' + expectedLetters.join(','));
     if (!(await page.locator('[data-gpv-panel="publish"]').isVisible())) throw new Error('Make site figure did not open the Publish tab');
-    if ((await page.inputValue('#gpv-panel-columns')) !== '2') throw new Error('panel columns: ' + (await page.inputValue('#gpv-panel-columns')));
+    if ((await page.inputValue('#gpv-panel-columns')) !== '3') throw new Error('panel columns: ' + (await page.inputValue('#gpv-panel-columns')) + ', not 3 for three panels');
     const estimate = (await page.locator('#gpv-export-estimate').textContent()) || '';
     const estimateWidth = Number((estimate.match(/^(\d+) ×/) || [])[1]);
     const figureDownload = page.waitForEvent('download', { timeout: 300000 });
@@ -1024,10 +1050,28 @@ await step('one position is compared across a wild-type and a mutant model: side
     const figureFile = await figureDownload;
     const figurePng = await readFile(await figureFile.path());
     const figureWidth = figurePng.readUInt32BE(16);
-    if (!/2-panels/.test(figureFile.suggestedFilename())) throw new Error('figure file name: ' + figureFile.suggestedFilename());
+    if (!/3-panels/.test(figureFile.suggestedFilename())) throw new Error('figure file name: ' + figureFile.suggestedFilename());
     if (Number.isFinite(estimateWidth) && estimateWidth > 0) {
-      if (figureWidth !== 2 * Math.floor(estimateWidth / 2)) throw new Error('figure PNG is ' + figureWidth + ' px wide, not the two-column ' + (2 * Math.floor(estimateWidth / 2)));
+      if (figureWidth !== 3 * Math.floor(estimateWidth / 3)) throw new Error('figure PNG is ' + figureWidth + ' px wide, not the three-column ' + (3 * Math.floor(estimateWidth / 3)));
     } else if (figureWidth < 1000) throw new Error('figure PNG is only ' + figureWidth + ' px wide');
+    /* The switch off is the two-panel figure exactly as it was before the deviation panel existed. */
+    await takeSiteFigureBack();
+    await tab('annotate');
+    await page.uncheck('#gpv-position-figure-deviation'); await page.waitForTimeout(150);
+    const plainBefore = await page.evaluate(() => window.__viewerDebug.savedViews().length);
+    await page.click('#gpv-position-figure'); await page.waitForTimeout(1500);
+    const plain = await page.evaluate(() => window.__viewerDebug.savedViews().map(view => ({ name: view.name, included: view.inFigure !== false })));
+    siteFigureViews = plain.length - plainBefore;
+    siteFigureNames = plain.slice(plainBefore).map(view => view.name);
+    if (siteFigureViews !== 2) throw new Error('with the deviation panel off Make site figure added ' + siteFigureViews + ' saved views, not 2');
+    if (siteFigureNames.join(', ') !== 'Overview, Site A:15') throw new Error('two-panel names: ' + siteFigureNames.join(', '));
+    if (!plain.slice(plainBefore).every(view => view.included)) throw new Error('the two site figure panels are not both ticked');
+    if (plain.slice(0, plainBefore).some(view => view.included)) throw new Error('an earlier saved view is still ticked into the two-panel figure');
+    const plainLetters = await page.locator('#gpv-builder-rows .gpv-builder-letter').allTextContents();
+    const plainExpected = [...Array(plainBefore).fill('—'), 'A', 'B'];
+    if (plainLetters.join('') !== plainExpected.join('')) throw new Error('two-panel builder letters: ' + plainLetters.join(',') + ' not ' + plainExpected.join(','));
+    if ((await page.inputValue('#gpv-panel-columns')) !== '2') throw new Error('two-panel columns: ' + (await page.inputValue('#gpv-panel-columns')));
+    await takeSiteFigureBack();
     await tab('annotate');
     await page.click('#gpv-position-clear'); await page.waitForTimeout(600);
     if (!(await page.locator('#gpv-position-figure').isDisabled())) throw new Error('Make site figure stayed enabled with no compared position');
@@ -1036,7 +1080,7 @@ await step('one position is compared across a wild-type and a mutant model: side
     if (await page.evaluate(() => window.__viewerDebug.labelRecords().some(label => label.kind === 'position'))) throw new Error('clearing left position labels behind');
     if ((await page.evaluate(() => window.__viewerDebug.spotlightResidues())).length) throw new Error('clearing left compared positions behind');
     if ((await page.locator('#gpv-label-list .gpv-entry').count()) !== labelsBefore) throw new Error('clearing removed labels it did not place');
-    console.log('       ' + state.trim() + ' · side chains and both labels in the SVG · ' + effect.summary.neighbourCount + ' neighbours within ' + effect.cutoff + ' Å measured, highlighted and exported · site figure: Overview + Site A:15 as panels A and B, PNG ' + figureWidth + ' px wide · cleared');
+    console.log('       ' + state.trim() + ' · side chains and both labels in the SVG · ' + effect.summary.neighbourCount + ' neighbours within ' + effect.cutoff + ' Å measured, highlighted and exported · site figure: Overview + Site A:15 + Deviation as panels A, B and C in three columns, PNG ' + figureWidth + ' px wide, colour mode back to ' + startColorMode + ' · two panels again with the deviation panel off · cleared');
   } finally { await cleanup(); }
 });
 await step('a set of positions is compared in one press: every site is labelled and one neighbourhood table covers them all', async () => {
