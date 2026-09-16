@@ -709,9 +709,31 @@
     body.replaceChildren();
     const legend = legendItems('figure'); const mode = root.querySelector('#gpv-color-mode').value;
     if (!legend) { state.textContent = 'This colour scheme draws no legend, so there is nothing to rename. Choose a scheme with a legend — chains, entities, domains, models or per-residue data.'; return; }
+    /* In Chain colour mode this is also the quickest place to recolour a chain while composing a
+       figure — the swatch that only ever named the legend row becomes the same colour picker the
+       Composition panel uses, so a change here, there, or in the on-screen legend all land on the
+       one chainColor() override every consumer reads. */
     const row = (key, fallback, swatch) => {
       const tr = document.createElement('tr'); const th = document.createElement('th'); th.scope = 'row';
-      if (swatch) { const i = document.createElement('i'); i.className = 'gpv-swatch'; i.style.background = swatch; th.append(i, ' '); }
+      const isChainSwatch = mode === 'chain' && swatch && key !== mode + '|title' && !/^\+\d+ more$/.test(fallback);
+      if (isChainSwatch) {
+        const chainId = fallback === '—' ? '' : fallback;
+        const picker = document.createElement('input');
+        picker.type = 'color'; picker.className = 'form-control-color gpv-chain-color';
+        picker.value = swatch;
+        picker.setAttribute('aria-label', 'Colour for chain ' + fallback);
+        picker.title = 'Set a custom colour for this chain — used everywhere (view, panels, sequence strip, legends, exports). Double-click to reset to the default colour.';
+        picker.addEventListener('input', () => { setChainColor(chainId, picker.value); applyStyle(); renderFigureLabelsState(); });
+        picker.addEventListener('change', () => updateStatus('Chain ' + fallback + ' colour set'));
+        picker.addEventListener('dblclick', event => {
+          event.preventDefault();
+          resetChainColor(chainId);
+          picker.value = chainColor(chainId);
+          applyStyle();
+          updateStatus('Chain ' + fallback + ' colour reset to default');
+        });
+        th.append(picker, ' ');
+      } else if (swatch) { const i = document.createElement('i'); i.className = 'gpv-swatch'; i.style.background = swatch; th.append(i, ' '); }
       th.append(fallback); tr.append(th);
       const td = document.createElement('td'); const input = document.createElement('input'); input.className = 'form-control'; input.type = 'text'; input.maxLength = figureLabelLimit;
       input.dataset.gpvLabelKey = key; input.placeholder = fallback; input.value = figureLabels[key] || ''; input.setAttribute('aria-label', 'Label for ' + fallback);
@@ -726,7 +748,8 @@
   function renderFigureLabelsState() {
     const mode = root.querySelector('#gpv-color-mode').value;
     const count = Object.keys(figureLabels).filter(key => key.startsWith(mode + '|')).length;
-    root.querySelector('#gpv-labels-state').textContent = count ? count + ' custom label' + (count === 1 ? '' : 's') + ' for this colour scheme · they appear on screen, on every export and in the figure legend text' : 'Blank keeps the default. Names change only what the legend says, never the data.';
+    const base = count ? count + ' custom label' + (count === 1 ? '' : 's') + ' for this colour scheme · they appear on screen, on every export and in the figure legend text' : 'Blank keeps the default. Names change only what the legend says, never the data.';
+    root.querySelector('#gpv-labels-state').textContent = base + (mode === 'chain' ? ' · click a chain’s swatch to recolour it, double-click to reset' : '');
     root.querySelector('#gpv-labels-reset').disabled = !count;
   }
   function applyFigureLabels(rebuild = true) {
