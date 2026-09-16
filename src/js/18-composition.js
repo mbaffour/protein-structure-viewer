@@ -29,12 +29,13 @@
       swatch.value = chainColor(row.chain);
       swatch.setAttribute('aria-label', 'Colour for chain ' + (row.chain || '—'));
       swatch.title = 'Set a custom colour for this chain — used in Chain colour mode everywhere (view, panels, sequence strip, legends, exports). Double-click to reset to the default colour.';
-      swatch.addEventListener('input', () => { setChainColor(row.chain, swatch.value); applyStyle(); });
+      swatch.addEventListener('input', () => { setChainColor(row.chain, swatch.value); root.querySelector('#gpv-color-mode').value = 'chain'; applyStyle(); });
       swatch.addEventListener('change', () => updateStatus('Chain ' + (row.chain || '—') + ' colour set'));
       swatch.addEventListener('dblclick', event => {
         event.preventDefault();
         resetChainColor(row.chain);
         swatch.value = chainColor(row.chain);
+        root.querySelector('#gpv-color-mode').value = 'chain';
         applyStyle();
         updateStatus('Chain ' + (row.chain || '—') + ' colour reset to default');
       });
