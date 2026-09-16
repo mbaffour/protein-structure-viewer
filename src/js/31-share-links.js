@@ -648,7 +648,31 @@
     }
   }
 
-  const legendChainLimit = 12;
+  /* How many entries a colour key names one by one before naming them all stops helping. Since
+     2.42.0 a legend wraps onto extra rows inside the width it is given, so a long list costs rows
+     rather than running off the panel, and rows are the cost that matters. The tightest place a
+     key is drawn is a cell of a three-column 178 mm figure (700 × 466 px at 300 dpi); measured
+     there, a chain key takes two rows at 15 chains (18 % of the cell height), three from 18 to 26
+     (27 %) and four at 30 (36 %) — past about a third of the panel the key is a block over the
+     model rather than a band under it. Twenty holds every case to three rows and leaves room for
+     the wider labels of entity colouring and of multi-character mmCIF chain identifiers. */
+  const legendNamedLimit = 20;
+  /* Name every value while the rows are worth reading; past the limit name what fits and end with
+     an explicit '+N more' so the key is honest about what it left out — the figure legend text
+     carries the full list. Before 2.45.0 a list this long drew no legend at all, which shipped
+     chain-coloured figures of the M13 virion (fifteen chains) with no key and no explanation. */
+  function legendNamesOrCount(values, item) {
+    const all = values.map(item);
+    if (all.length <= legendNamedLimit) return { items: all };
+    const named = all.slice(0, legendNamedLimit - 1);
+    const rest = all.length - named.length;
+    return { items: [...named, ['#9ca3af', '+' + rest + ' more', '+' + rest + ' more — the figure legend text names them all']], abbreviated: all.map(entry => entry[1]) };
+  }
+  /* Everything the drawn key stands for, when it had to abbreviate — the caption names it in full. */
+  function legendAbbreviated(kind = 'figure') {
+    const legend = defaultLegendItems(kind);
+    return legend && legend.abbreviated ? legend.abbreviated : null;
+  }
   /* Figure labels: what the legend's title and entries read as on screen and on every
      export, keyed by colour scheme and default entry text ('domain|D1', 'entity|α ×2',
      'chain|title'). Renaming changes nothing in the data — only the words in the legend —
@@ -753,13 +777,15 @@
     if (mode === 'entity') {
       const active = sequenceEntry(); if (!active) return null;
       const groups = entityGroups(active);
-      if (!groups.length || groups.length > legendChainLimit) return null;
-      return { title: 'Entity', items: groups.map(group => [entityColorFor(group.index), group.label + ' ×' + group.chains.length, group.label + ' ×' + group.chains.length + ' · ' + clipText(group.chains.join(', '), 24) + ' · ' + group.length + ' aa']) };
+      if (!groups.length) return null;
+      /* An assembly with more distinct sequences than the key can name has the same problem as a
+         many-chain one, and the same answer: name what fits, count the rest. */
+      return { title: 'Entity', ...legendNamesOrCount(groups, group => [entityColorFor(group.index), group.label + ' ×' + group.chains.length, group.label + ' ×' + group.chains.length + ' · ' + clipText(group.chains.join(', '), 24) + ' · ' + group.length + ' aa']) };
     }
     if (mode === 'chain') {
       const chains = [...new Set([...shown, ...panelEntries].flatMap(entry => entry.atoms.map(atom => atom.chain || '')))].sort(compareChains);
-      if (!chains.length || chains.length > legendChainLimit) return null;
-      return { title: 'Chain', items: chains.map(chain => [chainColor(chain), chain || '—']) };
+      if (!chains.length) return null;
+      return { title: 'Chain', ...legendNamesOrCount(chains, chain => [chainColor(chain), chain || '—']) };
     }
     if (mode === 'structure' && kind !== 'comparison') {
       if (shown.length < 2 || shown.length > 8) return null;

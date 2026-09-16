@@ -157,11 +157,13 @@ Notes on the colour schemes:
   It reads the B-factor column, so it is only meaningful for files that carry pLDDT there.
 - **Per entity** gives every chain with the same sequence one colour, so a sixty-copy capsid shows
   its two or three distinct proteins; the legend names each entity with a Greek letter and its copy
-  count, chains and length (α ×60 · A, B, … · 426 aa). The composition table carries the same line.
+  count, chains and length (α ×60 · A, B, … · 426 aa), abbreviating with `+N more` past twenty
+  entities. The composition table carries the same line.
 - **Per chain** colouring uses a fixed palette in sorted chain order, so chain A is the same colour in
   every model, every synchronized panel, the sequence strip, the exported legend, and the report. The
-  legend under the viewport names each chain (up to twelve). In overlay mode with per-structure
-  colouring the legend names the models instead.
+  legend under the viewport names every chain, wrapping onto as many rows as it needs; past twenty
+  chains it names the first nineteen and ends with `+N more`, and the generated figure legend text
+  names them all. In overlay mode with per-structure colouring the legend names the models instead.
 - **Cα deviation after alignment** colours each residue by the distance between its Cα and the
   matched residue of the reference once you have used *Align visible* (Compare tab): under 1 Å blue,
   1–2 Å green, 2–4 Å yellow, 4–8 Å orange, 8 Å and above red; residues the alignment did not match

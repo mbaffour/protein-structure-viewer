@@ -476,6 +476,103 @@ await step('chain colouring lists the chains in the legend', async () => {
   if (!/Chain/.test(text) || !/A/.test(text) || !/B/.test(text)) throw new Error('legend text: ' + text);
   await page.selectOption('#gpv-color-mode', 'plddt'); await page.waitForTimeout(300);
 });
+await step('a model with more chains than the fixtures still gets a chain key, wrapped to fit the panel', async () => {
+  /* Fourteen short poly-alanine chains — more than the twelve above which 2.44.0 and earlier
+     dropped the chain legend entirely, so a chain-coloured figure of an assembly this size (the
+     M13 virion has fifteen) printed with no key at all. Since 2.42.0 a legend wraps inside the
+     width it is given, so the key must now be drawn whatever the chain count: either naming every
+     chain or, past the point where the rows would eat the panel, ending with a '+N more' item. */
+  const chains = [...'ABCDEFGHIJKLMN'];
+  const lines = []; let serial = 1;
+  chains.forEach((chain, index) => {
+    for (let residue = 1; residue <= 6; residue += 1) {
+      for (const [atom, dx] of [['N', -0.6], ['CA', 0], ['C', 0.6], ['O', 1.0]]) {
+        const x = 2.3 * Math.cos(residue) + dx + index * 6; const y = 2.3 * Math.sin(residue); const z = 1.5 * residue;
+        lines.push('ATOM  ' + String(serial).padStart(5) + '  ' + atom.padEnd(3) + ' ALA ' + chain + String(residue).padStart(4) + '    ' +
+          x.toFixed(3).padStart(8) + y.toFixed(3).padStart(8) + z.toFixed(3).padStart(8) + '  1.00 70.00           ' + atom[0]);
+        serial += 1;
+      }
+    }
+    lines.push('TER');
+  });
+  const file = join(work, 'model_fourteen_chains.pdb'); await writeFile(file, lines.join('\n') + '\nEND\n');
+  const startTab = await page.evaluate(() => (document.querySelector('[data-gpv-tab][aria-selected="true"]') || {}).dataset.gpvTab || 'models');
+  const startColorMode = await page.inputValue('#gpv-color-mode');
+  /* Which models were ticked: the extra one is appended last, so once it is removed again the
+     original rows are back in their original order and take their own ticks back by index. */
+  const startShown = await page.evaluate(() => [...document.querySelectorAll('#gpv-list .gpv-entry input[type="checkbox"]')].map(box => box.checked));
+  await tab('publish');
+  const startLegendOn = await page.isChecked('#gpv-export-legend');
+  const cleanup = async () => {
+    await tab('publish');
+    await page.setChecked('#gpv-export-legend', startLegendOn); await page.waitForTimeout(150);
+    await tab('models');
+    const row = page.locator('#gpv-list .gpv-entry', { hasText: 'model_fourteen_chains' });
+    if (await row.count()) { await row.first().locator('button:has-text("Remove")').click(); await page.waitForTimeout(500); }
+    await page.evaluate(wanted => {
+      [...document.querySelectorAll('#gpv-list .gpv-entry input[type="checkbox"]')].forEach((box, index) => {
+        if (index < wanted.length && box.checked !== wanted[index]) box.click();
+      });
+    }, startShown);
+    await page.waitForTimeout(600);
+    await tab('appearance');
+    await page.selectOption('#gpv-color-mode', startColorMode); await page.waitForTimeout(300);
+    await tab(startTab);
+  };
+  try {
+    await tab('models'); await page.setInputFiles('#gpv-files', [file]); await page.waitForTimeout(2000);
+    await page.evaluate(() => {
+      [...document.querySelectorAll('#gpv-list .gpv-entry')].forEach(entry => {
+        const box = entry.querySelector('input[type="checkbox"]'); const wanted = entry.textContent.includes('model_fourteen_chains');
+        if (box && box.checked !== wanted) box.click();
+      });
+    });
+    await page.waitForTimeout(900);
+    await tab('publish'); await page.setChecked('#gpv-export-legend', true); await page.waitForTimeout(150);
+    await tab('appearance'); await page.selectOption('#gpv-color-mode', 'chain'); await page.waitForTimeout(700);
+    const seen = await page.evaluate(() => [...new Set(window.__viewerDebug.activeEntry().atoms.map(atom => atom.chain || ''))].length);
+    if (seen !== 14) throw new Error('the fixture loaded with ' + seen + ' chains, not 14');
+    /* The same measurement the exporters make: the whole figure, and a panel narrow enough that
+       the key has to wrap — a cell of a multi-panel figure. */
+    const measured = await page.evaluate(() => {
+      const debug = window.__viewerDebug; const context = document.createElement('canvas').getContext('2d');
+      const plan = debug.exportDimensions(); const wanted = debug.legendWanted('figure');
+      const at = (width, height) => {
+        const layout = debug.furnitureLayout(width, height, debug.figureScale(plan), null, debug.figurePalette(), wanted);
+        const metrics = wanted ? debug.legendMetrics(context, layout.legendScale, 'figure', layout.vertical, layout.legendAvailable) : null;
+        return metrics ? { available: Math.round(layout.legendAvailable), width: Math.round(metrics.width), rows: metrics.rows.map(row => row.cells.map(cell => cell.text)) } : null;
+      };
+      return { wanted, full: at(plan.width, plan.height), narrow: at(600, 400) };
+    });
+    if (!measured.wanted || !measured.full || !measured.narrow) throw new Error('no chain legend for 14 chains: ' + JSON.stringify(measured));
+    /* Every row after the title cell is an entry; the key is honest if it names all fourteen or
+       says how many it left out. */
+    const items = measured.full.rows.flat().slice(1);
+    const namesEvery = chains.every(chain => items.includes(chain));
+    const saysHowManyMore = /^\+\d+ more$/.test(items[items.length - 1]);
+    if (!namesEvery && !saysHowManyMore) throw new Error('the key neither names every chain nor counts the rest: ' + JSON.stringify(items));
+    [['full', measured.full], ['narrow', measured.narrow]].forEach(([where, metrics]) => {
+      if (metrics.width > metrics.available + 1) throw new Error('the ' + where + ' legend is ' + metrics.width + ' px wide in ' + metrics.available + ' px');
+      if (metrics.rows.some(row => row.some(text => /…/.test(text)))) throw new Error('the ' + where + ' legend truncated a chain name: ' + JSON.stringify(metrics.rows));
+    });
+    if (measured.narrow.rows.length < 2) throw new Error('the narrow panel did not wrap the key: ' + JSON.stringify(measured.narrow.rows));
+    const onScreen = (await page.locator('#gpv-plddt-legend').textContent()) || '';
+    if (await page.locator('#gpv-plddt-legend').isHidden()) throw new Error('the on-screen legend is hidden with 14 chains');
+    if (!/Chain/.test(onScreen) || !/N/.test(onScreen)) throw new Error('on-screen legend: ' + onScreen);
+    await tab('publish');
+    const download = page.waitForEvent('download', { timeout: 180000 });
+    await page.click('#gpv-svg');
+    const svg = await readFile(await (await download).path(), 'utf8');
+    const drawn = namesEvery ? chains : items;
+    const missing = drawn.filter(label => !svg.includes('>' + label + '</text>'));
+    if (missing.length) throw new Error('the figure SVG is missing legend labels: ' + missing.join(', '));
+    console.log('       14 chains · key in ' + measured.full.rows.length + ' row' + (measured.full.rows.length === 1 ? '' : 's') +
+      ' (' + measured.full.width + ' px in ' + measured.full.available + '), ' + measured.narrow.rows.length + ' rows in a 600 px panel · ' +
+      (namesEvery ? 'every chain named' : 'abbreviated with ' + items[items.length - 1]) + ' · same labels in the SVG');
+  } finally {
+    await cleanup();
+  }
+});
 await step('motion off', async () => { await page.selectOption('#gpv-motion', 'off'); await page.waitForTimeout(300); });
 await step('theme cycles system → light → dark → system', async () => {
   const seen = [];

@@ -17,9 +17,13 @@
     const shown = displayedEntries().filter(entry => entry.model);
     const provenance = provenanceValues();
     const mode = root.querySelector('#gpv-color-mode').value;
+    /* When the drawn key ran out of room and ended '+N more', the caption is where the reader
+       finds out what the other colours are: name every one of them here. Entity colouring already
+       lists its groups below, so only chain colouring needs the list adding. */
+    const abbreviated = legendAbbreviated('figure');
     let colourText = {
       structure: 'coloured per model' + (shown.length > 1 ? ' (' + shown.map(entry => displayName(entry) + ' ' + entry.color).join('; ') + ')' : ''),
-      chain: 'coloured by chain',
+      chain: 'coloured by chain' + (abbreviated ? ' (' + abbreviated.length + ' chains: ' + abbreviated.join(', ') + ')' : ''),
       entity: 'coloured by entity — chains with identical sequences share a colour' + (shown[0] ? ' (' + entityGroups(shown[0]).map(group => group.label + ' ×' + group.chains.length).join(', ') + ')' : ''),
       plddt: 'coloured by per-residue pLDDT (very low <50 orange, low 50–70 yellow, confident 70–90 light blue, very high ≥90 dark blue)',
       agreement: 'coloured by per-residue Cα RMSF across ' + (ensembleSpread ? ensembleSpread.count + ' aligned models' : 'the aligned models') + ' (<0.5 Å blue, 0.5–1 Å green, 1–2 Å yellow, 2–4 Å orange, ≥4 Å red; residues present in one model grey)',
@@ -109,10 +113,13 @@
       const size = assemblyDimensions(first);
       if (size) sentences.push('Assembly size was summarised as the Cα extent (' + (size.exact ? 'the maximum Cα–Cα distance' : 'a two-pass lower-bound estimate of the maximum Cα–Cα distance, used above 6 000 residues') + ') and the radius of gyration over Cα atoms with equal weights.');
     }
+    /* Same question the caption answers: did the drawn key have to abbreviate? */
+    const abbreviated = legendAbbreviated('figure');
     const colourNotes = {
       plddt: 'pLDDT colouring used the AlphaFold bands (<50 very low, 50–70 low, 70–90 confident, ≥90 very high).',
       charge: 'Residue charge colouring used formal charges at neutral pH (Lys and Arg positive; Asp and Glu negative; His shown as partially positive).',
       hydrophobicity: 'Hydrophobicity colouring used the Kyte–Doolittle scale.',
+      chain: abbreviated ? 'Each chain was given its own colour; the figure key names the first ' + (legendNamedLimit - 1) + ' of the ' + abbreviated.length + ' chains and counts the remainder, all of which are named in the figure legend.' : null,
       entity: 'Chains were grouped into entities by identical sequence.',
       data: residueData ? 'Per-residue values (' + residueData.name + ') were mapped linearly onto a ' + ({ viridis: 'viridis', diverging: 'diverging blue–white–red', heat: 'white–red' })[residueData.scale] + ' scale between the minimum and maximum of the data.' : null
     };

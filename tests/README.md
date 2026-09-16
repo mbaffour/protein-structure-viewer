@@ -38,6 +38,9 @@ PSV_CHROMIUM=/opt/pw-browsers/chromium/chrome-linux/chrome npm test
 - Appearance: entity colouring groups the two identical chains (α ×2, 30 aa) and the composition line
   reports the Cα extent and radius of gyration, and the extent equals a brute-force maximum Cα–Cα distance; the Okabe–Ito switch recolours chain A to rgb(0, 114, 178) and back; every representation, colour scheme, projection, background, motion;
   pLDDT legend; theme cycling; preference persistence across a reload
+- Chain legend: a fourteen-chain model still gets a key — it is drawn, its wrapped box fits the width
+  it is given (a 600 px panel wraps it onto three rows), the items name every chain or end with a
+  `+N more` item, and the exported SVG carries the same labels
 - Compare: sequence-aware and identifier alignment, non-zero RMSD against a
   deliberately different model, CSV export, synchronised multi-view with a third panel that
   follows a real drag on the primary, restore

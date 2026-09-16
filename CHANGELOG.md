@@ -2,6 +2,32 @@
 
 All notable changes to this project are recorded here.
 
+## 2.45.0
+
+### Fixed
+
+- **A figure coloured by chain came out with no key at all above twelve chains.** The chain legend
+  had a hard cap: more than twelve chains and `defaultLegendItems` returned nothing, so no key was
+  drawn on screen, in the publication PNG, in the SVG or in a built figure's panels — a
+  chain-coloured figure of the M13 virion tip, which has fifteen chains, printed fifteen colours and
+  no way to tell which subunit was which. The cap was a width guard from before 2.42.0, when a
+  legend that did not fit simply ran off the panel; since 2.42.0 it wraps onto extra rows inside the
+  width it is given and truncates a label only as a last resort, so the guard was guarding against
+  something that no longer happens. The key is now drawn for any number of chains: the M13 tip's
+  fifteen fit one row of a 178 mm panel and wrap onto two at 85 mm, every chain named, nothing
+  truncated.
+- The same cap, and the same fix, for **entity** colouring: an assembly with more than twelve
+  distinct sequences also lost its key. Twenty-two entities now draw nineteen names and `+3 more`
+  instead of nothing.
+- A list genuinely too long to print is abbreviated rather than dropped. Measured in the tightest
+  place a key is drawn — a cell of a three-column 178 mm figure, 700 × 466 px at 300 dpi — a chain
+  key takes two rows at fifteen chains (18 % of the cell height), three from eighteen to twenty-six
+  (27 %) and four at thirty (36 %), which is a block over the model rather than a band under it.
+  Past twenty entries the key therefore names the first nineteen and ends with an explicit
+  `+N more`, and the **figure legend text** names every chain in full (`coloured by chain (26
+  chains: A, B, …)`), with a methods sentence saying how many the key names and how many it counts.
+  What no longer happens, at any chain count, is a coloured figure with no key and no explanation.
+
 ## 2.44.0
 
 ### Fixed
