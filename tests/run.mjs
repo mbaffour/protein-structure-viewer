@@ -78,15 +78,308 @@ let retries = 0;
 /* A download or event promise created before a click that then times out rejects with nobody
    awaiting it; Node would abort the whole run. Log it against the current step and carry on. */
 process.on('unhandledRejection', error => { console.log('  !    unhandled rejection during [' + currentStep + ']: ' + String(error && error.message || error).split('\n')[0]); });
+
+/* ---------- a safety net under each step's own finally ---------- */
+
+/* Every stateful step captures what it changes and puts it back in its own `finally`; that
+   stays the primary mechanism and nothing below replaces it. But a step that hangs never
+   reaches its finally — the cleanup times out too — and the leftovers then fail every later
+   step that counts models, strip rows or compared positions, so one hung step is reported as
+   ten. After a step FAILS (after the existing retry, which is unchanged) the harness puts the
+   page back to a baseline captured once the fixtures were in, so the next step starts from the
+   state it expects.
+
+   Rules this obeys: it only ever restores *state*, never re-runs an assertion and never takes a
+   name out of `failures`, so a genuinely broken viewer still goes red. Every action is
+   individually guarded and given its own deadline, and the whole recovery has a hard cap, so
+   recovery can never hang the run the way the step it is cleaning up after did. */
+const ACTION_MS = 3000;    /* one recovery action — a click, a read, one control put back */
+const RECOVERY_MS = 25000; /* the whole recovery, however many actions are left undone */
+let baseline = null;          /* the state every later step assumes; see captureBaseline */
+let steps = 0, recoveries = 0, incompleteRecoveries = 0, recoveryMs = 0, baselineMs = 0, markMs = 0;
+let suspectSince = null;      /* the step after which a recovery could not finish */
+const suspect = [];           /* steps that failed while that was true — their failures are not trustworthy */
+
+/* Runs fn with its own deadline and never throws: the caller gets {ok} either way. Both
+   branches of the race are handled, so a slow action that rejects after its deadline does not
+   land in the unhandledRejection handler above. */
+const guard = async (fn, ms) => {
+  let timer = null;
+  try {
+    const value = await Promise.race([
+      Promise.resolve().then(fn),
+      new Promise((_, reject) => { timer = setTimeout(() => reject(new Error('gave up after ' + ms + ' ms')), ms); })
+    ]);
+    return { ok: true, value };
+  } catch (error) { return { ok: false, error: String(error && error.message || error).split('\n')[0] }; }
+  finally { if (timer) clearTimeout(timer); }
+};
+
+/* The lists steps pile things into. Each is cleared by the app's own button where there is one;
+   `#gpv-saved-views` has only a per-row Remove, and rows are removed from the end. */
+const collections = [
+  { key: 'positions', one: 'compared position', many: 'compared positions', tab: 'annotate', clear: '#gpv-position-clear', rows: null },
+  { key: 'labels', one: 'label', many: 'labels', tab: 'annotate', clear: '#gpv-clear-labels', rows: '#gpv-label-list .gpv-entry' },
+  { key: 'selections', one: 'selection', many: 'selections', tab: 'annotate', clear: '#gpv-clear-selections', rows: '#gpv-selection-list .gpv-entry' },
+  { key: 'measurements', one: 'measurement', many: 'measurements', tab: 'annotate', clear: '#gpv-clear-measurements', rows: '#gpv-measurement-list .gpv-entry' },
+  { key: 'annotations', one: 'annotation', many: 'annotations', tab: 'annotate', clear: '#gpv-clear-annotations', rows: '#gpv-annotation-list .gpv-entry' },
+  { key: 'domains', one: 'named domain', many: 'named domains', tab: 'annotate', clear: '#gpv-clear-domains', rows: '#gpv-domain-list .gpv-entry' },
+  { key: 'panels', one: 'comparison panel', many: 'comparison panels', tab: 'compare', clear: '#gpv-clear-panels', rows: '#gpv-compare-panels .gpv-entry' },
+  { key: 'views', one: 'saved view', many: 'saved views', tab: 'publish', clear: null, rows: '#gpv-saved-views .gpv-entry' }
+];
+
+/* One round trip for everything recovery compares: which models are loaded and shown, which tab
+   is open, how much each accumulating list holds, and the value of every control in the panel.
+   Read through the app's own debug getters where they exist and off the rendered rows and
+   controls where they do not. Controls are enumerated from the DOM rather than listed here, so
+   one added to the viewer is covered without touching this file; the file picker cannot be
+   written back and a read-only field is not a setting. */
+const readSnapshot = () => page.evaluate(() => {
+  const debug = window.__viewerDebug;
+  const rows = selector => document.querySelectorAll(selector).length;
+  const open = document.querySelector('[data-gpv-tab][aria-selected="true"]');
+  const controls = {};
+  document.querySelectorAll('#generic-protein-viewer input[id], #generic-protein-viewer select[id], #generic-protein-viewer textarea[id]').forEach(element => {
+    if (['file', 'hidden', 'button', 'submit', 'reset', 'image'].includes(element.type) || element.readOnly) return;
+    /* Whether it was accepting input matters at restore time: a control greyed out both before
+       the step and after it is derived state, not something the step left behind. */
+    controls[element.id] = element.type === 'checkbox' || element.type === 'radio'
+      ? { checked: element.checked, off: element.disabled }
+      : { value: element.value, off: element.disabled };
+  });
+  return {
+    models: debug ? debug.entries().map(entry => ({ id: entry.id, name: entry.name, visible: entry.visible !== false })) : [],
+    tab: (open && open.dataset.gpvTab) || 'models',
+    controls,
+    counts: {
+      positions: debug ? debug.spotlightResidues().length : 0,
+      labels: debug ? debug.labelRecords().length : 0,
+      selections: debug ? debug.selectionRecords().length : 0,
+      views: debug ? debug.savedViews().length : 0,
+      measurements: rows('#gpv-measurement-list .gpv-entry'),
+      annotations: rows('#gpv-annotation-list .gpv-entry'),
+      domains: rows('#gpv-domain-list .gpv-entry'),
+      panels: rows('#gpv-compare-panels > *')
+    }
+  };
+});
+
+/* Taken once, immediately after the import group: that is the first moment the three fixture
+   models — the thing the remaining ~150 steps all assume — exist. The baseline is the reference
+   for the models and their ticks, and for those alone: a step that loads a fixture should always
+   have it taken away again, whatever else the run has done since. It is deliberately NOT the
+   reference for the settings — see markState. */
+const captureBaseline = async () => {
+  const started = Date.now();
+  const snapshot = await guard(readSnapshot, 8000);
+  baselineMs = Date.now() - started;
+  if (!snapshot.ok) {
+    console.log('  !!   baseline snapshot failed (' + snapshot.error + ') — a failed step will not be recovered from');
+    return;
+  }
+  baseline = snapshot.value;
+  console.log('  ..   baseline: ' + baseline.models.length + ' models (' + baseline.models.map(model => model.name).join(', ') + ') · ' + baseline.tab + ' tab · ' + Object.keys(baseline.controls).length + ' controls · ' + baselineMs + ' ms');
+};
+
+/* The state as the step about to run found it: how full the accumulating lists are and what
+   every control was set to. Recovery restores to *this*, not to the baseline, because the suite
+   legitimately moves on as it goes — six saved views stay loaded for four later steps, and a
+   passing step may deliberately leave a setting for the steps after it. Putting a control back
+   to its import-time value would let one failure quietly undo a setting a later step depends on:
+   a safety net with a state bug of its own, and an unreadable transcript when it bites.
+   Restoring to the mark means recovery only ever puts back what the failed step itself moved. */
+const markState = async () => {
+  if (!baseline) return null;
+  const started = Date.now();
+  const result = await guard(readSnapshot, 3000);
+  markMs += Date.now() - started;
+  return result.ok ? result.value : null;
+};
+
+const recover = async (failedName, mark) => {
+  if (!baseline) { console.log('  ..   no baseline yet — [' + failedName + '] leaves whatever it left'); return; }
+  const started = Date.now();
+  const previousStep = currentStep;
+  currentStep = 'recovery after ' + failedName;
+  recoveries += 1;
+  const deadline = started + RECOVERY_MS;
+  const did = [], trouble = [];
+  const remaining = () => deadline - Date.now();
+  /* One guarded action. Anything that fails is written down and the rest of the recovery
+     carries on: no single piece can abort the others. */
+  const act = async (what, fn, ms = ACTION_MS) => {
+    if (remaining() <= 0) { trouble.push(what + ': no time left'); return null; }
+    const result = await guard(fn, Math.min(ms, remaining()));
+    if (!result.ok) { trouble.push(what + ': ' + result.error); return null; }
+    return result.value === undefined ? true : result.value;
+  };
+  const openTab = name => act('open the ' + name + ' tab', async () => {
+    await page.click(`[data-gpv-tab="${name}"]`, { timeout: ACTION_MS });
+    await page.waitForTimeout(120);
+  });
+  /* A real click where the control is on screen, and the button's own handler through the DOM
+     where the tab switch did not take — either way it is the app's Clear button doing the work. */
+  const press = (what, selector) => act(what, async () => {
+    try { await page.click(selector, { timeout: Math.max(600, Math.min(ACTION_MS, remaining()) - 600) }); }
+    catch { await page.evaluate(id => { const button = document.querySelector(id); if (!button) throw new Error('no ' + id); button.click(); }, selector); }
+    await page.waitForTimeout(250);
+  });
+
+  /* A step may have left the model list filtered or paged, which hides the rows recovery needs. */
+  await act('clear the model search', () => page.evaluate(() => {
+    const search = document.querySelector('#gpv-search');
+    if (search && search.value) { search.value = ''; search.dispatchEvent(new Event('input', { bubbles: true })); }
+    const more = document.querySelector('#gpv-show-more');
+    if (more && !more.hidden) more.click();
+  }));
+
+  const before = await act('read the page', readSnapshot, 5000);
+  if (before) {
+    /* 1. models the baseline does not know about, removed by their own row's Remove button. */
+    const wanted = new Set(baseline.models.map(model => model.name));
+    const extra = before.models.filter(model => !wanted.has(model.name));
+    if (extra.length) await openTab('models');
+    for (const model of extra) {
+      const gone = await act('remove ' + model.name, async () => {
+        const row = '#gpv-list [data-entry-id="' + model.id + '"] button:has-text("Remove")';
+        try { await page.click(row, { timeout: Math.max(600, Math.min(ACTION_MS, remaining()) - 800) }); }
+        catch {
+          await page.evaluate(id => {
+            const remove = [...document.querySelectorAll('#gpv-list [data-entry-id="' + id + '"] button')].find(item => item.textContent.trim() === 'Remove');
+            if (!remove) throw new Error('its row is not on screen');
+            remove.click();
+          }, model.id);
+        }
+        await page.waitForTimeout(400);
+        return true;
+      }, 5000);
+      if (gone) did.push('removed ' + model.name);
+    }
+    const lost = baseline.models.filter(model => !before.models.some(item => item.name === model.name));
+    if (lost.length) trouble.push('the baseline model' + (lost.length === 1 ? ' ' : 's ') + lost.map(model => model.name).join(', ') + ' cannot be brought back');
+
+    /* 2. the shown ticks, through each row's own switch. */
+    const now = await act('re-read the model list', readSnapshot, 5000);
+    let ticks = 0;
+    for (const model of (now || before).models) {
+      const want = baseline.models.find(item => item.name === model.name);
+      if (!want || want.visible === model.visible) continue;
+      if (!ticks) await openTab('models');
+      const set = await act((want.visible ? 'show ' : 'hide ') + model.name, async () => {
+        await page.setChecked('#gpv-list [data-entry-id="' + model.id + '"] input[type="checkbox"]', want.visible, { timeout: ACTION_MS });
+        await page.waitForTimeout(250);
+      }, 4000);
+      if (set) ticks += 1;
+    }
+    if (ticks) did.push('re-ticked ' + ticks + ' model' + (ticks === 1 ? '' : 's'));
+
+    /* 3. what the step piled up, cleared back to the mark taken before it ran. Counts are read
+       again for each list because clearing one empties another: Clear compared positions takes
+       the position labels with it. */
+    let counts = (now || before).counts;
+    for (const list of collections) {
+      const floor = mark && mark.counts ? mark.counts[list.key] : 0;
+      if (counts[list.key] - floor <= 0) continue;
+      const fresh = await act('count the ' + list.many, readSnapshot, 4000);
+      if (fresh) counts = fresh.counts;
+      const surplus = counts[list.key] - floor;
+      if (surplus <= 0) continue;
+      await openTab(list.tab);
+      let cleared = 0;
+      if (list.clear && floor === 0) {
+        const enabled = await act('look at ' + list.clear, () => page.evaluate(id => { const button = document.querySelector(id); return Boolean(button) && !button.disabled; }, list.clear));
+        if (enabled && await press('press ' + list.clear, list.clear)) cleared = surplus;
+      }
+      if (!cleared && list.rows) {
+        /* Rows are appended, so the surplus is at the end: take the last one off, that many times. */
+        for (let index = 0; index < surplus && remaining() > 0; index += 1) {
+          const off = await act('remove a ' + list.one, async () => {
+            await page.locator(list.rows).last().locator('button:has-text("Remove")').click({ timeout: Math.min(ACTION_MS, Math.max(600, remaining())) });
+            await page.waitForTimeout(200);
+          }, 4000);
+          if (!off) break;
+          cleared += 1;
+        }
+      }
+      if (cleared) did.push('cleared ' + cleared + ' ' + (cleared === 1 ? list.one : list.many));
+      if (cleared < surplus) trouble.push((surplus - cleared) + ' ' + (surplus - cleared === 1 ? list.one : list.many) + ' could not be cleared');
+    }
+  }
+
+  /* 4. every control the failed step moved and did not move back, put back the way the steps
+     themselves do it: set the value, then fire input and change so the app reacts. The reference
+     is the mark taken before the step, so a setting an earlier, passing step left on purpose is
+     left alone; only if the mark could not be read does the baseline stand in for it. */
+  const wantedControls = (mark && mark.controls) || baseline.controls;
+  if (!(mark && mark.controls)) trouble.push('no pre-step control mark — settings were compared against the import-time baseline instead');
+  const snapshot = await act('read the controls', readSnapshot, 5000);
+  const controls = snapshot && snapshot.controls;
+  const restoredIds = [], unreachable = [];
+  let restored = 0;
+  if (controls) {
+    for (const [id, want] of Object.entries(wantedControls)) {
+      const has = controls[id];
+      if (!has) continue;
+      if ('checked' in want ? has.checked === want.checked : has.value === want.value) continue;
+      if (want.off && has.off) continue; /* greyed out before the step and after it: derived, not a leftover */
+      if (remaining() <= 0) { unreachable.push('#' + id + ': no time left'); continue; }
+      const outcome = await act('put #' + id + ' back', () => page.evaluate(([target, value]) => {
+        const element = document.getElementById(target);
+        if (!element) return 'gone from the page';
+        if (element.disabled) return 'greyed out, still ' + ('checked' in value ? element.checked : JSON.stringify(element.value));
+        if ('checked' in value) { if (element.checked === value.checked) return 'same'; element.checked = value.checked; }
+        else { if (element.value === value.value) return 'same'; element.value = value.value; }
+        element.dispatchEvent(new Event('input', { bubbles: true }));
+        element.dispatchEvent(new Event('change', { bubbles: true }));
+        return 'set';
+      }, [id, want]));
+      if (outcome === 'set') { restored += 1; restoredIds.push('#' + id); await guard(() => page.waitForTimeout(120), 1000); }
+      else if (outcome && outcome !== 'same') unreachable.push('#' + id + ': ' + outcome);
+    }
+  }
+  /* Naming them matters: a control recovery puts back is a control the failed step moved and did
+     not move back, and reading which ones is how you tell a leak from a deliberate change. */
+  if (restored) did.push('restored ' + restored + ' control' + (restored === 1 ? '' : 's') + ' (' + restoredIds.slice(0, 8).join(', ') + (restoredIds.length > 8 ? ', …' : '') + ')');
+  if (unreachable.length) trouble.push('could not put back ' + unreachable.join(', '));
+
+  /* 5. the tab last, and to the panel the step found open rather than the one the run started
+     on, for the same reason the controls go back to the mark. */
+  const wantedTab = (mark && mark.tab) || baseline.tab;
+  const openNow = await act('read the open tab', () => page.evaluate(() => { const open = document.querySelector('[data-gpv-tab][aria-selected="true"]'); return (open && open.dataset.gpvTab) || 'models'; }));
+  if (openNow && openNow !== wantedTab && (await openTab(wantedTab))) did.push('back on the ' + wantedTab + ' tab');
+
+  const spent = Date.now() - started;
+  recoveryMs += spent;
+  currentStep = previousStep;
+  console.log('  ..   recovered after [' + failedName + ']: ' + (did.length ? did.join(', ') : 'nothing needed restoring') + ' · ' + (spent / 1000).toFixed(1) + ' s');
+  if (trouble.length) {
+    incompleteRecoveries += 1;
+    suspectSince = failedName;
+    console.log('  !!   RECOVERY INCOMPLETE after [' + failedName + ']: ' + trouble.join(' · '));
+    console.log('  !!   the page was not put back — every later failure is suspect until a recovery finishes');
+  } else if (suspectSince) {
+    console.log('  ..   recovery finished cleanly — later failures count again');
+    suspectSince = null;
+  }
+};
+
 const step = async (name, body) => {
   currentStep = name;
+  steps += 1;
+  const mark = await markState();
+  let failed = false;
   try { await body(); console.log('  ok   ' + name); return; }
   catch (error) {
-    if (!isTimeout(error)) { console.log('  FAIL ' + name + ' :: ' + String(error.message).split('\n')[0]); failures.push(name); return; }
-    retries += 1; console.log('  RETRY ' + name + ' :: ' + String(error.message).split('\n')[0]);
+    if (!isTimeout(error)) { console.log('  FAIL ' + name + ' :: ' + String(error.message).split('\n')[0]); failures.push(name); failed = true; }
+    else { retries += 1; console.log('  RETRY ' + name + ' :: ' + String(error.message).split('\n')[0]); }
   }
-  try { await body(); console.log('  ok   ' + name + ' (after one retry)'); }
-  catch (error) { console.log('  FAIL ' + name + ' :: ' + String(error.message).split('\n')[0]); failures.push(name); }
+  if (!failed) {
+    try { await body(); console.log('  ok   ' + name + ' (after one retry)'); }
+    catch (error) { console.log('  FAIL ' + name + ' :: ' + String(error.message).split('\n')[0]); failures.push(name); failed = true; }
+  }
+  if (!failed) return;
+  if (suspectSince) suspect.push(name);
+  await recover(name, mark);
 };
 const tab = async name => { await page.click(`[data-gpv-tab="${name}"]`); await page.waitForTimeout(150); };
 /* A human click is a short press and release; WebKit does not reliably turn an instantaneous
@@ -190,6 +483,9 @@ await step('the viewport has a canvas', async () => {
   });
   if (!ok) throw new Error('no canvas');
 });
+/* The three fixtures are in, the canvas is up and no step has customised anything yet: this is
+   the state the ~150 steps below all start from, so this is what a failed step is put back to. */
+await captureBaseline();
 
 group('figure finishing');
 await step('outline and depth cueing switch on without errors and round-trip through a scene', async () => {
@@ -2539,5 +2835,11 @@ consoleErrors.slice(0, 10).forEach(error => console.log('  ! ' + error));
 console.log('report console errors: ' + reportErrors.length);
 reportErrors.slice(0, 10).forEach(error => console.log('  ! ' + error));
 console.log('steps retried after a timeout: ' + retries);
+/* What the safety net cost and what it had to do. A step named on the `failed steps` line and
+   not on the `suspect` one failed on its own; a suspect step ran on a page recovery could not
+   put back, so its failure says as much about the recovery as about the viewer. */
+console.log('safety net: baseline ' + baselineMs + ' ms · marks ' + (markMs / 1000).toFixed(1) + ' s over ' + steps + ' steps · recoveries ' + recoveries + (recoveries ? ' in ' + (recoveryMs / 1000).toFixed(1) + ' s' : '') + ' · incomplete ' + incompleteRecoveries);
 console.log('failed steps: ' + (failures.length ? failures.join(', ') : 'none'));
+console.log('failed on their own: ' + (failures.filter(name => !suspect.includes(name)).length ? failures.filter(name => !suspect.includes(name)).join(', ') : 'none'));
+console.log('failed after an incomplete recovery (suspect): ' + (suspect.length ? suspect.join(', ') : 'none'));
 process.exit(failures.length || consoleErrors.length || reportErrors.length ? 1 : 0);

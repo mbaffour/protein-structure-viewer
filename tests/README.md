@@ -197,6 +197,93 @@ PSV_CHROMIUM=/opt/pw-browsers/chromium/chrome-linux/chrome npm test
 
 The two emphasised checks are regressions against bugs that shipped in 2.0.
 
+## Recovering from a failed step
+
+Every stateful step captures what it changes and puts it back in its own `finally` — loading a
+mutant model and removing it again, taking back the selections *Highlight neighbourhood* added,
+restoring the alignment mode, the colour mode and the tab. **That is still the primary
+mechanism, and a new step should be written that way.** Nothing below replaces it.
+
+The safety net is for the case that idiom cannot cover: a step that *hangs*. Its `finally` runs
+into the same slow page and times out too, so the extra model stays loaded and the compared
+position stays set — and then every later step that counts models, strip rows or positions fails
+on the leftovers. One hung step gets reported as ten, and the ten look like a broken viewer.
+
+There are two references, and which one is used for what is the heart of the design.
+
+- **The baseline** is captured once, immediately after the import group — the first moment the
+  three fixture models the remaining ~150 steps assume exist. It is the reference for **the
+  models and their ticks, and those alone**: a step that loads a fixture should always have it
+  taken away again, whatever else the run has done since. It logs a line:
+
+  ```
+    ..   baseline: 3 models (model_a.pdb, model_b.pdb, model_c.pdb) · models tab · 113 controls · 6 ms
+  ```
+
+- **The mark** is captured before *every* step, in one round trip: how full each accumulating
+  list is, which tab is open, and the value or tick of every `input`, `select` and `textarea` in
+  the panel that carries one — enumerated from the DOM, so a control added to the viewer is
+  covered without editing the suite. It is the reference for **the settings, the lists and the
+  tab**, because the suite legitimately moves on as it goes: the six saved views made for the
+  contact sheet are still wanted four steps later, and a passing step may deliberately leave a
+  setting for the steps that follow it. Restoring those from the import-time baseline would let
+  one failure quietly undo a setting a later step depends on — a safety net with a state bug of
+  its own, and an unreadable transcript when it bites. Restoring to the mark means recovery
+  **only ever puts back what the failed step itself moved**.
+
+- **Recovery runs when `step()` records a FAIL** — after the existing single retry, which is
+  unchanged (a step that times out is still retried once, and a step that passes on the retry is
+  not recovered from). It removes any model the baseline does not know about, puts the shown
+  ticks back, clears what the step piled onto each list above the mark (compared positions,
+  labels, selections, measurements, annotations, named domains, comparison panels, saved views)
+  using the app's own Clear buttons where there is one and each row's Remove where there is not,
+  puts back every control whose value or tick differs from the mark, and reopens the tab the step
+  found open. A control greyed out both at the mark and now is left alone — that is the app
+  deriving it, not a leftover. If the mark could not be read at all, the baseline stands in for
+  it and the recovery says so, which makes it *incomplete*.
+
+  What this does **not** cover is the tick and text boxes inside rendered list rows — the figure
+  builder's per-panel checkboxes and captions have no ids, because they belong to the rows rather
+  than to the panel. A step that changes those still owns putting them back in its own `finally`
+  (as the site-figure step's `takeSiteFigureBack` does).
+
+- **Nothing here can hang the run.** Every action has its own deadline (3 s) and the whole
+  recovery has a hard cap (25 s); each piece is guarded separately, so one failing piece is
+  written down and the rest still runs.
+
+- **Nothing here hides a failure.** Recovery restores *state*: it never re-runs an assertion and
+  never takes a name out of `failures`, so a genuinely broken viewer is still red, and the exit
+  code is still non-zero whenever a step failed.
+
+### The lines it prints
+
+```
+  ..   recovered after [a step name]: removed model_mutant.pdb, cleared 1 compared position, restored 1 control (#gpv-view-mode) · 1.7 s
+  ..   recovered after [another step]: cleared 1 saved view, restored 4 controls (#gpv-export-mode, #gpv-print-width, #gpv-panel-columns, #gpv-builder-letters) · 0.9 s
+```
+What it had to put back — read this as the list of things the failed step leaked, and nothing
+else: because the reference is the mark rather than the baseline, a control named on this line is
+one *that step* moved and did not move back. `nothing needed restoring` means the step's own
+`finally` did its job and only the assertion failed.
+
+```
+  !!   RECOVERY INCOMPLETE after [a step name]: press #gpv-position-clear: gave up after 3000 ms · could not put back #gpv-outline: greyed out, still "bold"
+  !!   the page was not put back — every later failure is suspect until a recovery finishes
+```
+Recovery could not finish. Later failures may be the leftovers rather than the viewer; they are
+still counted, but they are also listed separately at the end. A later recovery that does finish
+prints `recovery finished cleanly — later failures count again` and the suspicion is lifted.
+
+```
+safety net: baseline 3 ms · marks 1.1 s over 156 steps · recoveries 1 in 1.7 s · incomplete 0
+failed steps: a, b
+failed on their own: a, b
+failed after an incomplete recovery (suspect): none
+```
+`failed steps` is unchanged and still lists every failure (CI and grep read that line). The two
+lines under it split those names into the ones that failed on a page recovery had put back and
+the ones that did not.
+
 ## Cross-validation against Biopython
 
 `reference.py` (Biopython + numpy) and `validate.mjs` check the viewer's analysis numbers on a real
@@ -221,6 +308,9 @@ is committed; point the scripts at your own.
   wrong answer still fails the run on the first attempt.
 - An unhandled promise rejection (typically a `waitForEvent('download')` left behind by a click that timed out) is
   logged with the step it happened in and does not abort the run.
+- A step that fails is followed by a recovery that puts the page back to the baseline, so one hung step does not
+  fail the ten steps after it — see [Recovering from a failed step](#recovering-from-a-failed-step). A step's own
+  `finally` is still where cleanup belongs.
 - The suite fronts the viewer tab after the generated-report group; a headed engine otherwise leaves the report
   tab in front and clicks on the viewer hang.
 
