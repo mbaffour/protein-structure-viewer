@@ -25,7 +25,7 @@
       const chainCell = document.createElement('th');
       const swatch = document.createElement('input');
       swatch.type = 'color';
-      swatch.className = 'form-control form-control-color gpv-chain-color';
+      swatch.className = 'form-control-color gpv-chain-color';
       swatch.value = chainColor(row.chain);
       swatch.setAttribute('aria-label', 'Colour for chain ' + (row.chain || '—'));
       swatch.title = 'Set a custom colour for this chain — used in Chain colour mode everywhere (view, panels, sequence strip, legends, exports). Double-click to reset to the default colour.';

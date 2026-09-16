@@ -1456,7 +1456,7 @@ html>body{padding:0}</style>
   #generic-protein-viewer .gpv-composition { margin-top: 10px; }
   #generic-protein-viewer .gpv-composition summary { cursor: pointer; color: var(--muted-foreground); }
   #generic-protein-viewer .gpv-composition .gpv-swatch { margin-right: 6px; }
-  #generic-protein-viewer .gpv-composition .gpv-chain-color { width: 22px; height: 22px; padding: 1px; vertical-align: -6px; margin-right: 6px; }
+  #generic-protein-viewer .gpv-composition .gpv-chain-color { display: inline-block; width: 22px; height: 22px; min-height: 0; padding: 1px; vertical-align: -6px; margin-right: 6px; }
   #generic-protein-viewer .gpv-chain-switch { margin: 0; min-height: 0; }
   #generic-protein-viewer .gpv-goto { max-width: 11em; }
   #generic-protein-viewer .gpv-goto .form-control { min-width: 7em; }
@@ -4940,7 +4940,7 @@ html>body{padding:0}</style>
       const chainCell = document.createElement('th');
       const swatch = document.createElement('input');
       swatch.type = 'color';
-      swatch.className = 'form-control form-control-color gpv-chain-color';
+      swatch.className = 'form-control-color gpv-chain-color';
       swatch.value = chainColor(row.chain);
       swatch.setAttribute('aria-label', 'Colour for chain ' + (row.chain || '—'));
       swatch.title = 'Set a custom colour for this chain — used in Chain colour mode everywhere (view, panels, sequence strip, legends, exports). Double-click to reset to the default colour.';
