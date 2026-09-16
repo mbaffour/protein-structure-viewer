@@ -23,8 +23,22 @@
     residueRows(entry).forEach(row => {
       const tr = document.createElement('tr');
       const chainCell = document.createElement('th');
-      const swatch = document.createElement('i'); swatch.className = 'gpv-swatch'; swatch.style.background = chainColor(row.chain);
-      chainCell.append(swatch, row.chain || '—'); tr.append(chainCell);
+      const swatch = document.createElement('input');
+      swatch.type = 'color';
+      swatch.className = 'form-control-color gpv-chain-color';
+      swatch.value = chainColor(row.chain);
+      swatch.setAttribute('aria-label', 'Colour for chain ' + (row.chain || '—'));
+      swatch.title = 'Set a custom colour for this chain — used in Chain colour mode everywhere (view, panels, sequence strip, legends, exports). Double-click to reset to the default colour.';
+      swatch.addEventListener('input', () => { setChainColor(row.chain, swatch.value); applyStyle(); });
+      swatch.addEventListener('change', () => updateStatus('Chain ' + (row.chain || '—') + ' colour set'));
+      swatch.addEventListener('dblclick', event => {
+        event.preventDefault();
+        resetChainColor(row.chain);
+        swatch.value = chainColor(row.chain);
+        applyStyle();
+        updateStatus('Chain ' + (row.chain || '—') + ' colour reset to default');
+      });
+      chainCell.append(swatch, document.createTextNode(row.chain || '—')); tr.append(chainCell);
       const count = document.createElement('td'); count.className = 'text-end'; count.textContent = String(row.residues.length); tr.append(count);
       const range = document.createElement('td'); range.textContent = row.residues[0].resi + '–' + row.residues[row.residues.length - 1].resi; tr.append(range);
       const confidence = document.createElement('td'); confidence.className = 'text-end';

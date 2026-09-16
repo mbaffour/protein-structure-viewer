@@ -32,14 +32,30 @@
   /* Okabe & Ito (2008) palette, ordered so chain A stays blue. Black is replaced by grey for ribbons. */
   const okabeIto = ['#0072b2', '#e69f00', '#009e73', '#cc79a7', '#56b4e9', '#d55e00', '#f0e442', '#999999'];
   let safePaletteOn = false;
+  /* A user can override any chain's automatic colour (Composition panel); the override wins
+     everywhere chainColor() is read — main view, panels, sequence strip, legends, exports —
+     since they all read colour through this one function rather than the palette directly. */
+  const customChainColors = new Map();
   function chainColor(chain) {
     const key = chain || '';
     if (!chainOrder.has(key)) chainOrder.set(key, chainOrder.size);
+    if (customChainColors.has(key)) return customChainColors.get(key);
     const source = safePaletteOn ? okabeIto : chainPalette;
     return source[chainOrder.get(key) % source.length];
   }
   function seedChainColors(atoms) {
     [...new Set(atoms.map(atom => atom.chain || ''))].sort(compareChains).forEach(chainColor);
+  }
+  function setChainColor(chain, color) {
+    const key = chain || '';
+    if (!chainOrder.has(key)) chainOrder.set(key, chainOrder.size);
+    customChainColors.set(key, color);
+  }
+  function resetChainColor(chain) {
+    customChainColors.delete(chain || '');
+  }
+  function resetAllChainColors() {
+    customChainColors.clear();
   }
   const clipText = (text, limit) => String(text).length > limit ? String(text).slice(0, limit - 1) + '…' : String(text);
   let structures = [];
