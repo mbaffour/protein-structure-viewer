@@ -1459,6 +1459,11 @@ html>body{padding:0}</style>
   #generic-protein-viewer .gpv-composition .gpv-swatch { margin-right: 6px; }
   #generic-protein-viewer .gpv-chain-color { display: inline-block; width: 22px; height: 22px; min-height: 0; padding: 1px; vertical-align: -6px; margin-right: 6px; }
   #generic-protein-viewer .gpv-chain-switch { margin: 0; min-height: 0; }
+  /* Eight columns (Model, Reference, Cα pairs, Identity, RMSD, Fitted on, Fit RMSD, Mapping) never
+     fit a ~400px sidebar without squeezing every cell to an unreadable sliver — .table's width:100%
+     would rather shrink columns than let .table-responsive's overflow-x:auto do its job. A min-width
+     gives the table room to lay out normally and scroll instead of squeeze. */
+  #generic-protein-viewer #gpv-alignment-wrap .table { min-width: 620px; }
   #generic-protein-viewer .gpv-goto { max-width: 11em; }
   #generic-protein-viewer .gpv-goto .form-control { min-width: 7em; }
   #generic-protein-viewer .gpv-sequence-text { margin-top: 8px; }
