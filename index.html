@@ -921,7 +921,7 @@ html>body{padding:0}</style>
     <details class="gpv-composition" id="gpv-composition" open hidden><summary class="text-small">Composition of the current model</summary>
       <div class="table-responsive"><table class="table table-sm" aria-label="Chains of the current model"><thead><tr><th>Chain</th><th class="text-end">Residues</th><th>Range</th><th class="text-end">Mean pLDDT</th><th>Shown</th><th data-tooltip="Blend the chain most of the way into the background to spotlight the others; kept in panels, exports and the sequence strip">Faded</th></tr></thead><tbody id="gpv-chain-rows"></tbody></table></div>
       <div class="text-small text-muted" id="gpv-assembly-summary"></div>
-      <div class="viz-controls"><span class="text-small text-muted" id="gpv-hetero-summary"></span><button class="btn btn-ghost" type="button" id="gpv-chains-all" data-tooltip="Show every chain of the current model again">Show all chains</button></div>
+      <div class="viz-controls"><span class="text-small text-muted" id="gpv-hetero-summary"></span><button class="btn btn-ghost" type="button" id="gpv-chains-all" data-tooltip="Show every chain of the current model again">Show all chains</button><button class="btn btn-ghost" type="button" id="gpv-chain-colors-reset" data-tooltip="Put every chain back to its automatically assigned colour">Reset chain colours</button></div>
     </details>
     <div class="viz-controls gpv-list-more" id="gpv-list-more" hidden>
       <span class="text-muted text-small" id="gpv-list-more-label"></span>
@@ -1456,6 +1456,7 @@ html>body{padding:0}</style>
   #generic-protein-viewer .gpv-composition { margin-top: 10px; }
   #generic-protein-viewer .gpv-composition summary { cursor: pointer; color: var(--muted-foreground); }
   #generic-protein-viewer .gpv-composition .gpv-swatch { margin-right: 6px; }
+  #generic-protein-viewer .gpv-composition .gpv-chain-color { width: 22px; height: 22px; padding: 1px; vertical-align: -6px; margin-right: 6px; }
   #generic-protein-viewer .gpv-chain-switch { margin: 0; min-height: 0; }
   #generic-protein-viewer .gpv-goto { max-width: 11em; }
   #generic-protein-viewer .gpv-goto .form-control { min-width: 7em; }
@@ -1636,14 +1637,30 @@ html>body{padding:0}</style>
   /* Okabe & Ito (2008) palette, ordered so chain A stays blue. Black is replaced by grey for ribbons. */
   const okabeIto = ['#0072b2', '#e69f00', '#009e73', '#cc79a7', '#56b4e9', '#d55e00', '#f0e442', '#999999'];
   let safePaletteOn = false;
+  /* A user can override any chain's automatic colour (Composition panel); the override wins
+     everywhere chainColor() is read — main view, panels, sequence strip, legends, exports —
+     since they all read colour through this one function rather than the palette directly. */
+  const customChainColors = new Map();
   function chainColor(chain) {
     const key = chain || '';
     if (!chainOrder.has(key)) chainOrder.set(key, chainOrder.size);
+    if (customChainColors.has(key)) return customChainColors.get(key);
     const source = safePaletteOn ? okabeIto : chainPalette;
     return source[chainOrder.get(key) % source.length];
   }
   function seedChainColors(atoms) {
     [...new Set(atoms.map(atom => atom.chain || ''))].sort(compareChains).forEach(chainColor);
+  }
+  function setChainColor(chain, color) {
+    const key = chain || '';
+    if (!chainOrder.has(key)) chainOrder.set(key, chainOrder.size);
+    customChainColors.set(key, color);
+  }
+  function resetChainColor(chain) {
+    customChainColors.delete(chain || '');
+  }
+  function resetAllChainColors() {
+    customChainColors.clear();
   }
   const clipText = (text, limit) => String(text).length > limit ? String(text).slice(0, limit - 1) + '…' : String(text);
   let structures = [];
@@ -4921,8 +4938,22 @@ html>body{padding:0}</style>
     residueRows(entry).forEach(row => {
       const tr = document.createElement('tr');
       const chainCell = document.createElement('th');
-      const swatch = document.createElement('i'); swatch.className = 'gpv-swatch'; swatch.style.background = chainColor(row.chain);
-      chainCell.append(swatch, row.chain || '—'); tr.append(chainCell);
+      const swatch = document.createElement('input');
+      swatch.type = 'color';
+      swatch.className = 'form-control form-control-color gpv-chain-color';
+      swatch.value = chainColor(row.chain);
+      swatch.setAttribute('aria-label', 'Colour for chain ' + (row.chain || '—'));
+      swatch.title = 'Set a custom colour for this chain — used in Chain colour mode everywhere (view, panels, sequence strip, legends, exports). Double-click to reset to the default colour.';
+      swatch.addEventListener('input', () => { setChainColor(row.chain, swatch.value); applyStyle(); });
+      swatch.addEventListener('change', () => updateStatus('Chain ' + (row.chain || '—') + ' colour set'));
+      swatch.addEventListener('dblclick', event => {
+        event.preventDefault();
+        resetChainColor(row.chain);
+        swatch.value = chainColor(row.chain);
+        applyStyle();
+        updateStatus('Chain ' + (row.chain || '—') + ' colour reset to default');
+      });
+      chainCell.append(swatch, document.createTextNode(row.chain || '—')); tr.append(chainCell);
       const count = document.createElement('td'); count.className = 'text-end'; count.textContent = String(row.residues.length); tr.append(count);
       const range = document.createElement('td'); range.textContent = row.residues[0].resi + '–' + row.residues[row.residues.length - 1].resi; tr.append(range);
       const confidence = document.createElement('td'); confidence.className = 'text-end';
@@ -10901,6 +10932,7 @@ applyBackground();
   root.querySelector('#gpv-goto-run').addEventListener('click', () => goToResidue(root.querySelector('#gpv-goto').value));
   root.querySelector('#gpv-goto').addEventListener('keydown', event => { if (event.key === 'Enter') { event.preventDefault(); goToResidue(root.querySelector('#gpv-goto').value); } });
   root.querySelector('#gpv-chains-all').addEventListener('click', () => { const entry = activeEntry(); if (!entry) return; entry.hiddenChains = []; entry.fadedChains = []; applyStyle(); updateStatus('All chains of ' + displayName(entry) + ' shown'); });
+  root.querySelector('#gpv-chain-colors-reset').addEventListener('click', () => { resetAllChainColors(); applyStyle(); renderComposition(); updateStatus('Chain colours reset to the default palette'); });
   root.querySelector('#gpv-figure-legend').addEventListener('click', () => { writeFigureLegend(); });
   root.querySelector('#gpv-methods-text').addEventListener('click', () => { writeMethodsText(); });
   root.querySelector('#gpv-redo').addEventListener('click', redo);

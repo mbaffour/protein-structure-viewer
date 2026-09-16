@@ -921,7 +921,7 @@ html>body{padding:0}</style>
     <details class="gpv-composition" id="gpv-composition" open hidden><summary class="text-small">Composition of the current model</summary>
       <div class="table-responsive"><table class="table table-sm" aria-label="Chains of the current model"><thead><tr><th>Chain</th><th class="text-end">Residues</th><th>Range</th><th class="text-end">Mean pLDDT</th><th>Shown</th><th data-tooltip="Blend the chain most of the way into the background to spotlight the others; kept in panels, exports and the sequence strip">Faded</th></tr></thead><tbody id="gpv-chain-rows"></tbody></table></div>
       <div class="text-small text-muted" id="gpv-assembly-summary"></div>
-      <div class="viz-controls"><span class="text-small text-muted" id="gpv-hetero-summary"></span><button class="btn btn-ghost" type="button" id="gpv-chains-all" data-tooltip="Show every chain of the current model again">Show all chains</button></div>
+      <div class="viz-controls"><span class="text-small text-muted" id="gpv-hetero-summary"></span><button class="btn btn-ghost" type="button" id="gpv-chains-all" data-tooltip="Show every chain of the current model again">Show all chains</button><button class="btn btn-ghost" type="button" id="gpv-chain-colors-reset" data-tooltip="Put every chain back to its automatically assigned colour">Reset chain colours</button></div>
     </details>
     <div class="viz-controls gpv-list-more" id="gpv-list-more" hidden>
       <span class="text-muted text-small" id="gpv-list-more-label"></span>
@@ -1456,6 +1456,7 @@ html>body{padding:0}</style>
   #generic-protein-viewer .gpv-composition { margin-top: 10px; }
   #generic-protein-viewer .gpv-composition summary { cursor: pointer; color: var(--muted-foreground); }
   #generic-protein-viewer .gpv-composition .gpv-swatch { margin-right: 6px; }
+  #generic-protein-viewer .gpv-composition .gpv-chain-color { width: 22px; height: 22px; padding: 1px; vertical-align: -6px; margin-right: 6px; }
   #generic-protein-viewer .gpv-chain-switch { margin: 0; min-height: 0; }
   #generic-protein-viewer .gpv-goto { max-width: 11em; }
   #generic-protein-viewer .gpv-goto .form-control { min-width: 7em; }

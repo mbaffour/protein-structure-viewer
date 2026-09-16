@@ -106,6 +106,7 @@
   root.querySelector('#gpv-goto-run').addEventListener('click', () => goToResidue(root.querySelector('#gpv-goto').value));
   root.querySelector('#gpv-goto').addEventListener('keydown', event => { if (event.key === 'Enter') { event.preventDefault(); goToResidue(root.querySelector('#gpv-goto').value); } });
   root.querySelector('#gpv-chains-all').addEventListener('click', () => { const entry = activeEntry(); if (!entry) return; entry.hiddenChains = []; entry.fadedChains = []; applyStyle(); updateStatus('All chains of ' + displayName(entry) + ' shown'); });
+  root.querySelector('#gpv-chain-colors-reset').addEventListener('click', () => { resetAllChainColors(); applyStyle(); renderComposition(); updateStatus('Chain colours reset to the default palette'); });
   root.querySelector('#gpv-figure-legend').addEventListener('click', () => { writeFigureLegend(); });
   root.querySelector('#gpv-methods-text').addEventListener('click', () => { writeMethodsText(); });
   root.querySelector('#gpv-redo').addEventListener('click', redo);
