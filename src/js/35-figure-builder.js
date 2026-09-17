@@ -281,6 +281,7 @@
       hiddenChains: entry.hiddenChains || [],
       fadedChains: entry.fadedChains || [], faded: Boolean(entry.faded),
       confidence: reportConfidence(entry),
+      hasConfidence: entry.scores.length > 0,
       coords: reportCoordinates(entry),
       shapes: reportShapes(entry),
       labels: labelRecords.filter(label => label.entryId === entry.id).map(label => ({ text: label.text, chain: label.chain, resi: label.resi, atom: label.atom, ...labelPosition(label), color: label.color || null, size: label.size || 12 }))
@@ -456,7 +457,7 @@ function applyViewStyle(v) {
 function styleSpec(s) {
   const rep = el('style').value, mode = el('colors').value;
   let options = { color: s.color };
-  if (mode === 'plddt') options = { colorfunc: a => pcolor(Number(a.b || 0)) };
+  if (mode === 'plddt') options = s.hasConfidence ? { colorfunc: a => pcolor(Number(a.b || 0)) } : { color: s.color };
   if (mode === 'chain') options = { colorfunc: a => chainColors[a.chain || ''] || '#9ca3af' };
   if (residueThemes[mode] && mode !== 'ss') options = { colorfunc: a => residueThemes[mode][String(a.resn || '').toUpperCase()] || residueThemes.fallback };
   if (mode === 'ss') options = { colorfunc: a => residueThemes.ss[a.ss] || residueThemes.ss.c };
@@ -539,7 +540,7 @@ function show(pane, preserveView) {
   if (oldView) pane.viewer.setView(oldView); else pane.viewer.zoomTo();
   pane.viewer.render();
   lastViews.set(pane, pane.viewer.getView());
-  pane.plddt = mean(m.selectedAtoms({}).filter(a => a.atom === 'CA' && Number.isFinite(Number(a.b))).map(a => Number(a.b)));
+  pane.plddt = s.hasConfidence ? mean(m.selectedAtoms({}).filter(a => a.atom === 'CA' && Number.isFinite(Number(a.b))).map(a => Number(a.b))) : null;
   const c = s.confidence || {};
   pane.stats.textContent = (pane.plddt === null ? 'pLDDT —' : 'pLDDT ' + pane.plddt.toFixed(1)) + (Number.isFinite(Number(c.iptm)) ? ' · ipTM ' + metric(c.iptm, 2) : Number.isFinite(Number(c.ptm)) ? ' · pTM ' + metric(c.ptm, 2) : '');
   if (panes[focused] === pane) describe(pane);
@@ -668,7 +669,7 @@ function stripRows(m) {
 }
 function stripColor(s, a) {
   const mode = el('colors').value;
-  if (mode === 'plddt') return pcolor(Number(a.b || 0));
+  if (mode === 'plddt') return s.hasConfidence ? pcolor(Number(a.b || 0)) : s.color;
   if (mode === 'chain') return chainColors[a.chain || ''] || '#9ca3af';
   if (mode === 'ss') return residueThemes.ss[a.ss] || residueThemes.ss.c;
   if (mode === 'annotated') { const r = domainLookupFor(s).get((a.chain || '') + '|' + a.resi); return r ? r.color : '#9ca3af'; }

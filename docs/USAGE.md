@@ -159,7 +159,11 @@ thousand atoms are skipped with a message, because the surface calculation would
 Notes on the colour schemes:
 
 - **pLDDT** colouring uses the standard AlphaFold bands and reveals the legend under the viewport.
-  It reads the B-factor column, so it is only meaningful for files that carry pLDDT there.
+  It reads the B-factor column, so it is only meaningful for files that carry pLDDT there. A model
+  without confidence scores — any structure fetched from the PDB — keeps its own model colour instead,
+  in the view, the strip, every export and the report, so crystallographic B-factors are never shown
+  as pLDDT. A structure opened from a local file is treated as scored if its B-factor column holds
+  values, so check what an experimental file you open yourself is being coloured by.
 - **Per entity** gives every chain with the same sequence one colour, so a sixty-copy capsid shows
   its two or three distinct proteins; the legend names each entity with a Greek letter and its copy
   count, chains and length (α ×60 · A, B, … · 426 aa), abbreviating with `+N more` past twenty
