@@ -2,6 +2,40 @@
 
 All notable changes to this project are recorded here.
 
+## 2.47.0
+
+### Added
+
+- **A Predict link, and first-class reading of what comes back.**
+  [AlphaFold2 WebGPU](https://martin-steinegger.github.io/alphafold2-webgpu/) folds a sequence on
+  your own GPU in the browser. It is the obvious thing to reach for when you have a sequence and no
+  structure, and the viewer had nothing to offer there: the identifier field only finds structures
+  that already exist. A **Predict** button now sits beside **Fetch** and opens it in a new tab. It is
+  an ordinary link — nothing from this page goes with it, and the viewer still makes network
+  requests in exactly the two situations the README documents.
+- The archive that comes back is now read whole. Its `config.json` records the model, the recycle
+  count, the alignment mode and the seed, and those go into the Publish tab's methods text — the
+  alignment mode above all, because a single-sequence prediction carries systematically lower
+  confidence than an MSA-backed one and a reader cannot tell the two apart from a pLDDT number.
+  Those settings are saved with the session and restored with it, so the methods text still names
+  the predictor after reopening the page or a session file.
+
+### Fixed
+
+- **A ColabFold-shaped scores file attached to nothing, and its PAE was discarded.** Two separate
+  problems met in the same archive. File pairing understood AlphaFold 3 and AlphaFold DB naming, so
+  `demo_scores.json` never found `demo_unrelaxed_model_1.pdb` and its pTM and PAE sat unused. And
+  ColabFold and AlphaFold2 WebGPU write `predicted_aligned_error` as one flat run of L² numbers
+  rather than nested rows, which the confidence scanner read as no rows at all and dropped in
+  silence. Both are fixed: the job name now pairs the structure, the scores and the PAE file, and a
+  flat matrix is folded back into square rows using the residue count from the file's own `plddt`
+  array. PAE domains, the PAE plot, ligand-site PAE and the interface map all work on such an
+  archive now.
+- An archive's alignment is taken whatever it is called. The `.a3m` filter required "unpaired" in
+  the name, which is AlphaFold 3's convention; ColabFold and AlphaFold2 WebGPU write a single
+  `<job>.a3m`, so *Colour by MSA* had nothing to work with. AlphaFold 3 archives are unaffected —
+  where files named "unpaired" exist, those are still the ones used.
+
 ## 2.46.2
 
 ### Fixed

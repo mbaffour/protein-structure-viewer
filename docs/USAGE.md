@@ -12,6 +12,7 @@ interpretation caveats see [`SCIENTIFIC-AUDIT.md`](../SCIENTIFIC-AUDIT.md).
 - [Figure finishing](#figure-finishing)
 - [Interface contact map](#interface-contact-map)
 - [Getting structures in](#getting-structures-in)
+- [Folding a sequence](#folding-a-sequence)
 - [Keyboard shortcuts](#keyboard-shortcuts)
 - [Models tab](#models-tab)
 - [Appearance tab](#appearance-tab)
@@ -69,8 +70,47 @@ automatically by file-name matching:
   fraction disordered, clash flag, PAE, chain-pair ipTM, chain-pair minimum PAE
 - `ranking_debug.json` (AlphaFold 2) — model order and per-model ranking confidence
 - `ranking_scores.csv` (AlphaFold Server) — seed/sample ranking scores, converted to ranks
+- `*_scores.json` (ColabFold, AlphaFold2 WebGPU) — pTM, ipTM, ranking confidence and PAE. These write
+  `predicted_aligned_error` as one flat run of L² numbers rather than nested rows; the viewer folds it
+  back into a square matrix, taking the residue count from the file's own `plddt` array.
 
 Anything the viewer cannot interpret is skipped and reported in the red notice below the upload card.
+
+## Folding a sequence
+
+The viewer inspects structures; it does not predict them. When you have a sequence and no structure,
+**Predict** — next to the Fetch field — opens
+[AlphaFold2 WebGPU](https://martin-steinegger.github.io/alphafold2-webgpu/) in a new tab. That is a
+separate project by Martin Steinegger which runs AlphaFold2 `model_1_ptm` and AlphaFold-Multimer-v3
+`model_1` entirely on your own GPU through WebGPU. It needs a current WebGPU-capable browser and
+downloads roughly 100–180 MiB of model weights on its first run.
+
+The round-trip:
+
+1. Press **Predict**, paste your sequence there (colons separate the chains of a complex), choose an
+   alignment mode and fold it.
+2. Download the result archive from that page.
+3. Drop the `.zip` here, unopened.
+
+The whole archive is read at once and paired by its job name:
+
+| In the archive | What the viewer does with it |
+| --- | --- |
+| `<job>_unrelaxed_model_1.pdb` | Loads as the model; pLDDT comes from the B-factor column |
+| `<job>_scores.json` | pTM, ipTM where present, and the PAE matrix |
+| `<job>_predicted_aligned_error_v1.json` | The same PAE in AlphaFold DB's nested shape |
+| `<job>.a3m` | The alignment, for *Confidence → Colour by MSA* |
+| `config.json` | The model, recycle count, alignment mode and seed, which go into the methods text |
+| `*_plddt.png`, `*_pae.png`, `*_coverage.png`, `log.txt`, `cite.bib` | Ignored — the viewer draws its own plots |
+
+Because `config.json` is read, the Publish tab's methods text names AlphaFold2 WebGPU, the model it
+used and how the alignment was made. That last part matters: a single-sequence prediction has
+systematically lower confidence than an MSA-backed one, and a reader cannot tell the two apart from a
+pLDDT number alone.
+
+**Predict is a link.** It opens a separate site in a new tab and sends nothing from this page. What
+that site does with a sequence you type into it is its own business — its default mode submits the
+sequence to the public ColabFold MMseqs2 API, and its single-sequence mode does not.
 
 ## Keyboard shortcuts
 

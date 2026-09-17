@@ -302,7 +302,12 @@
               if (memberIndex % 5 === 4) await nextPaint();
             } catch (error) { skipped += 1; failures.push(member.name + ': ' + error.message); }
           }
-          const msaMembers = members.filter(member => !member.dir && /\.a3m$/i.test(member.name) && /unpaired/i.test(member.name));
+          /* AlphaFold 3 archives carry one alignment per entity and name them "unpaired"; ColabFold and
+             AlphaFold2 WebGPU write a single <job>.a3m. Prefer the named ones when both are present, so
+             an AlphaFold 3 archive still contributes exactly the files it used to. */
+          const a3mMembers = members.filter(member => !member.dir && /\.a3m$/i.test(member.name));
+          const unpaired = a3mMembers.filter(member => /unpaired/i.test(member.name));
+          const msaMembers = unpaired.length ? unpaired : a3mMembers;
           for (const member of msaMembers) {
             try {
               const text = await member.async('string');

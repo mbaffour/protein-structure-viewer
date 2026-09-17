@@ -1,5 +1,6 @@
   /* ---------- MSA conservation ----------
-     AlphaFold 3 archives carry the unpaired MSA per entity as .a3m. The query is the first
+     AlphaFold 3 archives carry the unpaired MSA per entity as .a3m; ColabFold and AlphaFold2 WebGPU
+     write one <job>.a3m per prediction. The query is the first
      record; uppercase letters are match columns, lowercase letters insertions (dropped), '-'
      gaps. Per query column: depth (sequences with a residue), identity to the query, and
      conservation = 1 − H / log2(20) with H the Shannon entropy over the twenty amino acids.
@@ -66,7 +67,7 @@
     const entry = activeEntry(); const assets = msaAssetsFor(entry);
     const button = root.querySelector('#gpv-msa-paint'); const state = root.querySelector('#gpv-msa-state');
     button.disabled = !assets.length || !entry || !entry.model;
-    if (!assets.length) { state.textContent = entry ? 'No alignment for ' + (entry.collection || 'this source') + '. AlphaFold 3 archives carry one per entity; an .a3m can also be added on its own.' : 'No alignment loaded.'; return; }
+    if (!assets.length) { state.textContent = entry ? 'No alignment for ' + (entry.collection || 'this source') + '. AlphaFold 3 and AlphaFold2 WebGPU archives carry one; an .a3m can also be added on its own.' : 'No alignment loaded.'; return; }
     state.textContent = assets.length + ' alignment' + (assets.length === 1 ? '' : 's') + ' from ' + (entry.collection || 'this source') + ': ' + clipText(assets.map(asset => asset.name.replace(/^.*_unpaired_msa_/, '')).join(', '), 90);
   }
 

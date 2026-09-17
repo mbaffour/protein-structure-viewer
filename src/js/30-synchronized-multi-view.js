@@ -862,6 +862,27 @@
     })).sort((a, b) => (b.confidence.rankingScore ?? -Infinity) - (a.confidence.rankingScore ?? -Infinity)).map((asset, index) => ({ ...asset, rank: index + 1 }));
   }
 
+  /* AlphaFold2 WebGPU writes a config.json beside its structure recording how the prediction was run.
+     None of it pairs with a model by filename, and all of it belongs in the methods text, so it is kept
+     against the archive rather than being pushed through the confidence path, where ptm and iptm would
+     make it look like a scores file matching a model called "config". */
+  function predictionRunFromConfig(data, collection) {
+    if (!data || typeof data !== 'object' || data.implementation !== 'alphafold2-webgpu') return null;
+    const text = value => typeof value === 'string' && value ? value : null;
+    const count = value => Number.isFinite(value) ? value : null;
+    return {
+      collection,
+      implementation: 'AlphaFold2 WebGPU',
+      modelType: text(data.model_type),
+      modelNumber: count(data.model_number),
+      recycles: count(data.num_recycles),
+      msaMode: text(data.msa_mode),
+      msaDepth: count(data.msa_depth),
+      randomSeed: count(data.random_seed),
+      adapter: text(data.adapter)
+    };
+  }
+
   function registerMetadata(name, textValue, collection = null) {
     const lower = name.toLowerCase();
     if (lower.endsWith('.csv') || lower.endsWith('.tsv')) {
@@ -877,6 +898,8 @@
       pendingScene = data;
       return true;
     }
+    const run = predictionRunFromConfig(data, collection);
+    if (run) { predictionRuns = predictionRuns.filter(entry => entry.collection !== run.collection); predictionRuns.push(run); return true; }
     const ranked = rankingAssets(name, data);
     if (ranked.length) {
       ranked.forEach(asset => { asset.collection = collection; });

@@ -86,6 +86,36 @@
     catch (error) { field.focus(); field.select(); announce('Figure legend written — copy it from the field'); }
   }
 
+  /* What AlphaFold2 WebGPU's config.json says about how a prediction was made. A reader cannot judge a
+     confidence number without the model and the alignment behind it, and single-sequence mode in
+     particular explains a low pLDDT that would otherwise look like a failed prediction. */
+  function predictionRunSentences(shown) {
+    /* A config.json dropped on its own carries no archive name, which is how confidence assets are
+       matched too: no collection means it is not tied to one and applies to whatever is shown. */
+    const collections = new Set(shown.map(entry => entry.collection));
+    const runs = predictionRuns.filter(run => !run.collection || collections.has(run.collection));
+    if (!runs.length) return [];
+    const models = { alphafold2_ptm: 'model_1_ptm', alphafold2_multimer_v3: 'model_1_multimer_v3' };
+    const alignments = {
+      mmseqs2_uniref_env: 'an alignment searched against UniRef and environmental sequences through the ColabFold MMseqs2 server (Mirdita et al., 2022; Steinegger & Söding, 2017)',
+      single_sequence: 'no alignment (single-sequence mode, which lowers confidence and is not comparable with an MSA-backed prediction)',
+      custom: 'a supplied alignment'
+    };
+    return runs.map(run => {
+      const model = models[run.modelType] || (run.modelType ? run.modelType.replace(/_/g, ' ') : 'model 1');
+      const alignment = alignments[run.msaMode] || (run.msaMode ? 'an alignment in ' + run.msaMode.replace(/_/g, ' ') + ' mode' : null);
+      return (runs.length > 1 && run.collection ? 'The models in ' + run.collection + ' were' : 'The structures were')
+        + ' predicted in the browser with AlphaFold2 WebGPU (github.com/martin-steinegger/alphafold2-webgpu), a WebGPU port of AlphaFold2 (Jumper et al., 2021)'
+        + (run.modelType === 'alphafold2_multimer_v3' ? ' and AlphaFold-Multimer (Evans et al., 2021)' : '')
+        + ', using ' + model
+        + (run.recycles === null ? '' : ' with ' + run.recycles + ' recycle' + (run.recycles === 1 ? '' : 's'))
+        + (alignment ? ' and ' + alignment : '')
+        + (run.msaDepth === null || run.msaMode === 'single_sequence' ? '' : ' of ' + run.msaDepth + ' sequences')
+        + (run.randomSeed === null ? '' : ' (random seed ' + run.randomSeed + ')')
+        + '. The prediction was not relaxed.';
+    });
+  }
+
   /* A methods paragraph in the past tense, stating the definitions behind every number the
      viewer can show, so a paper's Methods section describes what was actually computed. */
   function methodsText() {
@@ -94,6 +124,7 @@
     const mode = root.querySelector('#gpv-color-mode').value;
     const sentences = [];
     sentences.push('Predicted structures were inspected in Protein Structure Viewer ' + viewerVersion + ' (Awuah, 2026; github.com/mbaffour/protein-structure-viewer), a browser application built on 3Dmol.js 2.4.2 (Rego & Koes, 2015).');
+    predictionRunSentences(shown).forEach(sentence => sentences.push(sentence));
     if (shown.some(entry => entry.scores.length)) sentences.push('Per-residue pLDDT was read from the B-factor column of the model files and mean pLDDT was calculated over Cα atoms' + (shown.some(entry => entry.confidence && entry.confidence.pae) ? '; predicted aligned error (PAE) matrices were read from the accompanying confidence files' : '') + '.');
     if (alignmentResults.length) {
       const bySequence = alignmentResults[0].method !== 'chain/residue IDs';

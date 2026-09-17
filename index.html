@@ -840,8 +840,9 @@ html>body{padding:0}</style>
         <input class="form-control gpv-fetch-field" id="gpv-fetch-id" type="text" autocomplete="off" spellcheck="false" aria-label="Structure identifier to fetch" placeholder="or fetch an ID: 1ubq, P69905">
         <button class="btn" type="submit" id="gpv-fetch" data-tooltip="Download a PDB entry from RCSB, or an AlphaFold DB model from EMBL-EBI"><i data-icon="cloud-download" aria-hidden="true"></i>Fetch</button>
       </form>
+      <a class="btn" id="gpv-predict-link" href="https://martin-steinegger.github.io/alphafold2-webgpu/" target="_blank" rel="noopener noreferrer" data-tooltip="Have a sequence but no structure? Fold it in your own browser with AlphaFold2 WebGPU, then drop the result ZIP here"><i data-icon="external-link" aria-hidden="true"></i>Predict</a>
     </div>
-    <span class="text-muted text-small gpv-fetch-note">Fetching contacts <code>files.rcsb.org</code> or <code>alphafold.ebi.ac.uk</code>. Files you open locally are never sent anywhere.</span>
+    <span class="text-muted text-small gpv-fetch-note">Fetching contacts <code>files.rcsb.org</code> or <code>alphafold.ebi.ac.uk</code>. Predict opens <code>alphafold2-webgpu</code> in a new tab and takes nothing with it. Files you open locally are never sent anywhere.</span>
   </div>
   <div class="gpv-import-state" id="gpv-import-state" hidden aria-live="polite">
     <progress id="gpv-import-progress" value="0" max="1"></progress>
@@ -1114,7 +1115,7 @@ html>body{padding:0}</style>
 
   <section class="gpv-tool-panel" data-gpv-panel="confidence" hidden>
     <div class="gpv-confidence-layout" id="gpv-confidence-panel" hidden>
-      <div><div class="viz-controls gpv-msa" aria-label="Multiple sequence alignment"><span class="text-small text-muted">MSA</span><label class="form-label">Colour by<select class="form-select" id="gpv-msa-metric"><option value="conservation">Conservation (1 − normalised entropy)</option><option value="identity">Identity to the query</option><option value="depth">Coverage (sequences per column)</option></select></label><label class="form-check form-switch"><input class="form-check-input" id="gpv-msa-weights" type="checkbox" checked><span class="form-check-label">Henikoff weights</span></label><button class="btn" type="button" id="gpv-msa-paint" disabled data-tooltip="Read the unpaired MSA that AlphaFold 3 used (the .a3m in the archive) and colour each chain it covers by the chosen per-column statistic">Colour by MSA</button><span class="text-muted text-small" id="gpv-msa-state">No alignment loaded. AlphaFold 3 archives carry one per entity; an .a3m can also be added on its own.</span></div>
+      <div><div class="viz-controls gpv-msa" aria-label="Multiple sequence alignment"><span class="text-small text-muted">MSA</span><label class="form-label">Colour by<select class="form-select" id="gpv-msa-metric"><option value="conservation">Conservation (1 − normalised entropy)</option><option value="identity">Identity to the query</option><option value="depth">Coverage (sequences per column)</option></select></label><label class="form-check form-switch"><input class="form-check-input" id="gpv-msa-weights" type="checkbox" checked><span class="form-check-label">Henikoff weights</span></label><button class="btn" type="button" id="gpv-msa-paint" disabled data-tooltip="Read the alignment the prediction used (the .a3m in an AlphaFold 3 or AlphaFold2 WebGPU archive) and colour each chain it covers by the chosen per-column statistic">Colour by MSA</button><span class="text-muted text-small" id="gpv-msa-state">No alignment loaded. AlphaFold 3 and AlphaFold2 WebGPU archives carry one; an .a3m can also be added on its own.</span></div>
       <div class="viz-controls"><button class="btn" type="button" id="gpv-confidence-csv">Download confidence CSV</button><button class="btn" type="button" id="gpv-profile-svg" disabled data-tooltip="Per-residue pLDDT plot of the displayed models, one panel per chain, as editable SVG">pLDDT profile SVG</button><button class="btn" type="button" id="gpv-profile-png" disabled data-tooltip="The same pLDDT profile rendered at 2× as PNG">pLDDT profile PNG</button></div><div class="table-responsive"><table class="table table-sm" aria-label="AlphaFold model confidence metrics"><thead><tr><th>Model</th><th class="text-end">Mean pLDDT</th><th class="text-end">pTM</th><th class="text-end">ipTM</th><th class="text-end">Ranking score</th><th class="text-end">Rank</th><th>Clash</th></tr></thead><tbody id="gpv-metrics"></tbody></table></div></div>
       <div class="gpv-pae-panel" id="gpv-pae-panel" hidden><div id="gpv-pae-plot" hidden><div class="viz-controls"><button class="btn" type="button" id="gpv-pae-png">Download PAE PNG</button></div><canvas id="gpv-pae" width="420" height="420" role="img" aria-label="Predicted aligned error heatmap"></canvas><div class="gpv-pae-legend text-small"><span>Low error</span><span>PAE (Å)</span><span>High error</span></div><div class="text-small" id="gpv-pae-detail">Move over the heatmap to inspect a residue pair.</div></div><div class="table-responsive" id="gpv-interface-wrap" hidden><table class="table table-sm" aria-label="Chain-pair interface confidence"><thead><tr><th>Chain pair</th><th class="text-end">ipTM</th><th class="text-end">Min PAE (Å)</th></tr></thead><tbody id="gpv-interface-metrics"></tbody></table></div></div>
     </div>
@@ -1680,6 +1681,7 @@ html>body{padding:0}</style>
   let labelRecords = [];
   let nextStructureId = 1;
   let confidenceAssets = [];
+  let predictionRuns = [];
   let alignmentResults = [];
   let selectionRecords = [];
   let measurementRecords = [];
@@ -1702,7 +1704,7 @@ html>body{padding:0}</style>
   let busyDepth = 0;
   let restoreMotion = null;
   const listPageSize = 60;
-  const viewerVersion = '2.46.2';
+  const viewerVersion = '2.47.0';
   const preferenceKey = 'protein-structure-viewer:preferences';
   const themeKey = 'protein-structure-viewer:theme';
   const labelColors = getComputedStyle(root);
@@ -1862,8 +1864,15 @@ html>body{padding:0}</style>
     let i = start;
     while (i <= end) {
       const code = bytes[i];
-      if (code === 91) { depth += 1; if (depth === 2) { row = new Float32Array(expected || 1024); filled = 0; } i += 1; continue; }
-      if (code === 93) { if (depth === 2 && row) { rows.push(filled === row.length ? row : row.slice(0, filled)); expected = filled; row = null; } depth -= 1; i += 1; continue; }
+      if (code === 91) { depth += 1; if (depth === 1 || depth === 2) { row = new Float32Array(expected || 1024); filled = 0; } i += 1; continue; }
+      /* Depth 2 closes one row of a nested matrix. Depth 1 closing with numbers still in hand and no
+         rows behind them means the array was flat, which is how ColabFold and AlphaFold2 WebGPU write
+         predicted_aligned_error; the caller folds that single run back into a square. */
+      if (code === 93) {
+        if (depth === 2 && row) { rows.push(filled === row.length ? row : row.slice(0, filled)); expected = filled; row = null; }
+        else if (depth === 1 && row && !rows.length && filled) { rows.push(row.slice(0, filled)); row = null; }
+        depth -= 1; i += 1; continue;
+      }
       if ((code >= 48 && code <= 57) || code === 45 || code === 43 || code === 46) {
         let j = i; let negative = false;
         if (code === 45 || code === 43) { negative = code === 45; j += 1; }
@@ -1887,6 +1896,19 @@ html>body{padding:0}</style>
     return rows;
   }
 
+  /* L² values in one run, back into L rows. The residue count is taken from plddt when it is there,
+     because a square root of a float count is a worse answer than the file's own length. */
+  function squareFromFlatPae(flat, residueCount) {
+    const side = Number.isInteger(residueCount) && residueCount > 0 && residueCount * residueCount === flat.length
+      ? residueCount : Math.round(Math.sqrt(flat.length));
+    if (!(side >= 1) || side * side !== flat.length) return null;
+    const rows = new Array(side);
+    /* slice, not subarray: a view keeps the whole L² buffer alive, and the session autosave
+       structured-clones every row, which would write that buffer once per row. */
+    for (let i = 0; i < side; i += 1) rows[i] = flat.slice(i * side, (i + 1) * side);
+    return rows;
+  }
+
   function parseConfidenceBytes(bytes) {
     const cuts = []; let pae = null;
     ['pae', 'predicted_aligned_error', 'contact_probs'].forEach(key => {
@@ -1900,7 +1922,13 @@ html>body{padding:0}</style>
     cuts.forEach(([start, end]) => { text += decoder.decode(bytes.subarray(position, start)) + 'null'; position = end + 1; });
     text += decoder.decode(bytes.subarray(position));
     const data = JSON.parse(text);
-    if (pae && pae.length) { const target = normalizeConfidenceJson(data); if (target && typeof target === 'object' && !Array.isArray(target)) target.pae = pae; }
+    const target = normalizeConfidenceJson(data);
+    if (pae && pae.length && target && typeof target === 'object' && !Array.isArray(target)) {
+      const square = pae.length === 1 && pae[0].length > 1
+        ? squareFromFlatPae(pae[0], Array.isArray(target.plddt) ? target.plddt.length : null)
+        : pae;
+      if (square) target.pae = square;
+    }
     return data;
   }
 
@@ -1914,6 +1942,14 @@ html>body{padding:0}</style>
        (or -confidence_v6) belong together; the version suffix carries no model index. */
     const database = stem.replace(/-(model|predicted_aligned_error|confidence)_v\d+$/, '');
     if (database !== stem) return database;
+    /* AlphaFold2 WebGPU and ColabFold write job_unrelaxed_model_1.pdb beside job_scores.json and
+       job_predicted_aligned_error_v1.json. Reduce all three to the job name, before the AlphaFold 3
+       rule below, which would otherwise leave job_unrelaxed_model_1 as job_unrelaxed_1. */
+    const folded = stem
+      .replace(/_(?:un)?relaxed_model_\d+$/, '')
+      .replace(/_scores$/, '')
+      .replace(/_predicted_aligned_error_v\d+$/, '');
+    if (folded !== stem) return folded;
     return stem.replace(/_(summary_confidences|confidences|full_data|model)(?:_(\d+))?$/, (_, marker, index) => index ? '_' + index : '');
   }
 
@@ -1941,7 +1977,9 @@ html>body{padding:0}</style>
   function confidenceFromJson(raw) {
     const data = normalizeConfidenceJson(raw);
     if (!data || typeof data !== 'object' || Array.isArray(data)) return null;
-    const pae = Array.isArray(data.pae) ? data.pae : Array.isArray(data.predicted_aligned_error) ? data.predicted_aligned_error : null;
+    const flat = Array.isArray(data.pae) ? data.pae : Array.isArray(data.predicted_aligned_error) ? data.predicted_aligned_error : null;
+    const pae = flat && flat.length && typeof flat[0] === 'number'
+      ? squareFromFlatPae(flat, Array.isArray(data.plddt) ? data.plddt.length : null) : flat;
     return {
       ptm: finiteNumber(data.ptm ?? data.predicted_tm_score),
       iptm: finiteNumber(data.iptm ?? data.interface_predicted_tm_score),
@@ -4342,6 +4380,7 @@ html>body{padding:0}</style>
     return {
       savedAt: new Date().toISOString(), viewerVersion,
       files: structures.map(entry => ({ name: entry.name, text: entry.text, format: entry.format, sourcePath: entry.sourcePath, collection: entry.collection, fetchId: entry.fetchId || null, confidence: confidenceOf(entry.confidence) || {}, rank: entry.rank })),
+      predictionRuns: predictionRuns.map(run => ({ ...run })),
       scene: sessionScene()
     };
   }
@@ -4413,6 +4452,7 @@ html>body{padding:0}</style>
     const snapshot = {
       savedAt: new Date().toISOString(), viewerVersion,
       files: structures.map(entry => ({ name: entry.name, text: entry.text, format: entry.format, sourcePath: entry.sourcePath, collection: entry.collection, fetchId: entry.fetchId || null, confidence: sessionConfidence(entry.confidence) || {}, rank: entry.rank })),
+      predictionRuns: predictionRuns.map(run => ({ ...run })),
       scene: sessionScene()
     };
     await sessionStore('readwrite', store => store.put(snapshot, 'current'));
@@ -4431,6 +4471,9 @@ html>body{padding:0}</style>
   async function restoreSession(saved) {
     const done = setBusy('Restoring session…');
     try {
+      /* The prediction settings are not a property of any one model, so they travel beside the files
+         rather than on them; without this the methods text loses its predictor after a restore. */
+      if (Array.isArray(saved.predictionRuns)) predictionRuns = saved.predictionRuns.map(run => ({ ...run }));
       saved.files.forEach(file => {
         const entry = addStructure(uniqueModelName(file.name, file.collection), file.text, file.format, file.sourcePath, file.collection);
         if (file.fetchId) entry.fetchId = file.fetchId;
@@ -5343,7 +5386,8 @@ html>body{padding:0}</style>
 
 
   /* ---------- MSA conservation ----------
-     AlphaFold 3 archives carry the unpaired MSA per entity as .a3m. The query is the first
+     AlphaFold 3 archives carry the unpaired MSA per entity as .a3m; ColabFold and AlphaFold2 WebGPU
+     write one <job>.a3m per prediction. The query is the first
      record; uppercase letters are match columns, lowercase letters insertions (dropped), '-'
      gaps. Per query column: depth (sequences with a residue), identity to the query, and
      conservation = 1 − H / log2(20) with H the Shannon entropy over the twenty amino acids.
@@ -5410,7 +5454,7 @@ html>body{padding:0}</style>
     const entry = activeEntry(); const assets = msaAssetsFor(entry);
     const button = root.querySelector('#gpv-msa-paint'); const state = root.querySelector('#gpv-msa-state');
     button.disabled = !assets.length || !entry || !entry.model;
-    if (!assets.length) { state.textContent = entry ? 'No alignment for ' + (entry.collection || 'this source') + '. AlphaFold 3 archives carry one per entity; an .a3m can also be added on its own.' : 'No alignment loaded.'; return; }
+    if (!assets.length) { state.textContent = entry ? 'No alignment for ' + (entry.collection || 'this source') + '. AlphaFold 3 and AlphaFold2 WebGPU archives carry one; an .a3m can also be added on its own.' : 'No alignment loaded.'; return; }
     state.textContent = assets.length + ' alignment' + (assets.length === 1 ? '' : 's') + ' from ' + (entry.collection || 'this source') + ': ' + clipText(assets.map(asset => asset.name.replace(/^.*_unpaired_msa_/, '')).join(', '), 90);
   }
 
@@ -5649,6 +5693,36 @@ html>body{padding:0}</style>
     catch (error) { field.focus(); field.select(); announce('Figure legend written — copy it from the field'); }
   }
 
+  /* What AlphaFold2 WebGPU's config.json says about how a prediction was made. A reader cannot judge a
+     confidence number without the model and the alignment behind it, and single-sequence mode in
+     particular explains a low pLDDT that would otherwise look like a failed prediction. */
+  function predictionRunSentences(shown) {
+    /* A config.json dropped on its own carries no archive name, which is how confidence assets are
+       matched too: no collection means it is not tied to one and applies to whatever is shown. */
+    const collections = new Set(shown.map(entry => entry.collection));
+    const runs = predictionRuns.filter(run => !run.collection || collections.has(run.collection));
+    if (!runs.length) return [];
+    const models = { alphafold2_ptm: 'model_1_ptm', alphafold2_multimer_v3: 'model_1_multimer_v3' };
+    const alignments = {
+      mmseqs2_uniref_env: 'an alignment searched against UniRef and environmental sequences through the ColabFold MMseqs2 server (Mirdita et al., 2022; Steinegger & Söding, 2017)',
+      single_sequence: 'no alignment (single-sequence mode, which lowers confidence and is not comparable with an MSA-backed prediction)',
+      custom: 'a supplied alignment'
+    };
+    return runs.map(run => {
+      const model = models[run.modelType] || (run.modelType ? run.modelType.replace(/_/g, ' ') : 'model 1');
+      const alignment = alignments[run.msaMode] || (run.msaMode ? 'an alignment in ' + run.msaMode.replace(/_/g, ' ') + ' mode' : null);
+      return (runs.length > 1 && run.collection ? 'The models in ' + run.collection + ' were' : 'The structures were')
+        + ' predicted in the browser with AlphaFold2 WebGPU (github.com/martin-steinegger/alphafold2-webgpu), a WebGPU port of AlphaFold2 (Jumper et al., 2021)'
+        + (run.modelType === 'alphafold2_multimer_v3' ? ' and AlphaFold-Multimer (Evans et al., 2021)' : '')
+        + ', using ' + model
+        + (run.recycles === null ? '' : ' with ' + run.recycles + ' recycle' + (run.recycles === 1 ? '' : 's'))
+        + (alignment ? ' and ' + alignment : '')
+        + (run.msaDepth === null || run.msaMode === 'single_sequence' ? '' : ' of ' + run.msaDepth + ' sequences')
+        + (run.randomSeed === null ? '' : ' (random seed ' + run.randomSeed + ')')
+        + '. The prediction was not relaxed.';
+    });
+  }
+
   /* A methods paragraph in the past tense, stating the definitions behind every number the
      viewer can show, so a paper's Methods section describes what was actually computed. */
   function methodsText() {
@@ -5657,6 +5731,7 @@ html>body{padding:0}</style>
     const mode = root.querySelector('#gpv-color-mode').value;
     const sentences = [];
     sentences.push('Predicted structures were inspected in Protein Structure Viewer ' + viewerVersion + ' (Awuah, 2026; github.com/mbaffour/protein-structure-viewer), a browser application built on 3Dmol.js 2.4.2 (Rego & Koes, 2015).');
+    predictionRunSentences(shown).forEach(sentence => sentences.push(sentence));
     if (shown.some(entry => entry.scores.length)) sentences.push('Per-residue pLDDT was read from the B-factor column of the model files and mean pLDDT was calculated over Cα atoms' + (shown.some(entry => entry.confidence && entry.confidence.pae) ? '; predicted aligned error (PAE) matrices were read from the accompanying confidence files' : '') + '.');
     if (alignmentResults.length) {
       const bySequence = alignmentResults[0].method !== 'chain/residue IDs';
@@ -6736,6 +6811,27 @@ html>body{padding:0}</style>
     })).sort((a, b) => (b.confidence.rankingScore ?? -Infinity) - (a.confidence.rankingScore ?? -Infinity)).map((asset, index) => ({ ...asset, rank: index + 1 }));
   }
 
+  /* AlphaFold2 WebGPU writes a config.json beside its structure recording how the prediction was run.
+     None of it pairs with a model by filename, and all of it belongs in the methods text, so it is kept
+     against the archive rather than being pushed through the confidence path, where ptm and iptm would
+     make it look like a scores file matching a model called "config". */
+  function predictionRunFromConfig(data, collection) {
+    if (!data || typeof data !== 'object' || data.implementation !== 'alphafold2-webgpu') return null;
+    const text = value => typeof value === 'string' && value ? value : null;
+    const count = value => Number.isFinite(value) ? value : null;
+    return {
+      collection,
+      implementation: 'AlphaFold2 WebGPU',
+      modelType: text(data.model_type),
+      modelNumber: count(data.model_number),
+      recycles: count(data.num_recycles),
+      msaMode: text(data.msa_mode),
+      msaDepth: count(data.msa_depth),
+      randomSeed: count(data.random_seed),
+      adapter: text(data.adapter)
+    };
+  }
+
   function registerMetadata(name, textValue, collection = null) {
     const lower = name.toLowerCase();
     if (lower.endsWith('.csv') || lower.endsWith('.tsv')) {
@@ -6751,6 +6847,8 @@ html>body{padding:0}</style>
       pendingScene = data;
       return true;
     }
+    const run = predictionRunFromConfig(data, collection);
+    if (run) { predictionRuns = predictionRuns.filter(entry => entry.collection !== run.collection); predictionRuns.push(run); return true; }
     const ranked = rankingAssets(name, data);
     if (ranked.length) {
       ranked.forEach(asset => { asset.collection = collection; });
@@ -7168,7 +7266,12 @@ html>body{padding:0}</style>
               if (memberIndex % 5 === 4) await nextPaint();
             } catch (error) { skipped += 1; failures.push(member.name + ': ' + error.message); }
           }
-          const msaMembers = members.filter(member => !member.dir && /\.a3m$/i.test(member.name) && /unpaired/i.test(member.name));
+          /* AlphaFold 3 archives carry one alignment per entity and name them "unpaired"; ColabFold and
+             AlphaFold2 WebGPU write a single <job>.a3m. Prefer the named ones when both are present, so
+             an AlphaFold 3 archive still contributes exactly the files it used to. */
+          const a3mMembers = members.filter(member => !member.dir && /\.a3m$/i.test(member.name));
+          const unpaired = a3mMembers.filter(member => /unpaired/i.test(member.name));
+          const msaMembers = unpaired.length ? unpaired : a3mMembers;
           for (const member of msaMembers) {
             try {
               const text = await member.async('string');
@@ -10421,6 +10524,7 @@ applyBackground();
     root.querySelector('#gpv-annotation-state').textContent = 'Pick a tool, start drawing, then click atoms in the main viewer.';
     savedViews = [];
     confidenceAssets = [];
+    predictionRuns = [];
     alignmentResults = [];
     pendingScene = null;
     root.querySelector('#gpv-residue').textContent = 'Click any atom in the viewer to inspect it.';
@@ -10993,7 +11097,7 @@ applyBackground();
   offerSessionRestore();
   /* ?debug=1 exposes a few internals for the regression suite and for bug reports;
      it has no effect otherwise. */
-  if (new URLSearchParams(location.search).has('debug')) window.__viewerDebug = { viewer, pickAtomAt, displayedEntries, activeEntry, colorOptions, sceneSettings, contactResult: () => contactResult, residueData: () => residueData, msaAssets: () => msaAssets, entries: () => structures, nearbyResidues, assemblyDimensions, paeDomains, parseConfidenceBytes, methodsText, alignmentResults: () => alignmentResults, ensembleSpread: () => ensembleSpread, siteResults: () => siteResults, interfaceResults: () => interfaceResults, solventAccessibleArea, heavyAtoms, ligandGroups, architectureModel, domainSets, distinguishingNames, rmsdMatrix: () => rmsdMatrix, rmsdMedoid, scaleBarSpec, pixelsPerAngstrom, sceneCentre, exportDimensions, exportViewer: () => exportViewer, renderPublicationImage, furnitureLayout, legendMetrics, legendWanted, figurePalette, figureScale, releaseExportViewer, labelRecords: () => labelRecords, labelPosition, labelHitAt, labelScreenBox, separateLabels, spotlightResidues: () => spotlightResidues, positionEffect: () => positionEffect, savedViews: () => savedViews, selectionRecords: () => selectionRecords };
+  if (new URLSearchParams(location.search).has('debug')) window.__viewerDebug = { viewer, pickAtomAt, displayedEntries, activeEntry, colorOptions, sceneSettings, contactResult: () => contactResult, residueData: () => residueData, msaAssets: () => msaAssets, predictionRuns: () => predictionRuns, associationKey, squareFromFlatPae, entries: () => structures, nearbyResidues, assemblyDimensions, paeDomains, parseConfidenceBytes, methodsText, alignmentResults: () => alignmentResults, ensembleSpread: () => ensembleSpread, siteResults: () => siteResults, interfaceResults: () => interfaceResults, solventAccessibleArea, heavyAtoms, ligandGroups, architectureModel, domainSets, distinguishingNames, rmsdMatrix: () => rmsdMatrix, rmsdMedoid, scaleBarSpec, pixelsPerAngstrom, sceneCentre, exportDimensions, exportViewer: () => exportViewer, renderPublicationImage, furnitureLayout, legendMetrics, legendWanted, figurePalette, figureScale, releaseExportViewer, labelRecords: () => labelRecords, labelPosition, labelHitAt, labelScreenBox, separateLabels, spotlightResidues: () => spotlightResidues, positionEffect: () => positionEffect, savedViews: () => savedViews, selectionRecords: () => selectionRecords };
   applyTheme(readJson(themeKey, 'system'));
   selectToolTab('models');
   applyAppearance();

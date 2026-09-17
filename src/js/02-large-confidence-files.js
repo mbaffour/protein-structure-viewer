@@ -49,8 +49,15 @@
     let i = start;
     while (i <= end) {
       const code = bytes[i];
-      if (code === 91) { depth += 1; if (depth === 2) { row = new Float32Array(expected || 1024); filled = 0; } i += 1; continue; }
-      if (code === 93) { if (depth === 2 && row) { rows.push(filled === row.length ? row : row.slice(0, filled)); expected = filled; row = null; } depth -= 1; i += 1; continue; }
+      if (code === 91) { depth += 1; if (depth === 1 || depth === 2) { row = new Float32Array(expected || 1024); filled = 0; } i += 1; continue; }
+      /* Depth 2 closes one row of a nested matrix. Depth 1 closing with numbers still in hand and no
+         rows behind them means the array was flat, which is how ColabFold and AlphaFold2 WebGPU write
+         predicted_aligned_error; the caller folds that single run back into a square. */
+      if (code === 93) {
+        if (depth === 2 && row) { rows.push(filled === row.length ? row : row.slice(0, filled)); expected = filled; row = null; }
+        else if (depth === 1 && row && !rows.length && filled) { rows.push(row.slice(0, filled)); row = null; }
+        depth -= 1; i += 1; continue;
+      }
       if ((code >= 48 && code <= 57) || code === 45 || code === 43 || code === 46) {
         let j = i; let negative = false;
         if (code === 45 || code === 43) { negative = code === 45; j += 1; }
@@ -74,6 +81,19 @@
     return rows;
   }
 
+  /* L² values in one run, back into L rows. The residue count is taken from plddt when it is there,
+     because a square root of a float count is a worse answer than the file's own length. */
+  function squareFromFlatPae(flat, residueCount) {
+    const side = Number.isInteger(residueCount) && residueCount > 0 && residueCount * residueCount === flat.length
+      ? residueCount : Math.round(Math.sqrt(flat.length));
+    if (!(side >= 1) || side * side !== flat.length) return null;
+    const rows = new Array(side);
+    /* slice, not subarray: a view keeps the whole L² buffer alive, and the session autosave
+       structured-clones every row, which would write that buffer once per row. */
+    for (let i = 0; i < side; i += 1) rows[i] = flat.slice(i * side, (i + 1) * side);
+    return rows;
+  }
+
   function parseConfidenceBytes(bytes) {
     const cuts = []; let pae = null;
     ['pae', 'predicted_aligned_error', 'contact_probs'].forEach(key => {
@@ -87,7 +107,13 @@
     cuts.forEach(([start, end]) => { text += decoder.decode(bytes.subarray(position, start)) + 'null'; position = end + 1; });
     text += decoder.decode(bytes.subarray(position));
     const data = JSON.parse(text);
-    if (pae && pae.length) { const target = normalizeConfidenceJson(data); if (target && typeof target === 'object' && !Array.isArray(target)) target.pae = pae; }
+    const target = normalizeConfidenceJson(data);
+    if (pae && pae.length && target && typeof target === 'object' && !Array.isArray(target)) {
+      const square = pae.length === 1 && pae[0].length > 1
+        ? squareFromFlatPae(pae[0], Array.isArray(target.plddt) ? target.plddt.length : null)
+        : pae;
+      if (square) target.pae = square;
+    }
     return data;
   }
 
@@ -101,6 +127,14 @@
        (or -confidence_v6) belong together; the version suffix carries no model index. */
     const database = stem.replace(/-(model|predicted_aligned_error|confidence)_v\d+$/, '');
     if (database !== stem) return database;
+    /* AlphaFold2 WebGPU and ColabFold write job_unrelaxed_model_1.pdb beside job_scores.json and
+       job_predicted_aligned_error_v1.json. Reduce all three to the job name, before the AlphaFold 3
+       rule below, which would otherwise leave job_unrelaxed_model_1 as job_unrelaxed_1. */
+    const folded = stem
+      .replace(/_(?:un)?relaxed_model_\d+$/, '')
+      .replace(/_scores$/, '')
+      .replace(/_predicted_aligned_error_v\d+$/, '');
+    if (folded !== stem) return folded;
     return stem.replace(/_(summary_confidences|confidences|full_data|model)(?:_(\d+))?$/, (_, marker, index) => index ? '_' + index : '');
   }
 
@@ -128,7 +162,9 @@
   function confidenceFromJson(raw) {
     const data = normalizeConfidenceJson(raw);
     if (!data || typeof data !== 'object' || Array.isArray(data)) return null;
-    const pae = Array.isArray(data.pae) ? data.pae : Array.isArray(data.predicted_aligned_error) ? data.predicted_aligned_error : null;
+    const flat = Array.isArray(data.pae) ? data.pae : Array.isArray(data.predicted_aligned_error) ? data.predicted_aligned_error : null;
+    const pae = flat && flat.length && typeof flat[0] === 'number'
+      ? squareFromFlatPae(flat, Array.isArray(data.plddt) ? data.plddt.length : null) : flat;
     return {
       ptm: finiteNumber(data.ptm ?? data.predicted_tm_score),
       iptm: finiteNumber(data.iptm ?? data.interface_predicted_tm_score),

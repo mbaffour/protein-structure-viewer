@@ -65,6 +65,7 @@
     const snapshot = {
       savedAt: new Date().toISOString(), viewerVersion,
       files: structures.map(entry => ({ name: entry.name, text: entry.text, format: entry.format, sourcePath: entry.sourcePath, collection: entry.collection, fetchId: entry.fetchId || null, confidence: sessionConfidence(entry.confidence) || {}, rank: entry.rank })),
+      predictionRuns: predictionRuns.map(run => ({ ...run })),
       scene: sessionScene()
     };
     await sessionStore('readwrite', store => store.put(snapshot, 'current'));
@@ -83,6 +84,9 @@
   async function restoreSession(saved) {
     const done = setBusy('Restoring session…');
     try {
+      /* The prediction settings are not a property of any one model, so they travel beside the files
+         rather than on them; without this the methods text loses its predictor after a restore. */
+      if (Array.isArray(saved.predictionRuns)) predictionRuns = saved.predictionRuns.map(run => ({ ...run }));
       saved.files.forEach(file => {
         const entry = addStructure(uniqueModelName(file.name, file.collection), file.text, file.format, file.sourcePath, file.collection);
         if (file.fetchId) entry.fetchId = file.fetchId;

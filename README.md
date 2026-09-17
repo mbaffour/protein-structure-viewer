@@ -25,6 +25,10 @@ Structure files you open stay in the browser. Nothing is uploaded.
    - `1ubq` — a PDB entry from RCSB
    - `P69905` — a UniProt accession, resolved against AlphaFold DB
    - `AF-P0DTC2-F1` — an AlphaFold DB entry name
+
+   If you have a sequence but no structure, **Predict** opens
+   [AlphaFold2 WebGPU](https://martin-steinegger.github.io/alphafold2-webgpu/) in a new tab, which
+   folds it on your own GPU. Download the result archive from there and drop it here.
 3. Use the tool tabs underneath the viewport: **Models**, **Appearance**, **Annotate**,
    **Compare**, **Confidence**, **Publish**.
 
@@ -38,6 +42,8 @@ Press <kbd>?</kbd> in the viewer for keyboard shortcuts and inline help.
 | AlphaFold result `.zip` | Every model is extracted and grouped under the archive name; template hits are ignored |
 | `*_confidences.json`, `*_summary_confidences.json` | pTM, ipTM, ranking score, clash flag, and PAE are attached to matching models |
 | `ranking_debug.json`, `ranking_scores.csv` | Ranks and ranking scores are attached to matching models |
+| An [AlphaFold2 WebGPU](https://martin-steinegger.github.io/alphafold2-webgpu/) result `.zip` | The model, its `*_scores.json` and `*_predicted_aligned_error_v1.json`, its `.a3m` and its `config.json` are read together and paired by job name |
+| `*_scores.json` | pTM, ipTM, ranking score and PAE are attached; a flat `predicted_aligned_error` is folded back into a square matrix |
 | A scene JSON saved from the Publish tab | The whole annotated scene is restored once its structures are present |
 
 Multi-model archives open one model at a time so the browser does not try to render hundreds of
@@ -282,6 +288,11 @@ in exactly two situations:
   All three are integrity-pinned with SRI hashes, so a tampered or substituted file will not execute.
 - When you use **Fetch** to download a structure by identifier, to `files.rcsb.org` or
   `alphafold.ebi.ac.uk`. That request sends only the identifier you typed.
+
+The **Predict** button is an ordinary link: it opens AlphaFold2 WebGPU in a new tab and sends nothing
+from this page with it. What that separate site then does with a sequence you type into it is
+governed by its own documentation — its default alignment mode submits the sequence to the public
+ColabFold MMseqs2 API, and its single-sequence mode does not.
 
 A Content-Security-Policy header restricts the page to exactly those origins. If the libraries cannot
 be reached, the viewer says so rather than failing silently.

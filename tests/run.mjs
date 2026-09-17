@@ -11,7 +11,7 @@ import { createReadStream, existsSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, extname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { writeFixtures } from './fixtures.mjs';
+import { writeFixtures, writeAlphafoldWebgpuFixtures } from './fixtures.mjs';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const failures = [];
@@ -2856,6 +2856,135 @@ await step('the fetched entry is removed so later groups see the same models as 
   await page.unroute('https://alphafold.ebi.ac.uk/api/prediction/P69905');
   await page.unroute('https://alphafold.ebi.ac.uk/files/AF-P69905-F1-model_v6.cif');
   await page.unroute('https://alphafold.ebi.ac.uk/files/AF-P69905-F1-predicted_aligned_error_v6.json');
+});
+
+group('AlphaFold2 WebGPU results');
+/* martin-steinegger.github.io/alphafold2-webgpu folds a sequence in the browser and downloads a
+   ColabFold-shaped archive. Two things about it are new here: job_scores.json writes
+   predicted_aligned_error as one flat run of L² numbers rather than nested rows, and the files pair
+   by a job name the AlphaFold 3 / AlphaFold DB heuristics did not recognise. */
+const af2wg = await writeAlphafoldWebgpuFixtures(work);
+
+await step('the Predict link points at AlphaFold2 WebGPU and opens safely in a new tab', async () => {
+  const link = await page.evaluate(() => {
+    const anchor = document.querySelector('#gpv-predict-link');
+    return anchor ? { href: anchor.getAttribute('href'), target: anchor.getAttribute('target'), rel: anchor.getAttribute('rel'), text: anchor.textContent.trim() } : null;
+  });
+  if (!link) throw new Error('no #gpv-predict-link');
+  if (link.href !== 'https://martin-steinegger.github.io/alphafold2-webgpu/') throw new Error('href ' + link.href);
+  if (link.target !== '_blank' || !/noopener/.test(link.rel) || !/noreferrer/.test(link.rel)) throw new Error(JSON.stringify(link));
+  if (link.text !== 'Predict') throw new Error('label ' + JSON.stringify(link.text));
+});
+
+await step('a flat L² predicted_aligned_error folds back into square rows', async () => {
+  const shaped = await page.evaluate(() => {
+    const rows = window.__viewerDebug.squareFromFlatPae(Float32Array.from([1, 2, 3, 4, 5, 6, 7, 8, 9]), 3);
+    const guessed = window.__viewerDebug.squareFromFlatPae(Float32Array.from([1, 2, 3, 4]), null);
+    return {
+      side: rows.length, width: rows[0].length, corner: rows[2][0], middle: rows[1][1],
+      guessedSide: guessed.length,
+      ragged: window.__viewerDebug.squareFromFlatPae(Float32Array.from([1, 2, 3]), null),
+      /* Separate buffers, or the session autosave would clone the whole matrix once per row. */
+      shared: rows[0].buffer === rows[1].buffer
+    };
+  });
+  if (shaped.side !== 3 || shaped.width !== 3 || shaped.corner !== 7 || shaped.middle !== 5) throw new Error(JSON.stringify(shaped));
+  if (shaped.guessedSide !== 2) throw new Error('square root fallback gave ' + shaped.guessedSide);
+  if (shaped.ragged !== null) throw new Error('a non-square run should be refused');
+  if (shaped.shared) throw new Error('rows alias one buffer');
+});
+
+await step('the archive job name pairs the structure, the scores and the PAE file', async () => {
+  const keys = await page.evaluate(() => ['demo_unrelaxed_model_1.pdb', 'demo_scores.json', 'demo_predicted_aligned_error_v1.json', 'demo_relaxed_model_2.pdb'].map(window.__viewerDebug.associationKey));
+  if (keys.slice(0, 3).some(key => key !== 'demo') || keys[3] !== 'demo') throw new Error(JSON.stringify(keys));
+  /* The AlphaFold 3 and AlphaFold DB rules must still win where they applied before. */
+  const existing = await page.evaluate(() => ({
+    db: window.__viewerDebug.associationKey('AF-P69905-F1-predicted_aligned_error_v6.json'),
+    dbModel: window.__viewerDebug.associationKey('AF-P69905-F1-model_v6.cif'),
+    af3: window.__viewerDebug.associationKey('fold_x_summary_confidences_0.json'),
+    af3Model: window.__viewerDebug.associationKey('fold_x_model_0.cif')
+  }));
+  if (existing.db !== existing.dbModel || existing.af3 !== existing.af3Model) throw new Error(JSON.stringify(existing));
+});
+
+await step('the downloaded ZIP loads as one model with pTM, a square PAE and its alignment', async () => {
+  const before = await page.locator('#gpv-list [data-entry-id]').count();
+  await tab('models');
+  await page.setInputFiles('#gpv-files', [af2wg.archive]); await page.waitForTimeout(2000);
+  if (await page.locator('#gpv-list [data-entry-id]').count() !== before + 1) throw new Error('model count did not rise by one');
+  const info = await page.evaluate(() => {
+    const entry = window.__viewerDebug.entries().find(e => /demo/.test(e.collection || ''));
+    if (!entry) return null;
+    const pae = entry.confidence && entry.confidence.pae;
+    return {
+      scores: entry.scores.length, ptm: entry.confidence.ptm,
+      side: pae ? pae.length : 0, width: pae && pae[0] ? pae[0].length : 0,
+      maximum: entry.confidence.paeMaximum,
+      msa: window.__viewerDebug.msaAssets().length,
+      run: window.__viewerDebug.predictionRuns()[0] || null
+    };
+  });
+  if (!info) throw new Error('no entry from the archive');
+  if (info.scores !== 30) throw new Error('Cα scores ' + info.scores);
+  if (Math.abs(info.ptm - 0.812) > 1e-6) throw new Error('pTM ' + info.ptm);
+  if (info.side !== 30 || info.width !== 30) throw new Error('PAE ' + info.side + 'x' + info.width);
+  if (!(info.maximum > 0)) throw new Error('PAE maximum ' + info.maximum);
+  if (!info.msa) throw new Error('the archive .a3m was not taken (it is not named "unpaired")');
+  if (!info.run || info.run.recycles !== 3 || info.run.msaMode !== 'mmseqs2_uniref_env') throw new Error('config.json: ' + JSON.stringify(info.run));
+});
+
+await step('PAE domains run on the recovered matrix and the methods text names the predictor', async () => {
+  const domains = await page.evaluate(() => {
+    const entry = window.__viewerDebug.entries().find(e => /demo/.test(e.collection || ''));
+    const result = window.__viewerDebug.paeDomains(entry.confidence.pae, 5);
+    return result ? result.domains.length : 0;
+  });
+  if (!domains) throw new Error('no domains from the recovered PAE');
+  const methods = await page.evaluate(() => window.__viewerDebug.methodsText());
+  for (const phrase of ['AlphaFold2 WebGPU', 'model_1_ptm', '3 recycles', 'ColabFold MMseqs2']) {
+    if (!methods.includes(phrase)) throw new Error('methods text lacks "' + phrase + '": ' + methods.slice(0, 600));
+  }
+});
+
+await step('the run settings are written into the autosaved session', async () => {
+  /* They belong to the archive, not to any one model, so they ride beside the files rather than on
+     them — and without that the methods text would lose its predictor on the next reload. */
+  await page.waitForTimeout(2200);
+  const saved = await page.evaluate(() => new Promise(resolve => {
+    const open = indexedDB.open('protein-structure-viewer', 1);
+    open.onsuccess = () => {
+      const request = open.result.transaction('session', 'readonly').objectStore('session').get('current');
+      request.onsuccess = () => { open.result.close(); resolve(request.result ? request.result.predictionRuns : null); };
+      request.onerror = () => { open.result.close(); resolve(null); };
+    };
+    open.onerror = () => resolve(null);
+  }));
+  if (!Array.isArray(saved) || !saved.length) throw new Error('no predictionRuns in the autosave: ' + JSON.stringify(saved));
+  if (saved[0].recycles !== 3 || saved[0].msaMode !== 'mmseqs2_uniref_env') throw new Error(JSON.stringify(saved[0]));
+});
+
+await step('the same files dropped loose rather than zipped pair the same way', async () => {
+  await tab('models');
+  const zipped = await page.evaluate(() => { const entry = window.__viewerDebug.entries().find(e => /demo/.test(e.collection || '')); return entry ? entry.id : null; });
+  if (zipped === null) throw new Error('the archive entry went missing before this step');
+  await page.click('#gpv-list [data-entry-id="' + zipped + '"] button:has-text("Remove")'); await page.waitForTimeout(300);
+  await page.setInputFiles('#gpv-files', af2wg.loose); await page.waitForTimeout(2000);
+  const info = await page.evaluate(() => {
+    const entry = window.__viewerDebug.entries().find(e => /af2wg_demo_unrelaxed/.test(e.name));
+    if (!entry) return null;
+    const pae = entry.confidence && entry.confidence.pae;
+    return { ptm: entry.confidence.ptm, side: pae ? pae.length : 0, width: pae && pae[0] ? pae[0].length : 0 };
+  });
+  if (!info) throw new Error('no entry from the loose files');
+  if (Math.abs(info.ptm - 0.812) > 1e-6 || info.side !== 30 || info.width !== 30) throw new Error(JSON.stringify(info));
+});
+
+await step('the AlphaFold2 WebGPU entries are removed so later groups see the same models as before', async () => {
+  await tab('models');
+  const leftover = await page.evaluate(() => window.__viewerDebug.entries().filter(e => /af2wg_|demo/.test(e.name + ' ' + (e.collection || ''))).map(e => e.id));
+  for (const id of leftover) { await page.click('#gpv-list [data-entry-id="' + id + '"] button:has-text("Remove")'); await page.waitForTimeout(200); }
+  if (await page.evaluate(() => window.__viewerDebug.entries().some(e => /af2wg_|demo/.test(e.name + ' ' + (e.collection || ''))))) throw new Error('entries still present');
+  await page.selectOption('#gpv-color-mode', 'plddt'); await page.waitForTimeout(200);
 });
 
 group('share links');

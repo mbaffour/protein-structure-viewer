@@ -39,6 +39,7 @@
     return {
       savedAt: new Date().toISOString(), viewerVersion,
       files: structures.map(entry => ({ name: entry.name, text: entry.text, format: entry.format, sourcePath: entry.sourcePath, collection: entry.collection, fetchId: entry.fetchId || null, confidence: confidenceOf(entry.confidence) || {}, rank: entry.rank })),
+      predictionRuns: predictionRuns.map(run => ({ ...run })),
       scene: sessionScene()
     };
   }
