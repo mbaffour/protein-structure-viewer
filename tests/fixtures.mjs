@@ -97,16 +97,20 @@ function storedZip(entries) {
   return Buffer.concat([...parts, ...central, end]);
 }
 
-export function alphafoldWebgpuFiles({ job = 'demo', residues = 30 } = {}) {
+/* Two clear domains, so asserting on the segmentation says something: a PAE that came back
+   transposed or shifted by a row would not split into the halves the coordinates have. */
+export function alphafoldWebgpuFiles({ job = 'demo', residues = 60 } = {}) {
   const structure = pdb({ seed: 3, residues, chains: 'A' });
   const random = mulberry32(11);
+  const half = residues / 2;
   const plddt = Array.from({ length: residues }, (_, i) => Number((55 + 40 * Math.sin(i / 6)).toFixed(2)));
   const flat = [];
   const rows = [];
   for (let i = 0; i < residues; i += 1) {
     const row = [];
     for (let j = 0; j < residues; j += 1) {
-      const value = Number((Math.abs(i - j) * 0.4 + random() * 0.2).toFixed(2));
+      const together = (i < half) === (j < half);
+      const value = Number(((together ? 1.2 : 18) + random() * 0.2).toFixed(2));
       row.push(value); flat.push(value);
     }
     rows.push(row);

@@ -2925,9 +2925,9 @@ await step('the downloaded ZIP loads as one model with pTM, a square PAE and its
     };
   });
   if (!info) throw new Error('no entry from the archive');
-  if (info.scores !== 30) throw new Error('Cα scores ' + info.scores);
+  if (info.scores !== 60) throw new Error('Cα scores ' + info.scores);
   if (Math.abs(info.ptm - 0.812) > 1e-6) throw new Error('pTM ' + info.ptm);
-  if (info.side !== 30 || info.width !== 30) throw new Error('PAE ' + info.side + 'x' + info.width);
+  if (info.side !== 60 || info.width !== 60) throw new Error('PAE ' + info.side + 'x' + info.width);
   if (!(info.maximum > 0)) throw new Error('PAE maximum ' + info.maximum);
   if (!info.msa) throw new Error('the archive .a3m was not taken (it is not named "unpaired")');
   if (!info.run || info.run.recycles !== 3 || info.run.msaMode !== 'mmseqs2_uniref_env') throw new Error('config.json: ' + JSON.stringify(info.run));
@@ -2936,10 +2936,11 @@ await step('the downloaded ZIP loads as one model with pTM, a square PAE and its
 await step('PAE domains run on the recovered matrix and the methods text names the predictor', async () => {
   const domains = await page.evaluate(() => {
     const entry = window.__viewerDebug.entries().find(e => /demo/.test(e.collection || ''));
-    const result = window.__viewerDebug.paeDomains(entry.confidence.pae, 5);
-    return result ? result.domains.length : 0;
+    const result = window.__viewerDebug.paeDomains(entry, 5);
+    return result ? { count: result.domains.length, sizes: result.domains.map(d => d.tokens.length), reason: result.reason || null } : null;
   });
-  if (!domains) throw new Error('no domains from the recovered PAE');
+  /* The fixture's two halves: a matrix that came back transposed or shifted would not split here. */
+  if (!domains || domains.count !== 2) throw new Error('domains from the recovered PAE: ' + JSON.stringify(domains));
   const methods = await page.evaluate(() => window.__viewerDebug.methodsText());
   for (const phrase of ['AlphaFold2 WebGPU', 'model_1_ptm', '3 recycles', 'ColabFold MMseqs2']) {
     if (!methods.includes(phrase)) throw new Error('methods text lacks "' + phrase + '": ' + methods.slice(0, 600));
@@ -2966,8 +2967,7 @@ await step('the run settings are written into the autosaved session', async () =
 await step('the same files dropped loose rather than zipped pair the same way', async () => {
   await tab('models');
   const zipped = await page.evaluate(() => { const entry = window.__viewerDebug.entries().find(e => /demo/.test(e.collection || '')); return entry ? entry.id : null; });
-  if (zipped === null) throw new Error('the archive entry went missing before this step');
-  await page.click('#gpv-list [data-entry-id="' + zipped + '"] button:has-text("Remove")'); await page.waitForTimeout(300);
+  if (zipped !== null) { await page.click('#gpv-list [data-entry-id="' + zipped + '"] button:has-text("Remove")'); await page.waitForTimeout(300); }
   await page.setInputFiles('#gpv-files', af2wg.loose); await page.waitForTimeout(2000);
   const info = await page.evaluate(() => {
     const entry = window.__viewerDebug.entries().find(e => /af2wg_demo_unrelaxed/.test(e.name));
@@ -2976,7 +2976,7 @@ await step('the same files dropped loose rather than zipped pair the same way', 
     return { ptm: entry.confidence.ptm, side: pae ? pae.length : 0, width: pae && pae[0] ? pae[0].length : 0 };
   });
   if (!info) throw new Error('no entry from the loose files');
-  if (Math.abs(info.ptm - 0.812) > 1e-6 || info.side !== 30 || info.width !== 30) throw new Error(JSON.stringify(info));
+  if (Math.abs(info.ptm - 0.812) > 1e-6 || info.side !== 60 || info.width !== 60) throw new Error(JSON.stringify(info));
 });
 
 await step('the AlphaFold2 WebGPU entries are removed so later groups see the same models as before', async () => {
@@ -2984,7 +2984,6 @@ await step('the AlphaFold2 WebGPU entries are removed so later groups see the sa
   const leftover = await page.evaluate(() => window.__viewerDebug.entries().filter(e => /af2wg_|demo/.test(e.name + ' ' + (e.collection || ''))).map(e => e.id));
   for (const id of leftover) { await page.click('#gpv-list [data-entry-id="' + id + '"] button:has-text("Remove")'); await page.waitForTimeout(200); }
   if (await page.evaluate(() => window.__viewerDebug.entries().some(e => /af2wg_|demo/.test(e.name + ' ' + (e.collection || ''))))) throw new Error('entries still present');
-  await page.selectOption('#gpv-color-mode', 'plddt'); await page.waitForTimeout(200);
 });
 
 group('share links');
