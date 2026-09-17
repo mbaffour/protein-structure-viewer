@@ -116,7 +116,12 @@ scene manifests and saved views match on, so renaming never breaks a restore. Cl
 back to the file name.
 
 **Composition of the current model** lists each chain with its residue count, residue range, mean
-pLDDT and colour swatch, and a **Shown** switch. Unticking a chain hides it everywhere — viewer,
+pLDDT and colour, and **Shown** and **Faded** switches. The colour is a picker, not only a key:
+click it to give that chain whatever colour the figure needs — applied at once in the viewer, the
+synchronized panels, the sequence strip, the legend, every export and the report — double-click it
+to hand that chain back its palette colour, and **Reset chain colours** to hand them all back.
+Setting a colour switches the view to chain colouring, so you see the change you just made.
+Unticking a chain hides it everywhere — viewer,
 synchronized panels, PNG and SVG exports, the surface — while the sequence strip keeps the row, dimmed
 and marked *hidden*, so you still see what is missing. **Show all chains** restores them. The line
 underneath counts ligands and ions by residue name (HEM ×4, ZN ×2 …); water is never counted. Hidden
@@ -159,8 +164,11 @@ Notes on the colour schemes:
   its two or three distinct proteins; the legend names each entity with a Greek letter and its copy
   count, chains and length (α ×60 · A, B, … · 426 aa), abbreviating with `+N more` past twenty
   entities. The composition table carries the same line.
-- **Per chain** colouring uses a fixed palette in sorted chain order, so chain A is the same colour in
-  every model, every synchronized panel, the sequence strip, the exported legend, and the report. The
+- **Per chain** colouring assigns a palette colour in sorted chain order, so chain A is the same
+  colour in every model, every synchronized panel, the sequence strip, the exported legend, and the
+  report — unless you choose otherwise: the colour picker on each row of the **Composition** table
+  (and, while this scheme is active, on each chain row of *Publish → Edit figure labels*) overrides
+  the palette for that chain everywhere those surfaces read it. The
   legend under the viewport names every chain, wrapping onto as many rows as it needs; past twenty
   chains it names the first nineteen and ends with `+N more`, and the generated figure legend text
   names them all. In overlay mode with per-structure colouring the legend names the models instead.
@@ -637,6 +645,12 @@ names; renamed entries keep their residue ranges on screen, and nothing in the d
 keeps the default. Labels are keyed by colour scheme and default entry, so a name given to "D1" in PAE
 domain colouring does not touch the chain legend, and they are part of the scene: scenes, session files
 and share links carry them, undo covers them, and **Reset labels** clears the current scheme's names.
+
+While **chain** colouring is the active scheme, the swatch beside each chain row in that table is the
+same colour picker the Composition table carries, so a chain can be recoloured without leaving the
+figure you are composing: click to set it, double-click to go back to its palette colour. It is one
+override rather than a per-figure copy — what you set here is what the viewer, the other panels, the
+sequence strip and every export show.
 Model names in the *Model* legend come from the display name set in the Models tab; annotated domains
 are named where they are defined, in Annotate → Domains.
 

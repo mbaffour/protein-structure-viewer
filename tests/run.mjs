@@ -745,6 +745,59 @@ await step('the colour-blind-safe palette recolours chain A to Okabe–Ito blue'
   const restored = await page.locator('#gpv-plddt-legend .gpv-swatch').first().evaluate(el => getComputedStyle(el).backgroundColor);
   if (restored !== 'rgb(59, 130, 246)') throw new Error('default chain A swatch: ' + restored);
 });
+/* The colour a chain is given overrides chainColor(), which every surface reads, so the check is
+   that one edit reaches all of them and that both ways back — one chain, then all of them — return
+   the palette colour. The reset is dispatched rather than really double-clicked: a real click on
+   <input type="color"> opens the operating system's colour dialog in a headed run, which would hang
+   the suite. fill() sets the value and fires input without opening anything. */
+await step('a chain takes the colour it is given, in the view, the strip and the key, and gives it back', async () => {
+  await tab('appearance'); await page.selectOption('#gpv-color-mode', 'structure'); await page.waitForTimeout(300);
+  await tab('models');
+  const picker = page.locator('#gpv-chain-rows input[aria-label="Colour for chain A"]');
+  if (!(await picker.count())) throw new Error('no colour picker on the chain A row');
+  const snapshot = () => page.evaluate(() => document.querySelector('#gpv-stage canvas').toDataURL());
+  const before = await snapshot();
+  await picker.fill('#ff00ff'); await page.waitForTimeout(600);
+  /* Setting a colour from any other scheme has to switch to chain colouring, or the edit is invisible. */
+  const mode = await page.inputValue('#gpv-color-mode');
+  if (mode !== 'chain') throw new Error('colour mode after the edit: ' + mode);
+  if ((await snapshot()) === before) throw new Error('the custom chain colour did not change the render');
+  const key = await page.locator('#gpv-plddt-legend .gpv-swatch').first().evaluate(el => getComputedStyle(el).backgroundColor);
+  if (key !== 'rgb(255, 0, 255)') throw new Error('chain A key swatch: ' + key);
+  /* Scan the row rather than sample one pixel: the cells are drawn with a gap between them at this
+     width, so a single sample can legitimately land on the background. */
+  const strip = await page.locator('#gpv-sequence-rows canvas').first().evaluate(canvas => {
+    const row = canvas.getContext('2d').getImageData(0, Math.floor(canvas.height / 2), canvas.width, 1).data;
+    let magenta = 0;
+    for (let x = 0; x < row.length; x += 4) if (row[x] > 200 && row[x + 1] < 60 && row[x + 2] > 200) magenta += 1;
+    return magenta;
+  });
+  if (!strip) throw new Error('the chain A strip row carries no magenta');
+  await picker.dispatchEvent('dblclick'); await page.waitForTimeout(500);
+  if ((await picker.inputValue()) !== '#3b82f6') throw new Error('double-click did not restore the palette colour: ' + (await picker.inputValue()));
+  await picker.fill('#00ffff'); await page.waitForTimeout(400);
+  await page.click('#gpv-chain-colors-reset'); await page.waitForTimeout(500);
+  const cleared = await page.locator('#gpv-plddt-legend .gpv-swatch').first().evaluate(el => getComputedStyle(el).backgroundColor);
+  if (cleared !== 'rgb(59, 130, 246)') throw new Error('Reset chain colours left chain A at ' + cleared);
+  console.log('       view, strip and key all magenta · one chain reset, then all');
+});
+await step('the figure label editor recolours a chain without leaving the Publish tab', async () => {
+  await tab('appearance'); await page.selectOption('#gpv-color-mode', 'chain'); await page.waitForTimeout(300);
+  await tab('publish');
+  await page.click('#gpv-labels-edit'); await page.waitForTimeout(300);
+  const picker = page.locator('#gpv-labels-rows input[type="color"]').first();
+  if (!(await picker.count())) throw new Error('the chain rows carry no colour picker');
+  await picker.fill('#00ff00'); await page.waitForTimeout(600);
+  const key = await page.locator('#gpv-plddt-legend .gpv-swatch').first().evaluate(el => getComputedStyle(el).backgroundColor);
+  if (key !== 'rgb(0, 255, 0)') throw new Error('key swatch after editing from Publish: ' + key);
+  /* One override, not a copy per tab: the Composition table must already agree. */
+  await tab('models');
+  const mirrored = await page.locator('#gpv-chain-rows input[aria-label="Colour for chain A"]').inputValue();
+  if (mirrored !== '#00ff00') throw new Error('the Composition picker shows ' + mirrored);
+  await page.click('#gpv-chain-colors-reset'); await page.waitForTimeout(400);
+  await tab('publish'); await page.click('#gpv-labels-edit'); await page.waitForTimeout(200);
+  await tab('appearance'); await page.selectOption('#gpv-color-mode', 'plddt'); await page.waitForTimeout(300);
+});
 await step('entity colouring groups the two identical chains and reads as a stoichiometry', async () => {
   await page.selectOption('#gpv-color-mode', 'entity'); await page.waitForTimeout(400);
   const legend = (await page.locator('#gpv-plddt-legend').textContent()) || '';

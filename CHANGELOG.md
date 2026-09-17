@@ -2,6 +2,55 @@
 
 All notable changes to this project are recorded here.
 
+## 2.46.0
+
+### Added
+
+- **A chain can be given the colour you want it, instead of the one the palette handed it.** Chain
+  colouring assigned from a fixed twelve-colour palette in sorted chain order and there was no way
+  to change it, so a figure that needed the light chain grey and the heavy chain blue — or that had
+  to match a figure already in the paper, or a collaborator's — could not be made at all. Each row
+  of the **Composition** table now carries a colour picker in place of its static swatch. What it
+  sets is an override on the one `chainColor()` function every surface reads, so it lands at once in
+  the viewer, the synchronized panels, the sequence strip, the on-screen key, the publication PNG,
+  SVG, TIFF and PDF, a built figure's panels and the interactive report. Double-click a swatch to
+  give that chain its palette colour back, or **Reset chain colours** to give them all back. The
+  colour-blind-safe palette still applies to every chain not overridden.
+- **The same picker in the figure label editor, where a figure is actually built.** *Publish → Edit
+  figure labels* already listed one row per chain, each with the swatch its legend entry prints in,
+  for renaming; while chain colouring is the active scheme those swatches are now that picker too.
+  Recolouring no longer means leaving the figure you are composing to go back to **Models**. The two
+  places and the on-screen key are three views of one override: a change in either shows in the
+  other at once.
+
+### Fixed
+
+- **Editing a chain's colour appeared to do nothing unless you were already colouring by chain.**
+  The Composition picker set the override but left the colour mode alone, so from the default
+  per-structure colouring — or pLDDT, or any other scheme — the swatch changed and the structure on
+  screen did not, which reads as a broken control rather than as a setting that will matter later.
+  It now switches the view to chain colouring, as the per-model colour picker in the **Models** list
+  has always done.
+- **The Models list squeezed a model's name to nothing.** Each row lays out a visibility switch, the
+  name and source, the mean pLDDT, a colour swatch, a fade switch and the **Emphasise**, **Rename**
+  and **Remove** buttons in one flex row — around 470 px of content in a tool panel that is a fixed
+  ~400 px wide at every window size, so the name column, the one part able to shrink, was shrunk to
+  zero and `overflow-wrap: anywhere` broke `4hhb.cif` down the row one character per line. The row
+  now wraps the way the annotation and label lists already did: name and source first, buttons under
+  them.
+- The Composition table's colour picker no longer takes a line of its own and double the row height.
+  It carried `.form-control`, which is `display: block` — harmless in the flex rows that class is
+  used in elsewhere, not in a table cell, where it pushed the chain letter underneath.
+- **A superposition's numbers were unreadable in the panel that shows them.** The alignment results
+  table has eight columns — model, reference, Cα pairs, identity, RMSD, what it was fitted on, the
+  fitted RMSD and the chain mapping — and `width: 100%` meant the browser shrank every column to fit
+  the ~400 px panel rather than let the wrapper it already sits in scroll. It now keeps a legible
+  width and scrolls sideways, as the other wide tables do.
+- A highlighted range reads as a range again. The selection list spelled out every residue it
+  covered — `10, 11, 12, 13, … 20`, several lines of it for anything longer than a motif — instead of
+  folding runs the way the domain list and the generated figure legend already do. It now reads
+  `10–20, 25, 30–32`.
+
 ## 2.45.0
 
 ### Fixed
