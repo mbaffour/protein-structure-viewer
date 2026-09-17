@@ -71,7 +71,7 @@
     const margin = figure ? { left: 72 * scale, top: 54 * scale, right: 24 * scale, bottom: 64 * scale } : { left: 0, top: 0, right: 0, bottom: 0 };
     canvas.width = Math.round(m * cell + margin.left + margin.right); canvas.height = Math.round(n * cell + margin.top + margin.bottom);
     const context = canvas.getContext('2d');
-    const palette = figure ? { paper: '#ffffff', ink: '#111827', grid: '#e5e7eb' } : { paper: labelColors.getPropertyValue('--card').trim() || '#ffffff', ink: labelColors.getPropertyValue('--foreground').trim() || '#111827', grid: labelColors.getPropertyValue('--border').trim() || '#e5e7eb' };
+    const palette = figure ? { paper: '#ffffff', ink: '#111827', grid: '#e5e7eb' } : { paper: themeColor('--card', '#ffffff'), ink: themeColor('--foreground', '#111827'), grid: themeColor('--border', '#e5e7eb') };
     context.fillStyle = palette.paper; context.fillRect(0, 0, canvas.width, canvas.height);
     const near = '#1e3a8a'; const far = '#bfdbfe';
     pairs.forEach((distance, key) => {

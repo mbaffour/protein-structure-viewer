@@ -37,7 +37,9 @@ PSV_CHROMIUM=/opt/pw-browsers/chromium/chrome-linux/chrome npm test
 - Navigation: previous/next, arrow keys, digit shortcuts for all six tabs
 - Appearance: entity colouring groups the two identical chains (α ×2, 30 aa) and the composition line
   reports the Cα extent and radius of gyration, and the extent equals a brute-force maximum Cα–Cα distance; the Okabe–Ito switch recolours chain A to rgb(0, 114, 178) and back; every representation, colour scheme, projection, background, motion;
-  pLDDT legend; theme cycling; preference persistence across a reload
+  pLDDT legend; theme cycling; on-screen label colours resolved to plain hex in both light and dark
+  themes, with text-to-box luminance contrast of at least 0.5 and a box colour that follows the theme;
+  preference persistence across a reload
 - Custom chain colours: a colour set on the chain A row of the Composition table switches the view to chain
   colouring (it is set from per-structure colouring, so an edit that did not switch would be invisible),
   changes the render, and reaches the on-screen key and the sequence strip row; double-clicking the swatch
@@ -100,6 +102,10 @@ PSV_CHROMIUM=/opt/pw-browsers/chromium/chrome-linux/chrome npm test
 - Figure formats: the PDF starts with %PDF-1.4, its MediaBox matches 85 mm at 300 dpi to half a point, it carries an
   image object and a valid trailer; JPEG and WebP download with the right magic bytes (or as PNG where the browser
   cannot encode them); the checklist flags the lossy choice; TIFF now goes through the same button.
+- Model agreement across a numbering offset: a copy of `model_a` with every residue numbered 10 higher and
+  the same coordinates is aligned onto the original; the ensemble counts two models, matches at least 50
+  residues, reports an RMSF under 0.01 Å everywhere, and paints the copy's residue 15 in the < 0.5 Å band —
+  it was compared with residue 5, not with the residue ten positions along.
 - RMSF profile: after aligning, the SVG has one chain group and one trace per fixture chain, the title, the axis label
   and the band legend; the PNG is at least the output width; the composite offers the panel.
 - Medoid: it is one of the two fixture models that share a backbone, its mean is the smallest, exactly one row carries

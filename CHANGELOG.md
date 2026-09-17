@@ -2,6 +2,42 @@
 
 All notable changes to this project are recorded here.
 
+## 2.46.3
+
+### Fixed
+
+- **Model agreement compared the wrong residues whenever two models numbered them differently.**
+  The per-residue Cα RMSF behind *Model agreement* colouring, the RMSF profile and the RMSF CSV pooled
+  every model's Cα atoms by chain and residue *number*, ignoring the residue pairing the superposition
+  had just used. Models from one AlphaFold run share their numbering, so it looked right there. Models
+  from different sources often do not: the AlphaFold DB model of human α-globin keeps the initiator
+  methionine (residues 1–142) that the crystal structures' mature chain lacks (1–141), so each residue
+  was averaged with its neighbour. Four α-globin structures that superpose within 0.3–0.7 Å were
+  painted a uniform 1–2 Å "disagreement" — about what a one-residue offset of 3.8 Å between
+  consecutive Cα atoms produces. Each model is now matched to the reference through its own
+  superposition pairing, and values are reported in the reference's numbering. The same four
+  structures now read a median of 0.22 Å, with 135 of 141 residues under 0.5 Å, and the spread that
+  remains is where the chain really differs: the C-terminal Tyr140–Arg141 and residues 88–89 beside
+  the proximal His87. The RMSD, the alignment table and *Compare this position* were never affected —
+  they already went through the pairing. The RMSF CSV's `models` column now counts the models each
+  residue was actually found in rather than repeating the ensemble size, and the methods text says how
+  residues were matched.
+- **Every label on screen was a black box with black text.** The interface theme defines its colours
+  as `light-dark()` and `color-mix()` expressions. CSS resolves those; the code that hands theme
+  colours to 3Dmol, to canvas drawing and to exported SVG read them raw with `getPropertyValue`, which
+  returns the expression itself — and 3Dmol parses `light-dark(rgb(26 28 31), rgb(255 255 255))` as
+  black. Residue labels, measurement labels and their borders and leader lines all came out black on
+  black in both themes (a figure with a set background was unaffected, because it uses fixed colours).
+  The same raw reads reached canvas drawing and SVG export, where a canvas rejects `light-dark()` and
+  keeps whatever colour was set before: the sequence strip's residue numbers and hover outline, the
+  contact map's grid and ink, and the PAE overlay stroke drew in a leftover colour, the contact map's
+  paper resolved as though the light theme were always on, and transparent SVG exports wrote an
+  expression no SVG editor understands as their label ink. Theme colours are now resolved by the browser for the
+  current theme and passed on as plain hex, translucent tokens composited over the page background as
+  the interface shows them. Switching theme — or the operating system switching it under **System** —
+  redraws the labels and the strip in the new colours.
+- The in-app tip about chain colouring still said the palette was fixed.
+
 ## 2.46.2
 
 ### Fixed

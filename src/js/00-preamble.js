@@ -91,9 +91,48 @@
   let busyDepth = 0;
   let restoreMotion = null;
   const listPageSize = 60;
-  const viewerVersion = '2.46.2';
+  const viewerVersion = '2.46.3';
   const preferenceKey = 'protein-structure-viewer:preferences';
   const themeKey = 'protein-structure-viewer:theme';
   const labelColors = getComputedStyle(root);
+  /* The theme's colour tokens are light-dark() and color-mix() expressions. CSS resolves them;
+     3Dmol, canvas 2D and a standalone SVG do not, and getPropertyValue hands back the expression —
+     which 3Dmol reads as black and a canvas silently ignores. themeColor() lets the browser resolve a
+     token for the current theme and returns an opaque hex, a translucent token composited over the
+     page background the way the interface shows it. */
+  const themeProbe = document.createElement('span');
+  themeProbe.setAttribute('aria-hidden', 'true');
+  themeProbe.style.cssText = 'position:absolute;width:0;height:0;overflow:hidden;visibility:hidden;pointer-events:none';
+  root.append(themeProbe);
+  const themeCanvas = document.createElement('canvas');
+  themeCanvas.width = 1; themeCanvas.height = 1;
+  const themeContext = themeCanvas.getContext('2d', { willReadFrequently: true });
+  const themeCache = new Map();
+  function cssRgba(value) {
+    themeProbe.style.color = '';
+    themeProbe.style.color = value;
+    themeContext.clearRect(0, 0, 1, 1);
+    themeContext.fillStyle = '#000000';
+    themeContext.fillStyle = getComputedStyle(themeProbe).color;
+    themeContext.fillRect(0, 0, 1, 1);
+    const data = themeContext.getImageData(0, 0, 1, 1).data;
+    return [data[0], data[1], data[2], data[3] / 255];
+  }
+  function themeColor(name, fallback) {
+    if (!labelColors.getPropertyValue(name).trim()) return fallback;
+    const scheme = (document.documentElement.getAttribute('data-theme') || '') + (matchMedia('(prefers-color-scheme: dark)').matches ? '|dark' : '|light');
+    const key = name + '|' + scheme;
+    if (themeCache.has(key)) return themeCache.get(key);
+    try {
+      const [r, g, b, a] = cssRgba('var(' + name + ')');
+      const [pr, pg, pb, pa] = cssRgba('var(--background)');
+      const paper = pa > 0 ? [pr, pg, pb] : [255, 255, 255];
+      const hex = '#' + [r, g, b].map((channel, index) => Math.round(channel * a + paper[index] * (1 - a)).toString(16).padStart(2, '0')).join('');
+      themeCache.set(key, hex);
+      return hex;
+    } catch (error) {
+      return fallback;
+    }
+  }
   const reduceMotion = matchMedia('(prefers-reduced-motion: reduce)').matches;
 

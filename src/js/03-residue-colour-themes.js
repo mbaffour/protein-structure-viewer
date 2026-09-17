@@ -85,7 +85,7 @@
        as "very low confidence". The sequence strip already falls back to the model colour here. */
     if (mode === 'plddt') return entry.scores.length ? { colorfunc: atom => plddtColor(Number(atom.b || 0)) } : { color: entry.color };
     if (mode === 'deviation') return { colorfunc: atom => deviationColor(entry, atom) };
-    if (mode === 'agreement') return { colorfunc: atom => agreementColor(atom) };
+    if (mode === 'agreement') return { colorfunc: atom => agreementColor(entry, atom) };
     if (mode === 'domain') return { colorfunc: atom => domainColor(entry, atom) };
     if (mode === 'annotated') return { colorfunc: atom => annotatedColor(entry, atom) };
     if (mode === 'data') return { colorfunc: atom => dataColor(entry, atom) };
@@ -578,13 +578,13 @@
     /* A boxed label is a patch of the figure's paper with text on it. Once a background colour is
        chosen the box takes that colour, which is what the SVG export has always drawn; only with a
        transparent background does it fall back to the interface's own card colour. */
-    const paper = background.alpha > 0 ? background.color : (labelColors.getPropertyValue('--card').trim() || '#ffffff');
-    const ink = background.alpha > 0 ? (onDark ? '#f8fafc' : '#111827') : (labelColors.getPropertyValue('--card-foreground').trim() || '#111827');
+    const paper = background.alpha > 0 ? background.color : themeColor('--card', '#ffffff');
+    const ink = background.alpha > 0 ? (onDark ? '#f8fafc' : '#111827') : themeColor('--card-foreground', '#111827');
     return {
       position,
       backgroundColor: paper,
       fontColor: color || (plain ? (onDark ? '#f8fafc' : '#111827') : ink),
-      borderColor: color || (background.alpha > 0 ? (onDark ? '#475569' : '#cbd5e1') : (labelColors.getPropertyValue('--border').trim() || '#cbd5e1')),
+      borderColor: color || (background.alpha > 0 ? (onDark ? '#475569' : '#cbd5e1') : themeColor('--border', '#cbd5e1')),
       borderThickness: plain ? 0 : 1,
       fontSize: Math.round((options.size || 12) * (options.scale || 1)),
       font: figureFont(),
@@ -617,7 +617,7 @@
       size.value = String(label.size || 12);
       size.addEventListener('change', () => { remember('label size'); label.size = Number(size.value); rebuildOverlays(); });
       const color = document.createElement('input'); color.className = 'form-control form-control-color'; color.type = 'color';
-      color.value = label.color || (labelColors.getPropertyValue('--card-foreground').trim() || '#111827');
+      color.value = label.color || themeColor('--card-foreground', '#111827');
       color.setAttribute('aria-label', 'Label colour');
       color.addEventListener('input', () => { if (!color.dataset.remembered) { remember('label colour'); color.dataset.remembered = '1'; } label.color = color.value; rebuildOverlays(); });
       color.addEventListener('change', () => { delete color.dataset.remembered; });
@@ -649,7 +649,7 @@
   function labelPosition(label, byId = entriesById()) { return shiftBy(labelAnchor(label, byId), label.offset); }
   const leaderMinimum = 0.75;
   function leaderLength(anchor, position) { return Math.hypot(position.x - anchor.x, position.y - anchor.y, position.z - anchor.z); }
-  function leaderColor() { return labelColors.getPropertyValue('--muted-foreground').trim() || '#94a3b8'; }
+  function leaderColor() { return themeColor('--muted-foreground', '#94a3b8'); }
   /* `placement`, when a figure panel has resolved one (panelLabelPlacement), says where each label
      goes in that panel — its text prints several times larger against the structure than on screen,
      so the screen's placement is not the panel's. Without one the label sits at its own offset. */

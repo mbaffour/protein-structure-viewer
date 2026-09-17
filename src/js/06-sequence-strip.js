@@ -48,7 +48,7 @@
     if (mode === 'chain') return chainColor(atom.chain);
     if (mode === 'entity') return entityColor(entry, atom);
     if (mode === 'deviation') return deviationColor(entry, atom);
-    if (mode === 'agreement') return agreementColor(atom);
+    if (mode === 'agreement') return agreementColor(entry, atom);
     if (mode === 'domain') return domainColor(entry, atom);
     if (mode === 'annotated') return annotatedColor(entry, atom);
     if (mode === 'data') return dataColor(entry, atom);
@@ -67,7 +67,7 @@
     const context = canvas.getContext('2d');
     context.setTransform(ratio, 0, 0, ratio, 0, 0); context.clearRect(0, 0, width, height);
     const count = row.residues.length; const cell = width / count; const gap = cell > 3 ? 1 : 0;
-    const ink = labelColors.getPropertyValue('--card-foreground').trim() || '#111827';
+    const ink = themeColor('--card-foreground', '#111827');
     const labelled = new Set(labelRecords.filter(label => label.entryId === entry.id && (label.chain || '') === row.chain).map(label => label.resi));
     const highlighted = new Map();
     selectionRecords.filter(record => record.entryId === entry.id && record.action === 'highlight' && (!record.chain || record.chain === row.chain))
@@ -94,7 +94,7 @@
         context.moveTo(x + cell / 2, 3.5); context.lineTo(x + cell / 2 - 3.5, 0); context.lineTo(x + cell / 2 + 3.5, 0); context.fill();
       }
     });
-    context.fillStyle = labelColors.getPropertyValue('--muted-foreground').trim() || '#6b7280';
+    context.fillStyle = themeColor('--muted-foreground', '#6b7280');
     context.font = '9px ' + (labelColors.getPropertyValue('--font-mono').trim() || 'monospace'); context.textBaseline = 'alphabetic';
     const step = [1, 5, 10, 25, 50, 100, 250, 500, 1000].find(value => value * cell >= 44) || 1000;
     let lastTick = -Infinity;

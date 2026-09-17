@@ -19,7 +19,19 @@
     if (typeof gpvRenderIcons === 'function') gpvRenderIcons(button);
     button.setAttribute('aria-label', 'Appearance: ' + (mode.value === 'system' ? 'follow system' : mode.label.toLowerCase()));
     writeJson(themeKey, mode.value);
-    /* The 3D canvas background follows the resolved theme, so repaint it. */
+    /* The 3D canvas background follows the resolved theme, so repaint it — and the labels and the
+       sequence strip, which draw with theme colours resolved at draw time (themeColor). */
     applyAppearance();
+    rebuildOverlays();
+    renderSequenceSoon();
   }
+
+  /* In System mode the operating system can switch between light and dark while the page is open
+     (a sunset schedule, say); redraw what is drawn with resolved theme colours when it does. */
+  matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () => {
+    if (document.documentElement.hasAttribute('data-theme')) return;
+    applyAppearance();
+    rebuildOverlays();
+    renderSequenceSoon();
+  });
 
