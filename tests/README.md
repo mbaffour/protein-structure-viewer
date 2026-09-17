@@ -38,6 +38,12 @@ PSV_CHROMIUM=/opt/pw-browsers/chromium/chrome-linux/chrome npm test
 - Appearance: entity colouring groups the two identical chains (α ×2, 30 aa) and the composition line
   reports the Cα extent and radius of gyration, and the extent equals a brute-force maximum Cα–Cα distance; the Okabe–Ito switch recolours chain A to rgb(0, 114, 178) and back; every representation, colour scheme, projection, background, motion;
   pLDDT legend; theme cycling; preference persistence across a reload
+- Custom chain colours: a colour set on the chain A row of the Composition table switches the view to chain
+  colouring (it is set from per-structure colouring, so an edit that did not switch would be invisible),
+  changes the render, and reaches the on-screen key and the sequence strip row; double-clicking the swatch
+  returns that chain to its palette colour and **Reset chain colours** returns all of them. The same picker
+  on the chain rows of *Publish → Edit figure labels* recolours without leaving the tab, and the Composition
+  table shows the same value — one override, not a copy per tab.
 - Chain legend: a fourteen-chain model still gets a key — it is drawn, its wrapped box fits the width
   it is given (a 600 px panel wraps it onto three rows), the items name every chain or end with a
   `+N more` item, and the exported SVG carries the same labels
