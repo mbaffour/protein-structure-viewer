@@ -139,6 +139,11 @@
     if (typeof settings.fog === 'boolean') root.querySelector('#gpv-fog').checked = settings.fog;
     if (['boxed', 'plain'].includes(settings.labelStyle)) root.querySelector('#gpv-label-style').value = settings.labelStyle;
     setFigureLabels(settings.figureLabels);
+    /* A scene, session or share link is untrusted input: keep only short chain ids and #rrggbb colours. */
+    resetAllChainColors();
+    Object.entries(settings.chainColors && typeof settings.chainColors === 'object' ? settings.chainColors : {}).slice(0, 200).forEach(([chain, color]) => {
+      if (chain.length <= 16 && /^#[0-9a-f]{6}$/i.test(String(color))) setChainColor(chain, String(color).toLowerCase());
+    });
     if (['bottom-left', 'bottom-right', 'top-left', 'top-right', 'left', 'right'].includes(settings.legendPosition)) root.querySelector('#gpv-legend-position').value = settings.legendPosition;
     if (typeof settings.chainsByPosition === 'boolean') root.querySelector('#gpv-chain-position').checked = settings.chainsByPosition;
     if (['all', 'region', 'selection'].includes(settings.fitScope)) root.querySelector('#gpv-fit-scope').value = settings.fitScope;

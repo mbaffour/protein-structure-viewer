@@ -46,10 +46,11 @@
   function seedChainColors(atoms) {
     [...new Set(atoms.map(atom => atom.chain || ''))].sort(compareChains).forEach(chainColor);
   }
+  /* Deliberately does not register the chain's palette position: a scene can restore overrides
+     before its models are seeded, and claiming a position here would shift the palette colour of
+     every chain that was not overridden. */
   function setChainColor(chain, color) {
-    const key = chain || '';
-    if (!chainOrder.has(key)) chainOrder.set(key, chainOrder.size);
-    customChainColors.set(key, color);
+    customChainColors.set(chain || '', color);
   }
   function resetChainColor(chain) {
     customChainColors.delete(chain || '');
@@ -90,7 +91,7 @@
   let busyDepth = 0;
   let restoreMotion = null;
   const listPageSize = 60;
-  const viewerVersion = '2.46.1';
+  const viewerVersion = '2.46.2';
   const preferenceKey = 'protein-structure-viewer:preferences';
   const themeKey = 'protein-structure-viewer:theme';
   const labelColors = getComputedStyle(root);

@@ -2,6 +2,23 @@
 
 All notable changes to this project are recorded here.
 
+## 2.46.2
+
+### Fixed
+
+- **A chain colour you chose was forgotten the moment the page closed.** 2.46.0 kept chain colour
+  overrides only in memory. Every other appearance setting is part of the scene, so reloading the
+  page, reopening a session file or following a share link brought back the models, labels, legend
+  names and camera — and handed every chain its palette colour again. A figure recoloured to match a
+  paper came back in the default colours, and a share link sent to a collaborator showed them
+  something other than what was shared. Chain colours are now saved with the scene and restored
+  everywhere a scene is: the autosaved session, session and scene files, and share links. A restored
+  scene replaces whatever overrides were set before it, and only short chain identifiers with
+  `#rrggbb` colours are accepted from a file or link.
+- Restoring overrides no longer risks moving the chains that were not overridden. Setting a chain's
+  colour used to claim that chain's place in the palette order; restored before the models it
+  belongs to were read, it could push every later chain one palette colour along.
+
 ## 2.46.1
 
 ### Fixed
