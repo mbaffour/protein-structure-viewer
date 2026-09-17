@@ -1,5 +1,5 @@
 cff-version: 1.2.0
-message: "If you use this software, please cite it using the metadata below. Each GitHub release is archived on Zenodo; cite the release DOI you used."
+message: "If you use this software, please cite it using the metadata below. The DOI here resolves to all versions and always points at the most recent; each GitHub release is also archived under its own DOI, listed on that Zenodo page — cite the release you actually used, which the viewer reports under Cite."
 type: software
 title: "Protein Structure Viewer"
 abstract: >-
@@ -15,7 +15,7 @@ authors:
     email: mbaffour890@gmail.com
 version: 2.46.0
 date-released: 2026-09-16
-doi: 10.5281/zenodo.22741488
+doi: 10.5281/zenodo.22741487
 license: MIT
 repository-code: "https://github.com/mbaffour/protein-structure-viewer"
 url: "https://mbaffour.github.io/structure-viewer/"
