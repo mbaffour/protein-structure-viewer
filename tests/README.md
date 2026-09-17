@@ -42,8 +42,8 @@ PSV_CHROMIUM=/opt/pw-browsers/chromium/chrome-linux/chrome npm test
   colouring (it is set from per-structure colouring, so an edit that did not switch would be invisible),
   changes the render, and reaches the on-screen key and the sequence strip row; double-clicking the swatch
   returns that chain to its palette colour and **Reset chain colours** returns all of them. The same picker
-  on the chain rows of *Publish → Edit figure labels* recolours without leaving the tab, and the Composition
-  table shows the same value — one override, not a copy per tab.
+  on the chain rows of *Publish → Edit figure labels* is a swatch no wider than 40 px, recolours without
+  leaving the tab, and the Composition table shows the same value — one override, not a copy per tab.
 - Chain legend: a fourteen-chain model still gets a key — it is drawn, its wrapped box fits the width
   it is given (a 600 px panel wraps it onto three rows), the items name every chain or end with a
   `+N more` item, and the exported SVG carries the same labels
@@ -199,7 +199,12 @@ PSV_CHROMIUM=/opt/pw-browsers/chromium/chrome-linux/chrome npm test
   attaches the real 142×142 PAE matrix, and PAE domains, assembly dimensions, the confidence
   summary and pLDDT colouring all run against it.
 - Share links: a model fetched by ID (served from a stubbed RCSB response) enables *Copy share
-  link*; opening the link in a fresh page refetches the model and restores its corner text.
+  link*; that PDB entry carries no confidence scores and, although its stubbed B-factors are
+  pLDDT-like, pLDDT colouring gives it its model colour rather than a pLDDT colour; opening the link
+  in a fresh page refetches the model and restores its corner text.
+- Generated report, confidence: every predicted model in the report is flagged as carrying
+  confidence; a model flagged experimental reads `pLDDT —`, reports no mean pLDDT, and its strip is
+  drawn in its model colour under pLDDT colouring.
 
 The two emphasised checks are regressions against bugs that shipped in 2.0.
 

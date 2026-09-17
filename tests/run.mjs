@@ -787,6 +787,9 @@ await step('the figure label editor recolours a chain without leaving the Publis
   await page.click('#gpv-labels-edit'); await page.waitForTimeout(300);
   const picker = page.locator('#gpv-labels-rows input[type="color"]').first();
   if (!(await picker.count())) throw new Error('the chain rows carry no colour picker');
+  /* 2.46.0 shipped this picker as a 160 px bar: the table's min-width for its text fields caught it too. */
+  const pickerWidth = await picker.evaluate(el => el.getBoundingClientRect().width);
+  if (pickerWidth > 40) throw new Error('the figure-label colour picker is ' + pickerWidth + ' px wide, not a swatch');
   await picker.fill('#00ff00'); await page.waitForTimeout(600);
   const key = await page.locator('#gpv-plddt-legend .gpv-swatch').first().evaluate(el => getComputedStyle(el).backgroundColor);
   if (key !== 'rgb(0, 255, 0)') throw new Error('key swatch after editing from Publish: ' + key);
@@ -2433,6 +2436,24 @@ if (reportPath) {
     const title = await report.locator('#project-title').textContent();
     if (title !== 'Test figure') throw new Error('got ' + title);
   });
+  await step('the report states pLDDT only for models that carry confidence', async () => {
+    /* The fixtures are predictions, so each must say so; then one is marked experimental to check
+       that the report neither colours it on the pLDDT scale nor prints a mean pLDDT for it. */
+    const flags = await report.evaluate(() => structures.map(s => s.hasConfidence));
+    if (!flags.length || flags.some(flag => flag !== true)) throw new Error('hasConfidence flags: ' + JSON.stringify(flags));
+    const originalColors = await report.evaluate(() => el('colors').value);
+    await report.evaluate(() => { el('colors').value = 'plddt'; structures[panes[0].index].hasConfidence = false; refreshAll(); });
+    await report.waitForTimeout(800);
+    const state = await report.evaluate(() => {
+      const s = structures[panes[0].index];
+      return { plddt: panes[0].plddt, strip: stripColor(s, { b: 90, atom: 'CA', chain: 'A', resi: 1 }), own: s.color, stats: panes[0].stats.textContent };
+    });
+    await report.evaluate(value => { structures[panes[0].index].hasConfidence = true; el('colors').value = value; refreshAll(); }, originalColors);
+    await report.waitForTimeout(500);
+    if (state.plddt !== null) throw new Error('an experimental model still reports mean pLDDT ' + state.plddt);
+    if (state.strip !== state.own) throw new Error('its strip is painted ' + state.strip + ', not its model colour ' + state.own);
+    if (!/pLDDT —/.test(state.stats)) throw new Error('panel stats read: ' + state.stats);
+  });
   await step('the report carries the outline, depth cueing, the faded chain and the contact map', async () => {
     const state = await report.evaluate(() => ({ outline: initial.outline, fog: initial.fog, faded: structures.some(s => (s.fadedChains || []).includes('B')), contacts: initial.contacts ? initial.contacts.pairs.length : 0, wrapHidden: document.querySelector('#contacts-wrap').hidden, detail: document.querySelector('#contacts-detail').textContent }));
     if (state.outline !== 'bold' || !state.fog || !state.faded || state.contacts < 1 || state.wrapHidden || !/residue pairs/.test(state.detail)) throw new Error(JSON.stringify(state));
@@ -2858,6 +2879,23 @@ await step('a model fetched by ID enables the share link', async () => {
   const after = await page.locator('#gpv-list [data-entry-id]').count();
   if (after !== before + 1) throw new Error('model count ' + before + ' → ' + after + ' · ' + (await page.locator('#gpv-state').textContent()));
   if (await page.locator('#gpv-share-link').isDisabled()) throw new Error('share link still disabled');
+});
+await step('a structure fetched from the PDB is not painted on the pLDDT scale', async () => {
+  /* An RCSB entry carries crystallographic B-factors, not confidence, so it has no scores. The
+     stubbed file's B-factors are pLDDT-like on purpose: before 2.46.1 the view painted them on the
+     pLDDT scale anyway while the sequence strip did not, so a crystal structure read as a
+     prediction. It must take its model colour, as the strip does. */
+  await tab('appearance'); await page.selectOption('#gpv-color-mode', 'plddt'); await page.waitForTimeout(300);
+  const state = await page.evaluate(() => {
+    const d = window.__viewerDebug; const entry = d.entries().find(e => e.collection === 'RCSB PDB');
+    if (!entry) return null;
+    const atom = entry.atoms.find(a => a.atom === 'CA'); const options = d.colorOptions(entry);
+    return { scores: entry.scores.length, colour: options.colorfunc ? options.colorfunc(atom) : options.color, own: entry.color, b: Number(atom.b) };
+  });
+  if (!state) throw new Error('no entry from the RCSB fetch');
+  if (state.scores) throw new Error('the PDB entry carries ' + state.scores + ' confidence scores');
+  if (state.colour !== state.own) throw new Error('pLDDT mode painted the PDB entry ' + state.colour + ' (B-factor ' + state.b + ') instead of its model colour ' + state.own);
+  await page.selectOption('#gpv-color-mode', 'structure'); await page.waitForTimeout(200);
 });
 await step('the share link reopens the fetched model with its annotations', async () => {
   await tab('annotate');

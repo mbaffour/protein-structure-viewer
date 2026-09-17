@@ -1482,7 +1482,7 @@ html>body{padding:0}</style>
   #generic-protein-viewer .gpv-legend strong { color: var(--card-foreground); }
   #generic-protein-viewer .gpv-legend .gpv-legend-edit { padding: 0 6px; min-height: 22px; font-size: var(--font-size-small); color: var(--muted-foreground); }
   #generic-protein-viewer .gpv-labels-table th[scope="row"] { font-weight: 500; white-space: nowrap; }
-  #generic-protein-viewer .gpv-labels-table input { min-width: 160px; }
+  #generic-protein-viewer .gpv-labels-table input:not([type="color"]) { min-width: 160px; }
   #generic-protein-viewer .gpv-builder-table td, #generic-protein-viewer .gpv-builder-table th { vertical-align: middle; }
   #generic-protein-viewer .gpv-rmsd-matrix td { font-variant-numeric: tabular-nums; min-width: 3.6em; }
   #generic-protein-viewer .gpv-builder-table .gpv-builder-letter { font-weight: 700; }
@@ -1701,7 +1701,7 @@ html>body{padding:0}</style>
   let busyDepth = 0;
   let restoreMotion = null;
   const listPageSize = 60;
-  const viewerVersion = '2.46.0';
+  const viewerVersion = '2.46.1';
   const preferenceKey = 'protein-structure-viewer:preferences';
   const themeKey = 'protein-structure-viewer:theme';
   const labelColors = getComputedStyle(root);
@@ -2373,7 +2373,10 @@ html>body{padding:0}</style>
     const mode = root.querySelector('#gpv-color-mode').value;
     if (mode === 'chain') return { colorfunc: atom => chainColor(atom.chain) };
     if (mode === 'entity') return { colorfunc: atom => entityColor(entry, atom) };
-    if (mode === 'plddt') return { colorfunc: atom => plddtColor(Number(atom.b || 0)) };
+    /* Only a model that carries confidence scores goes on the pLDDT scale. An experimental structure
+       has crystallographic B-factors in that column; painting them as pLDDT shows a crystal structure
+       as "very low confidence". The sequence strip already falls back to the model colour here. */
+    if (mode === 'plddt') return entry.scores.length ? { colorfunc: atom => plddtColor(Number(atom.b || 0)) } : { color: entry.color };
     if (mode === 'deviation') return { colorfunc: atom => deviationColor(entry, atom) };
     if (mode === 'agreement') return { colorfunc: atom => agreementColor(atom) };
     if (mode === 'domain') return { colorfunc: atom => domainColor(entry, atom) };
@@ -8695,6 +8698,7 @@ html>body{padding:0}</style>
       hiddenChains: entry.hiddenChains || [],
       fadedChains: entry.fadedChains || [], faded: Boolean(entry.faded),
       confidence: reportConfidence(entry),
+      hasConfidence: entry.scores.length > 0,
       coords: reportCoordinates(entry),
       shapes: reportShapes(entry),
       labels: labelRecords.filter(label => label.entryId === entry.id).map(label => ({ text: label.text, chain: label.chain, resi: label.resi, atom: label.atom, ...labelPosition(label), color: label.color || null, size: label.size || 12 }))
@@ -8870,7 +8874,7 @@ function applyViewStyle(v) {
 function styleSpec(s) {
   const rep = el('style').value, mode = el('colors').value;
   let options = { color: s.color };
-  if (mode === 'plddt') options = { colorfunc: a => pcolor(Number(a.b || 0)) };
+  if (mode === 'plddt') options = s.hasConfidence ? { colorfunc: a => pcolor(Number(a.b || 0)) } : { color: s.color };
   if (mode === 'chain') options = { colorfunc: a => chainColors[a.chain || ''] || '#9ca3af' };
   if (residueThemes[mode] && mode !== 'ss') options = { colorfunc: a => residueThemes[mode][String(a.resn || '').toUpperCase()] || residueThemes.fallback };
   if (mode === 'ss') options = { colorfunc: a => residueThemes.ss[a.ss] || residueThemes.ss.c };
@@ -8953,7 +8957,7 @@ function show(pane, preserveView) {
   if (oldView) pane.viewer.setView(oldView); else pane.viewer.zoomTo();
   pane.viewer.render();
   lastViews.set(pane, pane.viewer.getView());
-  pane.plddt = mean(m.selectedAtoms({}).filter(a => a.atom === 'CA' && Number.isFinite(Number(a.b))).map(a => Number(a.b)));
+  pane.plddt = s.hasConfidence ? mean(m.selectedAtoms({}).filter(a => a.atom === 'CA' && Number.isFinite(Number(a.b))).map(a => Number(a.b))) : null;
   const c = s.confidence || {};
   pane.stats.textContent = (pane.plddt === null ? 'pLDDT —' : 'pLDDT ' + pane.plddt.toFixed(1)) + (Number.isFinite(Number(c.iptm)) ? ' · ipTM ' + metric(c.iptm, 2) : Number.isFinite(Number(c.ptm)) ? ' · pTM ' + metric(c.ptm, 2) : '');
   if (panes[focused] === pane) describe(pane);
@@ -9082,7 +9086,7 @@ function stripRows(m) {
 }
 function stripColor(s, a) {
   const mode = el('colors').value;
-  if (mode === 'plddt') return pcolor(Number(a.b || 0));
+  if (mode === 'plddt') return s.hasConfidence ? pcolor(Number(a.b || 0)) : s.color;
   if (mode === 'chain') return chainColors[a.chain || ''] || '#9ca3af';
   if (mode === 'ss') return residueThemes.ss[a.ss] || residueThemes.ss.c;
   if (mode === 'annotated') { const r = domainLookupFor(s).get((a.chain || '') + '|' + a.resi); return r ? r.color : '#9ca3af'; }

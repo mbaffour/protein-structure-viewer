@@ -2,6 +2,29 @@
 
 All notable changes to this project are recorded here.
 
+## 2.46.1
+
+### Fixed
+
+- **A crystal structure was shown as a low-confidence prediction.** pLDDT colouring painted every
+  model from the B-factor column, whether or not that column holds confidence. An experimental
+  structure keeps crystallographic B-factors there — mostly well under 50 — so a structure fetched
+  from the PDB came out orange, "very low", under a pLDDT legend: a crystal structure presented as a
+  poor prediction. The sequence strip had always known better and drew such a model in its own
+  colour, so the view and the strip disagreed on the same screen. The view now follows the strip —
+  only a model that carries confidence scores goes on the pLDDT scale — and so do the synchronized
+  panels, the surface and every export, which share its colouring. The project's own audit asks for
+  exactly this: predictions presented as predictions, kept distinct from experimental structures.
+- **The interactive report printed a mean pLDDT for a crystal structure.** The report averaged the
+  B-factor column of every model and stated the result as *Mean pLDDT* in its readout and panel
+  captions, and coloured by it. It is now told which models carry confidence, reads `pLDDT —` for
+  the rest, and draws them, and their sequence strips, in their model colour. A structure opened from
+  a local file is still judged the way the viewer judges it — by whether it carries per-residue
+  scores — so a non-AlphaFold PDB file opened from disk can still be read as scored; fetched
+  structures are the case this closes.
+- The chain colour picker in *Publish → Edit figure labels* is a swatch again, not a 160 px bar. The
+  table's minimum width for its name fields caught the picker too when 2.46.0 added it.
+
 ## 2.46.0
 
 ### Added

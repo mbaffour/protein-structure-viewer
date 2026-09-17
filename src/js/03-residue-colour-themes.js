@@ -80,7 +80,10 @@
     const mode = root.querySelector('#gpv-color-mode').value;
     if (mode === 'chain') return { colorfunc: atom => chainColor(atom.chain) };
     if (mode === 'entity') return { colorfunc: atom => entityColor(entry, atom) };
-    if (mode === 'plddt') return { colorfunc: atom => plddtColor(Number(atom.b || 0)) };
+    /* Only a model that carries confidence scores goes on the pLDDT scale. An experimental structure
+       has crystallographic B-factors in that column; painting them as pLDDT shows a crystal structure
+       as "very low confidence". The sequence strip already falls back to the model colour here. */
+    if (mode === 'plddt') return entry.scores.length ? { colorfunc: atom => plddtColor(Number(atom.b || 0)) } : { color: entry.color };
     if (mode === 'deviation') return { colorfunc: atom => deviationColor(entry, atom) };
     if (mode === 'agreement') return { colorfunc: atom => agreementColor(atom) };
     if (mode === 'domain') return { colorfunc: atom => domainColor(entry, atom) };
