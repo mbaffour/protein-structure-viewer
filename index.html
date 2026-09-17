@@ -1657,10 +1657,11 @@ html>body{padding:0}</style>
   function seedChainColors(atoms) {
     [...new Set(atoms.map(atom => atom.chain || ''))].sort(compareChains).forEach(chainColor);
   }
+  /* Deliberately does not register the chain's palette position: a scene can restore overrides
+     before its models are seeded, and claiming a position here would shift the palette colour of
+     every chain that was not overridden. */
   function setChainColor(chain, color) {
-    const key = chain || '';
-    if (!chainOrder.has(key)) chainOrder.set(key, chainOrder.size);
-    customChainColors.set(key, color);
+    customChainColors.set(chain || '', color);
   }
   function resetChainColor(chain) {
     customChainColors.delete(chain || '');
@@ -1701,7 +1702,7 @@ html>body{padding:0}</style>
   let busyDepth = 0;
   let restoreMotion = null;
   const listPageSize = 60;
-  const viewerVersion = '2.46.1';
+  const viewerVersion = '2.46.2';
   const preferenceKey = 'protein-structure-viewer:preferences';
   const themeKey = 'protein-structure-viewer:theme';
   const labelColors = getComputedStyle(root);
@@ -6800,6 +6801,7 @@ html>body{padding:0}</style>
       fitRegion: root.querySelector('#gpv-fit-region').value,
       positionCutoff: positionCutoff(),
       figureLabels: { ...figureLabels },
+      chainColors: Object.fromEntries(customChainColors),
       figureBuilder: builderOptions(),
       figureTemplate: figureTemplateSettings(),
       background: root.querySelector('#gpv-background').value,
@@ -7003,6 +7005,11 @@ html>body{padding:0}</style>
     if (typeof settings.fog === 'boolean') root.querySelector('#gpv-fog').checked = settings.fog;
     if (['boxed', 'plain'].includes(settings.labelStyle)) root.querySelector('#gpv-label-style').value = settings.labelStyle;
     setFigureLabels(settings.figureLabels);
+    /* A scene, session or share link is untrusted input: keep only short chain ids and #rrggbb colours. */
+    resetAllChainColors();
+    Object.entries(settings.chainColors && typeof settings.chainColors === 'object' ? settings.chainColors : {}).slice(0, 200).forEach(([chain, color]) => {
+      if (chain.length <= 16 && /^#[0-9a-f]{6}$/i.test(String(color))) setChainColor(chain, String(color).toLowerCase());
+    });
     if (['bottom-left', 'bottom-right', 'top-left', 'top-right', 'left', 'right'].includes(settings.legendPosition)) root.querySelector('#gpv-legend-position').value = settings.legendPosition;
     if (typeof settings.chainsByPosition === 'boolean') root.querySelector('#gpv-chain-position').checked = settings.chainsByPosition;
     if (['all', 'region', 'selection'].includes(settings.fitScope)) root.querySelector('#gpv-fit-scope').value = settings.fitScope;

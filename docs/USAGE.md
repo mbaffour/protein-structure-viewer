@@ -120,7 +120,9 @@ pLDDT and colour, and **Shown** and **Faded** switches. The colour is a picker, 
 click it to give that chain whatever colour the figure needs — applied at once in the viewer, the
 synchronized panels, the sequence strip, the legend, every export and the report — double-click it
 to hand that chain back its palette colour, and **Reset chain colours** to hand them all back.
-Setting a colour switches the view to chain colouring, so you see the change you just made.
+Setting a colour switches the view to chain colouring, so you see the change you just made. The
+colours are part of the scene: the autosaved session, session and scene files, and share links
+all bring them back.
 Unticking a chain hides it everywhere — viewer,
 synchronized panels, PNG and SVG exports, the surface — while the sequence strip keeps the row, dimmed
 and marked *hidden*, so you still see what is missing. **Show all chains** restores them. The line

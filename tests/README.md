@@ -201,7 +201,8 @@ PSV_CHROMIUM=/opt/pw-browsers/chromium/chrome-linux/chrome npm test
 - Share links: a model fetched by ID (served from a stubbed RCSB response) enables *Copy share
   link*; that PDB entry carries no confidence scores and, although its stubbed B-factors are
   pLDDT-like, pLDDT colouring gives it its model colour rather than a pLDDT colour; opening the link
-  in a fresh page refetches the model and restores its corner text.
+  in a fresh page refetches the model and restores its corner text and the custom colour chain A was
+  given before the link was made, while chain B keeps its own.
 - Generated report, confidence: every predicted model in the report is flagged as carrying
   confidence; a model flagged experimental reads `pLDDT —`, reports no mean pLDDT, and its strip is
   drawn in its model colour under pLDDT colouring.

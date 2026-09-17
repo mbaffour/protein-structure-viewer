@@ -927,6 +927,7 @@
       fitRegion: root.querySelector('#gpv-fit-region').value,
       positionCutoff: positionCutoff(),
       figureLabels: { ...figureLabels },
+      chainColors: Object.fromEntries(customChainColors),
       figureBuilder: builderOptions(),
       figureTemplate: figureTemplateSettings(),
       background: root.querySelector('#gpv-background').value,

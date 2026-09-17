@@ -2900,8 +2900,15 @@ await step('a structure fetched from the PDB is not painted on the pLDDT scale',
 await step('the share link reopens the fetched model with its annotations', async () => {
   await tab('annotate');
   await page.fill('#gpv-screen-text', 'Shared panel'); await page.click('#gpv-add-screen-text'); await page.waitForTimeout(300);
+  /* Before 2.46.2 a chain colour lived only in memory: it was lost on reload, in session files and
+     in share links. Chain colours are global by chain id, so setting A here colours 1tst's chain A. */
+  await tab('appearance'); const modeBefore = await page.inputValue('#gpv-color-mode');
+  await tab('models'); await page.locator('#gpv-chain-rows input[aria-label="Colour for chain A"]').fill('#123456'); await page.waitForTimeout(300);
   await tab('publish');
   await page.click('#gpv-share-link'); await page.waitForTimeout(1000);
+  await tab('models'); await page.click('#gpv-chain-colors-reset'); await page.waitForTimeout(200);
+  await tab('appearance'); await page.selectOption('#gpv-color-mode', modeBefore); await page.waitForTimeout(200);
+  await tab('publish');
   const link = await page.inputValue('#gpv-share-url');
   if (!/#scene=[zj]\./.test(link)) throw new Error('no scene token: ' + link.slice(0, 80));
   const shared = await browser.newPage({ viewport: { width: 1280, height: 1000 } });
@@ -2913,6 +2920,11 @@ await step('the share link reopens the fetched model with its annotations', asyn
   if (rows !== 1) throw new Error('shared page lists ' + rows + ' models · ' + (await shared.locator('#gpv-state').textContent()));
   const texts = await shared.locator('#gpv-annotation-list input[type="text"]').evaluateAll(inputs => inputs.map(input => input.value));
   if (!texts.includes('Shared panel')) throw new Error('corner text missing from the shared page: ' + JSON.stringify(texts));
+  await shared.click('[data-gpv-tab="models"]'); await shared.waitForTimeout(300);
+  const sharedA = await shared.locator('#gpv-chain-rows input[aria-label="Colour for chain A"]').inputValue();
+  if (sharedA !== '#123456') throw new Error('the shared page gives chain A ' + sharedA + ', not the colour it was shared with');
+  const sharedB = await shared.locator('#gpv-chain-rows input[aria-label="Colour for chain B"]').inputValue();
+  if (sharedB === '#123456') throw new Error('chain B took chain A’s override');
   console.log('       ' + (link.length / 1024).toFixed(1) + ' KB link · ' + ((await shared.locator('#gpv-state').textContent()) || '').trim());
   await shared.close();
 });
