@@ -83,7 +83,7 @@
     const project = projectorFor(target);
     const scale = dimensions.textScale || Math.max(1, dimensions.width / 600);
     const palette = figurePalette(); const byId = entriesById(); const parts = [];
-    const ink = labelColors.getPropertyValue('--card-foreground').trim() || '#111827';
+    const ink = themeColor('--card-foreground', '#111827');
     /* The same resolver the PNG of this panel draws with, run on the same viewer and the same plan,
        so the two files place every label on the same pixel. */
     const placement = panelLabelPlacement(target, dimensions, shownIds);

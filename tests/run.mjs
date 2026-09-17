@@ -934,6 +934,32 @@ await step('theme cycles system → light → dark → system', async () => {
   }
   if (seen.join(',') !== 'light,dark,system') throw new Error(seen.join(','));
 });
+await step('on-screen labels are legible in light and dark themes', async () => {
+  /* The theme's colour tokens are light-dark() and color-mix() expressions. Before 2.46.3 labels read
+     them raw, 3Dmol parsed each as black, and every on-screen label was a black box with black text. */
+  await tab('appearance'); const backgroundBefore = await page.inputValue('#gpv-background');
+  await page.selectOption('#gpv-background', 'transparent'); await page.waitForTimeout(200);
+  const read = () => page.evaluate(() => {
+    const d = window.__viewerDebug; const style = d.labelStyle({ x: 0, y: 0, z: 0 }, {});
+    return { font: style.fontColor, paper: style.backgroundColor, border: style.borderColor, muted: d.themeColor('--muted-foreground', 'fallback') };
+  });
+  const results = {};
+  try {
+    for (const mode of ['light', 'dark']) {
+      for (let i = 0; i < 3 && (await page.locator('#gpv-theme').getAttribute('data-mode')) !== mode; i += 1) { await page.click('#gpv-theme'); await page.waitForTimeout(250); }
+      const style = await read();
+      for (const [key, value] of Object.entries(style)) if (!/^#[0-9a-f]{6}$/i.test(value)) throw new Error(mode + ' ' + key + ' is not a resolved colour: ' + value);
+      const contrast = await page.evaluate(([a, b]) => Math.abs(window.__viewerDebug.hexLuminance(a) - window.__viewerDebug.hexLuminance(b)), [style.font, style.paper]);
+      if (contrast < 0.5) throw new Error(mode + ' label text ' + style.font + ' on ' + style.paper + ' has luminance contrast ' + contrast.toFixed(2));
+      results[mode] = style;
+    }
+    if (results.light.paper === results.dark.paper) throw new Error('label paper does not follow the theme: ' + results.light.paper);
+    console.log('       light ' + results.light.font + ' on ' + results.light.paper + ' · dark ' + results.dark.font + ' on ' + results.dark.paper);
+  } finally {
+    for (let i = 0; i < 3 && (await page.locator('#gpv-theme').getAttribute('data-mode')) !== 'system'; i += 1) { await page.click('#gpv-theme'); await page.waitForTimeout(250); }
+    await page.selectOption('#gpv-background', backgroundBefore); await page.waitForTimeout(200);
+  }
+});
 await step('preferences survive a reload', async () => {
   await page.selectOption('#gpv-style', 'stick'); await page.waitForTimeout(300);
   await page.reload(); await page.waitForTimeout(2500);
@@ -1059,6 +1085,56 @@ await step('identical chains are re-paired by position when a model places the s
     if (!/A→B/.test(byPosition.mapping) || !/B→A/.test(byPosition.mapping)) throw new Error('the chain mapping was not swapped: ' + byPosition.mapping);
     if (!/matched by position/.test(byPosition.mapping)) throw new Error('the method does not say chains were matched by position: ' + byPosition.mapping);
     console.log('       swapped copies: ' + byName.rmsd.toFixed(2) + ' Å in file order → ' + byPosition.rmsd.toFixed(2) + ' Å by position · ' + byPosition.mapping);
+  } finally { await cleanup(); }
+});
+await step('model agreement matches residues through the superposition when models number them differently', async () => {
+  /* The same coordinates with every residue numbered 10 higher, as a model whose numbering is
+     offset from the reference's (an AlphaFold DB model keeps the initiator Met a crystal structure's
+     mature chain lacks). Before 2.46.3 the RMSF pooled Cα by chain and residue *number*, so it
+     averaged each residue with the one ten positions away and reported a large spread for two
+     identical structures. */
+  const original = (await readFile(join(work, 'model_a.pdb'), 'utf8')).split('\n');
+  const shifted = original.filter(line => /^(ATOM|HETATM)/.test(line))
+    .map(line => line.slice(0, 22) + String(Number(line.slice(22, 26)) + 10).padStart(4) + line.slice(26))
+    .concat(['END', '']).join('\n');
+  const file = join(work, 'model_renumbered.pdb'); await writeFile(file, shifted);
+  await tab('appearance'); const modeBefore = await page.inputValue('#gpv-color-mode');
+  const cleanup = async () => {
+    await tab('appearance'); await page.selectOption('#gpv-color-mode', modeBefore); await page.waitForTimeout(200);
+    await tab('models');
+    const row = page.locator('#gpv-list .gpv-entry', { hasText: 'model_renumbered' });
+    if (await row.count()) { await row.first().locator('button:has-text("Remove")').click(); await page.waitForTimeout(400); }
+    await page.click('#gpv-show-all'); await page.waitForTimeout(600);
+    await tab('compare'); await page.click('#gpv-align'); await page.waitForTimeout(2500);
+  };
+  try {
+    await tab('models'); await page.setInputFiles('#gpv-files', [file]); await page.waitForTimeout(1800);
+    await page.evaluate(labels => {
+      [...document.querySelectorAll('#gpv-list .gpv-entry')].forEach(entry => {
+        const toggle = entry.querySelector('input[type="checkbox"]');
+        const wanted = labels.some(label => entry.textContent.includes(label));
+        if (toggle && toggle.checked !== wanted) toggle.click();
+      });
+    }, ['model_a.pdb', 'model_renumbered.pdb']);
+    await page.waitForTimeout(900);
+    await tab('compare');
+    await page.evaluate(() => { const select = document.querySelector('#gpv-reference'); const option = [...select.options].find(item => /model_a\.pdb/.test(item.textContent)); select.value = option.value; select.dispatchEvent(new Event('change', { bubbles: true })); });
+    await page.uncheck('#gpv-chain-position');
+    await page.click('#gpv-align'); await page.waitForTimeout(3000);
+    await tab('appearance'); await page.selectOption('#gpv-color-mode', 'agreement'); await page.waitForTimeout(400);
+    const state = await page.evaluate(() => {
+      const d = window.__viewerDebug; const spread = d.ensembleSpread();
+      if (!spread) return null;
+      const renumbered = d.entries().find(e => /model_renumbered/.test(e.name));
+      const atom = renumbered.atoms.find(a => a.atom === 'CA' && a.resi === 15 && (a.chain || '') === 'A');
+      return { size: spread.values.size, max: spread.max, count: spread.count, painted: d.colorOptions(renumbered).colorfunc(atom) };
+    });
+    if (!state) throw new Error('no ensemble spread after aligning the renumbered copy');
+    if (state.count !== 2) throw new Error('ensemble counts ' + state.count + ' models, expected 2');
+    if (state.size < 50) throw new Error('only ' + state.size + ' residues were matched');
+    if (!(state.max < 0.01)) throw new Error('identical structures report an RMSF of up to ' + state.max.toFixed(2) + ' Å');
+    if (state.painted !== '#2563eb') throw new Error('the renumbered model’s residue 15 is painted ' + state.painted + ', not the <0.5 Å band');
+    console.log('       ' + state.size + ' residues matched across a +10 numbering offset · max RMSF ' + state.max.toFixed(4) + ' Å');
   } finally { await cleanup(); }
 });
 await step('the pairwise RMSD matrix agrees with the alignment table and exports as CSV, PNG, SVG and a composite panel', async () => {

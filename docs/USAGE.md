@@ -193,8 +193,12 @@ Notes on the colour schemes:
 - **Model agreement (Cα RMSF)** colours each residue by how much its Cα position varies across the
   models you aligned with *Align visible* (Compare tab): under 0.5 Å blue, 0.5–1 Å green, 1–2 Å
   yellow, 2–4 Å orange, 4 Å and above red; residues present in only one model are grey. Where
-  *Cα deviation* compares one model to a reference, this asks the whole run at once. **Download RMSF
-  CSV** in the Compare tab writes the values per residue with the models used.
+  *Cα deviation* compares one model to a reference, this asks the whole run at once. Residues are
+  matched through the same pairing the superposition used, so models that number their residues
+  differently — an AlphaFold DB model with its initiator Met beside a crystal structure without it —
+  are compared residue for residue; values are reported in the reference's numbering. **Download RMSF
+  CSV** in the Compare tab writes the values per residue, how many models each residue was found in,
+  and the models used.
 - **Low confidence** hides residues below pLDDT 50 or 70 — in the viewer, in every synchronized
   panel, and in every PNG and SVG export, so a figure without disordered tails takes one click. The
   sequence strip dims the hidden residues and its title says what is hidden. The setting is stored in

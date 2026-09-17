@@ -1702,10 +1702,49 @@ html>body{padding:0}</style>
   let busyDepth = 0;
   let restoreMotion = null;
   const listPageSize = 60;
-  const viewerVersion = '2.46.2';
+  const viewerVersion = '2.46.3';
   const preferenceKey = 'protein-structure-viewer:preferences';
   const themeKey = 'protein-structure-viewer:theme';
   const labelColors = getComputedStyle(root);
+  /* The theme's colour tokens are light-dark() and color-mix() expressions. CSS resolves them;
+     3Dmol, canvas 2D and a standalone SVG do not, and getPropertyValue hands back the expression —
+     which 3Dmol reads as black and a canvas silently ignores. themeColor() lets the browser resolve a
+     token for the current theme and returns an opaque hex, a translucent token composited over the
+     page background the way the interface shows it. */
+  const themeProbe = document.createElement('span');
+  themeProbe.setAttribute('aria-hidden', 'true');
+  themeProbe.style.cssText = 'position:absolute;width:0;height:0;overflow:hidden;visibility:hidden;pointer-events:none';
+  root.append(themeProbe);
+  const themeCanvas = document.createElement('canvas');
+  themeCanvas.width = 1; themeCanvas.height = 1;
+  const themeContext = themeCanvas.getContext('2d', { willReadFrequently: true });
+  const themeCache = new Map();
+  function cssRgba(value) {
+    themeProbe.style.color = '';
+    themeProbe.style.color = value;
+    themeContext.clearRect(0, 0, 1, 1);
+    themeContext.fillStyle = '#000000';
+    themeContext.fillStyle = getComputedStyle(themeProbe).color;
+    themeContext.fillRect(0, 0, 1, 1);
+    const data = themeContext.getImageData(0, 0, 1, 1).data;
+    return [data[0], data[1], data[2], data[3] / 255];
+  }
+  function themeColor(name, fallback) {
+    if (!labelColors.getPropertyValue(name).trim()) return fallback;
+    const scheme = (document.documentElement.getAttribute('data-theme') || '') + (matchMedia('(prefers-color-scheme: dark)').matches ? '|dark' : '|light');
+    const key = name + '|' + scheme;
+    if (themeCache.has(key)) return themeCache.get(key);
+    try {
+      const [r, g, b, a] = cssRgba('var(' + name + ')');
+      const [pr, pg, pb, pa] = cssRgba('var(--background)');
+      const paper = pa > 0 ? [pr, pg, pb] : [255, 255, 255];
+      const hex = '#' + [r, g, b].map((channel, index) => Math.round(channel * a + paper[index] * (1 - a)).toString(16).padStart(2, '0')).join('');
+      themeCache.set(key, hex);
+      return hex;
+    } catch (error) {
+      return fallback;
+    }
+  }
   const reduceMotion = matchMedia('(prefers-reduced-motion: reduce)').matches;
 
   /* ---------- Small UI helpers ---------- */
@@ -2053,7 +2092,7 @@ html>body{padding:0}</style>
     context.putImageData(image, 0, 0);
     const chains = entry.confidence.tokenChainIds || [];
     context.save();
-    context.strokeStyle = labelColors.getPropertyValue('--foreground').trim() || '#111827';
+    context.strokeStyle = themeColor('--foreground', '#111827');
     context.globalAlpha = 0.7;
     context.lineWidth = 1;
     for (let index = 1; index < chains.length; index += 1) {
@@ -2379,7 +2418,7 @@ html>body{padding:0}</style>
        as "very low confidence". The sequence strip already falls back to the model colour here. */
     if (mode === 'plddt') return entry.scores.length ? { colorfunc: atom => plddtColor(Number(atom.b || 0)) } : { color: entry.color };
     if (mode === 'deviation') return { colorfunc: atom => deviationColor(entry, atom) };
-    if (mode === 'agreement') return { colorfunc: atom => agreementColor(atom) };
+    if (mode === 'agreement') return { colorfunc: atom => agreementColor(entry, atom) };
     if (mode === 'domain') return { colorfunc: atom => domainColor(entry, atom) };
     if (mode === 'annotated') return { colorfunc: atom => annotatedColor(entry, atom) };
     if (mode === 'data') return { colorfunc: atom => dataColor(entry, atom) };
@@ -2872,13 +2911,13 @@ html>body{padding:0}</style>
     /* A boxed label is a patch of the figure's paper with text on it. Once a background colour is
        chosen the box takes that colour, which is what the SVG export has always drawn; only with a
        transparent background does it fall back to the interface's own card colour. */
-    const paper = background.alpha > 0 ? background.color : (labelColors.getPropertyValue('--card').trim() || '#ffffff');
-    const ink = background.alpha > 0 ? (onDark ? '#f8fafc' : '#111827') : (labelColors.getPropertyValue('--card-foreground').trim() || '#111827');
+    const paper = background.alpha > 0 ? background.color : themeColor('--card', '#ffffff');
+    const ink = background.alpha > 0 ? (onDark ? '#f8fafc' : '#111827') : themeColor('--card-foreground', '#111827');
     return {
       position,
       backgroundColor: paper,
       fontColor: color || (plain ? (onDark ? '#f8fafc' : '#111827') : ink),
-      borderColor: color || (background.alpha > 0 ? (onDark ? '#475569' : '#cbd5e1') : (labelColors.getPropertyValue('--border').trim() || '#cbd5e1')),
+      borderColor: color || (background.alpha > 0 ? (onDark ? '#475569' : '#cbd5e1') : themeColor('--border', '#cbd5e1')),
       borderThickness: plain ? 0 : 1,
       fontSize: Math.round((options.size || 12) * (options.scale || 1)),
       font: figureFont(),
@@ -2911,7 +2950,7 @@ html>body{padding:0}</style>
       size.value = String(label.size || 12);
       size.addEventListener('change', () => { remember('label size'); label.size = Number(size.value); rebuildOverlays(); });
       const color = document.createElement('input'); color.className = 'form-control form-control-color'; color.type = 'color';
-      color.value = label.color || (labelColors.getPropertyValue('--card-foreground').trim() || '#111827');
+      color.value = label.color || themeColor('--card-foreground', '#111827');
       color.setAttribute('aria-label', 'Label colour');
       color.addEventListener('input', () => { if (!color.dataset.remembered) { remember('label colour'); color.dataset.remembered = '1'; } label.color = color.value; rebuildOverlays(); });
       color.addEventListener('change', () => { delete color.dataset.remembered; });
@@ -2943,7 +2982,7 @@ html>body{padding:0}</style>
   function labelPosition(label, byId = entriesById()) { return shiftBy(labelAnchor(label, byId), label.offset); }
   const leaderMinimum = 0.75;
   function leaderLength(anchor, position) { return Math.hypot(position.x - anchor.x, position.y - anchor.y, position.z - anchor.z); }
-  function leaderColor() { return labelColors.getPropertyValue('--muted-foreground').trim() || '#94a3b8'; }
+  function leaderColor() { return themeColor('--muted-foreground', '#94a3b8'); }
   /* `placement`, when a figure panel has resolved one (panelLabelPlacement), says where each label
      goes in that panel — its text prints several times larger against the structure than on screen,
      so the screen's placement is not the panel's. Without one the label sits at its own offset. */
@@ -3825,7 +3864,7 @@ html>body{padding:0}</style>
     if (mode === 'chain') return chainColor(atom.chain);
     if (mode === 'entity') return entityColor(entry, atom);
     if (mode === 'deviation') return deviationColor(entry, atom);
-    if (mode === 'agreement') return agreementColor(atom);
+    if (mode === 'agreement') return agreementColor(entry, atom);
     if (mode === 'domain') return domainColor(entry, atom);
     if (mode === 'annotated') return annotatedColor(entry, atom);
     if (mode === 'data') return dataColor(entry, atom);
@@ -3844,7 +3883,7 @@ html>body{padding:0}</style>
     const context = canvas.getContext('2d');
     context.setTransform(ratio, 0, 0, ratio, 0, 0); context.clearRect(0, 0, width, height);
     const count = row.residues.length; const cell = width / count; const gap = cell > 3 ? 1 : 0;
-    const ink = labelColors.getPropertyValue('--card-foreground').trim() || '#111827';
+    const ink = themeColor('--card-foreground', '#111827');
     const labelled = new Set(labelRecords.filter(label => label.entryId === entry.id && (label.chain || '') === row.chain).map(label => label.resi));
     const highlighted = new Map();
     selectionRecords.filter(record => record.entryId === entry.id && record.action === 'highlight' && (!record.chain || record.chain === row.chain))
@@ -3871,7 +3910,7 @@ html>body{padding:0}</style>
         context.moveTo(x + cell / 2, 3.5); context.lineTo(x + cell / 2 - 3.5, 0); context.lineTo(x + cell / 2 + 3.5, 0); context.fill();
       }
     });
-    context.fillStyle = labelColors.getPropertyValue('--muted-foreground').trim() || '#6b7280';
+    context.fillStyle = themeColor('--muted-foreground', '#6b7280');
     context.font = '9px ' + (labelColors.getPropertyValue('--font-mono').trim() || 'monospace'); context.textBaseline = 'alphabetic';
     const step = [1, 5, 10, 25, 50, 100, 250, 500, 1000].find(value => value * cell >= 44) || 1000;
     let lastTick = -Infinity;
@@ -4577,29 +4616,48 @@ html>body{padding:0}</style>
   let ensembleSpread = null;
   const agreementBands = [[0.5, '#2563eb', '<0.5 Å'], [1, '#22c55e', '0.5–1 Å'], [2, '#eab308', '1–2 Å'], [4, '#f97316', '2–4 Å'], [Infinity, '#dc2626', '≥4 Å']];
 
-  /* Per-residue root-mean-square fluctuation of Cα positions across the aligned
-     models, keyed by chain|resi. Residues present in one model only are skipped. */
-  function ensembleAgreement(entries) {
-    if (entries.length < 2) return null;
+  /* Per-residue root-mean-square fluctuation of Cα positions across the aligned models, in the
+     reference's residue numbering. Each model's Cα is taken through the pairing its superposition
+     used (alignedPairs), not by matching chain and residue number: models from different sources
+     number differently — an AlphaFold DB model keeps the initiator Met that a crystal structure's
+     mature chain lacks — and pooling by number then averages each residue with its neighbour.
+     Residues present in one model only are skipped. */
+  function ensembleAgreement(reference, targets) {
+    if (!reference || !targets.length) return null;
     const perTag = new Map();
-    entries.forEach(entry => entry.atoms.forEach(atom => {
-      if (atom.atom !== 'CA' || atom.hetflag) return;
-      const tag = residueTag(atom);
-      if (!perTag.has(tag)) perTag.set(tag, []);
-      perTag.get(tag).push([atom.x, atom.y, atom.z]);
-    }));
-    const values = new Map(); let max = 0;
+    reference.atoms.forEach(atom => { if (atom.atom === 'CA' && !atom.hetflag) perTag.set(residueTag(atom), [[atom.x, atom.y, atom.z]]); });
+    /* model id → its own residue tag → the reference tag it was paired with; null for the reference. */
+    const byEntry = new Map([[reference.id, null]]);
+    targets.forEach(entry => {
+      const own = new Map();
+      (entry.alignedPairs instanceof Map ? entry.alignedPairs : new Map()).forEach((atom, tag) => {
+        const points = perTag.get(tag);
+        if (!points || atom.hetflag) return;
+        points.push([atom.x, atom.y, atom.z]);
+        own.set(residueTag(atom), tag);
+      });
+      byEntry.set(entry.id, own);
+    });
+    const values = new Map(); const counts = new Map(); let max = 0;
     perTag.forEach((points, tag) => {
       if (points.length < 2) return;
       const centre = [0, 1, 2].map(axis => points.reduce((sum, point) => sum + point[axis], 0) / points.length);
       const rmsf = Math.sqrt(points.reduce((sum, point) => sum + (point[0] - centre[0]) ** 2 + (point[1] - centre[1]) ** 2 + (point[2] - centre[2]) ** 2, 0) / points.length);
-      values.set(tag, rmsf); max = Math.max(max, rmsf);
+      values.set(tag, rmsf); counts.set(tag, points.length); max = Math.max(max, rmsf);
     });
-    return values.size ? { values, count: entries.length, models: entries.map(entry => entry.name), max } : null;
+    return values.size ? { values, counts, byEntry, count: targets.length + 1, models: [reference, ...targets].map(entry => entry.name), max } : null;
   }
 
-  function agreementColor(atom) {
-    const value = ensembleSpread ? ensembleSpread.values.get(residueTag(atom)) : undefined;
+  /* The RMSF at a model's residue: the reference's own tag, or the reference tag the model's residue was paired with. */
+  function agreementValue(entry, atom) {
+    if (!ensembleSpread || !entry || !ensembleSpread.byEntry.has(entry.id)) return undefined;
+    const pairing = ensembleSpread.byEntry.get(entry.id);
+    const tag = pairing ? pairing.get(residueTag(atom)) : residueTag(atom);
+    return tag === undefined ? undefined : ensembleSpread.values.get(tag);
+  }
+
+  function agreementColor(entry, atom) {
+    const value = agreementValue(entry, atom);
     if (value === undefined) return '#9ca3af';
     return agreementBands.find(([limit]) => value < limit)[1];
   }
@@ -4674,8 +4732,9 @@ html>body{padding:0}</style>
     if (!ensembleSpread) return;
     const rows = [['chain', 'resi', 'models', 'ca_rmsf_angstrom']];
     [...ensembleSpread.values.entries()].sort((a, b) => compareChains(a[0].split('|')[0], b[0].split('|')[0]) || Number(a[0].split('|')[1]) - Number(b[0].split('|')[1]))
-      .forEach(([tag, value]) => rows.push([tag.split('|')[0], tag.split('|')[1], ensembleSpread.count, value.toFixed(3)]));
+      .forEach(([tag, value]) => rows.push([tag.split('|')[0], tag.split('|')[1], ensembleSpread.counts.get(tag), value.toFixed(3)]));
     rows.push([]); rows.push(['# models', ensembleSpread.models.join(' | ')]);
+    rows.push(['# residue numbering', ensembleSpread.models[0] + ' (reference); each model matched through its superposition pairing']);
     downloadBlob(rows.map(row => row.join(',')).join('\n'), 'text/csv', 'protein-ensemble-rmsf.csv');
     updateStatus('Per-residue RMSF downloaded for ' + ensembleSpread.values.size + ' residues across ' + ensembleSpread.count + ' models');
   }
@@ -5077,7 +5136,7 @@ html>body{padding:0}</style>
     const margin = figure ? { left: 72 * scale, top: 54 * scale, right: 24 * scale, bottom: 64 * scale } : { left: 0, top: 0, right: 0, bottom: 0 };
     canvas.width = Math.round(m * cell + margin.left + margin.right); canvas.height = Math.round(n * cell + margin.top + margin.bottom);
     const context = canvas.getContext('2d');
-    const palette = figure ? { paper: '#ffffff', ink: '#111827', grid: '#e5e7eb' } : { paper: labelColors.getPropertyValue('--card').trim() || '#ffffff', ink: labelColors.getPropertyValue('--foreground').trim() || '#111827', grid: labelColors.getPropertyValue('--border').trim() || '#e5e7eb' };
+    const palette = figure ? { paper: '#ffffff', ink: '#111827', grid: '#e5e7eb' } : { paper: themeColor('--card', '#ffffff'), ink: themeColor('--foreground', '#111827'), grid: themeColor('--border', '#e5e7eb') };
     context.fillStyle = palette.paper; context.fillRect(0, 0, canvas.width, canvas.height);
     const near = '#1e3a8a'; const far = '#bfdbfe';
     pairs.forEach((distance, key) => {
@@ -5665,7 +5724,7 @@ html>body{padding:0}</style>
       sentences.push('Per-residue Cα deviation is the distance between paired Cα atoms after superposition.');
       if (figurePanelsSelected().some(view => view.colorMode === 'deviation')) sentences.push('One figure panel maps that deviation onto the models in five bands (<1, 1–2, 2–4, 4–8 and ≥8 Å), residues the alignment did not pair being left grey.');
     }
-    if (ensembleSpread) sentences.push('Model agreement was expressed per residue as the Cα root-mean-square fluctuation about the mean Cα position across the ' + ensembleSpread.count + ' superposed models, for residues present in at least two models.');
+    if (ensembleSpread) sentences.push('Model agreement was expressed per residue as the Cα root-mean-square fluctuation about the mean Cα position across the ' + ensembleSpread.count + ' superposed models, for residues present in at least two models; each model\'s residues were matched to the reference (' + ensembleSpread.models[0] + ') through the residue pairing used for its superposition, and values are reported in the reference\'s residue numbering.');
     if (contactResult && contactResult.pairs.size) { const target = entryById(contactResult.entryId); sentences.push('Inter-chain contacts between chains ' + (contactResult.chainA || '—') + ' and ' + (contactResult.chainB || '—') + (target ? ' of ' + displayName(target) : '') + ' were defined as residue pairs with ' + (contactResult.mode === 'ca' ? 'Cα atoms' : 'any pair of heavy atoms') + ' within ' + contactResult.cutoff + ' Å; ' + contactResult.pairs.size + ' residue pairs (' + contactResult.residuesA.length + ' residues on chain ' + (contactResult.chainA || '—') + ', ' + contactResult.residuesB.length + ' on chain ' + (contactResult.chainB || '—') + ') met the criterion.'); }
     if (residueData && residueData.msa && root.querySelector('#gpv-color-mode').value === 'data') sentences.push('Per-residue ' + (residueData.msa.metric === 'depth' ? 'alignment coverage (number of sequences with a residue at the column)' : residueData.msa.metric === 'identity' ? 'identity to the query (fraction of aligned sequences sharing the query residue)' : 'conservation, defined as 1 − H/log₂20 with H the Shannon entropy of the amino-acid distribution at the column (gaps excluded' + (residueData.msa.weighted ? '; sequences weighted with the position-based scheme of Henikoff & Henikoff, 1994' : '; sequences unweighted') + '),') + ' was computed from the unpaired multiple sequence alignment written by AlphaFold 3 (' + residueData.msa.sequences.join(' and ') + ' sequences) and mapped onto the chains whose sequence matches the query.');
     const domains = first && first.domains;
@@ -6439,7 +6498,7 @@ html>body{padding:0}</style>
     });
     /* The reference is coloured by its mean deviation across the aligned models. */
     reference.deviations = new Map([...reference.deviationSamples].map(([tag, list]) => [tag, mean(list)]));
-    ensembleSpread = ensembleAgreement([reference, ...targets.filter(entry => entry !== reference && results.some(result => result.name === entry.name))]);
+    ensembleSpread = ensembleAgreement(reference, targets.filter(entry => entry !== reference && results.some(result => result.name === entry.name)));
     reference.deviationSamples = null;
     done();
     showImportErrors(failures);
@@ -8190,7 +8249,7 @@ html>body{padding:0}</style>
     const project = projectorFor(target);
     const scale = dimensions.textScale || Math.max(1, dimensions.width / 600);
     const palette = figurePalette(); const byId = entriesById(); const parts = [];
-    const ink = labelColors.getPropertyValue('--card-foreground').trim() || '#111827';
+    const ink = themeColor('--card-foreground', '#111827');
     /* The same resolver the PNG of this panel draws with, run on the same viewer and the same plan,
        so the two files place every label on the same pixel. */
     const placement = panelLabelPlacement(target, dimensions, shownIds);
@@ -10116,9 +10175,21 @@ applyBackground();
     if (typeof gpvRenderIcons === 'function') gpvRenderIcons(button);
     button.setAttribute('aria-label', 'Appearance: ' + (mode.value === 'system' ? 'follow system' : mode.label.toLowerCase()));
     writeJson(themeKey, mode.value);
-    /* The 3D canvas background follows the resolved theme, so repaint it. */
+    /* The 3D canvas background follows the resolved theme, so repaint it — and the labels and the
+       sequence strip, which draw with theme colours resolved at draw time (themeColor). */
     applyAppearance();
+    rebuildOverlays();
+    renderSequenceSoon();
   }
+
+  /* In System mode the operating system can switch between light and dark while the page is open
+     (a sunset schedule, say); redraw what is drawn with resolved theme colours when it does. */
+  matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () => {
+    if (document.documentElement.hasAttribute('data-theme')) return;
+    applyAppearance();
+    rebuildOverlays();
+    renderSequenceSoon();
+  });
 
   /* ---------- Full screen ---------- */
 
@@ -10890,7 +10961,7 @@ applyBackground();
     'The sequence strip under the viewer shows every chain coloured by pLDDT. Click a residue to select it for a label, drag across a range to fill the Selections fields, double-click to zoom to it.',
     'Ctrl/⌘+Z undoes the last label, selection, measurement or annotation change; add Shift to redo. The Undo and Redo buttons sit in the Annotate tab.',
     'Publish → Copy share link turns models fetched by ID, plus your camera, colours, labels and annotations, into a URL a reviewer opens directly. Local files are never included.',
-    'Colour by chain uses a fixed palette — chain A is the same blue in every model and panel — and the export legend names each chain.',
+    'Colour by chain gives chain A the same colour in every model and panel, and the export legend names each chain. Click a chain\'s swatch in Models → Composition, or in Publish → Edit figure labels, to give it any colour you like — sessions and share links keep it.',
     'Appearance → Low confidence hides residues below pLDDT 50 or 70 everywhere at once: viewer, synchronized panels, PNG and SVG exports.',
     'After Align visible, colour by Cα deviation to see where the models disagree. Blue is under 1 Å, red is 8 Å or more, grey was not matched.',
     'Confidence → pLDDT profile SVG plots per-residue confidence for every displayed model, one panel per chain, ready for a supplementary figure.',
@@ -10993,7 +11064,7 @@ applyBackground();
   offerSessionRestore();
   /* ?debug=1 exposes a few internals for the regression suite and for bug reports;
      it has no effect otherwise. */
-  if (new URLSearchParams(location.search).has('debug')) window.__viewerDebug = { viewer, pickAtomAt, displayedEntries, activeEntry, colorOptions, sceneSettings, contactResult: () => contactResult, residueData: () => residueData, msaAssets: () => msaAssets, entries: () => structures, nearbyResidues, assemblyDimensions, paeDomains, parseConfidenceBytes, methodsText, alignmentResults: () => alignmentResults, ensembleSpread: () => ensembleSpread, siteResults: () => siteResults, interfaceResults: () => interfaceResults, solventAccessibleArea, heavyAtoms, ligandGroups, architectureModel, domainSets, distinguishingNames, rmsdMatrix: () => rmsdMatrix, rmsdMedoid, scaleBarSpec, pixelsPerAngstrom, sceneCentre, exportDimensions, exportViewer: () => exportViewer, renderPublicationImage, furnitureLayout, legendMetrics, legendWanted, figurePalette, figureScale, releaseExportViewer, labelRecords: () => labelRecords, labelPosition, labelHitAt, labelScreenBox, separateLabels, spotlightResidues: () => spotlightResidues, positionEffect: () => positionEffect, savedViews: () => savedViews, selectionRecords: () => selectionRecords };
+  if (new URLSearchParams(location.search).has('debug')) window.__viewerDebug = { viewer, pickAtomAt, displayedEntries, activeEntry, colorOptions, sceneSettings, contactResult: () => contactResult, residueData: () => residueData, msaAssets: () => msaAssets, entries: () => structures, nearbyResidues, assemblyDimensions, paeDomains, parseConfidenceBytes, methodsText, alignmentResults: () => alignmentResults, ensembleSpread: () => ensembleSpread, siteResults: () => siteResults, interfaceResults: () => interfaceResults, solventAccessibleArea, heavyAtoms, ligandGroups, architectureModel, domainSets, distinguishingNames, rmsdMatrix: () => rmsdMatrix, rmsdMedoid, scaleBarSpec, pixelsPerAngstrom, sceneCentre, exportDimensions, exportViewer: () => exportViewer, renderPublicationImage, furnitureLayout, legendMetrics, legendWanted, figurePalette, figureScale, releaseExportViewer, labelRecords: () => labelRecords, labelPosition, labelHitAt, labelScreenBox, separateLabels, spotlightResidues: () => spotlightResidues, positionEffect: () => positionEffect, savedViews: () => savedViews, selectionRecords: () => selectionRecords, labelStyle, themeColor, hexLuminance, backgroundSpec };
   applyTheme(readJson(themeKey, 'system'));
   selectToolTab('models');
   applyAppearance();

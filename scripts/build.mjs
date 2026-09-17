@@ -66,6 +66,25 @@ for (const f of jsParts) {
  * cannot silently normalise a newline or drop a byte-order mark. */
 const output = Buffer.concat(parts.map(p => readFileSync(p)));
 
+/* The parts share one script, so a syntax error in any of them — an unescaped apostrophe in a tip,
+ * say — stops the whole viewer from starting, and the browser suite then reports it as a hundred
+ * timeouts. Parse every inline classic script before writing anything; nothing is executed. */
+{
+  const html = output.toString('utf8');
+  const scripts = /<script(?![^>]*\bsrc=)([^>]*)>([\s\S]*?)<\/script>/g;
+  let match; let index = 0;
+  while ((match = scripts.exec(html))) {
+    index += 1;
+    if (/\btype\s*=\s*["'](?!text\/javascript)/i.test(match[1])) continue;
+    try { new Function(match[2]); }
+    catch (error) {
+      const line = html.slice(0, match.index).split('\n').length;
+      console.error(`build: inline script ${index} (starting on line ${line} of index.html) does not parse: ${error.message}`);
+      process.exit(1);
+    }
+  }
+}
+
 if (!check) {
   writeFileSync(indexPath, output);
   console.log(`build: wrote index.html from ${parts.length} parts (${output.length} bytes)`);

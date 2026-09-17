@@ -240,7 +240,7 @@
     context.putImageData(image, 0, 0);
     const chains = entry.confidence.tokenChainIds || [];
     context.save();
-    context.strokeStyle = labelColors.getPropertyValue('--foreground').trim() || '#111827';
+    context.strokeStyle = themeColor('--foreground', '#111827');
     context.globalAlpha = 0.7;
     context.lineWidth = 1;
     for (let index = 1; index < chains.length; index += 1) {

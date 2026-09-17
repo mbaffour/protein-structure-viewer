@@ -565,7 +565,7 @@
     });
     /* The reference is coloured by its mean deviation across the aligned models. */
     reference.deviations = new Map([...reference.deviationSamples].map(([tag, list]) => [tag, mean(list)]));
-    ensembleSpread = ensembleAgreement([reference, ...targets.filter(entry => entry !== reference && results.some(result => result.name === entry.name))]);
+    ensembleSpread = ensembleAgreement(reference, targets.filter(entry => entry !== reference && results.some(result => result.name === entry.name)));
     reference.deviationSamples = null;
     done();
     showImportErrors(failures);
