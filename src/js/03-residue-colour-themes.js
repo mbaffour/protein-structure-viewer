@@ -727,7 +727,9 @@
       row.className = 'gpv-entry';
       const name = document.createElement('span');
       name.className = 'gpv-entry-name';
-      name.textContent = entry.name + ' · chain ' + (record.chain || '—') + ' · ' + record.residues.join(', ') + ' · ' + record.action;
+      /* compactRange (28-figure-legend.js) folds a long selection into runs — "10–20" instead of
+         "10, 11, 12, 13 … 20" — the same way the figure legend and domain ranges already read. */
+      name.textContent = entry.name + ' · chain ' + (record.chain || '—') + ' · ' + compactRange(record.residues) + ' · ' + record.action;
       const remove = document.createElement('button');
       remove.className = 'btn btn-ghost'; remove.type = 'button'; remove.textContent = 'Remove';
       remove.addEventListener('click', () => { remember('selection removal'); selectionRecords = selectionRecords.filter(item => item.id !== record.id); renderSelectionList(); applyStyle(); });
