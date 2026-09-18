@@ -2876,6 +2876,29 @@ await step('the Predict link points at AlphaFold2 WebGPU and opens safely in a n
   if (link.text !== 'Predict') throw new Error('label ' + JSON.stringify(link.text));
 });
 
+await step('the AlphaFold Server link points at DeepMind\'s hosted AlphaFold 3 and opens safely in a new tab', async () => {
+  const link = await page.evaluate(() => {
+    const anchor = document.querySelector('#gpv-alphafold-server-link');
+    return anchor ? { href: anchor.getAttribute('href'), target: anchor.getAttribute('target'), rel: anchor.getAttribute('rel'), text: anchor.textContent.trim() } : null;
+  });
+  if (!link) throw new Error('no #gpv-alphafold-server-link');
+  if (link.href !== 'https://alphafoldserver.com/') throw new Error('href ' + link.href);
+  if (link.target !== '_blank' || !/noopener/.test(link.rel) || !/noreferrer/.test(link.rel)) throw new Error(JSON.stringify(link));
+  if (link.text !== 'AlphaFold Server') throw new Error('label ' + JSON.stringify(link.text));
+});
+
+await step('an AlphaFold Server archive pairs by job name the same way AlphaFold 3 archives already do', async () => {
+  /* AlphaFold Server's real file names (fold_<job>_model_<N>.cif, fold_<job>_summary_confidences_<N>.json,
+     fold_<job>_confidences_<N>.json, fold_<job>_full_data_<N>.json) are exactly the shape the AlphaFold 3
+     rule in associationKey has matched since it was written — this is a characterisation check, not new
+     behaviour, so a change here should be a deliberate one. */
+  const keys = await page.evaluate(() => [
+    'fold_myjob_model_0.cif', 'fold_myjob_summary_confidences_0.json',
+    'fold_myjob_confidences_0.json', 'fold_myjob_full_data_0.json'
+  ].map(window.__viewerDebug.associationKey));
+  if (new Set(keys).size !== 1) throw new Error(JSON.stringify(keys));
+});
+
 await step('a flat L² predicted_aligned_error folds back into square rows', async () => {
   const shaped = await page.evaluate(() => {
     const rows = window.__viewerDebug.squareFromFlatPae(Float32Array.from([1, 2, 3, 4, 5, 6, 7, 8, 9]), 3);

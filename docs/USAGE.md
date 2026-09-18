@@ -112,6 +112,34 @@ pLDDT number alone.
 that site does with a sequence you type into it is its own business — its default mode submits the
 sequence to the public ColabFold MMseqs2 API, and its single-sequence mode does not.
 
+### AlphaFold Server
+
+**AlphaFold Server** — beside Predict — opens [DeepMind's hosted AlphaFold
+3](https://alphafoldserver.com/) in a new tab. Unlike AlphaFold2 WebGPU it needs no particular
+browser or GPU, because the prediction runs on Google's infrastructure rather than yours, and it
+covers more than a protein sequence: ligands, ions, DNA, RNA and common modified residues, in
+addition to protein complexes. In exchange it needs a Google account to sign in, and whatever you
+submit is sent to and processed by Google under [AlphaFold Server's Terms of
+Service](https://alphafoldserver.com/terms-of-service), which restrict use to non-commercial
+purposes and cap how many jobs you can run in a day.
+
+There is no equivalent of **Fetch** for it: predictions belong to your account rather than to a
+public, searchable database, and AlphaFold Server has no API for looking one up by an ID the way
+`files.rcsb.org` or `alphafold.ebi.ac.uk` do. The round-trip is the same shape as Predict's, download
+then drop, just through a browser tab instead of a GPU:
+
+1. Press **AlphaFold Server**, sign in, describe the job (sequences, and optionally ligands, ions or
+   nucleic acids) and run it.
+2. Download the result archive once it finishes.
+3. Drop the `.zip` here, unopened.
+
+Reading that archive is not new: AlphaFold Server writes the same file shapes AlphaFold 3 has always
+written — `fold_<job>_model_<N>.cif`, `fold_<job>_summary_confidences_<N>.json`,
+`fold_<job>_confidences_<N>.json` and `fold_<job>_full_data_<N>.json` — which the viewer has paired
+by job name and rank since AlphaFold 3 support was added; see [Getting structures
+in](#getting-structures-in) above. `fold_<job>_job_request.json` is skipped; nothing in it is a
+confidence number or a structure.
+
 ## Keyboard shortcuts
 
 | Key | Action |

@@ -26,9 +26,12 @@ Structure files you open stay in the browser. Nothing is uploaded.
    - `P69905` — a UniProt accession, resolved against AlphaFold DB
    - `AF-P0DTC2-F1` — an AlphaFold DB entry name
 
-   If you have a sequence but no structure, **Predict** opens
-   [AlphaFold2 WebGPU](https://martin-steinegger.github.io/alphafold2-webgpu/) in a new tab, which
-   folds it on your own GPU. Download the result archive from there and drop it here.
+   If you have a sequence but no structure, two links open a predictor in a new tab; download the
+   result archive from either and drop it here. **Predict** opens
+   [AlphaFold2 WebGPU](https://martin-steinegger.github.io/alphafold2-webgpu/), which folds a
+   monomer or complex on your own GPU with no sign-in. **AlphaFold Server** opens
+   [DeepMind's hosted AlphaFold 3](https://alphafoldserver.com/), which also models ligands,
+   DNA/RNA and modified residues, but needs a Google account and sends the sequence to Google.
 3. Use the tool tabs underneath the viewport: **Models**, **Appearance**, **Annotate**,
    **Compare**, **Confidence**, **Publish**.
 
@@ -40,7 +43,7 @@ Press <kbd>?</kbd> in the viewer for keyboard shortcuts and inline help.
 | --- | --- |
 | `.pdb`, `.cif`, `.mmcif` | Loaded as a model |
 | AlphaFold result `.zip` | Every model is extracted and grouped under the archive name; template hits are ignored |
-| `*_confidences.json`, `*_summary_confidences.json` | pTM, ipTM, ranking score, clash flag, and PAE are attached to matching models |
+| `*_confidences.json`, `*_summary_confidences.json` | pTM, ipTM, ranking score, clash flag, and PAE are attached to matching models — this is the shape [AlphaFold Server](https://alphafoldserver.com/) and the open-source AlphaFold 3 pipeline both write |
 | `ranking_debug.json`, `ranking_scores.csv` | Ranks and ranking scores are attached to matching models |
 | An [AlphaFold2 WebGPU](https://martin-steinegger.github.io/alphafold2-webgpu/) result `.zip` | The model, its `*_scores.json` and `*_predicted_aligned_error_v1.json`, its `.a3m` and its `config.json` are read together and paired by job name |
 | `*_scores.json` | pTM, ipTM, ranking score and PAE are attached; a flat `predicted_aligned_error` is folded back into a square matrix |
@@ -289,10 +292,13 @@ in exactly two situations:
 - When you use **Fetch** to download a structure by identifier, to `files.rcsb.org` or
   `alphafold.ebi.ac.uk`. That request sends only the identifier you typed.
 
-The **Predict** button is an ordinary link: it opens AlphaFold2 WebGPU in a new tab and sends nothing
-from this page with it. What that separate site then does with a sequence you type into it is
-governed by its own documentation — its default alignment mode submits the sequence to the public
-ColabFold MMseqs2 API, and its single-sequence mode does not.
+**Predict** and **AlphaFold Server** are both ordinary links: each opens a separate site in a new tab
+and sends nothing from this page with it. What that site then does with a sequence you type into it
+is its own concern, not this page's — Predict's default alignment mode submits the sequence to the
+public ColabFold MMseqs2 API (its single-sequence mode does not), and AlphaFold Server requires
+signing in with a Google account and sends the sequence to Google under [AlphaFold Server's own
+Terms of Service](https://alphafoldserver.com/terms-of-service), which restrict use to
+non-commercial purposes.
 
 A Content-Security-Policy header restricts the page to exactly those origins. If the libraries cannot
 be reached, the viewer says so rather than failing silently.

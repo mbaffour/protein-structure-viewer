@@ -2,6 +2,21 @@
 
 All notable changes to this project are recorded here.
 
+## 2.47.1
+
+### Added
+
+- **An AlphaFold Server link, beside Predict.** [AlphaFold Server](https://alphafoldserver.com/) is
+  DeepMind's hosted AlphaFold 3 — it covers ligands, ions, DNA and RNA as well as protein complexes,
+  which AlphaFold2 WebGPU does not. It needs a Google sign-in and sends what you submit to Google, so
+  the button and its tooltip say that plainly rather than borrow Predict's "sends nothing" wording,
+  and the README's privacy section spells out the distinction. There is no Fetch-style lookup for it:
+  AlphaFold Server has no public API and no searchable database of past jobs, so the only round-trip
+  is the same as Predict's — run it there, download the archive, drop it here.
+- Reading that archive needed nothing new. AlphaFold Server writes the same
+  `fold_<job>_model_<N>.cif` / `fold_<job>_summary_confidences_<N>.json` shape the viewer has paired
+  by job name and rank since AlphaFold 3 support was added, which predates this release.
+
 ## 2.47.0
 
 ### Added

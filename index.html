@@ -841,8 +841,9 @@ html>body{padding:0}</style>
         <button class="btn" type="submit" id="gpv-fetch" data-tooltip="Download a PDB entry from RCSB, or an AlphaFold DB model from EMBL-EBI"><i data-icon="cloud-download" aria-hidden="true"></i>Fetch</button>
       </form>
       <a class="btn" id="gpv-predict-link" href="https://martin-steinegger.github.io/alphafold2-webgpu/" target="_blank" rel="noopener noreferrer" data-tooltip="Have a sequence but no structure? Fold it in your own browser with AlphaFold2 WebGPU, then drop the result ZIP here"><i data-icon="external-link" aria-hidden="true"></i>Predict</a>
+      <a class="btn" id="gpv-alphafold-server-link" href="https://alphafoldserver.com/" target="_blank" rel="noopener noreferrer" data-tooltip="DeepMind's hosted AlphaFold 3 — complexes, ligands, DNA/RNA and modified residues. Needs a Google sign-in; your sequence is sent to Google, non-commercial use only. Drop the result ZIP here when it finishes"><i data-icon="external-link" aria-hidden="true"></i>AlphaFold Server</a>
     </div>
-    <span class="text-muted text-small gpv-fetch-note">Fetching contacts <code>files.rcsb.org</code> or <code>alphafold.ebi.ac.uk</code>. Predict opens <code>alphafold2-webgpu</code> in a new tab and takes nothing with it. Files you open locally are never sent anywhere.</span>
+    <span class="text-muted text-small gpv-fetch-note">Fetching contacts <code>files.rcsb.org</code> or <code>alphafold.ebi.ac.uk</code>. Predict opens <code>alphafold2-webgpu</code> in a new tab and takes nothing with it. AlphaFold Server opens Google's hosted AlphaFold 3 — it needs a Google sign-in, and your sequence goes to Google if you use it. Files you open locally are never sent anywhere.</span>
   </div>
   <div class="gpv-import-state" id="gpv-import-state" hidden aria-live="polite">
     <progress id="gpv-import-progress" value="0" max="1"></progress>
@@ -1704,7 +1705,7 @@ html>body{padding:0}</style>
   let busyDepth = 0;
   let restoreMotion = null;
   const listPageSize = 60;
-  const viewerVersion = '2.47.0';
+  const viewerVersion = '2.47.1';
   const preferenceKey = 'protein-structure-viewer:preferences';
   const themeKey = 'protein-structure-viewer:theme';
   const labelColors = getComputedStyle(root);
