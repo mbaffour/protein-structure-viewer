@@ -2177,10 +2177,19 @@ html>body{padding:0}</style>
 
   /* Every download in the app funnels through here. showSaveFilePicker always opens a native save
      dialog, unlike <a download>, which only does that when the browser's own "ask where to save
-     each file" setting is on. Where the API is missing (Firefox, Safari) or refuses (a headless
-     engine, a page without the right permission) this falls back to the classic anchor click, so
-     nothing regresses where the picker isn't available — only a user-triggered Cancel is treated
-     differently: an AbortError means stop, not "download anyway". */
+     each file" setting is on. Any failure — the API being missing (Firefox, Safari), a headless
+     engine, or the browser rejecting the call — falls back to the classic anchor click below, and
+     that includes a rejection named AbortError. It is tempting to treat that one specially and
+     stop rather than fall back, on the theory that it means the user clicked Cancel in a dialog
+     they saw. It doesn't reliably mean that: Chromium raises the identical AbortError, with the
+     identical message, when the call is made without a fresh enough user gesture to grant it —
+     which several call sites here do, because they render an image or await a fetch before ever
+     reaching this function. Measured directly against this app's own served page: a call made
+     without that gesture rejects with AbortError in under a millisecond, indistinguishable from a
+     real cancellation. Treating it as terminal made every one of those calls silently produce no
+     download at all, with nothing to tell the person who clicked why nothing happened — worse than
+     the one real cost of falling back unconditionally, which is that an explicit Cancel saves the
+     file anyway instead of discarding it. */
   async function downloadBlob(contents, type, filename) {
     const blob = contents instanceof Blob ? contents : new Blob([contents], { type });
     if (typeof showSaveFilePicker === 'function') {
@@ -2191,9 +2200,7 @@ html>body{padding:0}</style>
         await writable.close();
         return;
       } catch (error) {
-        if (error && error.name === 'AbortError') return;
-        /* Anything else (no picker permission, a headless test engine, a browser that reports the
-           API but refuses to use it) falls through to the classic path below. */
+        /* Falls through to the classic path below whatever the error was. */
       }
     }
     const url = URL.createObjectURL(blob);
@@ -9301,6 +9308,10 @@ function guide(i) {
 }
 function loadImage(uri) { return new Promise((resolve, reject) => { const img = new Image(); img.onload = () => resolve(img); img.onerror = reject; img.src = uri; }); }
 async function saveBlob(blob, filename) {
+  /* Falls back to the classic download on any picker failure, cancellation included: Chromium's
+     AbortError for an explicit Cancel and for a call made without a fresh user gesture are the
+     same error with the same message, so treating it as final would sometimes save nothing at
+     all with no explanation. See the equivalent function in the main app for how that was found. */
   if (typeof showSaveFilePicker === 'function') {
     try {
       const handle = await showSaveFilePicker({ suggestedName: filename });
@@ -9309,7 +9320,7 @@ async function saveBlob(blob, filename) {
       await writable.close();
       return;
     } catch (error) {
-      if (error && error.name === 'AbortError') return;
+      /* falls through */
     }
   }
   const url = URL.createObjectURL(blob);

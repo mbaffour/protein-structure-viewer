@@ -2140,22 +2140,22 @@ await step('the save picker is used when the browser offers one, and no classic 
   if (!(written > 0)) throw new Error('nothing was written to the picked file');
   if (!calls[0].types || calls[0].types[0].accept['text/csv'][0] !== '.csv') throw new Error('save dialog type filter: ' + JSON.stringify(calls[0].types));
 });
-await step('cancelling the save picker downloads nothing and raises no error', async () => {
+await step('a rejected save picker still falls back to a classic download, whatever the error', async () => {
+  /* Chromium raises AbortError both for an explicit Cancel and for a call made without a fresh
+     enough user gesture — the same name, the same message, no way to tell them apart from here.
+     downloadBlob must not treat either as "stop": it falls back to the classic path on any
+     rejection, or a real user who clicks Cancel and a call that simply couldn't get a dialog up
+     would both silently produce nothing, with no way to tell the difference from the outside. */
   await tab('confidence');
   await page.evaluate(() => {
     window.showSaveFilePicker = async () => { throw new DOMException('The user aborted a request.', 'AbortError'); };
   });
-  let downloaded = false;
-  const onDownload = () => { downloaded = true; };
-  page.once('download', onDownload);
+  const download = page.waitForEvent('download', { timeout: 10000 });
   await page.click('#gpv-confidence-csv');
-  await page.waitForTimeout(500);
-  page.off('download', onDownload);
+  const suggested = (await download).suggestedFilename();
   await page.evaluate(() => { delete window.showSaveFilePicker; });
   await tab('publish');
-  /* A silently swallowed rejection would otherwise surface as a pageerror, which fails the whole
-     run at the end (consoleErrors.length is checked at exit) — no separate assertion needed here. */
-  if (downloaded) throw new Error('cancelling the save dialog still triggered a classic download');
+  if (suggested !== 'protein-confidence-metrics.csv') throw new Error('fallback filename: ' + suggested);
 });
 await step('the publication PNG is not blank', async () => {
   await page.selectOption('#gpv-export-size', '1200x1200'); await page.selectOption('#gpv-export-scale', '1');

@@ -735,6 +735,10 @@ function guide(i) {
 }
 function loadImage(uri) { return new Promise((resolve, reject) => { const img = new Image(); img.onload = () => resolve(img); img.onerror = reject; img.src = uri; }); }
 async function saveBlob(blob, filename) {
+  /* Falls back to the classic download on any picker failure, cancellation included: Chromium's
+     AbortError for an explicit Cancel and for a call made without a fresh user gesture are the
+     same error with the same message, so treating it as final would sometimes save nothing at
+     all with no explanation. See the equivalent function in the main app for how that was found. */
   if (typeof showSaveFilePicker === 'function') {
     try {
       const handle = await showSaveFilePicker({ suggestedName: filename });
@@ -743,7 +747,7 @@ async function saveBlob(blob, filename) {
       await writable.close();
       return;
     } catch (error) {
-      if (error && error.name === 'AbortError') return;
+      /* falls through */
     }
   }
   const url = URL.createObjectURL(blob);
