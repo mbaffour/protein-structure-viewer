@@ -336,8 +336,51 @@
     return [...new Uint8Array(digest)].map(byte => byte.toString(16).padStart(2, '0')).join('');
   }
 
-  function downloadBlob(contents, type, filename) {
-    const url = URL.createObjectURL(new Blob([contents], { type }));
+  /* File System Access API type filters, keyed by the extension every downloadBlob caller already
+     puts on its filename. Only used to make the native save dialog offer the right extension and
+     file-type dropdown; a missing entry just means an unfiltered dialog, not a failure. */
+  const saveTypesByExtension = {
+    png: { description: 'PNG image', accept: { 'image/png': ['.png'] } },
+    svg: { description: 'SVG image', accept: { 'image/svg+xml': ['.svg'] } },
+    csv: { description: 'CSV file', accept: { 'text/csv': ['.csv'] } },
+    json: { description: 'JSON file', accept: { 'application/json': ['.json'] } },
+    zip: { description: 'ZIP archive', accept: { 'application/zip': ['.zip'] } },
+    html: { description: 'HTML file', accept: { 'text/html': ['.html'] } },
+    webm: { description: 'WebM video', accept: { 'video/webm': ['.webm'] } },
+    fasta: { description: 'FASTA file', accept: { 'text/plain': ['.fasta'] } },
+    tiff: { description: 'TIFF image', accept: { 'image/tiff': ['.tiff'] } },
+    pdf: { description: 'PDF document', accept: { 'application/pdf': ['.pdf'] } },
+    jpg: { description: 'JPEG image', accept: { 'image/jpeg': ['.jpg'] } },
+    webp: { description: 'WebP image', accept: { 'image/webp': ['.webp'] } }
+  };
+  function saveTypesFor(filename) {
+    const extension = (filename.match(/\.([a-z0-9]+)$/i) || [])[1];
+    const entry = extension && saveTypesByExtension[extension.toLowerCase()];
+    return entry ? [entry] : undefined;
+  }
+
+  /* Every download in the app funnels through here. showSaveFilePicker always opens a native save
+     dialog, unlike <a download>, which only does that when the browser's own "ask where to save
+     each file" setting is on. Where the API is missing (Firefox, Safari) or refuses (a headless
+     engine, a page without the right permission) this falls back to the classic anchor click, so
+     nothing regresses where the picker isn't available — only a user-triggered Cancel is treated
+     differently: an AbortError means stop, not "download anyway". */
+  async function downloadBlob(contents, type, filename) {
+    const blob = contents instanceof Blob ? contents : new Blob([contents], { type });
+    if (typeof showSaveFilePicker === 'function') {
+      try {
+        const handle = await showSaveFilePicker({ suggestedName: filename, types: saveTypesFor(filename) });
+        const writable = await handle.createWritable();
+        await writable.write(blob);
+        await writable.close();
+        return;
+      } catch (error) {
+        if (error && error.name === 'AbortError') return;
+        /* Anything else (no picker permission, a headless test engine, a browser that reports the
+           API but refuses to use it) falls through to the classic path below. */
+      }
+    }
+    const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
     link.href = url;
     link.download = filename;

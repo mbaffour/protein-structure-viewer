@@ -2107,6 +2107,56 @@ await step('the export button re-enables afterwards', async () => {
   const label = await page.locator('#gpv-image').textContent();
   if (!/Download figure PNG/.test(label)) throw new Error('label not restored: ' + label);
 });
+/* Every existing download step above and below relies on <a download> firing a Playwright
+   'download' event, which is exactly what happens in every engine this suite runs: headless
+   Chromium throws unconditionally from showSaveFilePicker, and Firefox/WebKit don't implement it
+   at all, so downloadBlob's fallback branch is what those steps have always exercised. These two
+   steps stub the picker itself to exercise the branch real Chrome and Edge users get. */
+await step('the save picker is used when the browser offers one, and no classic download fires', async () => {
+  await tab('confidence');
+  await page.evaluate(() => {
+    window.__pickerCalls = [];
+    window.__pickerWrittenSize = null;
+    window.showSaveFilePicker = async options => {
+      window.__pickerCalls.push(options);
+      return { createWritable: async () => ({
+        write: async data => { window.__pickerWrittenSize = (data && typeof data.size === 'number') ? data.size : 0; },
+        close: async () => {}
+      }) };
+    };
+  });
+  let downloaded = false;
+  const onDownload = () => { downloaded = true; };
+  page.once('download', onDownload);
+  await page.click('#gpv-confidence-csv');
+  await page.waitForTimeout(500);
+  page.off('download', onDownload);
+  const calls = await page.evaluate(() => window.__pickerCalls);
+  const written = await page.evaluate(() => window.__pickerWrittenSize);
+  await page.evaluate(() => { delete window.showSaveFilePicker; delete window.__pickerCalls; delete window.__pickerWrittenSize; });
+  await tab('publish');
+  if (downloaded) throw new Error('a classic download fired even though a picker was offered');
+  if (calls.length !== 1 || calls[0].suggestedName !== 'protein-confidence-metrics.csv') throw new Error('picker call: ' + JSON.stringify(calls));
+  if (!(written > 0)) throw new Error('nothing was written to the picked file');
+  if (!calls[0].types || calls[0].types[0].accept['text/csv'][0] !== '.csv') throw new Error('save dialog type filter: ' + JSON.stringify(calls[0].types));
+});
+await step('cancelling the save picker downloads nothing and raises no error', async () => {
+  await tab('confidence');
+  await page.evaluate(() => {
+    window.showSaveFilePicker = async () => { throw new DOMException('The user aborted a request.', 'AbortError'); };
+  });
+  let downloaded = false;
+  const onDownload = () => { downloaded = true; };
+  page.once('download', onDownload);
+  await page.click('#gpv-confidence-csv');
+  await page.waitForTimeout(500);
+  page.off('download', onDownload);
+  await page.evaluate(() => { delete window.showSaveFilePicker; });
+  await tab('publish');
+  /* A silently swallowed rejection would otherwise surface as a pageerror, which fails the whole
+     run at the end (consoleErrors.length is checked at exit) — no separate assertion needed here. */
+  if (downloaded) throw new Error('cancelling the save dialog still triggered a classic download');
+});
 await step('the publication PNG is not blank', async () => {
   await page.selectOption('#gpv-export-size', '1200x1200'); await page.selectOption('#gpv-export-scale', '1');
   const download = page.waitForEvent('download', { timeout: 120000 });
@@ -2557,6 +2607,33 @@ if (reportPath) {
     if (before === after) throw new Error('the second panel did not follow the drag');
     await report.click('#next', { timeout: 15000 }); await report.waitForTimeout(700);
     if (!/panel 1/.test(await report.locator('#position').textContent())) throw new Error('position lost its panel index');
+  });
+  await step('the report offers a save picker for its own PNG and video downloads', async () => {
+    /* The report is a standalone document with no access to the main app's downloadBlob, so it
+       carries its own copy of the same try-picker/fall-back logic (saveBlob in the template) —
+       this proves that copy behaves the same way, on the report's own two panels from the step above. */
+    await report.evaluate(() => {
+      window.__pickerCalls = [];
+      window.showSaveFilePicker = async options => {
+        window.__pickerCalls.push(options);
+        return { createWritable: async () => ({ write: async () => {}, close: async () => {} }) };
+      };
+    });
+    let downloaded = false;
+    const onDownload = () => { downloaded = true; };
+    report.once('download', onDownload);
+    await report.click('#png');
+    await report.waitForTimeout(800);
+    const pngCalls = await report.evaluate(() => window.__pickerCalls.splice(0));
+    const seconds = await report.evaluate(() => initial.seconds);
+    await report.click('#video');
+    await report.waitForTimeout(seconds * 1000 + 800);
+    report.off('download', onDownload);
+    const videoCalls = await report.evaluate(() => window.__pickerCalls.splice(0));
+    await report.evaluate(() => { delete window.showSaveFilePicker; delete window.__pickerCalls; });
+    if (downloaded) throw new Error('a classic download fired even though a picker was offered');
+    if (pngCalls.length !== 1 || pngCalls[0].suggestedName !== 'protein-comparison-2-panels.png') throw new Error('png picker call: ' + JSON.stringify(pngCalls));
+    if (videoCalls.length !== 1 || videoCalls[0].suggestedName !== 'protein-spin.webm') throw new Error('video picker call: ' + JSON.stringify(videoCalls));
   });
 }
 

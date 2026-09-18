@@ -1069,5 +1069,10 @@ mapping, or check that the models actually contain protein chains.
 **Video recording is unavailable.** `MediaRecorder` canvas capture is not implemented in Safari. Use
 Chrome or Firefox, or export a PNG.
 
+**Downloads sometimes skip the "Save As" dialog.** The viewer asks the browser for a native save
+location via the File System Access API on every download; where a browser does not implement it
+(Firefox, Safari) or does not permit it, the file saves through the browser's own default download
+mechanism instead. Chrome, Edge and other Chromium-based browsers currently offer the native picker.
+
 **The report is enormous.** It embeds coordinates for every model it carries. Switch **Report
 contents** to *Models currently shown* and hide everything you do not need.

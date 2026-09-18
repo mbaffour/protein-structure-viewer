@@ -323,11 +323,7 @@
       library
     });
     const blob = new Blob([html], { type: 'text/html' });
-    const link = document.createElement('a');
-    link.href = URL.createObjectURL(blob);
-    link.download = 'protein-model-report.html';
-    link.click();
-    setTimeout(() => URL.revokeObjectURL(link.href), 1000);
+    await downloadBlob(blob, 'text/html', 'protein-model-report.html');
     announce('HTML report downloaded · ' + chosen.length + ' model' + (chosen.length === 1 ? '' : 's') + ' · ' + formatBytes(blob.size));
   }
 
@@ -738,8 +734,25 @@ function guide(i) {
   caption.textContent = String.fromCharCode(65 + Number(i)) + ' · ' + v.name + (v.caption ? ' — ' + v.caption : '');
 }
 function loadImage(uri) { return new Promise((resolve, reject) => { const img = new Image(); img.onload = () => resolve(img); img.onerror = reject; img.src = uri; }); }
+async function saveBlob(blob, filename) {
+  if (typeof showSaveFilePicker === 'function') {
+    try {
+      const handle = await showSaveFilePicker({ suggestedName: filename });
+      const writable = await handle.createWritable();
+      await writable.write(blob);
+      await writable.close();
+      return;
+    } catch (error) {
+      if (error && error.name === 'AbortError') return;
+    }
+  }
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url; a.download = filename; a.click();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
 async function downloadPng() {
-  if (panes.length === 1) { const a = document.createElement('a'); a.href = panes[0].viewer.pngURI(); a.download = 'protein-model.png'; a.click(); return; }
+  if (panes.length === 1) { saveBlob(await (await fetch(panes[0].viewer.pngURI())).blob(), 'protein-model.png'); return; }
   const images = await Promise.all(panes.map(p => loadImage(p.viewer.pngURI())));
   const cols = columnsFor(panes.length), rows = Math.ceil(panes.length / cols);
   const w = Math.max.apply(null, images.map(i => i.width)), h = Math.max.apply(null, images.map(i => i.height)), cap = Math.round(h * 0.09);
@@ -756,7 +769,7 @@ async function downloadPng() {
     const s = structures[panes[i].index];
     ctx.fillText((s.label || s.name) + (panes[i].plddt === null ? '' : ' · mean pLDDT ' + panes[i].plddt.toFixed(1)), x + Math.round(w * 0.08), y + h + cap / 2);
   });
-  const a = document.createElement('a'); a.href = canvas.toDataURL('image/png'); a.download = 'protein-comparison-' + panes.length + '-panels.png'; a.click();
+  canvas.toBlob(blob => saveBlob(blob, 'protein-comparison-' + panes.length + '-panels.png'), 'image/png');
 }
 function record() {
   if (recording) return;
@@ -778,8 +791,7 @@ function record() {
   recorder.onstop = () => {
     cancelAnimationFrame(frame); stream.getTracks().forEach(t => t.stop());
     spinning = wasSpinning; applySpin();
-    const url = URL.createObjectURL(new Blob(chunks, { type: 'video/webm' })), a = document.createElement('a');
-    a.href = url; a.download = 'protein-spin.webm'; a.click(); setTimeout(() => URL.revokeObjectURL(url), 1000);
+    saveBlob(new Blob(chunks, { type: 'video/webm' }), 'protein-spin.webm');
     recording = false; button.disabled = false; button.textContent = 'Record ' + seconds + 's video';
   };
   recording = true; button.disabled = true; button.textContent = 'Recording…';

@@ -804,12 +804,7 @@
     recorder.onstop = () => {
       viewer.spin(false);
       stream.getTracks().forEach(track => track.stop());
-      const url = URL.createObjectURL(new Blob(chunks, { type: 'video/webm' }));
-      const link = document.createElement('a');
-      link.href = url;
-      link.download = 'protein-spin.webm';
-      link.click();
-      setTimeout(() => URL.revokeObjectURL(url), 1000);
+      downloadBlob(new Blob(chunks, { type: 'video/webm' }), 'video/webm', 'protein-spin.webm');
       button.disabled = structures.length === 0;
       button.textContent = 'Record spin video';
       /* Recording commandeers the viewer's motion; put the user's choice back. */

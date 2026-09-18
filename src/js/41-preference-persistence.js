@@ -295,11 +295,9 @@
   root.querySelector('#gpv-interface-run').addEventListener('click', analyseInterfaces);
   root.querySelector('#gpv-interface-csv').addEventListener('click', downloadInterfaceCsv);
   root.querySelector('#gpv-interface-cutoff').addEventListener('input', () => { root.querySelector('#gpv-interface-cutoff-value').textContent = Number(root.querySelector('#gpv-interface-cutoff').value).toFixed(1) + ' Å'; });
-  root.querySelector('#gpv-pae-png').addEventListener('click', () => {
-    const link = document.createElement('a');
-    link.href = root.querySelector('#gpv-pae').toDataURL('image/png');
-    link.download = 'predicted-aligned-error.png';
-    link.click();
+  root.querySelector('#gpv-pae-png').addEventListener('click', async () => {
+    const blob = await new Promise(resolve => root.querySelector('#gpv-pae').toBlob(resolve, 'image/png'));
+    await downloadBlob(blob, 'image/png', 'predicted-aligned-error.png');
     updateStatus('PAE heatmap PNG downloaded');
   });
   root.querySelector('#gpv-save-scene').addEventListener('click', saveScene);

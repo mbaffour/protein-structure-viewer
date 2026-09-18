@@ -2,6 +2,20 @@
 
 All notable changes to this project are recorded here.
 
+## 2.48.0
+
+### Added
+
+- **Every download can now ask where to save.** `<a download>` only opens a native save dialog when
+  the browser's own "ask where to save each file" setting is already on; otherwise every export
+  went straight to the default downloads folder under a fixed name. The viewer now asks the browser
+  for a save location through the File System Access API first, on every one of its roughly thirty
+  download buttons — figures, CSVs, the session ZIP, the composite figure, the spin video, the
+  standalone HTML report and that report's own PNG/video buttons — and only falls back to the old
+  behaviour where the API is missing (Firefox, Safari) or refuses. Cancelling the dialog downloads
+  nothing, the same as cancelling any other save. No setting to find: this is automatic, the same
+  way the viewer already treats the clipboard, `CompressionStream` and `MediaRecorder`.
+
 ## 2.47.1
 
 ### Added
