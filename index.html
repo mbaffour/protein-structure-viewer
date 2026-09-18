@@ -9340,9 +9340,12 @@ async function downloadPng() {
     const x = (i % cols) * w, y = Math.floor(i / cols) * (h + cap);
     ctx.drawImage(img, x, y);
     ctx.fillStyle = dark ? '#f8fafc' : '#111827'; ctx.textBaseline = 'middle';
-    ctx.font = '700 ' + Math.round(cap * 0.46) + 'px ' + figureFont();
+    /* The report is a standalone document with no Figure font control of its own to read (the
+       main app's figureFont() reads a select that only exists there) — a fixed default matches
+       what the main app itself defaults to. */
+    ctx.font = '700 ' + Math.round(cap * 0.46) + 'px Arial, Helvetica, sans-serif';
     ctx.fillText(String.fromCharCode(65 + i), x + Math.round(w * 0.025), y + h + cap / 2);
-    ctx.font = '500 ' + Math.round(cap * 0.34) + 'px ' + figureFont();
+    ctx.font = '500 ' + Math.round(cap * 0.34) + 'px Arial, Helvetica, sans-serif';
     const s = structures[panes[i].index];
     ctx.fillText((s.label || s.name) + (panes[i].plddt === null ? '' : ' · mean pLDDT ' + panes[i].plddt.toFixed(1)), x + Math.round(w * 0.08), y + h + cap / 2);
   });
