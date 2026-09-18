@@ -2941,6 +2941,20 @@ await step('PAE domains run on the recovered matrix and the methods text names t
   });
   /* The fixture's two halves: a matrix that came back transposed or shifted would not split here. */
   if (!domains || domains.count !== 2) throw new Error('domains from the recovered PAE: ' + JSON.stringify(domains));
+  /* Importing an archive switches the view to one model at a time without making the new model the
+     active one, and the methods text describes what is shown — rightly, since claiming a displayed
+     structure was predicted by something that did not predict it is a false provenance claim. So
+     select the model before asking what the methods say about it. */
+  await tab('models');
+  await page.evaluate(() => {
+    const entry = window.__viewerDebug.entries().find(e => /demo/.test(e.collection || ''));
+    const select = document.querySelector('#gpv-current');
+    select.value = String(entry.id);
+    select.dispatchEvent(new Event('change', { bubbles: true }));
+  });
+  await page.waitForTimeout(800);
+  const shown = await page.evaluate(() => window.__viewerDebug.displayedEntries().map(e => e.name));
+  if (!shown.some(name => /demo/.test(name))) throw new Error('the archive model is still not displayed: ' + JSON.stringify(shown));
   const methods = await page.evaluate(() => window.__viewerDebug.methodsText());
   for (const phrase of ['AlphaFold2 WebGPU', 'model_1_ptm', '3 recycles', 'ColabFold MMseqs2']) {
     if (!methods.includes(phrase)) throw new Error('methods text lacks "' + phrase + '": ' + methods.slice(0, 600));
