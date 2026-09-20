@@ -117,6 +117,10 @@ PSV_CHROMIUM=/opt/pw-browsers/chromium/chrome-linux/chrome npm test
   all, and the scene carries the faded flag.
 - Identical chains by position: a copy of the fixture with its two chains renamed A↔B aligns badly while chains are
   paired by sequence, and lands under half that RMSD with positional matching, which reports the mapping A→B; B→A.
+- A rejected positional re-pairing: two chains of the same sequence but different conformations, their centres 0.6 Å
+  apart, with the copy putting each conformation at the other's centre — the centres invite the swap, the fit is far
+  worse, and the pass is discarded. The mapping stays A→A; B→B, the RMSD is the one reported with the box unticked,
+  and the RMSD in the table matches the coordinates on screen and the reference's mean deviation to 0.005 Å.
 - Model legend names: a run's file names reduce to model_0 … model_4 (the stem is given back a boundary at a time when
   it would leave only a digit), two unrelated names lose only the shared extension, and a lone name is left whole.
 - Fitting on a region: fitting on `A:1-12` keeps the matched pair count, reports exactly 12 Cα in the fitted-on cell, a

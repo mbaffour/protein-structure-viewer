@@ -1137,6 +1137,117 @@ await step('model agreement matches residues through the superposition when mode
     console.log('       ' + state.size + ' residues matched across a +10 numbering offset · max RMSF ' + state.max.toFixed(4) + ' Å');
   } finally { await cleanup(); }
 });
+await step('a positional re-pairing that fits worse is discarded whole, leaving the table, the coordinates and the deviations agreeing', async () => {
+  /* Matching identical chains by position is a heuristic on centres of mass, and positionalPairs()
+     says where it misleads: subunits closer to each other than to their partners. This pair of
+     files is that case. Both chains carry the same sequence but different conformations — a plain
+     helix and a twisted one — and their centres sit 0.6 Å apart, with the copy placing each
+     conformation at the other's centre. Pairing in file order compares like with like; re-pairing
+     by position lines the centres up exactly and then compares the plain helix against the twisted
+     one, which fits far worse, so the second pass is rejected. What is checked here is that the
+     rejected pass leaves no trace: the atoms on screen, the pairing kept for the deviations and the
+     RMSD in the table must all describe the one fit that was applied. */
+  const isAtom = line => /^(ATOM|HETATM)/.test(line);
+  const position = line => [Number(line.slice(30, 38)), Number(line.slice(38, 46)), Number(line.slice(46, 54))];
+  const withPosition = (line, point) => line.slice(0, 30) + point.map(value => value.toFixed(3).padStart(8)).join('') + line.slice(54);
+  const centre = lines => {
+    const alpha = lines.filter(line => line.slice(12, 16).trim() === 'CA').map(position);
+    return [0, 1, 2].map(axis => alpha.reduce((sum, point) => sum + point[axis], 0) / alpha.length);
+  };
+  /* One chain of an existing fixture, moved so its Cα centre of mass sits exactly on `at` and renamed. */
+  const place = (lines, at, chain) => {
+    const from = centre(lines);
+    return lines.map(line => {
+      const moved = withPosition(line, position(line).map((value, axis) => value - from[axis] + at[axis]));
+      return moved.slice(0, 21) + chain + moved.slice(22);
+    });
+  };
+  const chainA = text => text.split('\n').filter(line => isAtom(line) && line[21] === 'A');
+  const plain = chainA(await readFile(join(work, 'model_a.pdb'), 'utf8'));
+  const twisted = chainA(await readFile(join(work, 'model_c.pdb'), 'utf8'));
+  const assembly = (plainAt, twistedAt) => {
+    let serial = 0;
+    return [...place(plain, plainAt, 'A'), 'TER', ...place(twisted, twistedAt, 'B'), 'TER', 'END', '']
+      .map(line => (isAtom(line) ? line.slice(0, 6) + String(serial += 1).padStart(5) + line.slice(11) : line)).join('\n');
+  };
+  const referenceFile = join(work, 'model_twins.pdb');
+  const movedFile = join(work, 'model_twins_moved.pdb');
+  await writeFile(referenceFile, assembly([0, 0, 0], [0.6, 0, 0]));
+  await writeFile(movedFile, assembly([0.6, 0, 0], [0, 0, 0]));
+  const cleanup = async () => {
+    await tab('compare'); await page.uncheck('#gpv-chain-position');
+    await tab('models');
+    for (const label of ['model_twins_moved.pdb', 'model_twins.pdb']) {
+      const row = page.locator('#gpv-list .gpv-entry', { hasText: label });
+      if (await row.count()) { await row.first().locator('button:has-text("Remove")').click(); await page.waitForTimeout(400); }
+    }
+    await page.click('#gpv-show-all'); await page.waitForTimeout(600);
+    await tab('compare'); await page.click('#gpv-align'); await page.waitForTimeout(2500);
+  };
+  try {
+    await tab('models'); await page.setInputFiles('#gpv-files', [referenceFile, movedFile]); await page.waitForTimeout(2200);
+    await page.evaluate(labels => {
+      [...document.querySelectorAll('#gpv-list .gpv-entry')].forEach(entry => {
+        const toggle = entry.querySelector('input[type="checkbox"]');
+        const wanted = labels.some(label => entry.textContent.includes(label));
+        if (toggle && toggle.checked !== wanted) toggle.click();
+      });
+    }, ['model_twins.pdb', 'model_twins_moved.pdb']);
+    await page.waitForTimeout(900);
+    await tab('compare');
+    await page.selectOption('#gpv-alignment-mode', 'sequence'); await page.waitForTimeout(200);
+    await page.evaluate(() => { const select = document.querySelector('#gpv-reference'); const option = [...select.options].find(item => /model_twins\.pdb/.test(item.textContent)); select.value = option.value; select.dispatchEvent(new Event('change', { bubbles: true })); });
+    await page.waitForTimeout(300);
+    const rowFor = async () => {
+      const rows = await page.locator('#gpv-alignment-results tr').evaluateAll(list => list.map(row => [...row.querySelectorAll('th,td')].map(cell => cell.textContent)));
+      const row = rows.find(cells => /model_twins_moved/.test(cells[0]));
+      if (!row) throw new Error('no row for the moved copy: ' + JSON.stringify(rows));
+      return { count: Number(row[2]), rmsd: Number(row[4]), mapping: row[7] };
+    };
+    await page.uncheck('#gpv-chain-position'); await page.click('#gpv-align'); await page.waitForTimeout(3000);
+    const bySequence = await rowFor();
+    await page.check('#gpv-chain-position'); await page.click('#gpv-align'); await page.waitForTimeout(3000);
+    const byPosition = await rowFor();
+    /* What is on screen after the rejected pass: the fit the table claims, or the one thrown away? */
+    const drawn = await page.evaluate(() => {
+      const tag = atom => (atom.chain || '') + '|' + atom.resi;
+      const entries = window.__viewerDebug.entries();
+      const reference = entries.find(entry => /^model_twins\.pdb/.test(entry.name));
+      const moved = entries.find(entry => /^model_twins_moved/.test(entry.name));
+      const alpha = new Map(reference.atoms.filter(atom => atom.atom === 'CA').map(atom => [tag(atom), atom]));
+      let squared = 0; let deviationGap = 0;
+      moved.alignedPairs.forEach((atom, key) => {
+        const anchor = alpha.get(key);
+        const distance = Math.hypot(anchor.x - atom.x, anchor.y - atom.y, anchor.z - atom.z);
+        squared += distance * distance;
+        /* One model was aligned, so the reference's mean deviation is that one distance; a second
+           pass left in the samples would average two. */
+        deviationGap = Math.max(deviationGap, Math.abs(reference.deviations.get(key) - distance));
+      });
+      /* Centres of mass in the frame on screen: does the fixture actually tempt the re-pairing? */
+      const centres = entry => {
+        const chains = new Map();
+        entry.atoms.filter(atom => atom.atom === 'CA').forEach(atom => { if (!chains.has(atom.chain)) chains.set(atom.chain, []); chains.get(atom.chain).push(atom); });
+        return new Map([...chains].map(([chain, atoms]) => [chain, ['x', 'y', 'z'].map(axis => atoms.reduce((sum, atom) => sum + atom[axis], 0) / atoms.length)]));
+      };
+      const here = centres(reference); const there = centres(moved);
+      const apart = (left, right) => Math.hypot(left[0] - right[0], left[1] - right[1], left[2] - right[2]);
+      return {
+        rmsd: Math.sqrt(squared / moved.alignedPairs.size), pairs: moved.alignedPairs.size, deviationGap,
+        matched: apart(here.get('A'), there.get('A')), crossed: apart(here.get('A'), there.get('B'))
+      };
+    });
+    if (!(bySequence.rmsd > 0.4 && bySequence.rmsd < 0.9)) throw new Error('pairing in file order should compare like with like, 0.6 Å apart: RMSD ' + bySequence.rmsd);
+    if (!(drawn.crossed < drawn.matched)) throw new Error('the fixture does not tempt positional matching: centres ' + drawn.crossed.toFixed(2) + ' Å crossed against ' + drawn.matched.toFixed(2) + ' Å matched');
+    if (/matched by position/.test(byPosition.mapping)) throw new Error('the worse positional re-pairing was applied: ' + byPosition.mapping);
+    if (!/A→A/.test(byPosition.mapping) || !/B→B/.test(byPosition.mapping)) throw new Error('the chain mapping should be the one in file order: ' + byPosition.mapping);
+    if (Math.abs(byPosition.rmsd - bySequence.rmsd) > 0.005 || byPosition.count !== bySequence.count) throw new Error('a rejected second pass changed the result: ' + byPosition.rmsd + ' Å over ' + byPosition.count + ' pairs against ' + bySequence.rmsd + ' Å over ' + bySequence.count);
+    if (drawn.pairs !== byPosition.count) throw new Error('the table counts ' + byPosition.count + ' pairs, the kept pairing ' + drawn.pairs);
+    if (Math.abs(drawn.rmsd - byPosition.rmsd) > 0.005) throw new Error('the table reports ' + byPosition.rmsd + ' Å but the coordinates on screen are ' + drawn.rmsd.toFixed(3) + ' Å apart — a discarded fit was left in place');
+    if (drawn.deviationGap > 0.005) throw new Error("the reference's mean deviation is not the distance on screen: off by " + drawn.deviationGap.toFixed(3) + ' Å — the discarded pass left its samples behind');
+    console.log('       misleading centres: ' + drawn.crossed.toFixed(2) + ' Å crossed against ' + drawn.matched.toFixed(2) + ' Å matched · kept ' + byPosition.rmsd.toFixed(2) + ' Å in file order, drawn ' + drawn.rmsd.toFixed(2) + ' Å');
+  } finally { await cleanup(); }
+});
 await step('the pairwise RMSD matrix agrees with the alignment table and exports as CSV, PNG, SVG and a composite panel', async () => {
   await tab('models'); await page.click('#gpv-show-all'); await page.waitForTimeout(400);
   const viewBefore = await page.inputValue('#gpv-view-mode'); await page.selectOption('#gpv-view-mode', 'overlay'); await page.waitForTimeout(500);
