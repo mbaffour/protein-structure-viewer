@@ -238,9 +238,14 @@ for index, (extra, score, iptm) in enumerate([(0.0, 0.83, 0.74), (5.0, 0.69, 0.5
     np.savez_compressed(boltz / f"pae_{stem}.npz", pae=boltz_pae(extra))
     np.savez_compressed(boltz / f"plddt_{stem}.npz", plddt=token_plddt.astype(np.float32))
     np.savez_compressed(boltz / f"pde_{stem}.npz", pde=(boltz_pae(extra) * 0.5).astype(np.float32))
-with zipfile.ZipFile(HERE / f"boltz_results_{JOB}.zip", "w", zipfile.ZIP_DEFLATED) as archive:
-    for path in sorted(boltz.iterdir()):
-        archive.write(path, f"boltz_results_{JOB}/predictions/{JOB}/{path.name}")
+def write_zip(target, members):
+    """Fixed timestamps, so regenerating gives the same bytes."""
+    with zipfile.ZipFile(target, "w", zipfile.ZIP_DEFLATED) as archive:
+        for name, path in members:
+            info = zipfile.ZipInfo(name, date_time=(2026, 9, 27, 0, 0, 0)); info.compress_type = zipfile.ZIP_DEFLATED
+            archive.writestr(info, path.read_bytes())
+
+write_zip(HERE / f"boltz_results_{JOB}.zip", [(f"boltz_results_{JOB}/predictions/{JOB}/{path.name}", path) for path in sorted(boltz.iterdir())])
 
 # ---------- Chai-1 ----------
 
@@ -262,9 +267,7 @@ for index, (aggregate, iptm) in enumerate([(0.52, 0.44), (0.71, 0.66)]):   # sam
         "chain_chain_clashes": np.zeros((1, 2, 2), dtype=np.int64),
     }
     np.savez(chai / f"scores.model_idx_{index}.npz", allow_pickle=False, **scores)
-with zipfile.ZipFile(HERE / f"chai_{JOB}.zip", "w", zipfile.ZIP_DEFLATED) as archive:
-    for path in sorted(chai.iterdir()):
-        archive.write(path, f"chai_{JOB}/{path.name}")
+write_zip(HERE / f"chai_{JOB}.zip", [(f"chai_{JOB}/{path.name}", path) for path in sorted(chai.iterdir())])
 
 # ---------- AlphaFold 3 (server names), per-atom pLDDT so Cβ and Cα differ ----------
 
@@ -277,14 +280,18 @@ for chain_index, (chain_id, atoms) in enumerate(chains):
         base = plddt[chain_index * RESIDUES + number - 1]
         value = round(float(base - (3.0 if atom_name == "CB" else 0.0) - (1.5 if atom_name not in ("N", "CA", "C", "O", "CB") else 0.0)), 2)
         atom_plddts.append(value); atom_chain_ids.append(chain_id)
-        atom_rows.append(f"ATOM {serial} {element} {atom_name} . {name} {chain_id} {chain_index + 1} {number} ? {xyz[0]:.3f} {xyz[1]:.3f} {xyz[2]:.3f} 1.00 {value:.2f} {number} {chain_id} 1")
+        # The server's mmCIF B-factors are a rounded copy that can differ from atom_plddts by up to
+        # 0.1; here every one is 0.09 higher, so a reader that takes pLDDT from the B-factors instead
+        # of full_data shows up in pDockQ and pDockQ2.
+        atom_rows.append(f"ATOM {serial} {element} {atom_name} . {name} {chain_id} {chain_index + 1} {number} ? {xyz[0]:.3f} {xyz[1]:.3f} {xyz[2]:.3f} 1.00 {value + 0.09:.2f} {number} {chain_id} 1")
         serial += 1
 header = ["data_" + JOB, "#", "loop_"] + ["_atom_site." + field for field in ["group_PDB", "id", "type_symbol", "label_atom_id", "label_alt_id", "label_comp_id", "label_asym_id", "label_entity_id", "label_seq_id", "pdbx_PDB_ins_code", "Cartn_x", "Cartn_y", "Cartn_z", "occupancy", "B_iso_or_equiv", "auth_seq_id", "auth_asym_id", "pdbx_PDB_model_num"]]
 (af3 / f"fold_{JOB}_model_0.cif").write_text("\n".join(header + atom_rows + ["#", ""]))
 full = {"atom_chain_ids": atom_chain_ids, "atom_plddts": atom_plddts, "contact_probs": np.round(np.exp(-distance / 8.0), 2).tolist(),
         "pae": pae_matrix().tolist(), "token_chain_ids": chain_of.tolist(), "token_res_ids": [i % RESIDUES + 1 for i in range(n)]}
 (af3 / f"fold_{JOB}_full_data_0.json").write_text(json.dumps(full))
-summary = {"chain_iptm": [0.69, 0.69], "chain_pair_iptm": [[0.84, 0.69], [0.69, 0.84]], "chain_pair_pae_min": [[0.76, 2.1], [2.3, 0.76]],
+# The server's summary lists chain_ids once per token, not once per chain.
+summary = {"chain_ids": chain_of.tolist(), "chain_iptm": [0.69, 0.69], "chain_pair_iptm": [[0.84, 0.69], [0.69, 0.84]], "chain_pair_pae_min": [[0.76, 2.1], [2.3, 0.76]],
            "chain_ptm": [0.84, 0.84], "fraction_disordered": 0.0, "has_clash": 0.0, "iptm": 0.69, "num_recycles": 10.0, "ptm": 0.76, "ranking_score": 0.72}
 (af3 / f"fold_{JOB}_summary_confidences_0.json").write_text(json.dumps(summary))
 

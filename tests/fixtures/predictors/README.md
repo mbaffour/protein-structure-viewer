@@ -10,7 +10,7 @@ the viewer's readers can be tested against each format without committing anyone
 | `colabfold/` | ColabFold 1.5+ | `hbdimer_unrelaxed_rank_00N_alphafold2_multimer_v3_model_M_seed_000.pdb` + `hbdimer_scores_rank_00N_…json` (plddt, pae, max_pae, ptm, iptm, and ColabFold's own ipsae / pdockq / pdockq2), `config.json` |
 | `boltz/`, `boltz_results_hbdimer.zip` | Boltz-2 | `hbdimer_model_N.cif` (ModelCIF, pLDDT × 100 in B_iso) + `confidence_hbdimer_model_N.json` + `pae_`, `plddt_`, `pde_hbdimer_model_N.npz` (`np.savez_compressed`); a six-atom ligand as chain C, so the PAE has 134 rows for 128 residues |
 | `chai/`, `chai_hbdimer.zip` | Chai-1 | `pred.model_idx_N.cif` (ModelCIF, per-atom pLDDT × 100) + `scores.model_idx_N.npz` (`np.savez`, leading batch dimension of 1); sample 1 has the higher aggregate score |
-| `af3/` | AlphaFold 3 (server names) | `fold_hbdimer_model_0.cif` + `fold_hbdimer_full_data_0.json` (per-atom pLDDT, Cβ 3 lower than Cα) + `fold_hbdimer_summary_confidences_0.json` |
+| `af3/` | AlphaFold 3 (server names) | `fold_hbdimer_model_0.cif` + `fold_hbdimer_full_data_0.json` (per-atom pLDDT, Cβ 3 lower than Cα; the mmCIF B-factors 0.09 higher, as the server's rounded copy can be) + `fold_hbdimer_summary_confidences_0.json` (`chain_ids` per token, as the server writes it) |
 | `expected-ipsae.json` | — | Interface scores computed by the reference implementation on these files |
 
 ## What is real and what is not

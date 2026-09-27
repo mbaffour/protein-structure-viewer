@@ -154,6 +154,9 @@
       tokenChainIds: Array.isArray(data.token_chain_ids) ? data.token_chain_ids : null,
       tokenResidueIds: Array.isArray(data.token_res_ids) ? data.token_res_ids : null,
       chainIds: Array.isArray(data.chain_ids) ? data.chain_ids : null,
+      /* AlphaFold 3 per-atom pLDDT, in atom order. The mmCIF B-factors carry a rounded copy that can
+         differ by up to 0.1; the interface scores read these, as ipsae.py does. */
+      atomPlddts: Array.isArray(data.atom_plddts) ? data.atom_plddts.map(Number) : null,
       chainPairIptm: Array.isArray(data.chain_pair_iptm) ? data.chain_pair_iptm : indexedPairMatrix(data.pair_chains_iptm),
       chainPairPaeMin: Array.isArray(data.chain_pair_pae_min) ? data.chain_pair_pae_min : null,
       /* ColabFold 1.5.5+ scores its own complexes (PAE cutoff 15 Å); kept to compare against. */
@@ -216,6 +219,7 @@
       body.append(row);
     });
     drawPae(activeEntry());
+    renderInteractions();
   }
 
   function paeColor(value, maximum) {
@@ -292,7 +296,8 @@
     const derivedChainIds = [...new Set(paeTokenIds(entry).chainIds)];
     /* Boltz and Chai-1 index their per-chain-pair ipTM by the model's chain order. */
     const modelChains = modelChainOrder(entry);
-    const chainIds = confidence.chainIds && confidence.chainIds.length ? confidence.chainIds : derivedChainIds.length === size ? derivedChainIds : modelChains.length === size ? modelChains : derivedChainIds.length ? derivedChainIds : Array.from({ length: size }, (_, index) => String(index + 1));
+    const listed = chainOrderFromIds(confidence.chainIds);
+    const chainIds = listed.length === size ? listed : derivedChainIds.length === size ? derivedChainIds : modelChains.length === size ? modelChains : derivedChainIds.length ? derivedChainIds : Array.from({ length: size }, (_, index) => String(index + 1));
     for (let i = 0; i < size; i += 1) {
       for (let j = i + 1; j < size; j += 1) {
         const row = document.createElement('tr');

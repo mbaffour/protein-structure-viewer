@@ -174,7 +174,8 @@ Reviewers and institutional IT increasingly ask what a browser tool loads and fr
 
 4. **Interface analysis.** Contact counts, interface-residue tables, buried-surface estimates, and
    highlightable/exportable interface selections landed in 2.3.0; per-residue contact maps in 2.18.0.
-   Still open: comparing interface tables across models of the same complex.
+   2.48.0 added interface confidence per chain pair (ipSAE, pDockQ, pDockQ2, LIS), summarised across
+   models. Still open: comparing the interface residue tables themselves across models.
 5. **Membrane context.** Adjustable membrane planes and hydrophobic slab guides — particularly useful
    for holins and other membrane proteins.
 6. **Ensemble summaries.** The pairwise RMSD matrix (2.32.0), the medoid as the representative model
@@ -255,6 +256,24 @@ within 0.2 % (VALIDATION.md). The practical consequence is that the viewer's BSA
 significant figures; the table's whole-Å² display is finer than the number deserves, and a BSA should
 be quoted as "about 1 000 Å²", not "1 024 Å²". Comparing BSA values between two models of the same
 complex is sounder than quoting one in isolation, since the sampling bias largely cancels.
+
+## Interaction confidence (2.48.0)
+
+ipSAE, pDockQ, pDockQ2 and LIS are computed as DunbrackLab/IPSAE `ipsae.py` (version 4) computes
+them, and the check against it is recorded in VALIDATION.md. Points a reader should know:
+
+- **These are confidence estimates, not evidence of binding.** All four are functions of the model's
+  own pLDDT and PAE (pDockQ also of its contact count). A model can be confident and wrong. The viewer
+  reports them without thresholds or verdicts; the published cut-offs were calibrated on particular
+  benchmarks and predictors.
+- **The PAE cutoff changes ipSAE.** 10 Å is the default (the reference's AlphaFold 3 example); 15 Å is
+  what the reference's AlphaFold 2 example and ColabFold's own scores use. Report the cutoff, which
+  the methods text does.
+- **Ligands are not chain partners**, as in the reference. Protein–ligand confidence is the ligand-site
+  PAE of the Ligand sites table, which is still unvalidated (below).
+- **Not cross-validated on real data**: AlphaFold 3 models with modified residues (tokenised atom by
+  atom) or ligands, nucleic-acid chains, and real Boltz or ColabFold runs. The token rules for those
+  cases are tested on the committed fixtures only; none of the real runs available contains them.
 
 ## Ligand-site PAE — still unvalidated (2.23.0)
 

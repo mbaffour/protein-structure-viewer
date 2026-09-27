@@ -3178,6 +3178,144 @@ await step('the .npy reader handles a Fortran-ordered big-endian float64 array a
   if (JSON.stringify(result.wide) !== '[7,-2,9]') throw new Error('version 2 int64: ' + JSON.stringify(result.wide));
 });
 
+group('interaction confidence');
+/* expected-ipsae.json is the output of the reference implementation, DunbrackLab/IPSAE ipsae.py,
+   on the same fixture files (make_fixtures.py records its SHA-256). ipSAE-family values are printed
+   to 6 decimals and pDockQ, pDockQ2, LIS to 4, so the tolerance is half a unit in that place;
+   residue counts must match exactly. tests/validate-ipsae.mjs runs the same comparison on real
+   AlphaFold 3 archives. */
+const expectedIpsae = JSON.parse(await readFile(join(predictorDir, 'expected-ipsae.json'), 'utf8'));
+const ipsaeColumns = { ipSAE: ['ipsae', 5.1e-7], ipSAE_d0chn: ['ipsaeD0chn', 5.1e-7], ipSAE_d0dom: ['ipsaeD0dom', 5.1e-7], ipTM_d0chn: ['iptmD0chn', 5.1e-7], pDockQ: ['pdockq', 5.1e-5], pDockQ2: ['pdockq2', 5.1e-5], LIS: ['lis', 5.1e-5], ipTM_af: ['iptmModel', 5.1e-4], n0res: ['n0res', 0], n0chn: ['n0chn', 0], n0dom: ['n0dom', 0], nres1: ['nres1', 0], nres2: ['nres2', 0], dist1: ['dist1', 0], dist2: ['dist2', 0] };
+const viewerIpsae = (pattern, pae, dist) => page.evaluate(({ pattern, pae, dist }) => {
+  const debug = window.__viewerDebug; const entry = debug.entries().find(e => new RegExp(pattern).test(e.name));
+  debug.materializeEntry(entry);
+  const scores = debug.interactionScores(entry, pae, dist);
+  const reported = row => ({ ...row, iptmModel: debug.reportedPairIptm(entry, row.chain1, row.chain2) });
+  return { asym: scores.asym.map(reported), pairs: scores.pairs.map(reported), reason: scores.reason, chains: scores.chains };
+}, { pattern, pae, dist });
+const compareIpsae = async (label, pattern) => {
+  let count = 0; const problems = [];
+  for (const [run, rows] of Object.entries(expectedIpsae.cases[label].runs)) {
+    const [pae, dist] = run.split('_').map(Number);
+    const mine = await viewerIpsae(pattern, pae, dist);
+    if (mine.reason) throw new Error(label + ': ' + mine.reason);
+    rows.forEach(row => {
+      const match = row.type === 'asym' ? mine.asym.find(a => a.chain1 === row.chain1 && a.chain2 === row.chain2) : mine.pairs.find(a => a.chain1 === row.chain1 && a.chain2 === row.chain2);
+      if (!match) { problems.push(run + ' ' + row.type + ' ' + row.chain1 + row.chain2 + ': no viewer row'); return; }
+      Object.entries(ipsaeColumns).forEach(([column, [key, tolerance]]) => {
+        count += 1;
+        if (!(Math.abs(Number(match[key]) - row[column]) <= tolerance)) problems.push(run + ' ' + row.type + ' ' + row.chain1 + '→' + row.chain2 + ' ' + column + ': viewer ' + match[key] + ', ipsae.py ' + row[column]);
+      });
+    });
+  }
+  if (problems.length) throw new Error(problems.length + ' of ' + count + ' disagree: ' + problems.slice(0, 4).join('; '));
+  return count;
+};
+const loadPredictor = async files => { await tab('models'); await page.setInputFiles('#gpv-files', files); await page.waitForTimeout(2500); };
+
+await step('ColabFold: every score of both directions and the combined row agrees with ipsae.py at 10 Å and 15 Å', async () => {
+  try {
+    await loadPredictor(colabfoldFiles);
+    const count = await compareIpsae('colabfold', 'rank_001');
+    /* ColabFold scores its own complexes at a 15 Å cutoff, with its own reimplementation. */
+    const own = await page.evaluate(() => window.__viewerDebug.entries().find(e => /rank_001/.test(e.name)).confidence.reportedInterface.ipsae);
+    const at15 = await viewerIpsae('rank_001', 15, 15);
+    ['A-B', 'B-A'].forEach(key => { const [a, b] = key.split('-'); const mine = at15.asym.find(row => row.chain1 === a && row.chain2 === b).ipsae; if (Math.abs(mine - own[key]) > 5.1e-7) throw new Error('ColabFold reports ' + key + ' ' + own[key] + ', the viewer ' + mine); });
+    console.log('       ' + count + ' values against ipsae.py, and ColabFold’s own ipSAE (' + own['A-B'] + ', ' + own['B-A'] + ') reproduced at 15 Å');
+  } finally { await removePredictorEntries(); }
+});
+
+await step('Boltz: the ligand is left out of the chain pairs and the scores still agree with ipsae.py', async () => {
+  try {
+    await loadPredictor(['hbdimer_model_0.cif', 'confidence_hbdimer_model_0.json', 'pae_hbdimer_model_0.npz'].map(name => join(predictorDir, 'boltz', name)));
+    const mine = await viewerIpsae('hbdimer_model_0', 10, 10);
+    if (JSON.stringify(mine.chains) !== '["A","B"]') throw new Error('chains scored: ' + JSON.stringify(mine.chains) + ' (the ligand chain C is not a partner)');
+    const count = await compareIpsae('boltz', 'hbdimer_model_0');
+    console.log('       ' + count + ' values against ipsae.py on a 134-token PAE with a six-atom ligand');
+  } finally { await removePredictorEntries(); }
+});
+
+await step('AlphaFold 3: pDockQ uses the Cβ atom’s own pLDDT from full_data, as ipsae.py does, every score agrees, and the pair is labelled by chain', async () => {
+  try {
+    await loadPredictor(['fold_hbdimer_model_0.cif', 'fold_hbdimer_full_data_0.json', 'fold_hbdimer_summary_confidences_0.json'].map(name => join(predictorDir, 'af3', name)));
+    const count = await compareIpsae('af3', 'fold_hbdimer_model_0');
+    const source = await page.evaluate(() => { const d = window.__viewerDebug; const entry = d.entries().find(e => /fold_hbdimer_model_0/.test(e.name)); return d.interactionScores(entry, 10, 10).plddtSource; });
+    if (source !== 'atom_plddts') throw new Error('pLDDT read from ' + source + ', not full_data atom_plddts (the fixture’s B-factors are 0.09 off, as the server’s can be)');
+    /* The server's summary lists chain_ids per token; before 2.48.0 the chain-pair table took the
+       first two entries of that list as the chain names and labelled the pair "A–A". */
+    const entryId = (await predictorEntries()).find(e => /fold_hbdimer_model_0/.test(e.name)).id;
+    await showEntry(entryId); await tab('confidence');
+    const label = await page.locator('#gpv-interface-metrics tr th').first().textContent();
+    if (label !== 'A–B') throw new Error('chain-pair row labelled ' + label);
+    const colabfold = expectedIpsae.cases.colabfold.runs['10_10'][0].pDockQ; const af3 = expectedIpsae.cases.af3.runs['10_10'][0].pDockQ;
+    console.log('       ' + count + ' values against ipsae.py · pDockQ ' + af3 + ' from Cβ pLDDT against ' + colabfold + ' with per-residue pLDDT');
+  } finally { await removePredictorEntries(); }
+});
+
+await step('the table, the cutoff switch, and scoring all shown models with a summary per chain pair', async () => {
+  try {
+    await loadPredictor(colabfoldFiles);
+    const first = (await predictorEntries()).find(e => /rank_001/.test(e.name));
+    await showEntry(first.id); await tab('confidence');
+    await page.selectOption('#gpv-ipsae-pae', '10'); await page.waitForTimeout(200);
+    if (await page.locator('#gpv-ipsae-run').isDisabled()) throw new Error('Score chain pairs is disabled: ' + await page.locator('#gpv-ipsae-state').textContent());
+    await page.click('#gpv-ipsae-run'); await page.waitForTimeout(600);
+    const cells = await page.locator('#gpv-ipsae-rows tr').first().locator('th,td').allTextContents();
+    const max10 = expectedIpsae.cases.colabfold.runs['10_10'].find(row => row.type === 'max');
+    const eachWay = await page.locator('#gpv-ipsae-rows tr').first().locator('td').nth(1).getAttribute('title');
+    if (cells[0] !== 'A–B' || cells[1] !== max10.ipSAE.toFixed(3) || cells[2] !== '0.086 / 0.110' || eachWay !== 'A→B 0.086 · B→A 0.110' || cells[3] !== '0.710') throw new Error('row: ' + JSON.stringify(cells) + ' · ' + eachWay);
+    await page.selectOption('#gpv-ipsae-pae', '15'); await page.waitForTimeout(600);
+    const max15 = expectedIpsae.cases.colabfold.runs['15_15'].find(row => row.type === 'max');
+    const at15 = await page.locator('#gpv-ipsae-rows tr').first().locator('td').first().textContent();
+    if (at15 !== max15.ipSAE.toFixed(3)) throw new Error('after switching to 15 Å the table reads ' + at15 + ', ipsae.py ' + max15.ipSAE);
+    if (!/ColabFold’s own ipSAE/.test(await page.locator('#gpv-ipsae-state').textContent())) throw new Error('ColabFold’s own ipSAE is not shown beside the viewer’s');
+    await page.selectOption('#gpv-ipsae-pae', '10'); await page.waitForTimeout(300);
+    await tab('models');
+    await page.evaluate(labels => { [...document.querySelectorAll('#gpv-list .gpv-entry')].forEach(entry => { const toggle = entry.querySelector('input[type="checkbox"]'); const wanted = labels.some(label => entry.textContent.includes(label)); if (toggle && toggle.checked !== wanted) toggle.click(); }); }, ['rank_001', 'rank_002']);
+    await page.waitForTimeout(600); await tab('confidence');
+    await page.click('#gpv-ipsae-all'); await page.waitForTimeout(1200);
+    const summary = await page.locator('#gpv-ipsae-ensemble-rows tr').first().locator('th,td').allTextContents();
+    if (summary[0] !== 'A–B' || summary[1] !== 'ipSAE' || summary[2] !== '2' || !/rank_001/.test(summary[5])) throw new Error('summary: ' + JSON.stringify(summary));
+    const download = page.waitForEvent('download', { timeout: 20000 });
+    await page.click('#gpv-ipsae-csv');
+    const file = join(work, 'interaction.csv'); await (await download).saveAs(file);
+    const lines = (await readFile(file, 'utf8')).trim().split('\n');
+    if (!/^"model","chain1","chain2","type","pae_cutoff","dist_cutoff","ipsae"/.test(lines[0])) throw new Error('CSV header: ' + lines[0]);
+    if (lines.length !== 1 + 2 * 3) throw new Error('CSV rows ' + (lines.length - 1) + ', expected two models × (two directions + the combined row)');
+    const methods = await page.evaluate(() => window.__viewerDebug.methodsText());
+    if (!/ipSAE \(Dunbrack, 2025; PAE cutoff 10 Å/.test(methods) || !/pDockQ2 \(Zhu et al\., 2023\)/.test(methods)) throw new Error('methods text: ' + methods.slice(-500));
+    const report = await page.evaluate(id => window.__viewerDebug.reportConfidence(window.__viewerDebug.entries().find(e => e.id === id)).interaction, first.id);
+    if (!report || report.paeCutoff !== 10 || report.pairs[0].pair !== 'A–B' || Math.abs(report.pairs[0].ipsae - max10.ipSAE) > 0.0006) throw new Error('report carries: ' + JSON.stringify(report));
+    console.log('       table A–B ipSAE ' + cells[1] + ' → ' + at15 + ' at 15 Å · summary over ' + summary[2] + ' models · CSV ' + (lines.length - 1) + ' rows · methods and report carry it');
+  } finally { await tab('models'); await page.click('#gpv-show-all'); await page.waitForTimeout(300); await removePredictorEntries(); }
+});
+
+await step('Chai-1: with no PAE only pDockQ is scored, and the state line says why', async () => {
+  try {
+    await loadPredictor([join(predictorDir, 'chai_hbdimer.zip')]);
+    const entry = (await predictorEntries()).find(e => /model_idx_1/.test(e.name));
+    await showEntry(entry.id); await tab('confidence');
+    await page.click('#gpv-ipsae-run'); await page.waitForTimeout(600);
+    const cells = await page.locator('#gpv-ipsae-rows tr').first().locator('th,td').allTextContents();
+    if (cells[1] !== '—' || cells[5] !== '—' || cells[6] !== '—' || !/^0\.\d{3}$/.test(cells[4]) || cells[3] !== '0.660') throw new Error('row: ' + JSON.stringify(cells));
+    const state = await page.locator('#gpv-ipsae-state').textContent();
+    if (!/Chai-1 does not save its PAE, so only pDockQ is available/.test(state)) throw new Error('state: ' + state);
+  } finally { await removePredictorEntries(); }
+});
+
+await step('a model with one chain cannot be scored, and says so', async () => {
+  await loadPredictor([afdbCif]);
+  const single = await page.evaluate(() => { const entry = window.__viewerDebug.entries().find(e => /P69905/.test(e.name)); return entry ? entry.id : null; });
+  try {
+    if (single === null) throw new Error('the single-chain AlphaFold DB model did not load');
+    await showEntry(single); await tab('confidence');
+    if (!(await page.locator('#gpv-ipsae-run').isDisabled())) throw new Error('Score chain pairs is enabled on a one-chain model');
+    if (!/has one chain/.test(await page.locator('#gpv-ipsae-state').textContent())) throw new Error('state: ' + await page.locator('#gpv-ipsae-state').textContent());
+  } finally {
+    if (single !== null) { await tab('models'); await page.click('#gpv-list [data-entry-id="' + single + '"] button:has-text("Remove")'); await page.waitForTimeout(300); }
+  }
+});
+
 group('share links');
 /* A minimal mmCIF built from the first fixture stands in for files.rcsb.org, so the
    fetch path and the share link round-trip run without network access. */

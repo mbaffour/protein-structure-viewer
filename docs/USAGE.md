@@ -413,6 +413,41 @@ adds the interface residues of a pair as a coloured selection you can manage in 
 loaded — it says how the prediction is packed, not whether the interaction exists — so read it next
 to the chain-pair ipTM and PAE above it.
 
+### Interaction confidence
+
+ipTM is averaged over every residue of both chains, so a small, confident interface between two
+large chains scores low, and disordered tails drag it down. **Interaction confidence** scores each
+chain pair on the interface itself, with four published scores:
+
+| Score | What it is |
+| --- | --- |
+| **ipSAE** (Dunbrack, 2025) | For each residue of chain 1, the TM-score kernel 1/(1 + (PAE/d0)²) averaged over the chain-2 residues it is aligned to with PAE below the cutoff, d0 set from how many there are; the best residue gives the score. Directional — the table shows both directions and reports the larger |
+| **pDockQ** (Bryant et al., 2022) | A logistic function of mean interface pLDDT × log10(number of Cβ–Cβ contacts within 8 Å); the interface pLDDT is that of the Cβ atom (Cα for glycine), from AlphaFold 3's `full_data` when it is loaded — the server's mmCIF B-factors are a rounded copy up to 0.1 away — and from the B-factor otherwise |
+| **pDockQ2** (Zhu et al., 2023) | A logistic function of mean interface pLDDT × the mean kernel 1/(1 + (PAE/10)²) over those contacts; directional |
+| **LIS** (Kim et al., 2024) | The mean of (12 − PAE)/12 over every inter-chain PAE below 12 Å; directional, the two directions averaged |
+
+Choose a **PAE cutoff** (10 Å by default; the reference's AlphaFold 3 example uses 10, its
+AlphaFold 2 example and ColabFold's own scores 15) and an **interface distance** (which only changes
+the residue counts), then **Score chain pairs** for the current model or **Score all shown models**.
+The table gives ipSAE with both directions, the ipTM the predictor itself reported for the pair,
+pDockQ, pDockQ2, LIS and the interface residues of each chain (PAE below the cutoff and Cβ within the
+distance). Hover the ipSAE to see which residue gives it. With two or more models scored, a second
+table summarises each chain pair across them — median, range and the top-ranked model's value.
+Changing a cutoff rescores everything already scored. **Download interaction CSV** writes every
+model and pair in both directions plus the combined row, in the columns ipsae.py writes, so the two
+can be compared line for line; the scores go into the methods text, and the report shows each
+scored model's three most confident pairs.
+
+Everything follows the reference implementation, DunbrackLab/IPSAE `ipsae.py` (version 4),
+including its two d0 functions and its choice of ligand-free residues: ligands and ions are not
+chain partners here. VALIDATION.md records the comparison with it on real AlphaFold 3 runs. For a
+ColabFold model the scores ColabFold wrote for itself (at 15 Å) are shown beside the viewer's. A
+Chai-1 model has no PAE, so only pDockQ can be computed; the state line says so.
+
+Higher is more confident for all four. They are the model's own estimates of its interface, not
+measurements, and no single threshold separates a real interaction from a spurious one — a
+confident interface can still be wrong, and a true one can be predicted poorly.
+
 
 ### Colour by MSA
 

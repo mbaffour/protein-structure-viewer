@@ -140,6 +140,9 @@ when the data is there. Interactive PAE heatmaps with per-token inspection that 
 strip, PNG export, a downloadable confidence-metrics CSV, and a per-residue pLDDT profile figure
 (SVG or PNG, one panel per chain, every displayed model overlaid). Interface geometry per model: inter-chain heavy-atom contacts,
 interface residues, and Shrake–Rupley buried surface area, with one-click highlighting and CSV export.
+Interaction confidence per chain pair — ipSAE, pDockQ, pDockQ2 and LIS, computed as the reference
+implementation ipsae.py does and cross-checked against it — for one model or summarised across every
+shown model, with a CSV in ipsae.py's own columns.
 PAE-derived domains — groups of residues the prediction places together — as a table, a colour
 scheme, and one-click highlights. Ligand sites: contact residues per ligand or ion, site mean pLDDT
 and, for AlphaFold 3, ligand–site PAE.

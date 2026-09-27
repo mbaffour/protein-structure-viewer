@@ -108,6 +108,7 @@
     const domains = first && first.domains;
     if (domains && domains.domains.length) sentences.push('Domains were derived from the PAE matrix by greedy agglomeration of ten-residue segments: the pair with the lowest mean inter-segment PAE was merged while that mean stayed below ' + domains.cutoff + ' Å; groups of fewer than twenty residues were absorbed into the nearest domain when within twice the cutoff and otherwise left unassigned. This segmentation is a heuristic and differs from the graph clustering used by the AlphaFold Protein Structure Database.');
     if (nearbyResult && nearbyResult.residues) sentences.push('Contacting residues were defined as residues with any heavy atom within ' + nearbyResult.cutoff + ' Å of any heavy atom of the ' + (nearbyResult.mode === 'chain' ? 'target chain' : nearbyResult.mode === 'hetero' ? 'ligands and ions' : 'target residue') + ' (hydrogens and water excluded).');
+    const interactionSentence = interactionMethodsSentence(); if (interactionSentence) sentences.push(interactionSentence);
     if (siteResults && siteResults.rows.length) sentences.push('Ligand-binding sites were defined as protein residues with any heavy atom within ' + siteResults.cutoff + ' Å of a ligand or ion heavy atom' + (siteResults.rows.some(row => row.pae !== null) ? '; ligand–site PAE is the mean of the symmetrised PAE between ligand tokens and site-residue tokens' : '') + '.');
     if (first) {
       const size = assemblyDimensions(first);

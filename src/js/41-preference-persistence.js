@@ -5,7 +5,7 @@
     '#gpv-export-mode', '#gpv-print-width', '#gpv-print-aspect', '#gpv-print-dpi', '#gpv-print-text', '#gpv-figure-font', '#gpv-scale-bar', '#gpv-legend-position', '#gpv-image-format',
     '#gpv-view-mode', '#gpv-order', '#gpv-alignment-mode', '#gpv-fit-scope', '#gpv-position-cutoff', '#gpv-export-size', '#gpv-export-scale',
     '#gpv-panel-columns', '#gpv-video-length', '#gpv-cycle-speed', '#gpv-speed', '#gpv-report-scope',
-    '#gpv-position-figure-deviation'
+    '#gpv-position-figure-deviation', '#gpv-ipsae-pae', '#gpv-ipsae-dist'
   ];
 
   function savePreferences() {
@@ -176,6 +176,7 @@
     root.querySelector('#gpv-annotation-state').textContent = 'Pick a tool, start drawing, then click atoms in the main viewer.';
     savedViews = [];
     confidenceAssets = [];
+    interactionResults = null;
     alignmentResults = [];
     pendingScene = null;
     root.querySelector('#gpv-residue').textContent = 'Click any atom in the viewer to inspect it.';

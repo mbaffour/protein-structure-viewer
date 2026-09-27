@@ -154,6 +154,13 @@
     return keys.map(row => keys.map(column => finiteNumber(value[row] && value[row][column])));
   }
 
+  /* AlphaFold 3's chain_ids is one entry per chain in some files and one per token in others
+     (the AlphaFold Server's summary files list every token: "A", "A", …, "B", …); the chain
+     order is the same either way once repeats are removed. */
+  function chainOrderFromIds(ids) {
+    return Array.isArray(ids) ? [...new Set(ids.map(id => String(id)))] : [];
+  }
+
   /* Chains in the order the model lists them — the order Boltz and Chai-1 index their
      per-chain scores by. */
   function modelChainOrder(entry) {

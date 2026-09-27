@@ -2,6 +2,54 @@
 
 All notable changes to this project are recorded here.
 
+## 2.48.0
+
+### Added
+
+- **Interaction confidence: ipSAE, pDockQ, pDockQ2 and LIS for every chain pair.** ipTM is averaged
+  over both chains whole, so a small confident interface between large chains scores low and
+  disordered tails pull it down; these four look at the interface itself. In the Confidence tab,
+  **Score chain pairs** scores the current model and **Score all shown models** the ticked ones, with
+  a PAE cutoff (10 Å by default; 12 and 15 offered) and an interface distance for the residue counts.
+  The table gives ipSAE with both directions (A→B, B→A) and the residue that sets it, the ipTM the
+  predictor reported for the pair (AlphaFold 3, Boltz and Chai-1 per pair; ColabFold's single ipTM for
+  a dimer), pDockQ, pDockQ2, LIS and the interface residues of each chain. Scoring several models adds
+  a summary per chain pair: median, range and the top-ranked model's value. **Download interaction
+  CSV** writes both directions and the combined row in the columns ipsae.py writes. The methods text
+  cites the four scores and the cutoff, and the report shows each scored model's three most
+  confident pairs (a 15-chain assembly has 105; the CSV has them all).
+- **Computed as the reference implementation does, and checked against it.** The scoring follows
+  DunbrackLab/IPSAE `ipsae.py` (version 4) step for step: its two d0 functions (1.0 up to L = 27 for
+  the chain-pair and domain variants; L raised to 26 for the per-residue one), Cβ (Cα for glycine)
+  contacts within 8 Å, the Cβ atom's own pLDDT for pDockQ, ligands left out of the chain partners,
+  the Cα token of a residue AlphaFold 3 tokenised atom by atom, and the reference's rules for which
+  direction's counts a combined row reports. On the committed fixtures every value agrees with the
+  reference to the last place it prints (6 decimals for the ipSAE family, 4 for the rest; counts
+  exactly), and ColabFold's own ipSAE, written by its reimplementation at 15 Å, is reproduced too.
+  On eight real AlphaFold 3 runs — 40 models of 2 to 15 chains, homomers and heteromers — 117 900
+  values were compared with ipsae.py, none outside that tolerance (VALIDATION.md).
+- For a ColabFold model the ipSAE ColabFold wrote for itself is shown beside the viewer's. A Chai-1
+  model has no PAE, so only pDockQ is scored, and the state line says why.
+
+### Fixed
+
+- **The chain-pair ipTM table labelled AlphaFold Server complexes "A–A".** The server's
+  `summary_confidences` lists `chain_ids` once per token, not once per chain, and the table took the
+  first entries of that list as its chain names; on a two-chain run the only pair read "A–A", and on
+  larger runs the labels were wrong throughout. The numbers were right; only the labels were not.
+  Chain order is now the list with repeats removed. Found by the cross-validation against ipsae.py.
+- The interface scores read AlphaFold 3's per-atom pLDDT from `full_data` rather than from the
+  mmCIF B-factors, which the server writes as a rounded copy up to 0.1 away.
+
+### Tests
+
+- A new **interaction confidence** group (6 steps): every score, both directions and the combined row,
+  against ipsae.py's output on the ColabFold, Boltz (with a ligand) and AlphaFold 3 fixtures at 10 and
+  15 Å; ColabFold's own ipSAE reproduced; the table, the cutoff switch, the cross-model summary, the
+  CSV, the methods text and the report; Chai-1 scored by pDockQ alone; a one-chain model refused.
+- `tests/validate-ipsae.mjs` runs the same comparison on any AlphaFold 3 archives: ipsae.py on every
+  model at 10/10 and 15/15, the viewer headless on the same archives, every chain pair compared.
+
 ## 2.47.0
 
 ### Added

@@ -127,6 +127,12 @@ PSV_CHROMIUM=/opt/pw-browsers/chromium/chrome-linux/chrome npm test
   reported as skipped; Chai-1 samples rank by aggregate score, float32 scores read back as 0.52 rather than
   0.5199999809, and the missing PAE is explained; a PAE that fits no layout is not matched to residues and the PAE
   line says so; the `.npy` reader handles a Fortran-ordered big-endian float64 array and a version-2 header.
+- Interaction confidence: ipSAE, ipSAE_d0chn, ipSAE_d0dom, ipTM_d0chn, pDockQ, pDockQ2, LIS, the reported ipTM and
+  the residue counts, in both directions and on the combined row, agree with ipsae.py's output
+  (`fixtures/predictors/expected-ipsae.json`) on the ColabFold, Boltz and AlphaFold 3 fixtures at 10 and 15 Å, and
+  ColabFold's own ipSAE is reproduced; the table, the cutoff switch, the summary across models, the CSV, the methods
+  text and the report carry the scores; a Chai-1 model is scored by pDockQ alone and says why; a one-chain model
+  cannot be scored. `validate-ipsae.mjs` runs the same comparison on real AlphaFold 3 archives.
 - Model legend names: a run's file names reduce to model_0 … model_4 (the stem is given back a boundary at a time when
   it would leave only a digit), two unrelated names lose only the shared extension, and a lone name is left whole.
 - Fitting on a region: fitting on `A:1-12` keeps the matched pair count, reports exactly 12 Cα in the fitted-on cell, a

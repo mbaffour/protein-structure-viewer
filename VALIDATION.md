@@ -281,6 +281,62 @@ mean over (i, j) of ½(PAE[i][j] + PAE[j][i]). Tolerance 10⁻³ Å, since this 
 matrix read from disk, not a sampled quantity. The site residue set should be compared as a set, as
 the contact residue set already is.
 
+## Interaction confidence (added 2.48.0)
+
+The reference is the published implementation itself: DunbrackLab/IPSAE `ipsae.py`, version 4
+(2026-01-03, commit 6174cf9, SHA-256 `10cf9b08c68c91e06cb28526cf2026f47a3980c9048fd3226d13e3304eaf1c27`),
+run unmodified with numpy 2.0.2. `tests/validate-ipsae.mjs` runs it on every model of an AlphaFold 3
+archive at PAE/distance cutoffs 10/10 and 15/15, drives the viewer headless on the same archive, and
+compares every chain pair in both directions and on the combined row: ipSAE, ipSAE_d0chn, ipSAE_d0dom,
+ipTM_d0chn, pDockQ, pDockQ2, LIS, the ipTM the model reported for the pair, and the counts n0res,
+n0chn, n0dom, nres1, nres2, dist1, dist2. The reference prints the ipSAE family to 6 decimals and
+pDockQ, pDockQ2 and LIS to 4, so the tolerance is half a unit in that place; counts must be equal.
+
+Run on 2026-09-27, viewer 2.48.0, on eight of the user's AlphaFold 3 server runs — 40 models, 2 to 15
+chains, 65 to 1 540 residues, homomers and heteromers:
+
+| Run | Chains | Residues |
+| --- | ---: | ---: |
+| M13 pVII–pIX | 2 | 65 |
+| M13 pV homodimer | 2 | 174 |
+| gp75–gp63–gp62 | 3 | 357 |
+| MS2 pool | 4 | 1 143 |
+| M13 pVI pentamer | 5 | 560 |
+| M13 virion pVIII segment | 10 | 730 |
+| gp63 × 14 | 14 | 1 540 |
+| M13 virion round tip | 15 | 690 |
+
+**117 900 comparisons, none outside tolerance.** The largest difference in every score is exactly the
+rounding of the reference's printed value (5.0 × 10⁻⁷ for the ipSAE family, 5.0 × 10⁻⁵ for pDockQ,
+pDockQ2 and LIS); the reported ipTM and every count agree exactly.
+
+What the check found on the way, both now fixed:
+
+- **pDockQ and pDockQ2 differed by up to 7.5 × 10⁻⁵.** The AlphaFold Server writes each atom's pLDDT
+  twice — in `full_data`'s `atom_plddts` and, rounded, in the mmCIF B-factor column — and the two
+  differ by up to 0.1 (63.98 against 63.9 on one of these runs). ipsae.py reads `atom_plddts`; the
+  viewer had read the B-factors. The interface scores now use `atom_plddts` whenever it is loaded.
+  Mean pLDDT and pLDDT colouring still use the B-factors, as the models' own record of it.
+- **The model's ipTM was missing for most multi-chain runs, and the chain-pair table was mislabelled.**
+  The server's `summary_confidences` lists `chain_ids` once per *token* (1 143 entries for the MS2
+  run), and the viewer took it as one entry per chain: the chain-pair ipTM lookup failed for runs of
+  three or more chains, and the chain-pair ipTM table under the PAE map labelled its rows with the
+  first entries of that list — "A–A". Chain order is now taken from the list with repeats removed.
+
+**Not covered by real data.** None of the available runs contains a ligand, an ion, a modified residue
+(tokenised atom by atom by AlphaFold 3) or a nucleic-acid chain, and none is a Boltz, Chai-1 or
+ColabFold run. The token rules for those cases, the ligand-free partner rule, the nucleic-acid d0
+minimum and the other formats are tested against ipsae.py only on the committed synthetic fixtures
+(`tests/fixtures/predictors/`, 270 values, all agreeing), which is a weaker check: it confirms the
+formats are read as the reference reads them, not that a real prediction of that kind is.
+
+To rerun:
+
+```
+node validate-ipsae.mjs path/to/ipsae.py fold_a.zip fold_b.zip …        # IPSAE_JOBS=4 by default
+IPSAE_CACHE=ref.json node validate-ipsae.mjs …                           # keep the slow reference half between runs
+```
+
 ## Rerunning
 
 ```
