@@ -47,8 +47,8 @@ you fetch the accession.
 **Drag and drop.** Drop files anywhere on the page — the drop target is the whole window, not just
 the upload card. Several archives can be dropped together.
 
-**File picker.** The **Choose model files** control accepts `.pdb`, `.cif`, `.mmcif`, `.json`, `.csv`,
-and `.zip`, multiple at a time.
+**File picker.** The **Choose model files** control accepts `.pdb`, `.cif`, `.mmcif`, `.json`, `.npz`,
+`.csv`, `.a3m` and `.zip`, multiple at a time.
 
 **Fetch by identifier.** Type an ID and press **Fetch**:
 
@@ -69,6 +69,22 @@ automatically by file-name matching:
   fraction disordered, clash flag, PAE, chain-pair ipTM, chain-pair minimum PAE
 - `ranking_debug.json` (AlphaFold 2) — model order and per-model ranking confidence
 - `ranking_scores.csv` (AlphaFold Server) — seed/sample ranking scores, converted to ranks
+- `<job>_scores_rank_001_<model>_seed_000.json` (ColabFold 1.5+) — pLDDT, PAE, pTM, ipTM, and for
+  complexes ColabFold's own ipSAE, pDockQ and pDockQ2; pairs with `<job>_unrelaxed_rank_001_…pdb` and
+  `<job>_relaxed_rank_001_…pdb`, and the rank is read from the name
+- `confidence_<name>_model_0.json` and `pae_<name>_model_0.npz` (Boltz) — ranking score, pTM, ipTM,
+  per-chain-pair ipTM and the PAE; pairs with `<name>_model_0.cif`. Model 0 is rank 1. The `plddt_`
+  and `pde_` files are recognised but not needed: pLDDT is in the model's B-factors
+- `scores.model_idx_0.npz` (Chai-1) — aggregate score, pTM, ipTM, per-chain-pair ipTM and the clash
+  flag; pairs with `pred.model_idx_0.cif`. Samples are ranked by aggregate score within one archive.
+  Chai-1 files carry no job name, so zip each run's folder (or drop one run at a time) to keep runs
+  apart. Chai-1 does not write its PAE matrix to disk, so its models have no PAE map
+
+**Which residue a PAE row is.** AlphaFold 3 lists the chain and residue of every row. For the other
+tools the viewer works it out from the model: one row per polymer residue and one per heavy atom of a
+ligand (how AlphaFold 3 and Boltz-2 tokenise), or one per residue (ColabFold). The layout is used only
+when its length is exactly the matrix size; otherwise the PAE is still drawn but not matched to
+residues, and the line under the map gives both counts.
 
 Anything the viewer cannot interpret is skipped and reported in the red notice below the upload card.
 
@@ -996,8 +1012,16 @@ structures and for prediction tools that do not write pLDDT into the B-factor co
 
 **Confidence JSON did not attach.** Matching is by file name. A confidence file is paired with a model
 when their stems match after stripping the `_confidences`, `_summary_confidences`, `_full_data`, and
-`_model` suffixes, or via `ranked_N` ordering, or via a `seed-X_sample-Y` name. If yours does not
-match any of those, rename it to its model's stem plus `_confidences.json`.
+`_model` suffixes, or via `ranked_N` ordering, or via a `seed-X_sample-Y` name. ColabFold files match
+once `_unrelaxed_`, `_relaxed_` or `_scores_` is set aside; Boltz files once the `confidence_`, `pae_`,
+`plddt_` or `pde_` prefix is; Chai-1 files by `model_idx_N`. If yours does not match any of those,
+rename it to its model's stem plus `_confidences.json`.
+
+**The PAE map says residues were not matched to rows.** The matrix has a different number of rows from
+the model's residues (and from its residues plus ligand atoms). This happens when a PAE file is paired
+with a model it was not computed for, or with a model whose ligands were removed. The map is still
+drawn; chain boundaries, PAE domains and ligand-site PAE are not, rather than being assigned to the
+wrong residues.
 
 **Alignment produced no rows.** Fewer than three Cα atoms could be paired. Switch to sequence-aware
 mapping, or check that the models actually contain protein chains.

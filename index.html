@@ -831,11 +831,11 @@ html>body{padding:0}</style>
 
   <div class="card gpv-drop" id="gpv-drop">
     <span class="gpv-drop-icon" aria-hidden="true"><i data-icon="folder-up"></i></span>
-    <strong>Add structures or AlphaFold result ZIPs</strong>
-    <span class="text-muted">Drop files anywhere on this page, or choose PDB, CIF/mmCIF, JSON, CSV, A3M and ZIP files</span>
+    <strong>Add structures or prediction results</strong>
+    <span class="text-muted">Drop files anywhere on this page, or choose PDB, CIF/mmCIF, JSON, NPZ, CSV, A3M and ZIP files — AlphaFold, ColabFold, Boltz and Chai-1 output is recognised</span>
     <span class="gpv-drop-badges"><span class="viz-badge">Multiple ZIPs</span><span class="viz-badge">Local processing</span><span class="viz-badge">No upload</span></span>
     <div class="gpv-drop-actions">
-      <input class="form-control gpv-file-input" id="gpv-files" aria-label="Choose model files" type="file" accept=".pdb,.cif,.mmcif,.json,.csv,.zip,.a3m" multiple>
+      <input class="form-control gpv-file-input" id="gpv-files" aria-label="Choose model files" type="file" accept=".pdb,.cif,.mmcif,.json,.npz,.csv,.zip,.a3m" multiple>
       <form class="gpv-fetch" id="gpv-fetch-form">
         <input class="form-control gpv-fetch-field" id="gpv-fetch-id" type="text" autocomplete="off" spellcheck="false" aria-label="Structure identifier to fetch" placeholder="or fetch an ID: 1ubq, P69905">
         <button class="btn" type="submit" id="gpv-fetch" data-tooltip="Download a PDB entry from RCSB, or an AlphaFold DB model from EMBL-EBI"><i data-icon="cloud-download" aria-hidden="true"></i>Fetch</button>
@@ -868,7 +868,7 @@ html>body{padding:0}</style>
     <div class="gpv-view-pane">
       <span class="viz-badge gpv-view-label" id="gpv-left-label" hidden>Primary</span>
       <div class="card gpv-stage" id="gpv-stage" tabindex="0" role="application" aria-label="Interactive three-dimensional protein structure viewer. Drag to rotate, scroll to zoom, click an atom to inspect it."></div>
-      <div class="gpv-stage-empty" id="gpv-stage-empty"><i data-icon="orbit" aria-hidden="true"></i><strong>No structure loaded yet</strong><span class="text-muted">Drop a PDB, CIF, or AlphaFold ZIP anywhere on this page, or fetch an ID above</span><button class="btn" type="button" id="gpv-demo"><i data-icon="cloud-download" aria-hidden="true"></i>Load an example (PDB 1ubq)</button></div>
+      <div class="gpv-stage-empty" id="gpv-stage-empty"><i data-icon="orbit" aria-hidden="true"></i><strong>No structure loaded yet</strong><span class="text-muted">Drop a PDB, CIF, or a zipped AlphaFold, ColabFold, Boltz or Chai-1 result anywhere on this page, or fetch an ID above</span><button class="btn" type="button" id="gpv-demo"><i data-icon="cloud-download" aria-hidden="true"></i>Load an example (PDB 1ubq)</button></div>
       <div class="gpv-scalebar text-small" id="gpv-scalebar" hidden aria-hidden="true"><span id="gpv-scalebar-label"></span><i id="gpv-scalebar-line"></i></div>
       <div class="gpv-busy" id="gpv-busy" hidden aria-hidden="true"><span class="gpv-spinner"></span><span id="gpv-busy-label">Working…</span></div>
     </div>
@@ -1115,8 +1115,8 @@ html>body{padding:0}</style>
   <section class="gpv-tool-panel" data-gpv-panel="confidence" hidden>
     <div class="gpv-confidence-layout" id="gpv-confidence-panel" hidden>
       <div><div class="viz-controls gpv-msa" aria-label="Multiple sequence alignment"><span class="text-small text-muted">MSA</span><label class="form-label">Colour by<select class="form-select" id="gpv-msa-metric"><option value="conservation">Conservation (1 − normalised entropy)</option><option value="identity">Identity to the query</option><option value="depth">Coverage (sequences per column)</option></select></label><label class="form-check form-switch"><input class="form-check-input" id="gpv-msa-weights" type="checkbox" checked><span class="form-check-label">Henikoff weights</span></label><button class="btn" type="button" id="gpv-msa-paint" disabled data-tooltip="Read the unpaired MSA that AlphaFold 3 used (the .a3m in the archive) and colour each chain it covers by the chosen per-column statistic">Colour by MSA</button><span class="text-muted text-small" id="gpv-msa-state">No alignment loaded. AlphaFold 3 archives carry one per entity; an .a3m can also be added on its own.</span></div>
-      <div class="viz-controls"><button class="btn" type="button" id="gpv-confidence-csv">Download confidence CSV</button><button class="btn" type="button" id="gpv-profile-svg" disabled data-tooltip="Per-residue pLDDT plot of the displayed models, one panel per chain, as editable SVG">pLDDT profile SVG</button><button class="btn" type="button" id="gpv-profile-png" disabled data-tooltip="The same pLDDT profile rendered at 2× as PNG">pLDDT profile PNG</button></div><div class="table-responsive"><table class="table table-sm" aria-label="AlphaFold model confidence metrics"><thead><tr><th>Model</th><th class="text-end">Mean pLDDT</th><th class="text-end">pTM</th><th class="text-end">ipTM</th><th class="text-end">Ranking score</th><th class="text-end">Rank</th><th>Clash</th></tr></thead><tbody id="gpv-metrics"></tbody></table></div></div>
-      <div class="gpv-pae-panel" id="gpv-pae-panel" hidden><div id="gpv-pae-plot" hidden><div class="viz-controls"><button class="btn" type="button" id="gpv-pae-png">Download PAE PNG</button></div><canvas id="gpv-pae" width="420" height="420" role="img" aria-label="Predicted aligned error heatmap"></canvas><div class="gpv-pae-legend text-small"><span>Low error</span><span>PAE (Å)</span><span>High error</span></div><div class="text-small" id="gpv-pae-detail">Move over the heatmap to inspect a residue pair.</div></div><div class="table-responsive" id="gpv-interface-wrap" hidden><table class="table table-sm" aria-label="Chain-pair interface confidence"><thead><tr><th>Chain pair</th><th class="text-end">ipTM</th><th class="text-end">Min PAE (Å)</th></tr></thead><tbody id="gpv-interface-metrics"></tbody></table></div></div>
+      <div class="viz-controls"><button class="btn" type="button" id="gpv-confidence-csv">Download confidence CSV</button><button class="btn" type="button" id="gpv-profile-svg" disabled data-tooltip="Per-residue pLDDT plot of the displayed models, one panel per chain, as editable SVG">pLDDT profile SVG</button><button class="btn" type="button" id="gpv-profile-png" disabled data-tooltip="The same pLDDT profile rendered at 2× as PNG">pLDDT profile PNG</button></div><div class="table-responsive"><table class="table table-sm" aria-label="Model confidence metrics"><thead><tr><th>Model</th><th class="text-end">Mean pLDDT</th><th class="text-end">pTM</th><th class="text-end">ipTM</th><th class="text-end">Ranking score</th><th class="text-end">Rank</th><th>Clash</th></tr></thead><tbody id="gpv-metrics"></tbody></table></div></div>
+      <div class="gpv-pae-panel" id="gpv-pae-panel" hidden><div id="gpv-pae-plot" hidden><div class="viz-controls"><button class="btn" type="button" id="gpv-pae-png">Download PAE PNG</button></div><canvas id="gpv-pae" width="420" height="420" role="img" aria-label="Predicted aligned error heatmap"></canvas><div class="gpv-pae-legend text-small"><span>Low error</span><span>PAE (Å)</span><span>High error</span></div><div class="text-small" id="gpv-pae-detail">Move over the heatmap to inspect a residue pair.</div></div><div class="table-responsive" id="gpv-interface-wrap" hidden><table class="table table-sm" aria-label="Chain-pair interface confidence"><thead><tr><th>Chain pair</th><th class="text-end">ipTM</th><th class="text-end">Min PAE (Å)</th></tr></thead><tbody id="gpv-interface-metrics"></tbody></table><p class="text-muted text-small" id="gpv-interface-note" hidden></p></div></div>
     </div>
     <h3 class="gpv-subheading">PAE domains</h3>
     <p class="text-muted text-small gpv-hint">Residues whose predicted aligned error to one another is low are placed together in the prediction. Ten-residue segments are merged greedily while the mean PAE between groups stays below the cutoff. This is a heuristic segmentation of the PAE matrix (greedy agglomeration; it differs from the graph clustering used by the AlphaFold Protein Structure Database), not a curated domain assignment, and it says nothing about whether the placement is right.</p>
@@ -1702,7 +1702,7 @@ html>body{padding:0}</style>
   let busyDepth = 0;
   let restoreMotion = null;
   const listPageSize = 60;
-  const viewerVersion = '2.46.3';
+  const viewerVersion = '2.47.0';
   const preferenceKey = 'protein-structure-viewer:preferences';
   const themeKey = 'protein-structure-viewer:theme';
   const labelColors = getComputedStyle(root);
@@ -1944,7 +1944,7 @@ html>body{padding:0}</style>
   }
 
   function fileStem(path) {
-    return path.split('/').pop().replace(/\.(pdb|cif|mmcif|json|csv)$/i, '');
+    return path.split('/').pop().replace(/\.(pdb|cif|mmcif|json|csv|npz)$/i, '');
   }
 
   function associationKey(path) {
@@ -1953,7 +1953,20 @@ html>body{padding:0}</style>
        (or -confidence_v6) belong together; the version suffix carries no model index. */
     const database = stem.replace(/-(model|predicted_aligned_error|confidence)_v\d+$/, '');
     if (database !== stem) return database;
-    return stem.replace(/_(summary_confidences|confidences|full_data|model)(?:_(\d+))?$/, (_, marker, index) => index ? '_' + index : '');
+    /* ColabFold: <job>_unrelaxed_rank_001_<model>_seed_000.pdb, the _relaxed_ one beside it, and
+       <job>_scores_rank_001_<model>_seed_000.json all belong together. */
+    const colabfold = stem.match(/^(.*)_(?:unrelaxed|relaxed|scores)_(rank_\d+_.+)$/);
+    if (colabfold) return colabfold[1] + '_' + colabfold[2];
+    /* Chai-1: pred.model_idx_0.cif and scores.model_idx_0.npz. */
+    const chai = stem.match(/^(?:pred|scores)\.(model_idx_\d+)$/);
+    if (chai) return chai[1];
+    /* Boltz: confidence_<name>_model_0.json and pae_/plddt_/pde_<name>_model_0.npz go with
+       <name>_model_0.cif. The prefix is only removed from those files, never from a structure,
+       so an AlphaFold 3 job whose name happens to start with "pae_" still pairs with its own data. */
+    const extension = (path.split('.').pop() || '').toLowerCase();
+    const boltz = extension === 'npz' ? stem.match(/^(?:confidence|pae|plddt|pde)_(.+_model_\d+)$/) : extension === 'json' ? stem.match(/^confidence_(.+_model_\d+)$/) : null;
+    const unprefixed = boltz ? boltz[1] : stem;
+    return unprefixed.replace(/_(summary_confidences|confidences|full_data|model)(?:_(\d+))?$/, (_, marker, index) => index ? '_' + index : '');
   }
 
   function assetFitsEntry(asset, entry) {
@@ -1984,7 +1997,8 @@ html>body{padding:0}</style>
     return {
       ptm: finiteNumber(data.ptm ?? data.predicted_tm_score),
       iptm: finiteNumber(data.iptm ?? data.interface_predicted_tm_score),
-      rankingScore: finiteNumber(data.ranking_score ?? data.ranking_confidence),
+      /* Boltz calls its ranking score confidence_score. */
+      rankingScore: finiteNumber(data.ranking_score ?? data.ranking_confidence ?? data.confidence_score),
       fractionDisordered: finiteNumber(data.fraction_disordered),
       hasClash: data.has_clash === undefined ? null : data.has_clash === true || Number(data.has_clash) === 1,
       pae,
@@ -1992,8 +2006,10 @@ html>body{padding:0}</style>
       tokenChainIds: Array.isArray(data.token_chain_ids) ? data.token_chain_ids : null,
       tokenResidueIds: Array.isArray(data.token_res_ids) ? data.token_res_ids : null,
       chainIds: Array.isArray(data.chain_ids) ? data.chain_ids : null,
-      chainPairIptm: Array.isArray(data.chain_pair_iptm) ? data.chain_pair_iptm : null,
-      chainPairPaeMin: Array.isArray(data.chain_pair_pae_min) ? data.chain_pair_pae_min : null
+      chainPairIptm: Array.isArray(data.chain_pair_iptm) ? data.chain_pair_iptm : indexedPairMatrix(data.pair_chains_iptm),
+      chainPairPaeMin: Array.isArray(data.chain_pair_pae_min) ? data.chain_pair_pae_min : null,
+      /* ColabFold 1.5.5+ scores its own complexes (PAE cutoff 15 Å); kept to compare against. */
+      reportedInterface: data.ipsae && typeof data.ipsae === 'object' && !Array.isArray(data.ipsae) ? { ipsae: data.ipsae, pdockq: data.pdockq || null, pdockq2: data.pdockq2 || null } : null
     };
   }
 
@@ -2007,6 +2023,7 @@ html>body{padding:0}</style>
   }
 
   function attachConfidenceAssets() {
+    rankScoreRankedAssets();
     structures.forEach(entry => {
       confidenceAssets.filter(asset => assetFitsEntry(asset, entry)).forEach(asset => {
         entry.confidence = mergeConfidence(entry.confidence, asset.confidence);
@@ -2090,7 +2107,8 @@ html>body{padding:0}</style>
       }
     }
     context.putImageData(image, 0, 0);
-    const chains = entry.confidence.tokenChainIds || [];
+    const layout = paeTokenLayout(entry);
+    const chains = layout && !layout.mismatch ? layout.chainIds : [];
     context.save();
     context.strokeStyle = themeColor('--foreground', '#111827');
     context.globalAlpha = 0.7;
@@ -2109,7 +2127,8 @@ html>body{padding:0}</style>
     canvas.dataset.entryId = String(entry.id);
     canvas.dataset.maximum = String(maximum);
     canvas.setAttribute('aria-label', 'Predicted aligned error heatmap for ' + entry.name + ', ' + size + ' by ' + size + ' tokens, maximum ' + maximum.toFixed(1) + ' angstroms');
-    root.querySelector('#gpv-pae-detail').textContent = entry.name + ' · ' + size + ' × ' + size + ' tokens · maximum ' + maximum.toFixed(1) + ' Å';
+    root.querySelector('#gpv-pae-detail').textContent = entry.name + ' · ' + size + ' × ' + size + ' tokens · maximum ' + maximum.toFixed(1) + ' Å'
+      + (layout && layout.mismatch ? ' · residues not matched to rows: ' + layout.mismatch : '');
     renderInterfaceMetrics(entry);
   }
 
@@ -2122,8 +2141,10 @@ html>body{padding:0}</style>
     const iptm = confidence.chainPairIptm;
     const pae = confidence.chainPairPaeMin;
     const size = Math.max(Array.isArray(iptm) ? iptm.length : 0, Array.isArray(pae) ? pae.length : 0);
-    const derivedChainIds = [...new Set(confidence.tokenChainIds || [])];
-    const chainIds = confidence.chainIds && confidence.chainIds.length ? confidence.chainIds : derivedChainIds.length ? derivedChainIds : Array.from({ length: size }, (_, index) => String(index + 1));
+    const derivedChainIds = [...new Set(paeTokenIds(entry).chainIds)];
+    /* Boltz and Chai-1 index their per-chain-pair ipTM by the model's chain order. */
+    const modelChains = modelChainOrder(entry);
+    const chainIds = confidence.chainIds && confidence.chainIds.length ? confidence.chainIds : derivedChainIds.length === size ? derivedChainIds : modelChains.length === size ? modelChains : derivedChainIds.length ? derivedChainIds : Array.from({ length: size }, (_, index) => String(index + 1));
     for (let i = 0; i < size; i += 1) {
       for (let j = i + 1; j < size; j += 1) {
         const row = document.createElement('tr');
@@ -2141,6 +2162,11 @@ html>body{padding:0}</style>
         body.append(row);
       }
     }
+    /* Chai-1 scores chain pairs but keeps its PAE in memory; say so rather than show an empty map. */
+    const note = root.querySelector('#gpv-interface-note');
+    const withoutPae = confidence.predictor === 'Chai-1' && !Array.isArray(confidence.pae);
+    note.hidden = !withoutPae;
+    note.textContent = withoutPae ? 'Chai-1 writes per-chain-pair ipTM but does not save its PAE to disk, so this model has no PAE map.' : '';
     wrap.hidden = body.children.length === 0;
     panel.hidden = root.querySelector('#gpv-pae-plot').hidden && wrap.hidden;
   }
@@ -2331,6 +2357,222 @@ html>body{padding:0}</style>
     viewer.render();
   }
 
+  /* ---------- Other predictors: ColabFold, Boltz, Chai-1 ----------
+     Each tool writes the same three things — a model, per-residue pLDDT, a PAE matrix and
+     a few summary scores — under its own names. The layouts below were read from each
+     tool's own writer:
+       ColabFold 1.5+  <job>_unrelaxed_rank_001_<model>_seed_000.pdb (or _relaxed_) with
+                       <job>_scores_rank_001_<model>_seed_000.json: plddt, pae, max_pae, ptm,
+                       iptm, and for complexes ColabFold's own ipsae / pdockq / pdockq2.
+       Boltz           <name>_model_0.cif with confidence_<name>_model_0.json and
+                       pae_ / plddt_ / pde_<name>_model_0.npz. Model 0 is the best ranked.
+       Chai-1          pred.model_idx_0.cif with scores.model_idx_0.npz (aggregate_score, ptm,
+                       iptm, per-chain-pair ipTM, clashes). Sample index is not rank. Chai-1
+                       keeps its PAE in memory and never writes it to disk.
+     All three put pLDDT × 100 in the B-factor column, which the viewer already reads. What
+     they need here is the pairing of scores to models, a reader for NumPy's .npz files, and
+     — because only AlphaFold 3 lists which residue each PAE row belongs to — a token layout
+     derived from the model itself. */
+
+  const npyTypes = {
+    f2: [2, (view, at, little) => halfToFloat(view.getUint16(at, little))], f4: [4, (view, at, little) => view.getFloat32(at, little)],
+    f8: [8, (view, at, little) => view.getFloat64(at, little)], i1: [1, (view, at) => view.getInt8(at)], u1: [1, (view, at) => view.getUint8(at)],
+    b1: [1, (view, at) => view.getUint8(at)], i2: [2, (view, at, little) => view.getInt16(at, little)], u2: [2, (view, at, little) => view.getUint16(at, little)],
+    i4: [4, (view, at, little) => view.getInt32(at, little)], u4: [4, (view, at, little) => view.getUint32(at, little)],
+    i8: [8, (view, at, little) => Number(view.getBigInt64(at, little))], u8: [8, (view, at, little) => Number(view.getBigUint64(at, little))]
+  };
+
+  function halfToFloat(bits) {
+    const sign = bits & 0x8000 ? -1 : 1; const exponent = (bits >> 10) & 0x1f; const fraction = bits & 0x3ff;
+    if (exponent === 0) return sign * Math.pow(2, -14) * (fraction / 1024);
+    if (exponent === 31) return fraction ? NaN : sign * Infinity;
+    return sign * Math.pow(2, exponent - 15) * (1 + fraction / 1024);
+  }
+
+  /* One .npy array: the magic string, a version, a header that is a Python dict literal
+     ('descr', 'fortran_order', 'shape'), then the values. Returned flat, in C order. */
+  function readNpy(bytes) {
+    if (bytes.length < 10 || bytes[0] !== 0x93 || String.fromCharCode(bytes[1], bytes[2], bytes[3], bytes[4], bytes[5]) !== 'NUMPY') throw new Error('not a NumPy array');
+    const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+    const major = bytes[6];
+    const headerStart = major === 1 ? 10 : 12;
+    const headerLength = major === 1 ? view.getUint16(8, true) : view.getUint32(8, true);
+    const header = String.fromCharCode(...bytes.subarray(headerStart, headerStart + headerLength));
+    const descr = (header.match(/'descr'\s*:\s*'([^']+)'/) || [])[1] || '';
+    const fortran = /'fortran_order'\s*:\s*True/.test(header);
+    const shape = ((header.match(/'shape'\s*:\s*\(([^)]*)\)/) || [])[1] || '').split(',').map(value => value.trim()).filter(Boolean).map(Number);
+    const type = npyTypes[descr.slice(1)];
+    if (!type || !shape.every(Number.isFinite)) throw new Error('unsupported NumPy array type ' + descr);
+    const little = descr[0] !== '>';
+    const count = shape.reduce((product, value) => product * value, 1);
+    const [width, read] = type; const start = headerStart + headerLength;
+    if (start + count * width > bytes.length) throw new Error('NumPy array shorter than its header says');
+    const values = new Float64Array(count);
+    for (let i = 0; i < count; i += 1) values[i] = read(view, start + i * width, little);
+    if (fortran && shape.length === 2) {
+      const [rows, columns] = shape; const ordered = new Float64Array(count);
+      for (let r = 0; r < rows; r += 1) for (let c = 0; c < columns; c += 1) ordered[r * columns + c] = values[c * rows + r];
+      return { shape, values: ordered, dtype: descr };
+    }
+    return { shape, values, dtype: descr };
+  }
+
+  /* An .npz is a ZIP of .npy files (np.savez stores them, np.savez_compressed deflates them). */
+  async function readNpz(data) {
+    if (typeof JSZip === 'undefined') throw new Error('The ZIP reader did not load. Refresh the page and try again.');
+    const zip = await JSZip.loadAsync(data);
+    const arrays = {};
+    for (const member of Object.values(zip.files)) {
+      if (member.dir || !/\.npy$/i.test(member.name)) continue;
+      arrays[member.name.split('/').pop().replace(/\.npy$/i, '')] = readNpy(await member.async('uint8array'));
+    }
+    return arrays;
+  }
+
+  /* Chai-1 keeps a leading batch dimension of one on every score: (1,), (1, n), (1, n, n). */
+  function squeezeLeading(array) {
+    let shape = array.shape.slice();
+    while (shape.length > 1 && shape[0] === 1) shape = shape.slice(1);
+    return { ...array, shape };
+  }
+
+  function npyRows(array) {
+    const { shape, values } = squeezeLeading(array);
+    if (shape.length !== 2) return null;
+    const [rows, columns] = shape;
+    return Array.from({ length: rows }, (_, r) => Float32Array.from(values.subarray(r * columns, (r + 1) * columns)));
+  }
+
+  /* A float32 score of 0.52 reads back as 0.5199999809; seven significant digits is all it holds. */
+  function npyNested(array) {
+    const { shape, values, dtype } = squeezeLeading(array);
+    const single = /f[24]$/.test(dtype || '');
+    const clean = value => single && Number.isFinite(value) ? Number(value.toPrecision(7)) : value;
+    if (shape.length === 1 && shape[0] === 1) return clean(values[0]);
+    if (shape.length === 1) return Array.from(values, clean);
+    if (shape.length === 2) return Array.from({ length: shape[0] }, (_, r) => Array.from(values.subarray(r * shape[1], (r + 1) * shape[1]), clean));
+    return null;
+  }
+
+  function npyScalar(array) {
+    const value = array ? npyNested(array) : null;
+    return typeof value === 'number' ? finiteNumber(value) : null;
+  }
+
+  /* What an .npz carries, as confidence the rest of the viewer already understands.
+     Boltz writes pae_ (the matrix), plddt_ and pde_ files; Chai-1 writes scores.
+     'ignored' means the file was recognised but carries nothing the viewer draws. */
+  function confidenceFromNpz(name, arrays) {
+    if (arrays.pae) {
+      const pae = npyRows(arrays.pae);
+      if (!pae || !pae.length || pae.length !== pae[0].length) return null;
+      return { confidence: { pae, paeMaximum: matrixMaximum(pae), paeSource: 'Boltz' } };
+    }
+    if (arrays.aggregate_score || arrays.per_chain_pair_iptm) {
+      const pairs = arrays.per_chain_pair_iptm ? npyNested(arrays.per_chain_pair_iptm) : null;
+      const clashes = arrays.has_inter_chain_clashes ? npyNested(arrays.has_inter_chain_clashes) : null;
+      return {
+        scoreRanked: true,
+        confidence: {
+          rankingScore: npyScalar(arrays.aggregate_score), ptm: npyScalar(arrays.ptm), iptm: npyScalar(arrays.iptm),
+          chainPairIptm: Array.isArray(pairs) && Array.isArray(pairs[0]) ? pairs : null,
+          hasClash: clashes === null ? null : Boolean(clashes),
+          predictor: 'Chai-1'
+        }
+      };
+    }
+    if (arrays.plddt || arrays.pde) return 'ignored';
+    return null;
+  }
+
+  async function registerNpz(name, bytes, collection = null) {
+    let arrays;
+    try { arrays = await readNpz(bytes); } catch (error) { return false; }
+    const found = confidenceFromNpz(name, arrays);
+    if (found === 'ignored') return true;
+    if (!found) return false;
+    confidenceAssets.push({ name, confidence: found.confidence, rank: predictorRank(name), collection, scoreRanked: Boolean(found.scoreRanked) });
+    return true;
+  }
+
+  /* Rank carried in a file name: ColabFold's rank_001, Boltz's model_0 (written in rank order). */
+  function predictorRank(path) {
+    const stem = fileStem(path).toLowerCase();
+    const colabfold = stem.match(/_(?:unrelaxed|relaxed|scores)_rank_(\d+)_/);
+    if (colabfold) return Number(colabfold[1]);
+    const boltz = stem.match(/^(?:confidence|pae|plddt|pde)_.+_model_(\d+)$/);
+    if (boltz) return Number(boltz[1]) + 1;
+    return null;
+  }
+
+  /* Boltz's confidence file keys chains by index ("0", "1", …) in the model's chain order. */
+  function indexedPairMatrix(value) {
+    if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
+    const keys = Object.keys(value).filter(key => /^\d+$/.test(key)).sort((a, b) => Number(a) - Number(b));
+    if (!keys.length) return null;
+    return keys.map(row => keys.map(column => finiteNumber(value[row] && value[row][column])));
+  }
+
+  /* Chains in the order the model lists them — the order Boltz and Chai-1 index their
+     per-chain scores by. */
+  function modelChainOrder(entry) {
+    const seen = [];
+    (entry && entry.atoms || []).forEach(atom => { const chain = String(atom.chain ?? ''); if (!seen.includes(chain)) seen.push(chain); });
+    return seen;
+  }
+
+  /* Which residue each PAE row belongs to. AlphaFold 3 says so in the file. For the others it
+     follows from how the models tokenise: one token per polymer residue, one per heavy atom of
+     a ligand (AlphaFold 3 and Boltz-2), or — ColabFold, protein only — one per residue. The
+     layout is used only when its length is exactly the matrix size; otherwise nothing is
+     guessed and the reason is returned. */
+  function paeTokenLayout(entry) {
+    const confidence = entry && entry.confidence || {}; const matrix = confidence.pae;
+    if (!Array.isArray(matrix) || !matrix.length) return null;
+    const size = matrix.length;
+    if (Array.isArray(confidence.tokenChainIds) && confidence.tokenChainIds.length === size) {
+      return { chainIds: confidence.tokenChainIds, residueIds: Array.isArray(confidence.tokenResidueIds) ? confidence.tokenResidueIds : [], derived: false, size };
+    }
+    const atoms = entry.atoms || [];
+    if (!atoms.length) return { chainIds: [], residueIds: [], derived: true, size, mismatch: 'the model is not loaded yet' };
+    const polymerChains = new Set(atoms.filter(atom => !atom.hetflag).map(atom => String(atom.chain ?? '')));
+    const groups = []; const byKey = new Map();
+    atoms.forEach(atom => {
+      if (/^(HOH|WAT|DOD)$/i.test(String(atom.resn || ''))) return;
+      const chain = String(atom.chain ?? ''); const key = chain + '|' + atom.resi + '|' + atom.resn;
+      if (!byKey.has(key)) { const group = { chain, resi: Number(atom.resi), polymer: polymerChains.has(chain), heavy: 0 }; byKey.set(key, group); groups.push(group); }
+      if (String(atom.elem || '').toUpperCase() !== 'H') byKey.get(key).heavy += 1;
+    });
+    const layouts = [
+      groups.flatMap(group => group.polymer ? [group] : Array.from({ length: group.heavy }, () => group)),
+      groups.filter(group => group.polymer)
+    ];
+    const layout = layouts.find(candidate => candidate.length === size);
+    if (!layout) {
+      const residues = groups.filter(group => group.polymer).length; const tokens = layouts[0].length;
+      return { chainIds: [], residueIds: [], derived: true, size, mismatch: 'the PAE has ' + size + ' rows but the model has ' + residues + ' residues' + (tokens !== residues ? ' (' + tokens + ' tokens counting ligand atoms)' : '') };
+    }
+    return { chainIds: layout.map(group => group.chain), residueIds: layout.map(group => group.resi), derived: true, size };
+  }
+
+  function paeTokenIds(entry) {
+    const layout = paeTokenLayout(entry);
+    return layout && !layout.mismatch ? layout : { chainIds: [], residueIds: [], derived: true, size: 0 };
+  }
+
+  /* Chai-1 files carry no job name, so ranks come from the aggregate score, within one archive. */
+  function rankScoreRankedAssets() {
+    const groups = new Map();
+    confidenceAssets.filter(asset => asset.scoreRanked).forEach(asset => {
+      const key = asset.collection || '';
+      if (!groups.has(key)) groups.set(key, []);
+      groups.get(key).push(asset);
+    });
+    groups.forEach(assets => {
+      assets.sort((a, b) => (b.confidence.rankingScore ?? -Infinity) - (a.confidence.rankingScore ?? -Infinity));
+      assets.forEach((asset, index) => { asset.rank = index + 1; });
+    });
+  }
   /* ---------- Residue colour themes ---------- */
 
   const residueModes = ['charge', 'hydrophobicity', 'restype', 'amino', 'ss'];
@@ -4761,8 +5003,9 @@ html>body{padding:0}</style>
     if (!Array.isArray(matrix) || !matrix.length) return null;
     const index = new Map();
     const add = (tag, i) => { if (!tag) return; if (!index.has(tag)) index.set(tag, []); index.get(tag).push(i); };
-    if (Array.isArray(confidence.tokenChainIds) && Array.isArray(confidence.tokenResidueIds) && confidence.tokenChainIds.length === matrix.length) {
-      confidence.tokenChainIds.forEach((chain, i) => add(String(chain) + '|' + Number(confidence.tokenResidueIds[i]), i));
+    const layout = paeTokenIds(entry);
+    if (layout.chainIds.length === matrix.length && layout.residueIds.length === matrix.length) {
+      layout.chainIds.forEach((chain, i) => add(String(chain) + '|' + Number(layout.residueIds[i]), i));
       return index;
     }
     const tags = paeTokens(entry); if (!tags) return null;
@@ -4854,8 +5097,9 @@ html>body{padding:0}</style>
     const size = matrix.length;
     const protein = entry.atoms.filter(atom => atom.atom === 'CA' && !atom.hetflag);
     const known = new Set(protein.map(residueTag));
-    if (Array.isArray(confidence.tokenChainIds) && Array.isArray(confidence.tokenResidueIds) && confidence.tokenChainIds.length === size) {
-      return confidence.tokenChainIds.map((chain, index) => { const tag = String(chain) + '|' + Number(confidence.tokenResidueIds[index]); return known.has(tag) ? tag : null; });
+    const layout = paeTokenIds(entry);
+    if (layout.chainIds.length === size && layout.residueIds.length === size) {
+      return layout.chainIds.map((chain, index) => { const tag = String(chain) + '|' + Number(layout.residueIds[index]); return known.has(tag) ? tag : null; });
     }
     if (protein.length === size) return protein.map(residueTag);
     const sorted = residueRows(entry).flatMap(row => row.residues);
@@ -5313,7 +5557,7 @@ html>body{padding:0}</style>
       }
     }
     context.putImageData(image, 0, 0);
-    const chains = entry.confidence.tokenChainIds || [];
+    const chains = paeTokenIds(entry).chainIds;
     context.strokeStyle = '#111827'; context.globalAlpha = 0.7; context.lineWidth = Math.max(1, size / 600);
     for (let index = 1; index < chains.length; index += 1) {
       if (chains[index] === chains[index - 1]) continue;
@@ -6820,7 +7064,7 @@ html>body{padding:0}</style>
     if (!confidence) return false;
     const useful = Object.values(confidence).some(value => value !== null && value !== false);
     if (!useful) return false;
-    confidenceAssets.push({ name, confidence, rank: null, collection });
+    confidenceAssets.push({ name, confidence, rank: predictorRank(name), collection });
     return true;
   }
 
@@ -7237,14 +7481,17 @@ html>body{padding:0}</style>
           }
           const metadataMembers = members.filter(member => {
             const lower = member.name.toLowerCase();
-            return !member.dir && (lower.endsWith('.json') || lower.endsWith('ranking_scores.csv')) && !lower.includes('/templates/');
+            return !member.dir && (lower.endsWith('.json') || lower.endsWith('.npz') || lower.endsWith('ranking_scores.csv')) && !lower.includes('/templates/');
           });
           const fullData = metadataMembers.filter(member => /_full_data_\d+\.json$/i.test(member.name));
           const selectedMetadata = structureMembers.length > 25 ? metadataMembers.filter(member => !fullData.includes(member)) : metadataMembers;
           deferredPae += metadataMembers.length - selectedMetadata.length;
           for (let metadataIndex = 0; metadataIndex < selectedMetadata.length; metadataIndex += 1) {
             const member = selectedMetadata[metadataIndex];
-            try { registerMetadata(member.name, /\.json$/i.test(member.name) ? await member.async('uint8array') : await member.async('string'), file.name); }
+            try {
+              if (/\.npz$/i.test(member.name)) await registerNpz(member.name, await member.async('uint8array'), file.name);
+              else registerMetadata(member.name, /\.json$/i.test(member.name) ? await member.async('uint8array') : await member.async('string'), file.name);
+            }
             catch (error) { skipped += 1; failures.push(member.name + ': confidence data could not be read'); }
             if (metadataIndex % 12 === 11) await nextPaint();
           }
@@ -7256,6 +7503,8 @@ html>body{padding:0}</style>
           loaded += 0;
         } else if (['json', 'csv'].includes(extension)) {
           if (!registerMetadata(file.name, extension === 'json' ? new Uint8Array(await file.arrayBuffer()) : await file.text())) skipped += 1;
+        } else if (extension === 'npz') {
+          if (!await registerNpz(file.name, new Uint8Array(await file.arrayBuffer()))) { skipped += 1; failures.push(file.name + ': not a PAE or score file from Boltz or Chai-1'); }
         } else {
           skipped += 1; failures.push(file.name + ': unsupported file type');
         }
@@ -8660,6 +8909,9 @@ html>body{padding:0}</style>
   function reportConfidence(entry) {
     const confidence = { ...(entry.confidence || {}) };
     const matrix = confidence.pae;
+    /* The report cannot re-derive which residue a row is, so a derived layout travels with it. */
+    const layout = paeTokenLayout(entry);
+    if (layout && layout.derived && !layout.mismatch) { confidence.tokenChainIds = layout.chainIds; confidence.tokenResidueIds = layout.residueIds; }
     const limit = paeLimit();
     if (!limit) { delete confidence.pae; delete confidence.tokenChainIds; delete confidence.tokenResidueIds; confidence.paeOmitted = true; return confidence; }
     if (!Array.isArray(matrix)) return confidence;
@@ -10668,8 +10920,9 @@ applyBackground();
     const columns = isMatrixRow(matrix[row]) ? matrix[row].length : matrix.length;
     const column = Math.min(columns - 1, Math.max(0, Math.floor((event.clientX - bounds.left) * columns / bounds.width)));
     const value = finiteNumber(matrix[row] && matrix[row][column]);
-    const chains = entry.confidence.tokenChainIds || [];
-    const residues = entry.confidence.tokenResidueIds || [];
+    const layout = paeTokenIds(entry);
+    const chains = layout.chainIds;
+    const residues = layout.residueIds;
     const describe = index => 'token ' + (index + 1) + (chains[index] !== undefined ? ', chain ' + chains[index] : '') + (residues[index] !== undefined ? ', residue ' + residues[index] : '');
     root.querySelector('#gpv-pae-detail').textContent = describe(row) + ' → ' + describe(column) + ' · PAE ' + (value === null ? '—' : value.toFixed(2) + ' Å');
     const mark = index => chains[index] !== undefined && residues[index] !== undefined ? { entryId: entry.id, chain: String(chains[index]), resi: Number(residues[index]) } : null;
@@ -10942,7 +11195,7 @@ applyBackground();
 
   const tipsKey = 'protein-structure-viewer:tips-hidden';
   const tips = [
-    'Drop several AlphaFold result ZIPs at once. Each becomes its own source you can filter by in the Models tab.',
+    'Drop several result ZIPs at once — AlphaFold, ColabFold, Boltz or Chai-1. Each becomes its own source you can filter by in the Models tab.',
     'Compare → Synchronized multi-view shows up to six models side by side. Drag, spin, or rock any panel and the rest follow.',
     'Pick Rotation only when the models differ in size, and Rotation and zoom after Align visible to inspect a superposition.',
     'Colour by pLDDT confidence and switch to orthographic projection for figures; perspective exaggerates whatever is closest.',
@@ -11064,7 +11317,7 @@ applyBackground();
   offerSessionRestore();
   /* ?debug=1 exposes a few internals for the regression suite and for bug reports;
      it has no effect otherwise. */
-  if (new URLSearchParams(location.search).has('debug')) window.__viewerDebug = { viewer, pickAtomAt, displayedEntries, activeEntry, colorOptions, sceneSettings, contactResult: () => contactResult, residueData: () => residueData, msaAssets: () => msaAssets, entries: () => structures, nearbyResidues, assemblyDimensions, paeDomains, parseConfidenceBytes, methodsText, alignmentResults: () => alignmentResults, ensembleSpread: () => ensembleSpread, siteResults: () => siteResults, interfaceResults: () => interfaceResults, solventAccessibleArea, heavyAtoms, ligandGroups, architectureModel, domainSets, distinguishingNames, rmsdMatrix: () => rmsdMatrix, rmsdMedoid, scaleBarSpec, pixelsPerAngstrom, sceneCentre, exportDimensions, exportViewer: () => exportViewer, renderPublicationImage, furnitureLayout, legendMetrics, legendWanted, figurePalette, figureScale, releaseExportViewer, labelRecords: () => labelRecords, labelPosition, labelHitAt, labelScreenBox, separateLabels, spotlightResidues: () => spotlightResidues, positionEffect: () => positionEffect, savedViews: () => savedViews, selectionRecords: () => selectionRecords, labelStyle, themeColor, hexLuminance, backgroundSpec };
+  if (new URLSearchParams(location.search).has('debug')) window.__viewerDebug = { viewer, pickAtomAt, displayedEntries, activeEntry, colorOptions, sceneSettings, contactResult: () => contactResult, residueData: () => residueData, msaAssets: () => msaAssets, entries: () => structures, nearbyResidues, assemblyDimensions, paeDomains, parseConfidenceBytes, methodsText, alignmentResults: () => alignmentResults, ensembleSpread: () => ensembleSpread, siteResults: () => siteResults, interfaceResults: () => interfaceResults, solventAccessibleArea, heavyAtoms, ligandGroups, architectureModel, domainSets, distinguishingNames, rmsdMatrix: () => rmsdMatrix, rmsdMedoid, scaleBarSpec, pixelsPerAngstrom, sceneCentre, exportDimensions, exportViewer: () => exportViewer, renderPublicationImage, furnitureLayout, legendMetrics, legendWanted, figurePalette, figureScale, releaseExportViewer, labelRecords: () => labelRecords, labelPosition, labelHitAt, labelScreenBox, separateLabels, spotlightResidues: () => spotlightResidues, positionEffect: () => positionEffect, savedViews: () => savedViews, selectionRecords: () => selectionRecords, labelStyle, themeColor, hexLuminance, backgroundSpec, paeTokenLayout, readNpy };
   applyTheme(readJson(themeKey, 'system'));
   selectToolTab('models');
   applyAppearance();

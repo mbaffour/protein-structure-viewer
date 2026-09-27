@@ -177,6 +177,9 @@
   function reportConfidence(entry) {
     const confidence = { ...(entry.confidence || {}) };
     const matrix = confidence.pae;
+    /* The report cannot re-derive which residue a row is, so a derived layout travels with it. */
+    const layout = paeTokenLayout(entry);
+    if (layout && layout.derived && !layout.mismatch) { confidence.tokenChainIds = layout.chainIds; confidence.tokenResidueIds = layout.residueIds; }
     const limit = paeLimit();
     if (!limit) { delete confidence.pae; delete confidence.tokenChainIds; delete confidence.tokenResidueIds; confidence.paeOmitted = true; return confidence; }
     if (!Array.isArray(matrix)) return confidence;

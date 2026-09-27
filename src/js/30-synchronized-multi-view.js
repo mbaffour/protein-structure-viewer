@@ -887,7 +887,7 @@
     if (!confidence) return false;
     const useful = Object.values(confidence).some(value => value !== null && value !== false);
     if (!useful) return false;
-    confidenceAssets.push({ name, confidence, rank: null, collection });
+    confidenceAssets.push({ name, confidence, rank: predictorRank(name), collection });
     return true;
   }
 

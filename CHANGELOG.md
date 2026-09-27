@@ -2,6 +2,48 @@
 
 All notable changes to this project are recorded here.
 
+## 2.47.0
+
+### Added
+
+- **Output from ColabFold, Boltz and Chai-1 is read, not only AlphaFold's.** Each tool writes the same
+  things — a model, pLDDT, a PAE matrix and summary scores — under its own names, and until now only
+  AlphaFold's names were recognised: a ColabFold model loaded without its PAE, and Boltz and Chai-1
+  scores were not read at all. The file layouts were taken from each tool's own writer.
+  - **ColabFold 1.5+**: `<job>_unrelaxed_rank_001_<model>_seed_000.pdb` (and the `_relaxed_` model
+    beside it) pairs with `<job>_scores_rank_001_<model>_seed_000.json` — pLDDT, PAE, pTM, ipTM, and
+    the rank from the file name. The ipSAE, pDockQ and pDockQ2 values that ColabFold 1.5.5 adds for
+    complexes are kept with the model.
+  - **Boltz**: `<name>_model_0.cif` pairs with `confidence_<name>_model_0.json` (confidence score as
+    the ranking score, pTM, ipTM, per-chain-pair ipTM) and `pae_<name>_model_0.npz`. Model 0 is rank 1,
+    as Boltz writes them in rank order. The `plddt_` and `pde_` files are recognised and not reported
+    as skipped; pLDDT is read from the model's B-factors, where Boltz also writes it.
+  - **Chai-1**: `pred.model_idx_0.cif` pairs with `scores.model_idx_0.npz` — the aggregate score (which
+    sets the rank: a sample index is not a rank), pTM, ipTM, per-chain-pair ipTM and the inter-chain
+    clash flag. Chai-1 keeps its PAE in memory and never writes it to disk, so a Chai-1 model has no
+    PAE map, and the Confidence tab says so instead of showing an empty space.
+  - Zipped output folders and loose files both work; `.npz` joins the file picker.
+- **NumPy `.npz` and `.npy` are read in the browser** — stored (`np.savez`) and deflated
+  (`np.savez_compressed`), versions 1–3 of the header, float16/32/64, integer and boolean arrays, either
+  byte order and Fortran order. A float32 score that reads back as 0.5199999809 is reported as 0.52.
+- **Which residue each PAE row belongs to is worked out when the file does not say.** Only AlphaFold 3
+  lists it. For the others the layout follows from how the models tokenise — one token per polymer
+  residue and one per heavy atom of a ligand (AlphaFold 3, Boltz-2), or one per residue (ColabFold) —
+  and is used only when its length is exactly the matrix size. A Boltz complex with a six-atom ligand
+  has 134 PAE rows for 128 residues and reads correctly; a matrix that fits neither layout is not
+  guessed at, and the PAE line says why (`the PAE has 134 rows but the model has 128 residues`). The PAE
+  map's chain boundaries, PAE domains, ligand sites, the hover readout, the composite figure and the
+  report all use the same layout.
+- The chain-pair table labels Boltz and Chai-1 pairs by the model's chains (`A–B`, `A–C`) rather than
+  by index.
+
+### Tests
+
+- Six steps in a new **other predictors** group, on fixtures written the way each tool writes them:
+  the NumPy files by NumPy, the Boltz and Chai-1 mmCIF by `python-modelcif` (the library both tools
+  use), from the real AlphaFold DB model of haemoglobin α already in the repository.
+  `tests/fixtures/predictors/make_fixtures.py` regenerates them.
+
 ## 2.46.3
 
 ### Fixed

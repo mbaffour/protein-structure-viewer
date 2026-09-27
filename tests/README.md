@@ -121,6 +121,12 @@ PSV_CHROMIUM=/opt/pw-browsers/chromium/chrome-linux/chrome npm test
   apart, with the copy putting each conformation at the other's centre — the centres invite the swap, the fit is far
   worse, and the pass is discarded. The mapping stays A→A; B→B, the RMSD is the one reported with the box unticked,
   and the RMSD in the table matches the coordinates on screen and the reference's mean deviation to 0.005 Å.
+- Other predictors: ColabFold models pair with their scores files (unrelaxed and relaxed), keep the rank in the file
+  name and ColabFold's own interface scores; a zipped Boltz folder reads its `.npz` PAE, ranks model 0 first and maps
+  134 PAE rows onto 128 residues and a six-atom ligand; the same Boltz files dropped loose pair too, with no file
+  reported as skipped; Chai-1 samples rank by aggregate score, float32 scores read back as 0.52 rather than
+  0.5199999809, and the missing PAE is explained; a PAE that fits no layout is not matched to residues and the PAE
+  line says so; the `.npy` reader handles a Fortran-ordered big-endian float64 array and a version-2 header.
 - Model legend names: a run's file names reduce to model_0 … model_4 (the stem is given back a boundary at a time when
   it would leave only a digit), two unrelated names lose only the shared extension, and a lone name is left whole.
 - Fitting on a region: fitting on `A:1-12` keeps the matched pair count, reports exactly 12 Cα in the fitted-on cell, a

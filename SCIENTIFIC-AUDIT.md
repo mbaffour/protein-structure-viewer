@@ -173,12 +173,12 @@ Reviewers and institutional IT increasingly ask what a browser tool loads and fr
 ### P2 — deeper structural analysis
 
 4. **Interface analysis.** Contact counts, interface-residue tables, buried-surface estimates, and
-   highlightable/exportable interface selections landed in 2.3.0. Still open: per-residue contact maps,
-   and comparing interface tables across models of the same complex.
+   highlightable/exportable interface selections landed in 2.3.0; per-residue contact maps in 2.18.0.
+   Still open: comparing interface tables across models of the same complex.
 5. **Membrane context.** Adjustable membrane planes and hydrophobic slab guides — particularly useful
    for holins and other membrane proteins.
-6. **Ensemble summaries.** Cluster models by structural similarity, show representative conformations,
-   and graph pairwise RMSD alongside confidence metrics.
+6. **Ensemble summaries.** The pairwise RMSD matrix (2.32.0), the medoid as the representative model
+   (2.33.0) and the RMSF profile (2.34.0) are in. Still open: clustering models by structural similarity.
 7. **Sequence viewer.** Linked sequence and structure selection, residue search, domain annotations,
    mutation markers, and chain-aware numbering.
 8. **Validation warnings.** Flag missing residues/atoms, duplicate identifiers, implausible coordinate
@@ -186,15 +186,14 @@ Reviewers and institutional IT increasingly ask what a browser tool loads and fr
 
 ### P3 — engineering
 
-9. **Wire the regression suite into CI.** [`tests/`](tests/) now drives the real viewer in headless
-   Chromium and covers import, navigation, appearance, both alignment modes, annotation, confidence
-   export, the full publish path, and the generated report — including explicit regressions for the
-   two bugs that shipped in 2.0. It is not yet run automatically on push.
-10. **Widen the fixtures.** The suite currently uses synthetic two-chain helices. Real monomers,
-    multimers with alternate chain IDs, files with missing residues, non-AlphaFold B-factors, and a
-    large AlphaFold archive would each catch a class of bug the synthetic fixtures cannot.
-11. **Split the single file for development** while still shipping one artefact, if the file continues
-    to grow. The single-file property is a feature for distribution, not for editing.
+9. **Wire the regression suite into CI.** Done in 2.23.0: every push to `main` and every pull request
+   runs [`tests/`](tests/) in Chromium, Firefox and WebKit.
+10. **Widen the fixtures.** A real AlphaFold DB model and PAE landed in 2.23.0, and 2.47.0 added
+    ColabFold, Boltz, Chai-1 and AlphaFold 3 output fixtures built from it. Still open: multimers with
+    alternate chain IDs, files with missing residues, and a large AlphaFold archive.
+11. **Split the single file for development.** Done in 2.23.0: `src/` is the source tree and
+    `scripts/build.mjs` assembles the one shipped `index.html`; `node scripts/build.mjs --check` reports
+    whether it is up to date.
 
 ## Recommended next milestone
 

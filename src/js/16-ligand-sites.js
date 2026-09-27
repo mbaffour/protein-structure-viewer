@@ -20,8 +20,9 @@
     if (!Array.isArray(matrix) || !matrix.length) return null;
     const index = new Map();
     const add = (tag, i) => { if (!tag) return; if (!index.has(tag)) index.set(tag, []); index.get(tag).push(i); };
-    if (Array.isArray(confidence.tokenChainIds) && Array.isArray(confidence.tokenResidueIds) && confidence.tokenChainIds.length === matrix.length) {
-      confidence.tokenChainIds.forEach((chain, i) => add(String(chain) + '|' + Number(confidence.tokenResidueIds[i]), i));
+    const layout = paeTokenIds(entry);
+    if (layout.chainIds.length === matrix.length && layout.residueIds.length === matrix.length) {
+      layout.chainIds.forEach((chain, i) => add(String(chain) + '|' + Number(layout.residueIds[i]), i));
       return index;
     }
     const tags = paeTokens(entry); if (!tags) return null;

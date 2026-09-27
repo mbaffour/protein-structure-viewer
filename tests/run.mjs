@@ -3045,6 +3045,139 @@ await step('the fetched entry is removed so later groups see the same models as 
   await page.unroute('https://alphafold.ebi.ac.uk/files/AF-P69905-F1-predicted_aligned_error_v6.json');
 });
 
+group('other predictors');
+/* One two-chain complex written the way ColabFold, Boltz, Chai-1 and the AlphaFold Server write
+   their results — file names, keys, NumPy .npz files and ModelCIF from each tool's own writer.
+   See fixtures/predictors/README.md and make_fixtures.py, which regenerates them. */
+const predictorDir = join(here, 'fixtures', 'predictors');
+const colabfoldFiles = ['rank_001_alphafold2_multimer_v3_model_2_seed_000', 'rank_002_alphafold2_multimer_v3_model_4_seed_000']
+  .flatMap(tag => [join(predictorDir, 'colabfold', 'hbdimer_unrelaxed_' + tag + '.pdb'), join(predictorDir, 'colabfold', 'hbdimer_scores_' + tag + '.json')]);
+const predictorEntries = () => page.evaluate(() => window.__viewerDebug.entries().filter(e => /hbdimer|model_idx|mismatch_model/.test(e.name)).map(e => {
+  const c = e.confidence || {}; const layout = window.__viewerDebug.paeTokenLayout(e);
+  const counts = {}; (layout && !layout.mismatch ? layout.chainIds : []).forEach(chain => { counts[chain] = (counts[chain] || 0) + 1; });
+  return { id: e.id, name: e.name, collection: e.collection, rank: e.rank, pae: c.pae ? c.pae.length : null, ptm: c.ptm, iptm: c.iptm, ranking: c.rankingScore, pairs: c.chainPairIptm || null, clash: c.hasClash, reported: c.reportedInterface || null, layout: layout ? (layout.mismatch || counts) : null, derived: layout ? layout.derived : null };
+}));
+const showEntry = async id => { await page.evaluate(id => { const select = document.querySelector('#gpv-current'); select.value = String(id); select.dispatchEvent(new Event('change', { bubbles: true })); }, id); await page.waitForTimeout(500); };
+const removePredictorEntries = async () => {
+  await tab('models');
+  for (const entry of await predictorEntries()) { await page.click('#gpv-list [data-entry-id="' + entry.id + '"] button:has-text("Remove")'); await page.waitForTimeout(150); }
+};
+
+await step('ColabFold: each ranked model pairs with its scores file, keeps its rank and ColabFold’s own interface scores', async () => {
+  try {
+    await tab('models');
+    const relaxed = join(work, 'hbdimer_relaxed_rank_001_alphafold2_multimer_v3_model_2_seed_000.pdb');
+    await writeFile(relaxed, await readFile(colabfoldFiles[0], 'utf8'));
+    await page.setInputFiles('#gpv-files', [...colabfoldFiles, relaxed, join(predictorDir, 'colabfold', 'config.json')]); await page.waitForTimeout(2500);
+    const entries = await predictorEntries();
+    if (entries.length !== 3) throw new Error('expected rank 1 unrelaxed, rank 1 relaxed and rank 2: ' + entries.map(e => e.name).join(', '));
+    entries.forEach(entry => {
+      const first = /rank_001/.test(entry.name);
+      if (entry.pae !== 128) throw new Error(entry.name + ': PAE rows ' + entry.pae + ' (the scores file has a 128 × 128 matrix)');
+      if (entry.rank !== (first ? 1 : 2)) throw new Error(entry.name + ': rank ' + entry.rank);
+      if (entry.iptm !== (first ? 0.71 : 0.48) || entry.ptm !== (first ? 0.74 : 0.66)) throw new Error(entry.name + ': pTM/ipTM ' + entry.ptm + '/' + entry.iptm);
+      if (!entry.reported || !entry.reported.ipsae || !('A-B' in entry.reported.ipsae)) throw new Error(entry.name + ': ColabFold’s ipsae scores were dropped');
+      if (JSON.stringify(entry.layout) !== JSON.stringify({ A: 64, B: 64 }) || !entry.derived) throw new Error(entry.name + ': token layout ' + JSON.stringify(entry.layout));
+    });
+    console.log('       ' + entries.length + ' ColabFold models · ranks ' + entries.map(e => e.rank).join(', ') + ' · PAE 128 × 128, rows matched to chains A and B');
+  } finally { await removePredictorEntries(); }
+});
+
+await step('Boltz: a zipped output folder reads its .npz PAE, ranks model 0 first and counts the ligand’s atoms as tokens', async () => {
+  try {
+    await tab('models');
+    await page.setInputFiles('#gpv-files', [join(predictorDir, 'boltz_results_hbdimer.zip')]); await page.waitForTimeout(3000);
+    let entries = await predictorEntries();
+    if (entries.length !== 2) throw new Error('models: ' + entries.map(e => e.name).join(', '));
+    for (const entry of entries) await showEntry(entry.id);
+    entries = await predictorEntries();
+    entries.forEach(entry => {
+      const first = /model_0/.test(entry.name);
+      if (entry.pae !== 134) throw new Error(entry.name + ': PAE rows ' + entry.pae + ' (128 residues and 6 ligand atoms)');
+      if (entry.rank !== (first ? 1 : 2) || entry.ranking !== (first ? 0.83 : 0.69)) throw new Error(entry.name + ': rank ' + entry.rank + ', confidence_score ' + entry.ranking);
+      if (JSON.stringify(entry.layout) !== JSON.stringify({ A: 64, B: 64, C: 6 })) throw new Error(entry.name + ': token layout ' + JSON.stringify(entry.layout));
+      if (!entry.pairs || entry.pairs.length !== 3 || entry.pairs[0][1] !== (first ? 0.74 : 0.51)) throw new Error(entry.name + ': pair_chains_iptm ' + JSON.stringify(entry.pairs));
+    });
+    await showEntry(entries.find(e => /model_0/.test(e.name)).id);
+    await tab('confidence');
+    const pairs = await page.locator('#gpv-interface-metrics tr th').allTextContents();
+    if (pairs.join(' ') !== 'A–B A–C B–C') throw new Error('chain-pair rows are not labelled by the model’s chains: ' + pairs.join(' '));
+    if (await page.locator('#gpv-pae-plot').isHidden()) throw new Error('the PAE map is hidden for a Boltz model with a PAE file');
+    console.log('       2 Boltz models · PAE 134 × 134 = A 64 + B 64 + ligand C 6 · chain pairs ' + pairs.join(', '));
+  } finally { await removePredictorEntries(); }
+});
+
+await step('Boltz: the same files dropped loose pair too, and plddt_/pde_ files are read without being reported as skipped', async () => {
+  try {
+    await tab('models');
+    const names = ['hbdimer_model_0.cif', 'confidence_hbdimer_model_0.json', 'pae_hbdimer_model_0.npz', 'plddt_hbdimer_model_0.npz', 'pde_hbdimer_model_0.npz'];
+    await page.setInputFiles('#gpv-files', names.map(name => join(predictorDir, 'boltz', name))); await page.waitForTimeout(2500);
+    const entries = await predictorEntries();
+    if (entries.length !== 1 || entries[0].pae !== 134 || entries[0].rank !== 1) throw new Error(JSON.stringify(entries.map(e => [e.name, e.pae, e.rank])));
+    const status = (await page.locator('#gpv-state').textContent()) || '';
+    if (/skipped/.test(status)) throw new Error('status reports skipped files: ' + status);
+    if (!(await page.locator('#gpv-import-errors').isHidden())) throw new Error('import errors shown: ' + await page.locator('#gpv-import-errors').textContent());
+  } finally { await removePredictorEntries(); }
+});
+
+await step('Chai-1: samples rank by aggregate score, float32 scores read back clean, and the missing PAE is explained', async () => {
+  try {
+    await tab('models');
+    await page.setInputFiles('#gpv-files', [join(predictorDir, 'chai_hbdimer.zip')]); await page.waitForTimeout(3000);
+    const entries = await predictorEntries();
+    if (entries.length !== 2) throw new Error('models: ' + entries.map(e => e.name).join(', '));
+    const zero = entries.find(e => /model_idx_0/.test(e.name)); const one = entries.find(e => /model_idx_1/.test(e.name));
+    if (one.rank !== 1 || zero.rank !== 2) throw new Error('sample 1 (aggregate 0.71) should rank above sample 0 (0.52): ranks ' + one.rank + ', ' + zero.rank);
+    if (zero.ptm !== 0.52 || zero.iptm !== 0.44 || zero.ranking !== 0.52) throw new Error('float32 scores not cleaned: ' + zero.ptm + ', ' + zero.iptm + ', ' + zero.ranking);
+    if (zero.pae !== null) throw new Error('Chai-1 writes no PAE, yet one was attached');
+    if (zero.clash !== false) throw new Error('has_inter_chain_clashes: ' + zero.clash);
+    if (!zero.pairs || zero.pairs[0][1] !== 0.44) throw new Error('per_chain_pair_iptm: ' + JSON.stringify(zero.pairs));
+    await showEntry(zero.id); await tab('confidence');
+    const note = (await page.locator('#gpv-interface-note').textContent()) || '';
+    if (await page.locator('#gpv-interface-note').isHidden() || !/does not save its PAE/.test(note)) throw new Error('no note on the missing PAE: ' + note);
+    const row = await page.locator('#gpv-interface-metrics tr').first().locator('th,td').allTextContents();
+    if (row[0] !== 'A–B' || row[1] !== '0.440') throw new Error('chain-pair ipTM row: ' + JSON.stringify(row));
+    console.log('       2 Chai-1 samples · rank from aggregate score · A–B ipTM ' + row[1] + ' · PAE note shown');
+  } finally { await removePredictorEntries(); }
+});
+
+await step('a PAE whose size matches neither the residues nor the tokens is not guessed at, and says why', async () => {
+  try {
+    await tab('models');
+    const cif = (await readFile(join(predictorDir, 'boltz', 'hbdimer_model_0.cif'), 'utf8')).split('\n').filter(line => !line.startsWith('HETATM')).join('\n');
+    const structure = join(work, 'mismatch_model_0.cif'); await writeFile(structure, cif);
+    const pae = join(work, 'pae_mismatch_model_0.npz'); await writeFile(pae, await readFile(join(predictorDir, 'boltz', 'pae_hbdimer_model_0.npz')));
+    await page.setInputFiles('#gpv-files', [structure, pae]); await page.waitForTimeout(2500);
+    const entry = (await predictorEntries()).find(e => /mismatch_model/.test(e.name));
+    if (!entry || entry.pae !== 134) throw new Error('the PAE did not attach: ' + JSON.stringify(entry));
+    if (typeof entry.layout !== 'string' || !/134 rows but the model has 128 residues/.test(entry.layout)) throw new Error('layout: ' + JSON.stringify(entry.layout));
+    await showEntry(entry.id); await tab('confidence');
+    const detail = (await page.locator('#gpv-pae-detail').textContent()) || '';
+    if (!/residues not matched to rows/.test(detail)) throw new Error('the PAE detail line does not say the rows were not matched: ' + detail);
+  } finally { await removePredictorEntries(); }
+});
+
+await step('the .npy reader handles a Fortran-ordered big-endian float64 array and a version 2 header', async () => {
+  const result = await page.evaluate(() => {
+    const make = (major, descr, fortran, shape, values, width, write) => {
+      let header = "{'descr': '" + descr + "', 'fortran_order': " + (fortran ? 'True' : 'False') + ", 'shape': (" + shape.join(', ') + (shape.length === 1 ? ',' : '') + "), }";
+      const prefix = major === 1 ? 10 : 12; while ((prefix + header.length + 1) % 64) header += ' '; header += '\n';
+      const bytes = new Uint8Array(prefix + header.length + values.length * width); const view = new DataView(bytes.buffer);
+      bytes.set([0x93, 78, 85, 77, 80, 89, major, 0]);
+      if (major === 1) view.setUint16(8, header.length, true); else view.setUint32(8, header.length, true);
+      for (let i = 0; i < header.length; i += 1) bytes[prefix + i] = header.charCodeAt(i);
+      values.forEach((value, i) => write(view, prefix + header.length + i * width, value));
+      return bytes;
+    };
+    /* [[1, 2, 3], [4, 5, 6]] stored column by column. */
+    const fortran = window.__viewerDebug.readNpy(make(1, '>f8', true, [2, 3], [1, 4, 2, 5, 3, 6], 8, (v, at, x) => v.setFloat64(at, x, false)));
+    const wide = window.__viewerDebug.readNpy(make(2, '<i8', false, [3], [7, -2, 9], 8, (v, at, x) => v.setBigInt64(at, BigInt(x), true)));
+    return { fortran: Array.from(fortran.values), shape: fortran.shape, wide: Array.from(wide.values) };
+  });
+  if (JSON.stringify(result.fortran) !== '[1,2,3,4,5,6]' || JSON.stringify(result.shape) !== '[2,3]') throw new Error('Fortran order: ' + JSON.stringify(result));
+  if (JSON.stringify(result.wide) !== '[7,-2,9]') throw new Error('version 2 int64: ' + JSON.stringify(result.wide));
+});
+
 group('share links');
 /* A minimal mmCIF built from the first fixture stands in for files.rcsb.org, so the
    fetch path and the share link round-trip run without network access. */

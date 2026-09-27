@@ -37,7 +37,7 @@
       }
     }
     context.putImageData(image, 0, 0);
-    const chains = entry.confidence.tokenChainIds || [];
+    const chains = paeTokenIds(entry).chainIds;
     context.strokeStyle = '#111827'; context.globalAlpha = 0.7; context.lineWidth = Math.max(1, size / 600);
     for (let index = 1; index < chains.length; index += 1) {
       if (chains[index] === chains[index - 1]) continue;
