@@ -84,7 +84,8 @@
   root.querySelector('#gpv-ipsae-all').addEventListener('click', async () => {
     const shown = visibleEntries().filter(interactionScorable); if (!shown.length) return;
     const done = setBusy('Scoring ' + shown.length + ' model' + (shown.length === 1 ? '' : 's') + '…');
-    try { for (let i = 0; i < shown.length; i += 1) { scoreInteractions([shown[i]]); if (i % 2 === 1) await nextPaint(); } } finally { done(); }
+    /* A paint between models: a 4 400-residue model takes about a second to parse and score. */
+    try { for (let i = 0; i < shown.length; i += 1) { scoreInteractions([shown[i]]); await nextPaint(); } } finally { done(); }
     renderInteractions(); updateStatus('Chain pairs scored in ' + shown.length + ' model' + (shown.length === 1 ? '' : 's'));
   });
   root.querySelector('#gpv-ipsae-csv').addEventListener('click', () => { const text = interactionCsv(); if (!text) return; downloadBlob(text, 'text/csv', 'interaction-confidence.csv'); updateStatus('Interaction CSV downloaded'); });
