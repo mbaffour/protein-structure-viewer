@@ -78,7 +78,12 @@ automatically by file-name matching:
 - `scores.model_idx_0.npz` (Chai-1) — aggregate score, pTM, ipTM, per-chain-pair ipTM and the clash
   flag; pairs with `pred.model_idx_0.cif`. Samples are ranked by aggregate score within one archive.
   Chai-1 files carry no job name, so zip each run's folder (or drop one run at a time) to keep runs
-  apart. Chai-1 does not write its PAE matrix to disk, so its models have no PAE map
+  apart. Chai-1 does not write its PAE matrix to disk, so its models have no PAE map — unless you saved
+  it from `run_inference`'s candidates as `pae_model_idx_N.npz` (key `pae`), which pairs with
+  `pred.model_idx_N.cif`
+- `pae_<model>.json` and `confidence_<model>.json` (AlphaFold 2.3 run locally) — the PAE, pairing with
+  `unrelaxed_<model>.pdb`/`.cif` and `relaxed_<model>`, where `<model>` is `model_1_multimer_v3_pred_0`
+  and the like; `ranking_debug.json` gives the ranks
 
 **Which residue a PAE row is.** AlphaFold 3 lists the chain and residue of every row. For the other
 tools the viewer works it out from the model: one row per polymer residue and one per heavy atom of a
@@ -443,6 +448,11 @@ including its two d0 functions and its choice of ligand-free residues: ligands a
 chain partners here. VALIDATION.md records the comparison with it on real AlphaFold 3 runs. For a
 ColabFold model the scores ColabFold wrote for itself (at 15 Å) are shown beside the viewer's. A
 Chai-1 model has no PAE, so only pDockQ can be computed; the state line says so.
+
+The predictor's own pair ipTM is shown as the larger of its two directions when it reports them
+differently (Chai-1 does). A structure with neither pLDDT nor PAE — a PDB entry, or a model loaded
+without its confidence files — is not scored: every value would be blank, and *Interfaces* below
+measures its contacts instead.
 
 Higher is more confident for all four. They are the model's own estimates of its interface, not
 measurements, and no single threshold separates a real interaction from a spurious one — a

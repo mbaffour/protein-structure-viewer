@@ -30,6 +30,22 @@ All notable changes to this project are recorded here.
   values were compared with ipsae.py, none outside that tolerance (VALIDATION.md).
 - For a ColabFold model the ipSAE ColabFold wrote for itself is shown beside the viewer's. A Chai-1
   model has no PAE, so only pDockQ is scored, and the state line says why.
+- **Tested on published outputs.** Real files other people have published — one barnase–barstar
+  complex from ColabFold, AlphaFold 2.3 run locally, the AlphaFold Server, Boltz-2 and Chai-1; a
+  locally run AlphaFold 3 model of SARS-CoV-2 Mpro with nirmatrelvir; and the ipSAE authors' Aurora
+  A–TPX2 example with a phosphothreonine, ATP and two Mg²⁺ — are now fixtures (with their licences),
+  and their interface scores agree with ipsae.py to its printed precision, including the modified
+  residue and the ligands. That testing added:
+  - **AlphaFold 2.3 run locally**: `unrelaxed_<model>` (and `relaxed_`) pairs with `pae_<model>.json`,
+    `<model>` being `model_1_multimer_v3_pred_0` and the like; the rank comes from `ranking_debug.json`.
+  - **A Chai-1 PAE saved by hand** as `pae_model_idx_N.npz` (Chai-1 keeps it in memory; people save
+    it) pairs with `pred.model_idx_N.cif`, so those models get a PAE map and ipSAE.
+  - **The pair ipTM is the larger of the two directions** when a predictor reports them differently —
+    Chai-1's published matrix gives barnase→barstar 0.896 and barstar→barnase 0.937 — as ipsae.py's
+    combined row does.
+- A structure with neither pLDDT nor PAE — a PDB entry, or a model without its confidence files — is
+  not offered these scores, which would all be blank; the state line says so and points to
+  *Interfaces*. A protein–ligand model says that ligands are not scored as partners.
 
 ### Fixed
 
@@ -40,6 +56,9 @@ All notable changes to this project are recorded here.
   Chain order is now the list with repeats removed. Found by the cross-validation against ipsae.py.
 - The interface scores read AlphaFold 3's per-atom pLDDT from `full_data` rather than from the
   mmCIF B-factors, which the server writes as a rounded copy up to 0.1 away.
+- **An RNA or DNA prediction had no pLDDT.** pLDDT was read from Cα atoms only, so a nucleic-acid
+  model — a published Boltz RNA prediction was the case that showed it — had no mean pLDDT, no pLDDT
+  colouring and no low-pLDDT hiding. Nucleotides now contribute their C1′ atom; proteins are unchanged.
 
 ### Tests
 

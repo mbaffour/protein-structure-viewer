@@ -105,9 +105,14 @@
        <job>_scores_rank_001_<model>_seed_000.json all belong together. */
     const colabfold = stem.match(/^(.*)_(?:unrelaxed|relaxed|scores)_(rank_\d+_.+)$/);
     if (colabfold) return colabfold[1] + '_' + colabfold[2];
-    /* Chai-1: pred.model_idx_0.cif and scores.model_idx_0.npz. */
-    const chai = stem.match(/^(?:pred|scores)\.(model_idx_\d+)$/);
+    /* Chai-1: pred.model_idx_0.cif and scores.model_idx_0.npz, and a PAE saved by hand from
+       run_inference's candidates as pae_model_idx_0.npz or pae.model_idx_0.npz. */
+    const chai = stem.match(/^(?:pred|scores|pae)[._](model_idx_\d+)$/);
     if (chai) return chai[1];
+    /* AlphaFold 2.3 run locally: unrelaxed_<model>.pdb/.cif (and relaxed_) beside pae_<model>.json
+       and confidence_<model>.json, <model> being model_1_multimer_v3_pred_0 and the like. */
+    const alphafold2 = stem.match(/^(?:unrelaxed|relaxed|pae|confidence)_(model_\d+(?:_[a-z0-9]+)*_pred_\d+|model_\d+(?:_ptm)?)$/);
+    if (alphafold2) return alphafold2[1];
     /* Boltz: confidence_<name>_model_0.json and pae_/plddt_/pde_<name>_model_0.npz go with
        <name>_model_0.cif. The prefix is only removed from those files, never from a structure,
        so an AlphaFold 3 job whose name happens to start with "pae_" still pairs with its own data. */

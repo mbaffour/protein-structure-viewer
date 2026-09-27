@@ -323,12 +323,31 @@ What the check found on the way, both now fixed:
   three or more chains, and the chain-pair ipTM table under the PAE map labelled its rows with the
   first entries of that list — "A–A". Chain order is now taken from the list with repeats removed.
 
-**Not covered by real data.** None of the available runs contains a ligand, an ion, a modified residue
-(tokenised atom by atom by AlphaFold 3) or a nucleic-acid chain, and none is a Boltz, Chai-1 or
-ColabFold run. The token rules for those cases, the ligand-free partner rule, the nucleic-acid d0
-minimum and the other formats are tested against ipsae.py only on the committed synthetic fixtures
-(`tests/fixtures/predictors/`, 270 values, all agreeing), which is a weaker check: it confirms the
-formats are read as the reference reads them, not that a real prediction of that kind is.
+**Published predictions.** The same comparison was then run on real files other people have
+published, which cover what the user's runs do not (`tests/fixtures/published/`, with provenance and
+licences; the suite repeats it on every run):
+
+| Prediction | Tool | What it adds |
+| --- | --- | --- |
+| barnase–barstar | ColabFold 1.6 | a real ColabFold scores file |
+| barnase–barstar | AlphaFold Server | — |
+| barnase–barstar | Boltz-2 | a real `.npz` PAE; chains named A and D |
+| SARS-CoV-2 Mpro + nirmatrelvir | AlphaFold 3, run locally | a ligand; local file names |
+| Aurora A–TPX2 (the ipSAE authors' example) | AlphaFold Server | a phosphothreonine tokenised atom by atom, ATP, two Mg²⁺ |
+| a single-chain RNA (coqylight/boltz_dap) and RNase T1 with a ligand (amitashnanda/ESM3-Guided…) | Boltz-2 | real Boltz files with one polymer chain each, so they test loading, the RNA's pLDDT and the ligand handling, not the scores; checked locally, not committed (no licence given) |
+
+**354 comparisons, none outside tolerance** — the ligand chains left out as ipsae.py leaves them out,
+the phosphothreonine's Cα token chosen as it chooses it. The published Chai-1 example's PAE (saved
+by its author; Chai-1 does not write one) and a locally run AlphaFold 2.3 model load and pair too,
+but ipsae.py reads neither format, so they are not in the count. foldmetrics, the tool those examples
+come from, prints its own ipSAE and pDockQ for five of them; eleven of its twelve values match the
+viewer's to three decimals, and the twelfth, Chai-1's pDockQ (0.513 here, 0.504 there), differs
+because Chai-1 writes pLDDT per atom and the viewer — like ipsae.py for AlphaFold 3 — takes the Cβ
+atom's.
+
+**Not covered by real data.** DNA and protein–nucleic-acid interfaces (a published Boltz RNA model
+was loaded, but it is a single chain), and real Chai-1 or AlphaFold 2.3 files against ipsae.py, which
+reads neither. The nucleic-acid d0 minimum is tested on nothing real.
 
 To rerun:
 

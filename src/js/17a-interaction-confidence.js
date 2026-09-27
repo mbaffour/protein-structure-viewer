@@ -197,6 +197,23 @@
     return modelChainOrder(entry).length === 2 ? finiteNumber(confidence.iptm) : null;
   }
 
+  /* The predictor's ipTM for a chain pair as one number. Chai-1 (and Boltz) can report the two
+     directions differently; ipsae.py's combined row takes the larger, and so does this. */
+  function reportedPairIptmMax(entry, chain1, chain2) {
+    const values = [reportedPairIptm(entry, chain1, chain2), reportedPairIptm(entry, chain2, chain1)].filter(value => value !== null);
+    return values.length ? Math.max(...values) : null;
+  }
+
+  function interactionScorable(entry) {
+    return Boolean(entry && (entry.scores.length || (entry.confidence && Array.isArray(entry.confidence.pae))));
+  }
+
+  /* Chains with any polymer residue: the partners ipsae.py scores. Ligand and ion chains are left out. */
+  function polymerChainOrder(entry) {
+    const polymer = new Set((entry.atoms || []).filter(atom => !atom.hetflag).map(atom => String(atom.chain ?? '')));
+    return modelChainOrder(entry).filter(chain => polymer.has(chain));
+  }
+
   function interactionSettings() {
     return { paeCutoff: Number(root.querySelector('#gpv-ipsae-pae').value) || 10, distCutoff: Number(root.querySelector('#gpv-ipsae-dist').value) || 10 };
   }
@@ -214,19 +231,23 @@
     const entry = activeEntry();
     const body = root.querySelector('#gpv-ipsae-rows'); body.replaceChildren();
     const state = root.querySelector('#gpv-ipsae-state');
-    const chains = entry && entry.atoms.length ? modelChainOrder(entry) : [];
-    root.querySelector('#gpv-ipsae-run').disabled = !entry || chains.length < 2;
-    root.querySelector('#gpv-ipsae-all').disabled = visibleEntries().length < 1 || chains.length < 2;
+    const chains = entry && entry.atoms.length ? polymerChainOrder(entry) : [];
+    const ligandChains = entry && entry.atoms.length ? modelChainOrder(entry).length - chains.length : 0;
+    /* An experimental structure has neither pLDDT nor PAE; every one of these scores would be blank. */
+    const unscorable = entry && !interactionScorable(entry);
+    root.querySelector('#gpv-ipsae-run').disabled = !entry || chains.length < 2 || unscorable;
+    root.querySelector('#gpv-ipsae-all').disabled = !visibleEntries().some(interactionScorable) || chains.length < 2;
     const scores = entry && interactionResults ? interactionResults.byEntry.get(entry.id) : null;
     root.querySelector('#gpv-ipsae-csv').disabled = !interactionResults || !interactionResults.byEntry.size;
     root.querySelector('#gpv-ipsae-wrap').hidden = !scores || !scores.pairs.length;
     if (!entry) { state.textContent = 'Show a model with two or more chains.'; renderInteractionEnsemble(); return; }
-    if (chains.length < 2) { state.textContent = displayName(entry) + ' has one chain; interaction scores need two.'; renderInteractionEnsemble(); return; }
+    if (unscorable) { state.textContent = displayName(entry) + ' carries no pLDDT or PAE — an experimental structure, or a model without its confidence files — so these prediction-confidence scores do not apply. Interfaces, below, measures its contacts.'; renderInteractionEnsemble(); return; }
+    if (chains.length < 2) { state.textContent = displayName(entry) + ' has ' + (chains.length ? 'one' : 'no') + ' protein or nucleic-acid chain' + (ligandChains ? ' and ' + ligandChains + ' ligand or ion chain' + (ligandChains === 1 ? '' : 's') + '; ligands are not scored as partners here — the Ligand sites table covers them' : '; interaction scores need two') + '.'; renderInteractionEnsemble(); return; }
     if (!scores) { state.textContent = 'Score the chain pairs of ' + displayName(entry) + ' (' + chains.length + ' chains).'; renderInteractionEnsemble(); return; }
     scores.pairs.forEach(pair => {
       const row = document.createElement('tr');
       const direction = pair.forward.ipsae === null ? '—' : interactionCell(pair.forward.ipsae) + ' / ' + interactionCell(pair.reverse.ipsae);
-      const values = [pair.chain1 + '–' + pair.chain2, interactionCell(pair.ipsae), direction, interactionCell(reportedPairIptm(entry, pair.chain1, pair.chain2)), interactionCell(pair.pdockq), interactionCell(pair.pdockq2), interactionCell(pair.lis),
+      const values = [pair.chain1 + '–' + pair.chain2, interactionCell(pair.ipsae), direction, interactionCell(reportedPairIptmMax(entry, pair.chain1, pair.chain2)), interactionCell(pair.pdockq), interactionCell(pair.pdockq2), interactionCell(pair.lis),
         pair.dist1 === null ? String(pair.forward.contactResidues) + ' within 8 Å' : pair.dist1 + ' + ' + pair.dist2];
       values.forEach((value, index) => {
         const cell = document.createElement(index === 0 ? 'th' : 'td');
@@ -279,7 +300,7 @@
       const entry = entryById(id); if (!entry) return;
       scores.pairs.forEach(pair => {
         [pair.forward, pair.reverse].forEach(one => rows.push([displayName(entry), one.chain1, one.chain2, 'asym', scores.paeCutoff, scores.distCutoff, number(one.ipsae), number(one.ipsaeD0chn), number(one.ipsaeD0dom), number(reportedPairIptm(entry, one.chain1, one.chain2)), number(one.iptmD0chn), number(one.pdockq), number(one.pdockq2), number(one.lis), number(one.n0res), one.n0chn, number(one.n0dom), number(one.d0res), number(one.d0chn), number(one.d0dom), number(one.nres1), number(one.nres2), number(one.dist1), number(one.dist2), one.bestResidue || '']));
-        rows.push([displayName(entry), pair.chain1, pair.chain2, 'max', scores.paeCutoff, scores.distCutoff, number(pair.ipsae), number(pair.ipsaeD0chn), number(pair.ipsaeD0dom), number(reportedPairIptm(entry, pair.chain1, pair.chain2)), number(pair.iptmD0chn), number(pair.pdockq), number(pair.pdockq2), number(pair.lis), number(pair.n0res), pair.n0chn, number(pair.n0dom), number(pair.d0res), number(pair.forward.d0chn), number(pair.d0dom), number(pair.nres1), number(pair.nres2), number(pair.dist1), number(pair.dist2), pair.bestResidue || '']);
+        rows.push([displayName(entry), pair.chain1, pair.chain2, 'max', scores.paeCutoff, scores.distCutoff, number(pair.ipsae), number(pair.ipsaeD0chn), number(pair.ipsaeD0dom), number(reportedPairIptmMax(entry, pair.chain1, pair.chain2)), number(pair.iptmD0chn), number(pair.pdockq), number(pair.pdockq2), number(pair.lis), number(pair.n0res), pair.n0chn, number(pair.n0dom), number(pair.d0res), number(pair.forward.d0chn), number(pair.d0dom), number(pair.nres1), number(pair.nres2), number(pair.dist1), number(pair.dist2), pair.bestResidue || '']);
       });
     });
     return rows.map(row => row.map(csvCell).join(',')).join('\n') + '\n';

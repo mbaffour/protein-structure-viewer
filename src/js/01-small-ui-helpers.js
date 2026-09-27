@@ -67,7 +67,8 @@
     const scores = [];
     model.selectedAtoms({}).forEach(atom => {
       const score = Number(atom.b);
-      if (atom.atom === 'CA' && Number.isFinite(score)) scores.push(score);
+      /* One value per residue: the Cα, or for a nucleotide (an RNA or DNA prediction has no Cα) the C1′. */
+      if ((atom.atom === 'CA' || (atom.atom === "C1'" && !atom.hetflag)) && Number.isFinite(score)) scores.push(score);
     });
     return scores;
   }

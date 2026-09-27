@@ -548,7 +548,7 @@ function show(pane, preserveView) {
   if (oldView) pane.viewer.setView(oldView); else pane.viewer.zoomTo();
   pane.viewer.render();
   lastViews.set(pane, pane.viewer.getView());
-  pane.plddt = s.hasConfidence ? mean(m.selectedAtoms({}).filter(a => a.atom === 'CA' && Number.isFinite(Number(a.b))).map(a => Number(a.b))) : null;
+  pane.plddt = s.hasConfidence ? mean(m.selectedAtoms({}).filter(a => (a.atom === 'CA' || (a.atom === "C1'" && !a.hetflag)) && Number.isFinite(Number(a.b))).map(a => Number(a.b))) : null;
   const c = s.confidence || {};
   pane.stats.textContent = (pane.plddt === null ? 'pLDDT —' : 'pLDDT ' + pane.plddt.toFixed(1)) + (Number.isFinite(Number(c.iptm)) ? ' · ipTM ' + metric(c.iptm, 2) : Number.isFinite(Number(c.ptm)) ? ' · pTM ' + metric(c.ptm, 2) : '');
   if (panes[focused] === pane) describe(pane);
