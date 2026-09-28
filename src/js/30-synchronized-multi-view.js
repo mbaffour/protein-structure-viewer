@@ -883,11 +883,15 @@
       confidenceAssets.push(...ranked);
       return true;
     }
+    /* AlphaFold 2.3's confidence_<model>.json (and AlphaFold DB's -confidence_vN.json) is per-residue
+       pLDDT, already in the model's B-factors: recognised, nothing to attach. */
+    const plain = normalizeConfidenceJson(data);
+    if (plain && Array.isArray(plain.residueNumber) && Array.isArray(plain.confidenceScore)) return true;
     const confidence = confidenceFromJson(data);
     if (!confidence) return false;
     const useful = Object.values(confidence).some(value => value !== null && value !== false);
     if (!useful) return false;
-    confidenceAssets.push({ name, confidence, rank: null, collection });
+    confidenceAssets.push({ name, confidence, rank: predictorRank(name), collection });
     return true;
   }
 

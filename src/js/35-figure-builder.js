@@ -176,7 +176,15 @@
 
   function reportConfidence(entry) {
     const confidence = { ...(entry.confidence || {}) };
+    delete confidence.atomPlddts; /* the report reads pLDDT from the coordinates it carries */
     const matrix = confidence.pae;
+    /* Interaction scores computed in the viewer travel with the model; the report shows them, it does not recompute them. */
+    const scored = interactionResults && interactionResults.byEntry.get(entry.id);
+    const round3 = value => value === null || value === undefined ? null : Math.round(Number(value) * 1000) / 1000;
+    if (scored) confidence.interaction = { paeCutoff: interactionResults.paeCutoff, pairs: scored.pairs.map(pair => ({ pair: pair.chain1 + '–' + pair.chain2, ipsae: round3(pair.ipsae), pdockq: round3(pair.pdockq), pdockq2: round3(pair.pdockq2), lis: round3(pair.lis) })) };
+    /* The report cannot re-derive which residue a row is, so a derived layout travels with it. */
+    const layout = paeTokenLayout(entry);
+    if (layout && layout.derived && !layout.mismatch) { confidence.tokenChainIds = layout.chainIds; confidence.tokenResidueIds = layout.residueIds; }
     const limit = paeLimit();
     if (!limit) { delete confidence.pae; delete confidence.tokenChainIds; delete confidence.tokenResidueIds; confidence.paeOmitted = true; return confidence; }
     if (!Array.isArray(matrix)) return confidence;
@@ -540,16 +548,26 @@ function show(pane, preserveView) {
   if (oldView) pane.viewer.setView(oldView); else pane.viewer.zoomTo();
   pane.viewer.render();
   lastViews.set(pane, pane.viewer.getView());
-  pane.plddt = s.hasConfidence ? mean(m.selectedAtoms({}).filter(a => a.atom === 'CA' && Number.isFinite(Number(a.b))).map(a => Number(a.b))) : null;
+  pane.plddt = s.hasConfidence ? mean(m.selectedAtoms({}).filter(a => (a.atom === 'CA' || (a.atom === "C1'" && !a.hetflag)) && Number.isFinite(Number(a.b))).map(a => Number(a.b))) : null;
   const c = s.confidence || {};
   pane.stats.textContent = (pane.plddt === null ? 'pLDDT —' : 'pLDDT ' + pane.plddt.toFixed(1)) + (Number.isFinite(Number(c.iptm)) ? ' · ipTM ' + metric(c.iptm, 2) : Number.isFinite(Number(c.ptm)) ? ' · pTM ' + metric(c.ptm, 2) : '');
   if (panes[focused] === pane) describe(pane);
+}
+/* The three most confident chain pairs; a 15-chain assembly has 105, which the CSV from the viewer lists. */
+function interactionSummary(interaction) {
+  if (!interaction || !interaction.pairs.length) return '';
+  const score = pair => pair.ipsae !== null ? pair.ipsae : pair.pdockq;
+  const ranked = interaction.pairs.filter(pair => score(pair) !== null).sort((a, b) => score(b) - score(a));
+  const shown = ranked.slice(0, 3).map(pair => pair.pair + (pair.ipsae !== null ? ' ipSAE ' + metric(pair.ipsae) : ' pDockQ ' + metric(pair.pdockq)));
+  if (!shown.length) return '';
+  return ' · ' + shown.join(', ') + (ranked.length > 3 ? ' and ' + (ranked.length - 3) + ' more pair' + (ranked.length - 3 === 1 ? '' : 's') : '') + ' (PAE cutoff ' + interaction.paeCutoff + ' Å)';
 }
 function describe(pane) {
   const s = structures[pane.index], c = s.confidence || {};
   el('name').textContent = s.label || s.name;
   el('score').textContent = pane.plddt === null ? 'Mean pLDDT —' : 'Mean pLDDT ' + pane.plddt.toFixed(1);
-  el('model-confidence').textContent = 'pTM ' + metric(c.ptm) + ' · ipTM ' + metric(c.iptm) + ' · ranking ' + metric(c.rankingScore) + (c.hasClash ? ' · clash warning' : '');
+  el('model-confidence').textContent = 'pTM ' + metric(c.ptm) + ' · ipTM ' + metric(c.iptm) + ' · ranking ' + metric(c.rankingScore) + (c.hasClash ? ' · clash warning' : '')
+    + interactionSummary(c.interaction);
   el('position').textContent = (pane.index + 1) + ' / ' + structures.length + (panes.length > 1 ? ' · panel ' + (panes.indexOf(pane) + 1) : '');
   drawPae(s); drawContacts(s);
 }

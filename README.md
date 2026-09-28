@@ -26,7 +26,8 @@ Structure files you open stay in the browser. Nothing is uploaded.
 
 1. Open the [hosted viewer](https://mbaffour.github.io/protein-structure-viewer/), or open
    `index.html` from a local copy. On macOS you can double-click `Launch Protein Viewer.command`.
-2. Drop a `.pdb`, `.cif`/`.mmcif`, or a complete AlphaFold result `.zip` anywhere on the page.
+2. Drop a `.pdb`, `.cif`/`.mmcif`, or a complete AlphaFold, ColabFold, Boltz or Chai-1 result `.zip`
+   anywhere on the page.
    You can also type an identifier and press **Fetch**:
    - `1ubq` — a PDB entry from RCSB
    - `P69905` — a UniProt accession, resolved against AlphaFold DB
@@ -46,6 +47,9 @@ dark setting, and changes when it does), **Light** and **Dark**.
 | AlphaFold result `.zip` | Every model is extracted and grouped under the archive name; template hits are ignored |
 | `*_confidences.json`, `*_summary_confidences.json` | pTM, ipTM, ranking score, clash flag, and PAE are attached to matching models |
 | `ranking_debug.json`, `ranking_scores.csv` | Ranks and ranking scores are attached to matching models |
+| ColabFold output, loose or zipped | `*_unrelaxed_rank_NNN_*.pdb` (or `_relaxed_`) pairs with `*_scores_rank_NNN_*.json`: pLDDT, PAE, pTM, ipTM and rank |
+| Boltz output folder, zipped | `*_model_N.cif` pairs with `confidence_*_model_N.json` and `pae_*_model_N.npz`: ranking score, pTM, ipTM, chain-pair ipTM and PAE; model 0 is rank 1 |
+| Chai-1 output folder, zipped | `pred.model_idx_N.cif` pairs with `scores.model_idx_N.npz`: aggregate score (sets the rank), pTM, ipTM, chain-pair ipTM, clash flag. Chai-1 does not save a PAE matrix |
 | A scene JSON saved from the Publish tab | The whole annotated scene is restored once its structures are present |
 
 Multi-model archives open one model at a time so the browser does not try to render hundreds of
@@ -136,6 +140,9 @@ when the data is there. Interactive PAE heatmaps with per-token inspection that 
 strip, PNG export, a downloadable confidence-metrics CSV, and a per-residue pLDDT profile figure
 (SVG or PNG, one panel per chain, every displayed model overlaid). Interface geometry per model: inter-chain heavy-atom contacts,
 interface residues, and Shrake–Rupley buried surface area, with one-click highlighting and CSV export.
+Interaction confidence per chain pair — ipSAE, pDockQ, pDockQ2 and LIS, computed as the reference
+implementation ipsae.py does and cross-checked against it — for one model or summarised across every
+shown model, with a CSV in ipsae.py's own columns.
 PAE-derived domains — groups of residues the prediction places together — as a table, a colour
 scheme, and one-click highlights. Ligand sites: contact residues per ligand or ion, site mean pLDDT
 and, for AlphaFold 3, ligand–site PAE.

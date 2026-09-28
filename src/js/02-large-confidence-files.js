@@ -92,7 +92,7 @@
   }
 
   function fileStem(path) {
-    return path.split('/').pop().replace(/\.(pdb|cif|mmcif|json|csv)$/i, '');
+    return path.split('/').pop().replace(/\.(pdb|cif|mmcif|json|csv|npz)$/i, '');
   }
 
   function associationKey(path) {
@@ -101,7 +101,25 @@
        (or -confidence_v6) belong together; the version suffix carries no model index. */
     const database = stem.replace(/-(model|predicted_aligned_error|confidence)_v\d+$/, '');
     if (database !== stem) return database;
-    return stem.replace(/_(summary_confidences|confidences|full_data|model)(?:_(\d+))?$/, (_, marker, index) => index ? '_' + index : '');
+    /* ColabFold: <job>_unrelaxed_rank_001_<model>_seed_000.pdb, the _relaxed_ one beside it, and
+       <job>_scores_rank_001_<model>_seed_000.json all belong together. */
+    const colabfold = stem.match(/^(.*)_(?:unrelaxed|relaxed|scores)_(rank_\d+_.+)$/);
+    if (colabfold) return colabfold[1] + '_' + colabfold[2];
+    /* Chai-1: pred.model_idx_0.cif and scores.model_idx_0.npz, and a PAE saved by hand from
+       run_inference's candidates as pae_model_idx_0.npz or pae.model_idx_0.npz. */
+    const chai = stem.match(/^(?:pred|scores|pae)[._](model_idx_\d+)$/);
+    if (chai) return chai[1];
+    /* AlphaFold 2.3 run locally: unrelaxed_<model>.pdb/.cif (and relaxed_) beside pae_<model>.json
+       and confidence_<model>.json, <model> being model_1_multimer_v3_pred_0 and the like. */
+    const alphafold2 = stem.match(/^(?:unrelaxed|relaxed|pae|confidence)_(model_\d+(?:_[a-z0-9]+)*_pred_\d+|model_\d+(?:_ptm)?)$/);
+    if (alphafold2) return alphafold2[1];
+    /* Boltz: confidence_<name>_model_0.json and pae_/plddt_/pde_<name>_model_0.npz go with
+       <name>_model_0.cif. The prefix is only removed from those files, never from a structure,
+       so an AlphaFold 3 job whose name happens to start with "pae_" still pairs with its own data. */
+    const extension = (path.split('.').pop() || '').toLowerCase();
+    const boltz = extension === 'npz' ? stem.match(/^(?:confidence|pae|plddt|pde)_(.+_model_\d+)$/) : extension === 'json' ? stem.match(/^confidence_(.+_model_\d+)$/) : null;
+    const unprefixed = boltz ? boltz[1] : stem;
+    return unprefixed.replace(/_(summary_confidences|confidences|full_data|model)(?:_(\d+))?$/, (_, marker, index) => index ? '_' + index : '');
   }
 
   function assetFitsEntry(asset, entry) {
@@ -132,7 +150,8 @@
     return {
       ptm: finiteNumber(data.ptm ?? data.predicted_tm_score),
       iptm: finiteNumber(data.iptm ?? data.interface_predicted_tm_score),
-      rankingScore: finiteNumber(data.ranking_score ?? data.ranking_confidence),
+      /* Boltz calls its ranking score confidence_score. */
+      rankingScore: finiteNumber(data.ranking_score ?? data.ranking_confidence ?? data.confidence_score),
       fractionDisordered: finiteNumber(data.fraction_disordered),
       hasClash: data.has_clash === undefined ? null : data.has_clash === true || Number(data.has_clash) === 1,
       pae,
@@ -140,8 +159,13 @@
       tokenChainIds: Array.isArray(data.token_chain_ids) ? data.token_chain_ids : null,
       tokenResidueIds: Array.isArray(data.token_res_ids) ? data.token_res_ids : null,
       chainIds: Array.isArray(data.chain_ids) ? data.chain_ids : null,
-      chainPairIptm: Array.isArray(data.chain_pair_iptm) ? data.chain_pair_iptm : null,
-      chainPairPaeMin: Array.isArray(data.chain_pair_pae_min) ? data.chain_pair_pae_min : null
+      /* AlphaFold 3 per-atom pLDDT, in atom order. The mmCIF B-factors carry a rounded copy that can
+         differ by up to 0.1; the interface scores read these, as ipsae.py does. */
+      atomPlddts: Array.isArray(data.atom_plddts) ? data.atom_plddts.map(Number) : null,
+      chainPairIptm: Array.isArray(data.chain_pair_iptm) ? data.chain_pair_iptm : indexedPairMatrix(data.pair_chains_iptm),
+      chainPairPaeMin: Array.isArray(data.chain_pair_pae_min) ? data.chain_pair_pae_min : null,
+      /* ColabFold 1.5.5+ scores its own complexes (PAE cutoff 15 Å); kept to compare against. */
+      reportedInterface: data.ipsae && typeof data.ipsae === 'object' && !Array.isArray(data.ipsae) ? { ipsae: data.ipsae, pdockq: data.pdockq || null, pdockq2: data.pdockq2 || null } : null
     };
   }
 
@@ -155,6 +179,7 @@
   }
 
   function attachConfidenceAssets() {
+    rankScoreRankedAssets();
     structures.forEach(entry => {
       confidenceAssets.filter(asset => assetFitsEntry(asset, entry)).forEach(asset => {
         entry.confidence = mergeConfidence(entry.confidence, asset.confidence);
@@ -199,6 +224,7 @@
       body.append(row);
     });
     drawPae(activeEntry());
+    renderInteractions();
   }
 
   function paeColor(value, maximum) {
@@ -238,7 +264,8 @@
       }
     }
     context.putImageData(image, 0, 0);
-    const chains = entry.confidence.tokenChainIds || [];
+    const layout = paeTokenLayout(entry);
+    const chains = layout && !layout.mismatch ? layout.chainIds : [];
     context.save();
     context.strokeStyle = themeColor('--foreground', '#111827');
     context.globalAlpha = 0.7;
@@ -257,7 +284,8 @@
     canvas.dataset.entryId = String(entry.id);
     canvas.dataset.maximum = String(maximum);
     canvas.setAttribute('aria-label', 'Predicted aligned error heatmap for ' + entry.name + ', ' + size + ' by ' + size + ' tokens, maximum ' + maximum.toFixed(1) + ' angstroms');
-    root.querySelector('#gpv-pae-detail').textContent = entry.name + ' · ' + size + ' × ' + size + ' tokens · maximum ' + maximum.toFixed(1) + ' Å';
+    root.querySelector('#gpv-pae-detail').textContent = entry.name + ' · ' + size + ' × ' + size + ' tokens · maximum ' + maximum.toFixed(1) + ' Å'
+      + (layout && layout.mismatch ? ' · residues not matched to rows: ' + layout.mismatch : '');
     renderInterfaceMetrics(entry);
   }
 
@@ -270,8 +298,11 @@
     const iptm = confidence.chainPairIptm;
     const pae = confidence.chainPairPaeMin;
     const size = Math.max(Array.isArray(iptm) ? iptm.length : 0, Array.isArray(pae) ? pae.length : 0);
-    const derivedChainIds = [...new Set(confidence.tokenChainIds || [])];
-    const chainIds = confidence.chainIds && confidence.chainIds.length ? confidence.chainIds : derivedChainIds.length ? derivedChainIds : Array.from({ length: size }, (_, index) => String(index + 1));
+    const derivedChainIds = [...new Set(paeTokenIds(entry).chainIds)];
+    /* Boltz and Chai-1 index their per-chain-pair ipTM by the model's chain order. */
+    const modelChains = modelChainOrder(entry);
+    const listed = chainOrderFromIds(confidence.chainIds);
+    const chainIds = listed.length === size ? listed : derivedChainIds.length === size ? derivedChainIds : modelChains.length === size ? modelChains : derivedChainIds.length ? derivedChainIds : Array.from({ length: size }, (_, index) => String(index + 1));
     for (let i = 0; i < size; i += 1) {
       for (let j = i + 1; j < size; j += 1) {
         const row = document.createElement('tr');
@@ -289,6 +320,11 @@
         body.append(row);
       }
     }
+    /* Chai-1 scores chain pairs but keeps its PAE in memory; say so rather than show an empty map. */
+    const note = root.querySelector('#gpv-interface-note');
+    const withoutPae = confidence.predictor === 'Chai-1' && !Array.isArray(confidence.pae);
+    note.hidden = !withoutPae;
+    note.textContent = withoutPae ? 'Chai-1 writes per-chain-pair ipTM but does not save its PAE to disk, so this model has no PAE map.' : '';
     wrap.hidden = body.children.length === 0;
     panel.hidden = root.querySelector('#gpv-pae-plot').hidden && wrap.hidden;
   }

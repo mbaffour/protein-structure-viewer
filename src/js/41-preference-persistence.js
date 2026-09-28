@@ -5,7 +5,7 @@
     '#gpv-export-mode', '#gpv-print-width', '#gpv-print-aspect', '#gpv-print-dpi', '#gpv-print-text', '#gpv-figure-font', '#gpv-scale-bar', '#gpv-legend-position', '#gpv-image-format',
     '#gpv-view-mode', '#gpv-order', '#gpv-alignment-mode', '#gpv-fit-scope', '#gpv-position-cutoff', '#gpv-export-size', '#gpv-export-scale',
     '#gpv-panel-columns', '#gpv-video-length', '#gpv-cycle-speed', '#gpv-speed', '#gpv-report-scope',
-    '#gpv-position-figure-deviation'
+    '#gpv-position-figure-deviation', '#gpv-ipsae-pae', '#gpv-ipsae-dist'
   ];
 
   function savePreferences() {
@@ -176,6 +176,7 @@
     root.querySelector('#gpv-annotation-state').textContent = 'Pick a tool, start drawing, then click atoms in the main viewer.';
     savedViews = [];
     confidenceAssets = [];
+    interactionResults = null;
     alignmentResults = [];
     pendingScene = null;
     root.querySelector('#gpv-residue').textContent = 'Click any atom in the viewer to inspect it.';
@@ -352,8 +353,9 @@
     const columns = isMatrixRow(matrix[row]) ? matrix[row].length : matrix.length;
     const column = Math.min(columns - 1, Math.max(0, Math.floor((event.clientX - bounds.left) * columns / bounds.width)));
     const value = finiteNumber(matrix[row] && matrix[row][column]);
-    const chains = entry.confidence.tokenChainIds || [];
-    const residues = entry.confidence.tokenResidueIds || [];
+    const layout = paeTokenIds(entry);
+    const chains = layout.chainIds;
+    const residues = layout.residueIds;
     const describe = index => 'token ' + (index + 1) + (chains[index] !== undefined ? ', chain ' + chains[index] : '') + (residues[index] !== undefined ? ', residue ' + residues[index] : '');
     root.querySelector('#gpv-pae-detail').textContent = describe(row) + ' → ' + describe(column) + ' · PAE ' + (value === null ? '—' : value.toFixed(2) + ' Å');
     const mark = index => chains[index] !== undefined && residues[index] !== undefined ? { entryId: entry.id, chain: String(chains[index]), resi: Number(residues[index]) } : null;

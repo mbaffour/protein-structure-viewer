@@ -6,7 +6,7 @@
    Set PSV_HEADED=1 to watch it run. */
 import { chromium, firefox, webkit } from 'playwright';
 import { createServer } from 'node:http';
-import { mkdtemp, readFile, writeFile } from 'node:fs/promises';
+import { mkdtemp, readFile, readdir, writeFile } from 'node:fs/promises';
 import { createReadStream, existsSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, extname, join, resolve } from 'node:path';
@@ -3043,6 +3043,413 @@ await step('the fetched entry is removed so later groups see the same models as 
   await page.unroute('https://alphafold.ebi.ac.uk/api/prediction/P69905');
   await page.unroute('https://alphafold.ebi.ac.uk/files/AF-P69905-F1-model_v6.cif');
   await page.unroute('https://alphafold.ebi.ac.uk/files/AF-P69905-F1-predicted_aligned_error_v6.json');
+});
+
+group('other predictors');
+/* One two-chain complex written the way ColabFold, Boltz, Chai-1 and the AlphaFold Server write
+   their results — file names, keys, NumPy .npz files and ModelCIF from each tool's own writer.
+   See fixtures/predictors/README.md and make_fixtures.py, which regenerates them. */
+const predictorDir = join(here, 'fixtures', 'predictors');
+const colabfoldFiles = ['rank_001_alphafold2_multimer_v3_model_2_seed_000', 'rank_002_alphafold2_multimer_v3_model_4_seed_000']
+  .flatMap(tag => [join(predictorDir, 'colabfold', 'hbdimer_unrelaxed_' + tag + '.pdb'), join(predictorDir, 'colabfold', 'hbdimer_scores_' + tag + '.json')]);
+const predictorEntries = () => page.evaluate(() => window.__viewerDebug.entries().filter(e => /hbdimer|model_idx|mismatch_model/.test(e.name)).map(e => {
+  const c = e.confidence || {}; const layout = window.__viewerDebug.paeTokenLayout(e);
+  const counts = {}; (layout && !layout.mismatch ? layout.chainIds : []).forEach(chain => { counts[chain] = (counts[chain] || 0) + 1; });
+  return { id: e.id, name: e.name, collection: e.collection, rank: e.rank, pae: c.pae ? c.pae.length : null, ptm: c.ptm, iptm: c.iptm, ranking: c.rankingScore, pairs: c.chainPairIptm || null, clash: c.hasClash, reported: c.reportedInterface || null, layout: layout ? (layout.mismatch || counts) : null, derived: layout ? layout.derived : null };
+}));
+const showEntry = async id => { await page.evaluate(id => { const select = document.querySelector('#gpv-current'); select.value = String(id); select.dispatchEvent(new Event('change', { bubbles: true })); }, id); await page.waitForTimeout(500); };
+const removePredictorEntries = async () => {
+  await tab('models');
+  for (const entry of await predictorEntries()) { await page.click('#gpv-list [data-entry-id="' + entry.id + '"] button:has-text("Remove")'); await page.waitForTimeout(150); }
+};
+
+await step('ColabFold: each ranked model pairs with its scores file, keeps its rank and ColabFold’s own interface scores', async () => {
+  try {
+    await tab('models');
+    const relaxed = join(work, 'hbdimer_relaxed_rank_001_alphafold2_multimer_v3_model_2_seed_000.pdb');
+    await writeFile(relaxed, await readFile(colabfoldFiles[0], 'utf8'));
+    await page.setInputFiles('#gpv-files', [...colabfoldFiles, relaxed, join(predictorDir, 'colabfold', 'config.json')]); await page.waitForTimeout(2500);
+    const entries = await predictorEntries();
+    if (entries.length !== 3) throw new Error('expected rank 1 unrelaxed, rank 1 relaxed and rank 2: ' + entries.map(e => e.name).join(', '));
+    entries.forEach(entry => {
+      const first = /rank_001/.test(entry.name);
+      if (entry.pae !== 128) throw new Error(entry.name + ': PAE rows ' + entry.pae + ' (the scores file has a 128 × 128 matrix)');
+      if (entry.rank !== (first ? 1 : 2)) throw new Error(entry.name + ': rank ' + entry.rank);
+      if (entry.iptm !== (first ? 0.71 : 0.48) || entry.ptm !== (first ? 0.74 : 0.66)) throw new Error(entry.name + ': pTM/ipTM ' + entry.ptm + '/' + entry.iptm);
+      if (!entry.reported || !entry.reported.ipsae || !('A-B' in entry.reported.ipsae)) throw new Error(entry.name + ': ColabFold’s ipsae scores were dropped');
+      if (JSON.stringify(entry.layout) !== JSON.stringify({ A: 64, B: 64 }) || !entry.derived) throw new Error(entry.name + ': token layout ' + JSON.stringify(entry.layout));
+    });
+    console.log('       ' + entries.length + ' ColabFold models · ranks ' + entries.map(e => e.rank).join(', ') + ' · PAE 128 × 128, rows matched to chains A and B');
+  } finally { await removePredictorEntries(); }
+});
+
+await step('Boltz: a zipped output folder reads its .npz PAE, ranks model 0 first and counts the ligand’s atoms as tokens', async () => {
+  try {
+    await tab('models');
+    await page.setInputFiles('#gpv-files', [join(predictorDir, 'boltz_results_hbdimer.zip')]); await page.waitForTimeout(3000);
+    let entries = await predictorEntries();
+    if (entries.length !== 2) throw new Error('models: ' + entries.map(e => e.name).join(', '));
+    for (const entry of entries) await showEntry(entry.id);
+    entries = await predictorEntries();
+    entries.forEach(entry => {
+      const first = /model_0/.test(entry.name);
+      if (entry.pae !== 134) throw new Error(entry.name + ': PAE rows ' + entry.pae + ' (128 residues and 6 ligand atoms)');
+      if (entry.rank !== (first ? 1 : 2) || entry.ranking !== (first ? 0.83 : 0.69)) throw new Error(entry.name + ': rank ' + entry.rank + ', confidence_score ' + entry.ranking);
+      if (JSON.stringify(entry.layout) !== JSON.stringify({ A: 64, B: 64, C: 6 })) throw new Error(entry.name + ': token layout ' + JSON.stringify(entry.layout));
+      if (!entry.pairs || entry.pairs.length !== 3 || entry.pairs[0][1] !== (first ? 0.74 : 0.51)) throw new Error(entry.name + ': pair_chains_iptm ' + JSON.stringify(entry.pairs));
+    });
+    await showEntry(entries.find(e => /model_0/.test(e.name)).id);
+    await tab('confidence');
+    const pairs = await page.locator('#gpv-interface-metrics tr th').allTextContents();
+    if (pairs.join(' ') !== 'A–B A–C B–C') throw new Error('chain-pair rows are not labelled by the model’s chains: ' + pairs.join(' '));
+    if (await page.locator('#gpv-pae-plot').isHidden()) throw new Error('the PAE map is hidden for a Boltz model with a PAE file');
+    console.log('       2 Boltz models · PAE 134 × 134 = A 64 + B 64 + ligand C 6 · chain pairs ' + pairs.join(', '));
+  } finally { await removePredictorEntries(); }
+});
+
+await step('Boltz: the same files dropped loose pair too, and plddt_/pde_ files are read without being reported as skipped', async () => {
+  try {
+    await tab('models');
+    const names = ['hbdimer_model_0.cif', 'confidence_hbdimer_model_0.json', 'pae_hbdimer_model_0.npz', 'plddt_hbdimer_model_0.npz', 'pde_hbdimer_model_0.npz'];
+    await page.setInputFiles('#gpv-files', names.map(name => join(predictorDir, 'boltz', name))); await page.waitForTimeout(2500);
+    const entries = await predictorEntries();
+    if (entries.length !== 1 || entries[0].pae !== 134 || entries[0].rank !== 1) throw new Error(JSON.stringify(entries.map(e => [e.name, e.pae, e.rank])));
+    const status = (await page.locator('#gpv-state').textContent()) || '';
+    if (/skipped/.test(status)) throw new Error('status reports skipped files: ' + status);
+    if (!(await page.locator('#gpv-import-errors').isHidden())) throw new Error('import errors shown: ' + await page.locator('#gpv-import-errors').textContent());
+  } finally { await removePredictorEntries(); }
+});
+
+await step('Chai-1: samples rank by aggregate score, float32 scores read back clean, and the missing PAE is explained', async () => {
+  try {
+    await tab('models');
+    await page.setInputFiles('#gpv-files', [join(predictorDir, 'chai_hbdimer.zip')]); await page.waitForTimeout(3000);
+    const entries = await predictorEntries();
+    if (entries.length !== 2) throw new Error('models: ' + entries.map(e => e.name).join(', '));
+    const zero = entries.find(e => /model_idx_0/.test(e.name)); const one = entries.find(e => /model_idx_1/.test(e.name));
+    if (one.rank !== 1 || zero.rank !== 2) throw new Error('sample 1 (aggregate 0.71) should rank above sample 0 (0.52): ranks ' + one.rank + ', ' + zero.rank);
+    if (zero.ptm !== 0.52 || zero.iptm !== 0.44 || zero.ranking !== 0.52) throw new Error('float32 scores not cleaned: ' + zero.ptm + ', ' + zero.iptm + ', ' + zero.ranking);
+    if (zero.pae !== null) throw new Error('Chai-1 writes no PAE, yet one was attached');
+    if (zero.clash !== false) throw new Error('has_inter_chain_clashes: ' + zero.clash);
+    if (!zero.pairs || zero.pairs[0][1] !== 0.44) throw new Error('per_chain_pair_iptm: ' + JSON.stringify(zero.pairs));
+    await showEntry(zero.id); await tab('confidence');
+    const note = (await page.locator('#gpv-interface-note').textContent()) || '';
+    if (await page.locator('#gpv-interface-note').isHidden() || !/does not save its PAE/.test(note)) throw new Error('no note on the missing PAE: ' + note);
+    const row = await page.locator('#gpv-interface-metrics tr').first().locator('th,td').allTextContents();
+    if (row[0] !== 'A–B' || row[1] !== '0.440') throw new Error('chain-pair ipTM row: ' + JSON.stringify(row));
+    console.log('       2 Chai-1 samples · rank from aggregate score · A–B ipTM ' + row[1] + ' · PAE note shown');
+  } finally { await removePredictorEntries(); }
+});
+
+await step('a PAE whose size matches neither the residues nor the tokens is not guessed at, and says why', async () => {
+  try {
+    await tab('models');
+    const cif = (await readFile(join(predictorDir, 'boltz', 'hbdimer_model_0.cif'), 'utf8')).split('\n').filter(line => !line.startsWith('HETATM')).join('\n');
+    const structure = join(work, 'mismatch_model_0.cif'); await writeFile(structure, cif);
+    const pae = join(work, 'pae_mismatch_model_0.npz'); await writeFile(pae, await readFile(join(predictorDir, 'boltz', 'pae_hbdimer_model_0.npz')));
+    await page.setInputFiles('#gpv-files', [structure, pae]); await page.waitForTimeout(2500);
+    const entry = (await predictorEntries()).find(e => /mismatch_model/.test(e.name));
+    if (!entry || entry.pae !== 134) throw new Error('the PAE did not attach: ' + JSON.stringify(entry));
+    if (typeof entry.layout !== 'string' || !/134 rows but the model has 128 residues/.test(entry.layout)) throw new Error('layout: ' + JSON.stringify(entry.layout));
+    await showEntry(entry.id); await tab('confidence');
+    const detail = (await page.locator('#gpv-pae-detail').textContent()) || '';
+    if (!/residues not matched to rows/.test(detail)) throw new Error('the PAE detail line does not say the rows were not matched: ' + detail);
+  } finally { await removePredictorEntries(); }
+});
+
+await step('the .npy reader handles a Fortran-ordered big-endian float64 array and a version 2 header', async () => {
+  const result = await page.evaluate(() => {
+    const make = (major, descr, fortran, shape, values, width, write) => {
+      let header = "{'descr': '" + descr + "', 'fortran_order': " + (fortran ? 'True' : 'False') + ", 'shape': (" + shape.join(', ') + (shape.length === 1 ? ',' : '') + "), }";
+      const prefix = major === 1 ? 10 : 12; while ((prefix + header.length + 1) % 64) header += ' '; header += '\n';
+      const bytes = new Uint8Array(prefix + header.length + values.length * width); const view = new DataView(bytes.buffer);
+      bytes.set([0x93, 78, 85, 77, 80, 89, major, 0]);
+      if (major === 1) view.setUint16(8, header.length, true); else view.setUint32(8, header.length, true);
+      for (let i = 0; i < header.length; i += 1) bytes[prefix + i] = header.charCodeAt(i);
+      values.forEach((value, i) => write(view, prefix + header.length + i * width, value));
+      return bytes;
+    };
+    /* [[1, 2, 3], [4, 5, 6]] stored column by column. */
+    const fortran = window.__viewerDebug.readNpy(make(1, '>f8', true, [2, 3], [1, 4, 2, 5, 3, 6], 8, (v, at, x) => v.setFloat64(at, x, false)));
+    const wide = window.__viewerDebug.readNpy(make(2, '<i8', false, [3], [7, -2, 9], 8, (v, at, x) => v.setBigInt64(at, BigInt(x), true)));
+    return { fortran: Array.from(fortran.values), shape: fortran.shape, wide: Array.from(wide.values) };
+  });
+  if (JSON.stringify(result.fortran) !== '[1,2,3,4,5,6]' || JSON.stringify(result.shape) !== '[2,3]') throw new Error('Fortran order: ' + JSON.stringify(result));
+  if (JSON.stringify(result.wide) !== '[7,-2,9]') throw new Error('version 2 int64: ' + JSON.stringify(result.wide));
+});
+
+group('interaction confidence');
+/* expected-ipsae.json is the output of the reference implementation, DunbrackLab/IPSAE ipsae.py,
+   on the same fixture files (make_fixtures.py records its SHA-256). ipSAE-family values are printed
+   to 6 decimals and pDockQ, pDockQ2, LIS to 4, so the tolerance is half a unit in that place;
+   residue counts must match exactly. tests/validate-ipsae.mjs runs the same comparison on real
+   AlphaFold 3 archives. */
+const expectedIpsae = JSON.parse(await readFile(join(predictorDir, 'expected-ipsae.json'), 'utf8'));
+const ipsaeColumns = { ipSAE: ['ipsae', 6e-7], ipSAE_d0chn: ['ipsaeD0chn', 6e-7], ipSAE_d0dom: ['ipsaeD0dom', 6e-7], ipTM_d0chn: ['iptmD0chn', 6e-7], pDockQ: ['pdockq', 5.1e-5], pDockQ2: ['pdockq2', 5.1e-5], LIS: ['lis', 5.1e-5], ipTM_af: ['iptmModel', 5.1e-4], n0res: ['n0res', 0], n0chn: ['n0chn', 0], n0dom: ['n0dom', 0], nres1: ['nres1', 0], nres2: ['nres2', 0], dist1: ['dist1', 0], dist2: ['dist2', 0] };
+const viewerIpsae = (pattern, pae, dist) => page.evaluate(({ pattern, pae, dist }) => {
+  const debug = window.__viewerDebug; const entry = debug.entries().find(e => new RegExp(pattern).test(e.name));
+  debug.materializeEntry(entry);
+  const scores = debug.interactionScores(entry, pae, dist);
+  const reported = row => ({ ...row, iptmModel: debug.reportedPairIptm(entry, row.chain1, row.chain2) });
+  return { asym: scores.asym.map(reported), pairs: scores.pairs.map(pair => ({ ...pair, iptmModel: debug.reportedPairIptmMax(entry, pair.chain1, pair.chain2) })), reason: scores.reason, chains: scores.chains };
+}, { pattern, pae, dist });
+const compareIpsae = async (label, pattern) => {
+  let count = 0; const problems = [];
+  for (const [run, rows] of Object.entries(expectedIpsae.cases[label].runs)) {
+    const [pae, dist] = run.split('_').map(Number);
+    const mine = await viewerIpsae(pattern, pae, dist);
+    if (mine.reason) throw new Error(label + ': ' + mine.reason);
+    rows.forEach(row => {
+      const match = row.type === 'asym' ? mine.asym.find(a => a.chain1 === row.chain1 && a.chain2 === row.chain2) : mine.pairs.find(a => a.chain1 === row.chain1 && a.chain2 === row.chain2);
+      if (!match) { problems.push(run + ' ' + row.type + ' ' + row.chain1 + row.chain2 + ': no viewer row'); return; }
+      Object.entries(ipsaeColumns).forEach(([column, [key, tolerance]]) => {
+        count += 1;
+        if (!(Math.abs(Number(match[key]) - row[column]) <= tolerance)) problems.push(run + ' ' + row.type + ' ' + row.chain1 + '→' + row.chain2 + ' ' + column + ': viewer ' + match[key] + ', ipsae.py ' + row[column]);
+      });
+    });
+  }
+  if (problems.length) throw new Error(problems.length + ' of ' + count + ' disagree: ' + problems.slice(0, 4).join('; '));
+  return count;
+};
+const loadPredictor = async files => { await tab('models'); await page.setInputFiles('#gpv-files', files); await page.waitForTimeout(2500); };
+
+await step('ColabFold: every score of both directions and the combined row agrees with ipsae.py at 10 Å and 15 Å', async () => {
+  try {
+    await loadPredictor(colabfoldFiles);
+    const count = await compareIpsae('colabfold', 'rank_001');
+    /* ColabFold scores its own complexes at a 15 Å cutoff, with its own reimplementation. */
+    const own = await page.evaluate(() => window.__viewerDebug.entries().find(e => /rank_001/.test(e.name)).confidence.reportedInterface.ipsae);
+    const at15 = await viewerIpsae('rank_001', 15, 15);
+    ['A-B', 'B-A'].forEach(key => { const [a, b] = key.split('-'); const mine = at15.asym.find(row => row.chain1 === a && row.chain2 === b).ipsae; if (Math.abs(mine - own[key]) > 6e-7) throw new Error('ColabFold reports ' + key + ' ' + own[key] + ', the viewer ' + mine); });
+    console.log('       ' + count + ' values against ipsae.py, and ColabFold’s own ipSAE (' + own['A-B'] + ', ' + own['B-A'] + ') reproduced at 15 Å');
+  } finally { await removePredictorEntries(); }
+});
+
+await step('Boltz: the ligand is left out of the chain pairs and the scores still agree with ipsae.py', async () => {
+  try {
+    await loadPredictor(['hbdimer_model_0.cif', 'confidence_hbdimer_model_0.json', 'pae_hbdimer_model_0.npz'].map(name => join(predictorDir, 'boltz', name)));
+    const mine = await viewerIpsae('hbdimer_model_0', 10, 10);
+    if (JSON.stringify(mine.chains) !== '["A","B"]') throw new Error('chains scored: ' + JSON.stringify(mine.chains) + ' (the ligand chain C is not a partner)');
+    const count = await compareIpsae('boltz', 'hbdimer_model_0');
+    console.log('       ' + count + ' values against ipsae.py on a 134-token PAE with a six-atom ligand');
+  } finally { await removePredictorEntries(); }
+});
+
+await step('AlphaFold 3: pDockQ uses the Cβ atom’s own pLDDT from full_data, as ipsae.py does, every score agrees, and the pair is labelled by chain', async () => {
+  try {
+    await loadPredictor(['fold_hbdimer_model_0.cif', 'fold_hbdimer_full_data_0.json', 'fold_hbdimer_summary_confidences_0.json'].map(name => join(predictorDir, 'af3', name)));
+    const count = await compareIpsae('af3', 'fold_hbdimer_model_0');
+    const source = await page.evaluate(() => { const d = window.__viewerDebug; const entry = d.entries().find(e => /fold_hbdimer_model_0/.test(e.name)); return d.interactionScores(entry, 10, 10).plddtSource; });
+    if (source !== 'atom_plddts') throw new Error('pLDDT read from ' + source + ', not full_data atom_plddts (the fixture’s B-factors are 0.09 off, as the server’s can be)');
+    /* The server's summary lists chain_ids per token; before 2.48.0 the chain-pair table took the
+       first two entries of that list as the chain names and labelled the pair "A–A". */
+    const entryId = (await predictorEntries()).find(e => /fold_hbdimer_model_0/.test(e.name)).id;
+    await showEntry(entryId); await tab('confidence');
+    const label = await page.locator('#gpv-interface-metrics tr th').first().textContent();
+    if (label !== 'A–B') throw new Error('chain-pair row labelled ' + label);
+    const colabfold = expectedIpsae.cases.colabfold.runs['10_10'][0].pDockQ; const af3 = expectedIpsae.cases.af3.runs['10_10'][0].pDockQ;
+    console.log('       ' + count + ' values against ipsae.py · pDockQ ' + af3 + ' from Cβ pLDDT against ' + colabfold + ' with per-residue pLDDT');
+  } finally { await removePredictorEntries(); }
+});
+
+await step('the table, the cutoff switch, and scoring all shown models with a summary per chain pair', async () => {
+  try {
+    await loadPredictor(colabfoldFiles);
+    const first = (await predictorEntries()).find(e => /rank_001/.test(e.name));
+    await showEntry(first.id); await tab('confidence');
+    await page.selectOption('#gpv-ipsae-pae', '10'); await page.waitForTimeout(200);
+    if (await page.locator('#gpv-ipsae-run').isDisabled()) throw new Error('Score chain pairs is disabled: ' + await page.locator('#gpv-ipsae-state').textContent());
+    await page.click('#gpv-ipsae-run'); await page.waitForTimeout(600);
+    const cells = await page.locator('#gpv-ipsae-rows tr').first().locator('th,td').allTextContents();
+    const max10 = expectedIpsae.cases.colabfold.runs['10_10'].find(row => row.type === 'max');
+    const eachWay = await page.locator('#gpv-ipsae-rows tr').first().locator('td').nth(1).getAttribute('title');
+    if (cells[0] !== 'A–B' || cells[1] !== max10.ipSAE.toFixed(3) || cells[2] !== '0.086 / 0.110' || eachWay !== 'A→B 0.086 · B→A 0.110' || cells[3] !== '0.710') throw new Error('row: ' + JSON.stringify(cells) + ' · ' + eachWay);
+    await page.selectOption('#gpv-ipsae-pae', '15'); await page.waitForTimeout(600);
+    const max15 = expectedIpsae.cases.colabfold.runs['15_15'].find(row => row.type === 'max');
+    const at15 = await page.locator('#gpv-ipsae-rows tr').first().locator('td').first().textContent();
+    if (at15 !== max15.ipSAE.toFixed(3)) throw new Error('after switching to 15 Å the table reads ' + at15 + ', ipsae.py ' + max15.ipSAE);
+    if (!/ColabFold’s own ipSAE/.test(await page.locator('#gpv-ipsae-state').textContent())) throw new Error('ColabFold’s own ipSAE is not shown beside the viewer’s');
+    await page.selectOption('#gpv-ipsae-pae', '10'); await page.waitForTimeout(300);
+    await tab('models');
+    await page.evaluate(labels => { [...document.querySelectorAll('#gpv-list .gpv-entry')].forEach(entry => { const toggle = entry.querySelector('input[type="checkbox"]'); const wanted = labels.some(label => entry.textContent.includes(label)); if (toggle && toggle.checked !== wanted) toggle.click(); }); }, ['rank_001', 'rank_002']);
+    await page.waitForTimeout(600); await tab('confidence');
+    await page.click('#gpv-ipsae-all'); await page.waitForTimeout(1200);
+    const summary = await page.locator('#gpv-ipsae-ensemble-rows tr').first().locator('th,td').allTextContents();
+    if (summary[0] !== 'A–B' || summary[1] !== 'ipSAE' || summary[2] !== '2' || !/rank_001/.test(summary[5])) throw new Error('summary: ' + JSON.stringify(summary));
+    const download = page.waitForEvent('download', { timeout: 20000 });
+    await page.click('#gpv-ipsae-csv');
+    const file = join(work, 'interaction.csv'); await (await download).saveAs(file);
+    const lines = (await readFile(file, 'utf8')).trim().split('\n');
+    if (!/^"model","chain1","chain2","type","pae_cutoff","dist_cutoff","ipsae"/.test(lines[0])) throw new Error('CSV header: ' + lines[0]);
+    if (lines.length !== 1 + 2 * 3) throw new Error('CSV rows ' + (lines.length - 1) + ', expected two models × (two directions + the combined row)');
+    const methods = await page.evaluate(() => window.__viewerDebug.methodsText());
+    if (!/ipSAE \(Dunbrack, 2025; PAE cutoff 10 Å/.test(methods) || !/pDockQ2 \(Zhu et al\., 2023\)/.test(methods)) throw new Error('methods text: ' + methods.slice(-500));
+    const report = await page.evaluate(id => window.__viewerDebug.reportConfidence(window.__viewerDebug.entries().find(e => e.id === id)).interaction, first.id);
+    if (!report || report.paeCutoff !== 10 || report.pairs[0].pair !== 'A–B' || Math.abs(report.pairs[0].ipsae - max10.ipSAE) > 0.0006) throw new Error('report carries: ' + JSON.stringify(report));
+    console.log('       table A–B ipSAE ' + cells[1] + ' → ' + at15 + ' at 15 Å · summary over ' + summary[2] + ' models · CSV ' + (lines.length - 1) + ' rows · methods and report carry it');
+  } finally { await tab('models'); await page.click('#gpv-show-all'); await page.waitForTimeout(300); await removePredictorEntries(); }
+});
+
+await step('Chai-1: with no PAE only pDockQ is scored, and the state line says why', async () => {
+  try {
+    await loadPredictor([join(predictorDir, 'chai_hbdimer.zip')]);
+    const entry = (await predictorEntries()).find(e => /model_idx_1/.test(e.name));
+    await showEntry(entry.id); await tab('confidence');
+    await page.click('#gpv-ipsae-run'); await page.waitForTimeout(600);
+    const cells = await page.locator('#gpv-ipsae-rows tr').first().locator('th,td').allTextContents();
+    if (cells[1] !== '—' || cells[5] !== '—' || cells[6] !== '—' || !/^0\.\d{3}$/.test(cells[4]) || cells[3] !== '0.660') throw new Error('row: ' + JSON.stringify(cells));
+    const state = await page.locator('#gpv-ipsae-state').textContent();
+    if (!/Chai-1 does not save its PAE, so only pDockQ is available/.test(state)) throw new Error('state: ' + state);
+  } finally { await removePredictorEntries(); }
+});
+
+await step('a model with one chain cannot be scored, and says so', async () => {
+  await loadPredictor([afdbCif]);
+  const single = await page.evaluate(() => { const entry = window.__viewerDebug.entries().find(e => /P69905/.test(e.name)); return entry ? entry.id : null; });
+  try {
+    if (single === null) throw new Error('the single-chain AlphaFold DB model did not load');
+    await showEntry(single); await tab('confidence');
+    if (!(await page.locator('#gpv-ipsae-run').isDisabled())) throw new Error('Score chain pairs is enabled on a one-chain model');
+    if (!/has one protein or nucleic-acid chain; interaction scores need two/.test(await page.locator('#gpv-ipsae-state').textContent())) throw new Error('state: ' + await page.locator('#gpv-ipsae-state').textContent());
+  } finally {
+    if (single !== null) { await tab('models'); await page.click('#gpv-list [data-entry-id="' + single + '"] button:has-text("Remove")'); await page.waitForTimeout(300); }
+  }
+});
+
+group('published predictor outputs');
+/* Real files as the tools wrote them, published by others (fixtures/published/README.md): one
+   barnase–barstar complex from six tools, a ligand-bound AlphaFold 3 run, and the ipSAE authors'
+   Aurora A–TPX2 example with a phosphothreonine, ATP and Mg²⁺. expected-ipsae.json is ipsae.py's
+   output on them. */
+const publishedDir = join(here, 'fixtures', 'published');
+const expectedPublished = JSON.parse(await readFile(join(publishedDir, 'expected-ipsae.json'), 'utf8'));
+const publishedFiles = async folder => (await readdir(join(publishedDir, folder))).filter(name => name !== 'LICENSE').map(name => join(publishedDir, folder, name));
+const allEntries = () => page.evaluate(() => window.__viewerDebug.entries().map(e => ({ id: e.id, name: e.name })));
+const loadPublished = async folder => {
+  const before = new Set((await allEntries()).map(e => e.id));
+  await tab('models'); await page.setInputFiles('#gpv-files', await publishedFiles(folder)); await page.waitForTimeout(2500);
+  const added = (await allEntries()).filter(e => !before.has(e.id));
+  for (const entry of added) await showEntry(entry.id);
+  return added;
+};
+const removeEntries = async entries => { await tab('models'); for (const entry of entries) { await page.click('#gpv-list [data-entry-id="' + entry.id + '"] button:has-text("Remove")'); await page.waitForTimeout(150); } };
+const describePublished = ids => page.evaluate(ids => window.__viewerDebug.entries().filter(e => ids.includes(e.id)).map(e => {
+  const d = window.__viewerDebug; const c = e.confidence || {}; const layout = d.paeTokenLayout(e); const counts = {};
+  (layout && !layout.mismatch ? layout.chainIds : []).forEach(chain => { counts[chain] = (counts[chain] || 0) + 1; });
+  return { name: e.name, scores: e.scores.length, rank: e.rank, pae: c.pae ? c.pae.length : null, layout: layout ? (layout.mismatch || counts) : null, ranking: c.rankingScore ?? null };
+}), ids);
+const importClean = async () => { if (!(await page.locator('#gpv-import-errors').isHidden())) throw new Error('import errors: ' + await page.locator('#gpv-import-errors').textContent()); };
+
+await step('each tool’s published files load, pair with their confidence data and match PAE rows to residues', async () => {
+  const cases = [
+    ['foldmetrics/colabfold', { pae: 199, rank: 1, layout: { A: 110, B: 89 } }],
+    ['foldmetrics/af2_multimer', { pae: 199, rank: 2, layout: { B: 110, C: 89 } }],
+    ['foldmetrics/af3_server', { pae: 199, layout: { A: 110, B: 89 } }],
+    ['foldmetrics/af3_mpro_ligand', { pae: 341, layout: { A: 306, B: 35 } }],
+    ['foldmetrics/boltz2', { pae: 199, rank: 1, layout: { A: 110, D: 89 } }],
+    ['foldmetrics/chai1', { pae: 199, rank: 1, layout: { A: 110, B: 89 } }],
+    ['ipsae-aurka-tpx2', { pae: 372, layout: { A: 296, B: 43, C: 31, D: 1, E: 1 } }]
+  ];
+  const lines = [];
+  for (const [folder, want] of cases) {
+    const added = await loadPublished(folder);
+    try {
+      await importClean();
+      const [info] = await describePublished(added.map(e => e.id));
+      if (!info) throw new Error(folder + ': no model loaded');
+      if (info.pae !== want.pae) throw new Error(folder + ': PAE rows ' + info.pae + ', expected ' + want.pae);
+      if (want.rank !== undefined && info.rank !== want.rank) throw new Error(folder + ': rank ' + info.rank + ', expected ' + want.rank);
+      if (JSON.stringify(info.layout) !== JSON.stringify(want.layout)) throw new Error(folder + ': rows matched as ' + JSON.stringify(info.layout) + ', expected ' + JSON.stringify(want.layout));
+      if (!info.scores) throw new Error(folder + ': no pLDDT read');
+      lines.push(folder.split('/').pop() + ' ' + info.pae);
+    } finally { await removeEntries(added); }
+  }
+  console.log('       PAE rows matched: ' + lines.join(' · '));
+});
+
+await step('interface scores on the published files agree with ipsae.py, ligands left out as there', async () => {
+  let count = 0;
+  for (const [label, item] of Object.entries(expectedPublished.cases)) {
+    const added = await loadPublished(item.folder);
+    try {
+      for (const [run, rows] of Object.entries(item.runs)) {
+        const [pae, dist] = run.split('_').map(Number);
+        const mine = await page.evaluate(({ name, pae, dist }) => {
+          const d = window.__viewerDebug; const entry = d.entries().find(e => e.name === name);
+          const scores = d.interactionScores(entry, pae, dist);
+          return { asym: scores.asym.map(row => ({ ...row, iptmModel: d.reportedPairIptm(entry, row.chain1, row.chain2) })), pairs: scores.pairs.map(pair => ({ ...pair, iptmModel: d.reportedPairIptmMax(entry, pair.chain1, pair.chain2) })), reason: scores.reason };
+        }, { name: item.structure, pae, dist });
+        if (mine.reason) throw new Error(label + ': ' + mine.reason);
+        if (!rows.length && mine.pairs.length) throw new Error(label + ': ipsae.py scores no chain pair (protein and ligand only), the viewer ' + mine.pairs.length);
+        rows.forEach(row => {
+          const match = row.type === 'asym' ? mine.asym.find(a => a.chain1 === row.chain1 && a.chain2 === row.chain2) : mine.pairs.find(a => a.chain1 === row.chain1 && a.chain2 === row.chain2);
+          if (!match) throw new Error(label + ' ' + run + ': no viewer row for ' + row.type + ' ' + row.chain1 + row.chain2);
+          Object.entries(ipsaeColumns).forEach(([column, [key, tolerance]]) => {
+            if (column === 'ipTM_af' && row.ipTM_af === 0 && match[key] === null) return; /* no summary file was published */
+            count += 1;
+            if (!(Math.abs(Number(match[key]) - row[column]) <= tolerance)) throw new Error(label + ' ' + run + ' ' + row.type + ' ' + row.chain1 + '→' + row.chain2 + ' ' + column + ': viewer ' + match[key] + ', ipsae.py ' + row[column]);
+          });
+        });
+      }
+      if (label === 'af3_local_ligand') {
+        await tab('confidence');
+        const state = await page.locator('#gpv-ipsae-state').textContent();
+        if (!/one protein or nucleic-acid chain and 1 ligand or ion chain; ligands are not scored as partners/.test(state)) throw new Error('state for a protein–ligand model: ' + state);
+        if (!(await page.locator('#gpv-ipsae-run').isDisabled())) throw new Error('Score chain pairs is enabled with one polymer chain');
+      }
+    } finally { await removeEntries(added); }
+  }
+  console.log('       ' + count + ' values against ipsae.py on five published predictions, one with a modified residue and ligands');
+});
+
+await step('Chai-1: a PAE saved beside the run pairs with its model, and the pair ipTM is the larger of Chai’s two directions', async () => {
+  const added = await loadPublished('foldmetrics/chai1');
+  try {
+    const result = await page.evaluate(() => { const d = window.__viewerDebug; const entry = d.entries().find(e => e.name === 'pred.model_idx_0.cif'); const m = entry.confidence.chainPairIptm; return { forward: m[0][1], reverse: m[1][0], pair: d.reportedPairIptmMax(entry, 'A', 'B'), iptm: entry.confidence.iptm }; });
+    if (!(result.forward < result.reverse)) throw new Error('the published per-chain-pair ipTM was expected to be asymmetric: ' + JSON.stringify(result));
+    if (result.pair !== result.reverse || Math.abs(result.pair - result.iptm) > 1e-6) throw new Error('pair ipTM ' + result.pair + ' is not the larger direction ' + result.reverse + ' (Chai’s own interface ipTM ' + result.iptm + ')');
+    await tab('confidence'); await page.click('#gpv-ipsae-run'); await page.waitForTimeout(600);
+    const cells = await page.locator('#gpv-ipsae-rows tr').first().locator('th,td').allTextContents();
+    if (cells[1] === '—' || cells[3] !== result.pair.toFixed(3)) throw new Error('row: ' + JSON.stringify(cells));
+    console.log('       A→B ' + result.forward.toFixed(3) + ', B→A ' + result.reverse.toFixed(3) + ' → pair ipTM ' + cells[3] + ' · ipSAE ' + cells[1]);
+  } finally { await removeEntries(added); }
+});
+
+await step('an experimental structure fetched from the PDB is not offered prediction-confidence scores, and says why', async () => {
+  /* A PDB entry has B-factors, not pLDDT, and no PAE: every score would be blank. */
+  const body = await readFile(join(predictorDir, 'af3', 'fold_hbdimer_model_0.cif'), 'utf8');
+  await page.route('https://files.rcsb.org/download/9zzz.cif', route => route.fulfill({ status: 200, contentType: 'chemical/x-mmcif', body }));
+  const before = new Set((await allEntries()).map(e => e.id));
+  try {
+    await tab('models'); await page.fill('#gpv-fetch-id', '9zzz'); await page.click('#gpv-fetch'); await page.waitForTimeout(2500);
+    const entry = (await allEntries()).find(e => !before.has(e.id));
+    if (!entry) throw new Error('the stubbed PDB entry did not load');
+    try {
+      await showEntry(entry.id); await tab('confidence');
+      if (!(await page.locator('#gpv-ipsae-run').isDisabled())) throw new Error('Score chain pairs is enabled on an experimental structure');
+      const state = await page.locator('#gpv-ipsae-state').textContent();
+      if (!/carries no pLDDT or PAE .* do not apply/.test(state)) throw new Error('state: ' + state);
+    } finally { await removeEntries([entry]); }
+  } finally { await page.unroute('https://files.rcsb.org/download/9zzz.cif'); }
+});
+
+await step('an RNA chain carries pLDDT through its C1′ atoms, so a nucleic-acid prediction is coloured by confidence', async () => {
+  /* Before 2.48.0 pLDDT was read from Cα atoms only, and an RNA or DNA prediction had none. */
+  const lines = []; let serial = 1;
+  ['G', 'G', 'A', 'C', 'U', 'U', 'C', 'G'].forEach((base, i) => {
+    [["P", 0], ["C4'", 1.5], ["C1'", 3.0]].forEach(([name, dx]) => {
+      const b = (60 + i * 4).toFixed(2);
+      lines.push('ATOM  ' + String(serial++).padStart(5) + ' ' + name.padEnd(4) + ' ' + base.padStart(3) + ' R' + String(i + 1).padStart(4) + '    ' + (i * 6 + dx).toFixed(3).padStart(8) + (0).toFixed(3).padStart(8) + (i * 0.5).toFixed(3).padStart(8) + '  1.00' + b.padStart(6) + '           ' + name[0]);
+    });
+  });
+  const file = join(work, 'rna_model.pdb'); await writeFile(file, lines.join('\n') + '\nEND\n');
+  const before = new Set((await allEntries()).map(e => e.id));
+  await tab('models'); await page.setInputFiles('#gpv-files', [file]); await page.waitForTimeout(1500);
+  const entry = (await allEntries()).find(e => !before.has(e.id));
+  try {
+    const info = await page.evaluate(id => { const e = window.__viewerDebug.entries().find(x => x.id === id); return { scores: e.scores.length, mean: e.scores.reduce((a, b) => a + b, 0) / e.scores.length }; }, entry.id);
+    if (info.scores !== 8 || Math.abs(info.mean - 74) > 1e-9) throw new Error('RNA pLDDT: ' + JSON.stringify(info));
+  } finally { await removeEntries([entry]); }
 });
 
 group('share links');

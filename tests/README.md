@@ -121,6 +121,24 @@ PSV_CHROMIUM=/opt/pw-browsers/chromium/chrome-linux/chrome npm test
   apart, with the copy putting each conformation at the other's centre — the centres invite the swap, the fit is far
   worse, and the pass is discarded. The mapping stays A→A; B→B, the RMSD is the one reported with the box unticked,
   and the RMSD in the table matches the coordinates on screen and the reference's mean deviation to 0.005 Å.
+- Other predictors: ColabFold models pair with their scores files (unrelaxed and relaxed), keep the rank in the file
+  name and ColabFold's own interface scores; a zipped Boltz folder reads its `.npz` PAE, ranks model 0 first and maps
+  134 PAE rows onto 128 residues and a six-atom ligand; the same Boltz files dropped loose pair too, with no file
+  reported as skipped; Chai-1 samples rank by aggregate score, float32 scores read back as 0.52 rather than
+  0.5199999809, and the missing PAE is explained; a PAE that fits no layout is not matched to residues and the PAE
+  line says so; the `.npy` reader handles a Fortran-ordered big-endian float64 array and a version-2 header.
+- Interaction confidence: ipSAE, ipSAE_d0chn, ipSAE_d0dom, ipTM_d0chn, pDockQ, pDockQ2, LIS, the reported ipTM and
+  the residue counts, in both directions and on the combined row, agree with ipsae.py's output
+  (`fixtures/predictors/expected-ipsae.json`) on the ColabFold, Boltz and AlphaFold 3 fixtures at 10 and 15 Å, and
+  ColabFold's own ipSAE is reproduced; the table, the cutoff switch, the summary across models, the CSV, the methods
+  text and the report carry the scores; a Chai-1 model is scored by pDockQ alone and says why; a one-chain model
+  cannot be scored. `validate-ipsae.mjs` runs the same comparison on real AlphaFold 3 archives.
+- Published predictor outputs (`fixtures/published/`, real files with their licences): barnase–barstar from ColabFold,
+  AlphaFold 2.3 run locally, the AlphaFold Server, Boltz-2 and Chai-1, Mpro with nirmatrelvir from a local AlphaFold 3,
+  and Aurora A–TPX2 with a phosphothreonine, ATP and Mg²⁺ all load, pair with their confidence data and match PAE rows
+  to residues; their interface scores agree with ipsae.py (354 values), ligands left out; a protein–ligand model says
+  ligands are not partners; Chai-1's hand-saved PAE pairs and its asymmetric ipTM is reported as the larger direction; a
+  PDB entry is not offered prediction-confidence scores; an RNA chain carries pLDDT through its C1′ atoms.
 - Model legend names: a run's file names reduce to model_0 … model_4 (the stem is given back a boundary at a time when
   it would leave only a digit), two unrelated names lose only the shared extension, and a lone name is left whole.
 - Fitting on a region: fitting on `A:1-12` keeps the matched pair count, reports exactly 12 Cα in the fitted-on cell, a

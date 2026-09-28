@@ -312,14 +312,17 @@
           }
           const metadataMembers = members.filter(member => {
             const lower = member.name.toLowerCase();
-            return !member.dir && (lower.endsWith('.json') || lower.endsWith('ranking_scores.csv')) && !lower.includes('/templates/');
+            return !member.dir && (lower.endsWith('.json') || lower.endsWith('.npz') || lower.endsWith('ranking_scores.csv')) && !lower.includes('/templates/');
           });
           const fullData = metadataMembers.filter(member => /_full_data_\d+\.json$/i.test(member.name));
           const selectedMetadata = structureMembers.length > 25 ? metadataMembers.filter(member => !fullData.includes(member)) : metadataMembers;
           deferredPae += metadataMembers.length - selectedMetadata.length;
           for (let metadataIndex = 0; metadataIndex < selectedMetadata.length; metadataIndex += 1) {
             const member = selectedMetadata[metadataIndex];
-            try { registerMetadata(member.name, /\.json$/i.test(member.name) ? await member.async('uint8array') : await member.async('string'), file.name); }
+            try {
+              if (/\.npz$/i.test(member.name)) await registerNpz(member.name, await member.async('uint8array'), file.name);
+              else registerMetadata(member.name, /\.json$/i.test(member.name) ? await member.async('uint8array') : await member.async('string'), file.name);
+            }
             catch (error) { skipped += 1; failures.push(member.name + ': confidence data could not be read'); }
             if (metadataIndex % 12 === 11) await nextPaint();
           }
@@ -331,6 +334,8 @@
           loaded += 0;
         } else if (['json', 'csv'].includes(extension)) {
           if (!registerMetadata(file.name, extension === 'json' ? new Uint8Array(await file.arrayBuffer()) : await file.text())) skipped += 1;
+        } else if (extension === 'npz') {
+          if (!await registerNpz(file.name, new Uint8Array(await file.arrayBuffer()))) { skipped += 1; failures.push(file.name + ': not a PAE or score file from Boltz or Chai-1'); }
         } else {
           skipped += 1; failures.push(file.name + ': unsupported file type');
         }

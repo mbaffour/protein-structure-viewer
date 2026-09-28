@@ -1,0 +1,5 @@
+{
+  "model_type": "alphafold2_multimer_v3",
+  "num_models": 2,
+  "version": "1.5.5"
+}

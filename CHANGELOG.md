@@ -2,6 +2,116 @@
 
 All notable changes to this project are recorded here.
 
+## 2.48.0
+
+### Added
+
+- **Interaction confidence: ipSAE, pDockQ, pDockQ2 and LIS for every chain pair.** ipTM is averaged
+  over both chains whole, so a small confident interface between large chains scores low and
+  disordered tails pull it down; these four look at the interface itself. In the Confidence tab,
+  **Score chain pairs** scores the current model and **Score all shown models** the ticked ones, with
+  a PAE cutoff (10 Å by default; 12 and 15 offered) and an interface distance for the residue counts.
+  The table gives ipSAE with both directions (A→B, B→A) and the residue that sets it, the ipTM the
+  predictor reported for the pair (AlphaFold 3, Boltz and Chai-1 per pair; ColabFold's single ipTM for
+  a dimer), pDockQ, pDockQ2, LIS and the interface residues of each chain. Scoring several models adds
+  a summary per chain pair: median, range and the top-ranked model's value. **Download interaction
+  CSV** writes both directions and the combined row in the columns ipsae.py writes. The methods text
+  cites the four scores and the cutoff, and the report shows each scored model's three most
+  confident pairs (a 15-chain assembly has 105; the CSV has them all).
+- **Computed as the reference implementation does, and checked against it.** The scoring follows
+  DunbrackLab/IPSAE `ipsae.py` (version 4) step for step: its two d0 functions (1.0 up to L = 27 for
+  the chain-pair and domain variants; L raised to 26 for the per-residue one), Cβ (Cα for glycine)
+  contacts within 8 Å, the Cβ atom's own pLDDT for pDockQ, ligands left out of the chain partners,
+  the Cα token of a residue AlphaFold 3 tokenised atom by atom, and the reference's rules for which
+  direction's counts a combined row reports. On the committed fixtures every value agrees with the
+  reference to the last place it prints (6 decimals for the ipSAE family, 4 for the rest; counts
+  exactly), and ColabFold's own ipSAE, written by its reimplementation at 15 Å, is reproduced too.
+  On 31 real AlphaFold 3 runs — 155 models of phage complexes, 2 to 15 chains and up to 2 348
+  residues — 304 650 values were compared with ipsae.py, none outside that tolerance
+  (VALIDATION.md).
+- For a ColabFold model the ipSAE ColabFold wrote for itself is shown beside the viewer's. A Chai-1
+  model has no PAE, so only pDockQ is scored, and the state line says why.
+- **Tested on published outputs.** Real files other people have published — one barnase–barstar
+  complex from ColabFold, AlphaFold 2.3 run locally, the AlphaFold Server, Boltz-2 and Chai-1; a
+  locally run AlphaFold 3 model of SARS-CoV-2 Mpro with nirmatrelvir; and the ipSAE authors' Aurora
+  A–TPX2 example with a phosphothreonine, ATP and two Mg²⁺ — are now fixtures (with their licences),
+  and their interface scores agree with ipsae.py to its printed precision, including the modified
+  residue and the ligands. That testing added:
+  - **AlphaFold 2.3 run locally**: `unrelaxed_<model>` (and `relaxed_`) pairs with `pae_<model>.json`,
+    `<model>` being `model_1_multimer_v3_pred_0` and the like; the rank comes from `ranking_debug.json`.
+  - **A Chai-1 PAE saved by hand** as `pae_model_idx_N.npz` (Chai-1 keeps it in memory; people save
+    it) pairs with `pred.model_idx_N.cif`, so those models get a PAE map and ipSAE.
+  - **The pair ipTM is the larger of the two directions** when a predictor reports them differently —
+    Chai-1's published matrix gives barnase→barstar 0.896 and barstar→barnase 0.937 — as ipsae.py's
+    combined row does.
+- A structure with neither pLDDT nor PAE — a PDB entry, or a model without its confidence files — is
+  not offered these scores, which would all be blank; the state line says so and points to
+  *Interfaces*. A protein–ligand model says that ligands are not scored as partners.
+
+### Fixed
+
+- **The chain-pair ipTM table labelled AlphaFold Server complexes "A–A".** The server's
+  `summary_confidences` lists `chain_ids` once per token, not once per chain, and the table took the
+  first entries of that list as its chain names; on a two-chain run the only pair read "A–A", and on
+  larger runs the labels were wrong throughout. The numbers were right; only the labels were not.
+  Chain order is now the list with repeats removed. Found by the cross-validation against ipsae.py.
+- The interface scores read AlphaFold 3's per-atom pLDDT from `full_data` rather than from the
+  mmCIF B-factors, which the server writes as a rounded copy up to 0.1 away.
+- **An RNA or DNA prediction had no pLDDT.** pLDDT was read from Cα atoms only, so a nucleic-acid
+  model — a published Boltz RNA prediction was the case that showed it — had no mean pLDDT, no pLDDT
+  colouring and no low-pLDDT hiding. Nucleotides now contribute their C1′ atom; proteins are unchanged.
+
+### Tests
+
+- A new **interaction confidence** group (6 steps): every score, both directions and the combined row,
+  against ipsae.py's output on the ColabFold, Boltz (with a ligand) and AlphaFold 3 fixtures at 10 and
+  15 Å; ColabFold's own ipSAE reproduced; the table, the cutoff switch, the cross-model summary, the
+  CSV, the methods text and the report; Chai-1 scored by pDockQ alone; a one-chain model refused.
+- `tests/validate-ipsae.mjs` runs the same comparison on any AlphaFold 3 archives: ipsae.py on every
+  model at 10/10 and 15/15, the viewer headless on the same archives, every chain pair compared.
+
+## 2.47.0
+
+### Added
+
+- **Output from ColabFold, Boltz and Chai-1 is read, not only AlphaFold's.** Each tool writes the same
+  things — a model, pLDDT, a PAE matrix and summary scores — under its own names, and until now only
+  AlphaFold's names were recognised: a ColabFold model loaded without its PAE, and Boltz and Chai-1
+  scores were not read at all. The file layouts were taken from each tool's own writer.
+  - **ColabFold 1.5+**: `<job>_unrelaxed_rank_001_<model>_seed_000.pdb` (and the `_relaxed_` model
+    beside it) pairs with `<job>_scores_rank_001_<model>_seed_000.json` — pLDDT, PAE, pTM, ipTM, and
+    the rank from the file name. The ipSAE, pDockQ and pDockQ2 values that ColabFold 1.5.5 adds for
+    complexes are kept with the model.
+  - **Boltz**: `<name>_model_0.cif` pairs with `confidence_<name>_model_0.json` (confidence score as
+    the ranking score, pTM, ipTM, per-chain-pair ipTM) and `pae_<name>_model_0.npz`. Model 0 is rank 1,
+    as Boltz writes them in rank order. The `plddt_` and `pde_` files are recognised and not reported
+    as skipped; pLDDT is read from the model's B-factors, where Boltz also writes it.
+  - **Chai-1**: `pred.model_idx_0.cif` pairs with `scores.model_idx_0.npz` — the aggregate score (which
+    sets the rank: a sample index is not a rank), pTM, ipTM, per-chain-pair ipTM and the inter-chain
+    clash flag. Chai-1 keeps its PAE in memory and never writes it to disk, so a Chai-1 model has no
+    PAE map, and the Confidence tab says so instead of showing an empty space.
+  - Zipped output folders and loose files both work; `.npz` joins the file picker.
+- **NumPy `.npz` and `.npy` are read in the browser** — stored (`np.savez`) and deflated
+  (`np.savez_compressed`), versions 1–3 of the header, float16/32/64, integer and boolean arrays, either
+  byte order and Fortran order. A float32 score that reads back as 0.5199999809 is reported as 0.52.
+- **Which residue each PAE row belongs to is worked out when the file does not say.** Only AlphaFold 3
+  lists it. For the others the layout follows from how the models tokenise — one token per polymer
+  residue and one per heavy atom of a ligand (AlphaFold 3, Boltz-2), or one per residue (ColabFold) —
+  and is used only when its length is exactly the matrix size. A Boltz complex with a six-atom ligand
+  has 134 PAE rows for 128 residues and reads correctly; a matrix that fits neither layout is not
+  guessed at, and the PAE line says why (`the PAE has 134 rows but the model has 128 residues`). The PAE
+  map's chain boundaries, PAE domains, ligand sites, the hover readout, the composite figure and the
+  report all use the same layout.
+- The chain-pair table labels Boltz and Chai-1 pairs by the model's chains (`A–B`, `A–C`) rather than
+  by index.
+
+### Tests
+
+- Six steps in a new **other predictors** group, on fixtures written the way each tool writes them:
+  the NumPy files by NumPy, the Boltz and Chai-1 mmCIF by `python-modelcif` (the library both tools
+  use), from the real AlphaFold DB model of haemoglobin α already in the repository.
+  `tests/fixtures/predictors/make_fixtures.py` regenerates them.
+
 ## 2.46.3
 
 ### Fixed

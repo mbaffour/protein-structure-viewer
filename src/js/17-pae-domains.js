@@ -11,8 +11,9 @@
     const size = matrix.length;
     const protein = entry.atoms.filter(atom => atom.atom === 'CA' && !atom.hetflag);
     const known = new Set(protein.map(residueTag));
-    if (Array.isArray(confidence.tokenChainIds) && Array.isArray(confidence.tokenResidueIds) && confidence.tokenChainIds.length === size) {
-      return confidence.tokenChainIds.map((chain, index) => { const tag = String(chain) + '|' + Number(confidence.tokenResidueIds[index]); return known.has(tag) ? tag : null; });
+    const layout = paeTokenIds(entry);
+    if (layout.chainIds.length === size && layout.residueIds.length === size) {
+      return layout.chainIds.map((chain, index) => { const tag = String(chain) + '|' + Number(layout.residueIds[index]); return known.has(tag) ? tag : null; });
     }
     if (protein.length === size) return protein.map(residueTag);
     const sorted = residueRows(entry).flatMap(row => row.residues);

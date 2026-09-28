@@ -281,6 +281,96 @@ mean over (i, j) of ½(PAE[i][j] + PAE[j][i]). Tolerance 10⁻³ Å, since this 
 matrix read from disk, not a sampled quantity. The site residue set should be compared as a set, as
 the contact residue set already is.
 
+## Interaction confidence (added 2.48.0)
+
+The reference is the published implementation itself: DunbrackLab/IPSAE `ipsae.py`, version 4
+(2026-01-03, commit 6174cf9, SHA-256 `10cf9b08c68c91e06cb28526cf2026f47a3980c9048fd3226d13e3304eaf1c27`),
+run unmodified with numpy 2.0.2. `tests/validate-ipsae.mjs` runs it on every model of an AlphaFold 3
+archive at PAE/distance cutoffs 10/10 and 15/15, drives the viewer headless on the same archive, and
+compares every chain pair in both directions and on the combined row: ipSAE, ipSAE_d0chn, ipSAE_d0dom,
+ipTM_d0chn, pDockQ, pDockQ2, LIS, the ipTM the model reported for the pair, and the counts n0res,
+n0chn, n0dom, nres1, nres2, dist1, dist2. The reference prints the ipSAE family to 6 decimals and
+pDockQ, pDockQ2 and LIS to 4, so the tolerance is half a unit in that place — for the ipSAE family
+with 1 × 10⁻⁷ added, because the viewer keeps PAE as float32 and ipsae.py as float64, and a value on
+a rounding boundary can print differently (a true 0.413344501 prints 0.413345 in the reference and is
+0.413344481 in the viewer; 4 of the 304 650 values below sit on such a boundary). Counts must be equal.
+
+Run on 2026-09-27, viewer 2.48.0 (commit 9f88c9f), on 31 of the user's 33 AlphaFold 3 server runs —
+155 models of phage M13, MS2, φX174 and other complexes, 2 to 15 chains, 65 to 2 348 residues,
+homomers and heteromers. The first eight, which found the two bugs below:
+
+| Run | Chains | Residues |
+| --- | ---: | ---: |
+| M13 pVII–pIX | 2 | 65 |
+| M13 pV homodimer | 2 | 174 |
+| gp75–gp63–gp62 | 3 | 357 |
+| MS2 pool | 4 | 1 143 |
+| M13 pVI pentamer | 5 | 560 |
+| M13 virion pVIII segment | 10 | 730 |
+| gp63 × 14 | 14 | 1 540 |
+| M13 virion round tip | 15 | 690 |
+
+and 23 more — M13 assembly, initiation, hypothesis and follow-up pools (up to 11 chains and 2 164
+residues), M13 pools 0001–0003 (up to 14 chains and 2 348 residues), MS2 and φX174 confirmations and
+pools.
+
+**304 650 comparisons, none outside tolerance** (117 900 on the first eight, 186 750 on the rest). The
+largest difference in every score is the rounding of the reference's printed value; the reported ipTM
+and every count agree exactly.
+
+The two remaining runs, the 5× subcomplex (4 410 residues, 15 chains) and the pointy tip (3 045
+residues, 15 chains), were not compared: ipsae.py evaluates its kernel with `np.vectorize` over the
+whole N × N matrix for every chain pair, which there needs about 1 GB per model and hours of CPU. The
+viewer scores the 4 410-residue model in under half a second. On that model the smallest inter-chain
+PAE is 11.6 Å, so at a 10 Å cutoff every chain pair's ipSAE is 0 — a property of the prediction,
+checked directly on its full_data file.
+
+What the check found on the way, both now fixed:
+
+- **pDockQ and pDockQ2 differed by up to 7.5 × 10⁻⁵.** The AlphaFold Server writes each atom's pLDDT
+  twice — in `full_data`'s `atom_plddts` and, rounded, in the mmCIF B-factor column — and the two
+  differ by up to 0.1 (63.98 against 63.9 on one of these runs). ipsae.py reads `atom_plddts`; the
+  viewer had read the B-factors. The interface scores now use `atom_plddts` whenever it is loaded.
+  Mean pLDDT and pLDDT colouring still use the B-factors, as the models' own record of it.
+- **The model's ipTM was missing for most multi-chain runs, and the chain-pair table was mislabelled.**
+  The server's `summary_confidences` lists `chain_ids` once per *token* (1 143 entries for the MS2
+  run), and the viewer took it as one entry per chain: the chain-pair ipTM lookup failed for runs of
+  three or more chains, and the chain-pair ipTM table under the PAE map labelled its rows with the
+  first entries of that list — "A–A". Chain order is now taken from the list with repeats removed.
+
+**Published predictions.** The same comparison was then run on real files other people have
+published, which cover what the user's runs do not (`tests/fixtures/published/`, with provenance and
+licences; the suite repeats it on every run):
+
+| Prediction | Tool | What it adds |
+| --- | --- | --- |
+| barnase–barstar | ColabFold 1.6 | a real ColabFold scores file |
+| barnase–barstar | AlphaFold Server | — |
+| barnase–barstar | Boltz-2 | a real `.npz` PAE; chains named A and D |
+| SARS-CoV-2 Mpro + nirmatrelvir | AlphaFold 3, run locally | a ligand; local file names |
+| Aurora A–TPX2 (the ipSAE authors' example) | AlphaFold Server | a phosphothreonine tokenised atom by atom, ATP, two Mg²⁺ |
+| a single-chain RNA (coqylight/boltz_dap) and RNase T1 with a ligand (amitashnanda/ESM3-Guided…) | Boltz-2 | real Boltz files with one polymer chain each, so they test loading, the RNA's pLDDT and the ligand handling, not the scores; checked locally, not committed (no licence given) |
+
+**354 comparisons, none outside tolerance** — the ligand chains left out as ipsae.py leaves them out,
+the phosphothreonine's Cα token chosen as it chooses it. The published Chai-1 example's PAE (saved
+by its author; Chai-1 does not write one) and a locally run AlphaFold 2.3 model load and pair too,
+but ipsae.py reads neither format, so they are not in the count. foldmetrics, the tool those examples
+come from, prints its own ipSAE and pDockQ for five of them; eleven of its twelve values match the
+viewer's to three decimals, and the twelfth, Chai-1's pDockQ (0.513 here, 0.504 there), differs
+because Chai-1 writes pLDDT per atom and the viewer — like ipsae.py for AlphaFold 3 — takes the Cβ
+atom's.
+
+**Not covered by real data.** DNA and protein–nucleic-acid interfaces (a published Boltz RNA model
+was loaded, but it is a single chain), and real Chai-1 or AlphaFold 2.3 files against ipsae.py, which
+reads neither. The nucleic-acid d0 minimum is tested on nothing real.
+
+To rerun:
+
+```
+node validate-ipsae.mjs path/to/ipsae.py fold_a.zip fold_b.zip …        # IPSAE_JOBS=4 by default
+IPSAE_CACHE=ref.json node validate-ipsae.mjs …                           # keep the slow reference half between runs
+```
+
 ## Rerunning
 
 ```

@@ -47,8 +47,8 @@ you fetch the accession.
 **Drag and drop.** Drop files anywhere on the page — the drop target is the whole window, not just
 the upload card. Several archives can be dropped together.
 
-**File picker.** The **Choose model files** control accepts `.pdb`, `.cif`, `.mmcif`, `.json`, `.csv`,
-and `.zip`, multiple at a time.
+**File picker.** The **Choose model files** control accepts `.pdb`, `.cif`, `.mmcif`, `.json`, `.npz`,
+`.csv`, `.a3m` and `.zip`, multiple at a time.
 
 **Fetch by identifier.** Type an ID and press **Fetch**:
 
@@ -69,6 +69,27 @@ automatically by file-name matching:
   fraction disordered, clash flag, PAE, chain-pair ipTM, chain-pair minimum PAE
 - `ranking_debug.json` (AlphaFold 2) — model order and per-model ranking confidence
 - `ranking_scores.csv` (AlphaFold Server) — seed/sample ranking scores, converted to ranks
+- `<job>_scores_rank_001_<model>_seed_000.json` (ColabFold 1.5+) — pLDDT, PAE, pTM, ipTM, and for
+  complexes ColabFold's own ipSAE, pDockQ and pDockQ2; pairs with `<job>_unrelaxed_rank_001_…pdb` and
+  `<job>_relaxed_rank_001_…pdb`, and the rank is read from the name
+- `confidence_<name>_model_0.json` and `pae_<name>_model_0.npz` (Boltz) — ranking score, pTM, ipTM,
+  per-chain-pair ipTM and the PAE; pairs with `<name>_model_0.cif`. Model 0 is rank 1. The `plddt_`
+  and `pde_` files are recognised but not needed: pLDDT is in the model's B-factors
+- `scores.model_idx_0.npz` (Chai-1) — aggregate score, pTM, ipTM, per-chain-pair ipTM and the clash
+  flag; pairs with `pred.model_idx_0.cif`. Samples are ranked by aggregate score within one archive.
+  Chai-1 files carry no job name, so zip each run's folder (or drop one run at a time) to keep runs
+  apart. Chai-1 does not write its PAE matrix to disk, so its models have no PAE map — unless you saved
+  it from `run_inference`'s candidates as `pae_model_idx_N.npz` (key `pae`), which pairs with
+  `pred.model_idx_N.cif`
+- `pae_<model>.json` and `confidence_<model>.json` (AlphaFold 2.3 run locally) — the PAE, pairing with
+  `unrelaxed_<model>.pdb`/`.cif` and `relaxed_<model>`, where `<model>` is `model_1_multimer_v3_pred_0`
+  and the like; `ranking_debug.json` gives the ranks
+
+**Which residue a PAE row is.** AlphaFold 3 lists the chain and residue of every row. For the other
+tools the viewer works it out from the model: one row per polymer residue and one per heavy atom of a
+ligand (how AlphaFold 3 and Boltz-2 tokenise), or one per residue (ColabFold). The layout is used only
+when its length is exactly the matrix size; otherwise the PAE is still drawn but not matched to
+residues, and the line under the map gives both counts.
 
 Anything the viewer cannot interpret is skipped and reported in the red notice below the upload card.
 
@@ -396,6 +417,46 @@ adds the interface residues of a pair as a coloured selection you can manage in 
 **Download interface CSV** exports the table with the residue lists. This is geometry of the model as
 loaded — it says how the prediction is packed, not whether the interaction exists — so read it next
 to the chain-pair ipTM and PAE above it.
+
+### Interaction confidence
+
+ipTM is averaged over every residue of both chains, so a small, confident interface between two
+large chains scores low, and disordered tails drag it down. **Interaction confidence** scores each
+chain pair on the interface itself, with four published scores:
+
+| Score | What it is |
+| --- | --- |
+| **ipSAE** (Dunbrack, 2025) | For each residue of chain 1, the TM-score kernel 1/(1 + (PAE/d0)²) averaged over the chain-2 residues it is aligned to with PAE below the cutoff, d0 set from how many there are; the best residue gives the score. Directional — the table shows both directions and reports the larger |
+| **pDockQ** (Bryant et al., 2022) | A logistic function of mean interface pLDDT × log10(number of Cβ–Cβ contacts within 8 Å); the interface pLDDT is that of the Cβ atom (Cα for glycine), from AlphaFold 3's `full_data` when it is loaded — the server's mmCIF B-factors are a rounded copy up to 0.1 away — and from the B-factor otherwise |
+| **pDockQ2** (Zhu et al., 2023) | A logistic function of mean interface pLDDT × the mean kernel 1/(1 + (PAE/10)²) over those contacts; directional |
+| **LIS** (Kim et al., 2024) | The mean of (12 − PAE)/12 over every inter-chain PAE below 12 Å; directional, the two directions averaged |
+
+Choose a **PAE cutoff** (10 Å by default; the reference's AlphaFold 3 example uses 10, its
+AlphaFold 2 example and ColabFold's own scores 15) and an **interface distance** (which only changes
+the residue counts), then **Score chain pairs** for the current model or **Score all shown models**.
+The table gives ipSAE with both directions, the ipTM the predictor itself reported for the pair,
+pDockQ, pDockQ2, LIS and the interface residues of each chain (PAE below the cutoff and Cβ within the
+distance). Hover the ipSAE to see which residue gives it. With two or more models scored, a second
+table summarises each chain pair across them — median, range and the top-ranked model's value.
+Changing a cutoff rescores everything already scored. **Download interaction CSV** writes every
+model and pair in both directions plus the combined row, in the columns ipsae.py writes, so the two
+can be compared line for line; the scores go into the methods text, and the report shows each
+scored model's three most confident pairs.
+
+Everything follows the reference implementation, DunbrackLab/IPSAE `ipsae.py` (version 4),
+including its two d0 functions and its choice of ligand-free residues: ligands and ions are not
+chain partners here. VALIDATION.md records the comparison with it on real AlphaFold 3 runs. For a
+ColabFold model the scores ColabFold wrote for itself (at 15 Å) are shown beside the viewer's. A
+Chai-1 model has no PAE, so only pDockQ can be computed; the state line says so.
+
+The predictor's own pair ipTM is shown as the larger of its two directions when it reports them
+differently (Chai-1 does). A structure with neither pLDDT nor PAE — a PDB entry, or a model loaded
+without its confidence files — is not scored: every value would be blank, and *Interfaces* below
+measures its contacts instead.
+
+Higher is more confident for all four. They are the model's own estimates of its interface, not
+measurements, and no single threshold separates a real interaction from a spurious one — a
+confident interface can still be wrong, and a true one can be predicted poorly.
 
 
 ### Colour by MSA
@@ -996,8 +1057,16 @@ structures and for prediction tools that do not write pLDDT into the B-factor co
 
 **Confidence JSON did not attach.** Matching is by file name. A confidence file is paired with a model
 when their stems match after stripping the `_confidences`, `_summary_confidences`, `_full_data`, and
-`_model` suffixes, or via `ranked_N` ordering, or via a `seed-X_sample-Y` name. If yours does not
-match any of those, rename it to its model's stem plus `_confidences.json`.
+`_model` suffixes, or via `ranked_N` ordering, or via a `seed-X_sample-Y` name. ColabFold files match
+once `_unrelaxed_`, `_relaxed_` or `_scores_` is set aside; Boltz files once the `confidence_`, `pae_`,
+`plddt_` or `pde_` prefix is; Chai-1 files by `model_idx_N`. If yours does not match any of those,
+rename it to its model's stem plus `_confidences.json`.
+
+**The PAE map says residues were not matched to rows.** The matrix has a different number of rows from
+the model's residues (and from its residues plus ligand atoms). This happens when a PAE file is paired
+with a model it was not computed for, or with a model whose ligands were removed. The map is still
+drawn; chain boundaries, PAE domains and ligand-site PAE are not, rather than being assigned to the
+wrong residues.
 
 **Alignment produced no rows.** Fewer than three Cα atoms could be paired. Switch to sequence-aware
 mapping, or check that the models actually contain protein chains.

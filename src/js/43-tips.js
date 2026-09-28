@@ -2,7 +2,7 @@
 
   const tipsKey = 'protein-structure-viewer:tips-hidden';
   const tips = [
-    'Drop several AlphaFold result ZIPs at once. Each becomes its own source you can filter by in the Models tab.',
+    'Drop several result ZIPs at once — AlphaFold, ColabFold, Boltz or Chai-1. Each becomes its own source you can filter by in the Models tab.',
     'Compare → Synchronized multi-view shows up to six models side by side. Drag, spin, or rock any panel and the rest follow.',
     'Pick Rotation only when the models differ in size, and Rotation and zoom after Align visible to inspect a superposition.',
     'Colour by pLDDT confidence and switch to orthographic projection for figures; perspective exaggerates whatever is closest.',
@@ -75,6 +75,25 @@
   root.querySelector('#gpv-sequence-text').addEventListener('toggle', () => { writeJson(lettersKey, root.querySelector('#gpv-sequence-text').open); renderSequence(); });
   root.querySelector('#gpv-fasta').addEventListener('click', downloadFasta);
   root.querySelector('#gpv-domain-run').addEventListener('click', findDomains);
+  root.querySelector('#gpv-ipsae-run').addEventListener('click', () => {
+    const entry = activeEntry(); if (!entry) return;
+    const done = setBusy('Scoring chain pairs…');
+    try { scoreInteractions([entry]); } finally { done(); }
+    renderInteractions(); updateStatus('Chain pairs of ' + displayName(entry) + ' scored');
+  });
+  root.querySelector('#gpv-ipsae-all').addEventListener('click', async () => {
+    const shown = visibleEntries().filter(interactionScorable); if (!shown.length) return;
+    const done = setBusy('Scoring ' + shown.length + ' model' + (shown.length === 1 ? '' : 's') + '…');
+    /* A paint between models: a 4 400-residue model takes about a second to parse and score. */
+    try { for (let i = 0; i < shown.length; i += 1) { scoreInteractions([shown[i]]); await nextPaint(); } } finally { done(); }
+    renderInteractions(); updateStatus('Chain pairs scored in ' + shown.length + ' model' + (shown.length === 1 ? '' : 's'));
+  });
+  root.querySelector('#gpv-ipsae-csv').addEventListener('click', () => { const text = interactionCsv(); if (!text) return; downloadBlob(text, 'text/csv', 'interaction-confidence.csv'); updateStatus('Interaction CSV downloaded'); });
+  ['#gpv-ipsae-pae', '#gpv-ipsae-dist'].forEach(selector => root.querySelector(selector).addEventListener('change', () => {
+    /* A new cutoff rescores whatever was scored, so the table never mixes cutoffs. */
+    if (interactionResults) scoreInteractions([...interactionResults.byEntry.keys()].map(entryById).filter(Boolean));
+    renderInteractions();
+  }));
   root.querySelector('#gpv-rmsf-csv').addEventListener('click', downloadRmsfCsv);
   root.querySelector('#gpv-site-run').addEventListener('click', analyseLigandSites);
   root.querySelector('#gpv-site-csv').addEventListener('click', downloadSitesCsv);
@@ -124,7 +143,7 @@
   offerSessionRestore();
   /* ?debug=1 exposes a few internals for the regression suite and for bug reports;
      it has no effect otherwise. */
-  if (new URLSearchParams(location.search).has('debug')) window.__viewerDebug = { viewer, pickAtomAt, displayedEntries, activeEntry, colorOptions, sceneSettings, contactResult: () => contactResult, residueData: () => residueData, msaAssets: () => msaAssets, entries: () => structures, nearbyResidues, assemblyDimensions, paeDomains, parseConfidenceBytes, methodsText, alignmentResults: () => alignmentResults, ensembleSpread: () => ensembleSpread, siteResults: () => siteResults, interfaceResults: () => interfaceResults, solventAccessibleArea, heavyAtoms, ligandGroups, architectureModel, domainSets, distinguishingNames, rmsdMatrix: () => rmsdMatrix, rmsdMedoid, scaleBarSpec, pixelsPerAngstrom, sceneCentre, exportDimensions, exportViewer: () => exportViewer, renderPublicationImage, furnitureLayout, legendMetrics, legendWanted, figurePalette, figureScale, releaseExportViewer, labelRecords: () => labelRecords, labelPosition, labelHitAt, labelScreenBox, separateLabels, spotlightResidues: () => spotlightResidues, positionEffect: () => positionEffect, savedViews: () => savedViews, selectionRecords: () => selectionRecords, labelStyle, themeColor, hexLuminance, backgroundSpec };
+  if (new URLSearchParams(location.search).has('debug')) window.__viewerDebug = { viewer, pickAtomAt, displayedEntries, activeEntry, colorOptions, sceneSettings, contactResult: () => contactResult, residueData: () => residueData, msaAssets: () => msaAssets, entries: () => structures, nearbyResidues, assemblyDimensions, paeDomains, parseConfidenceBytes, methodsText, alignmentResults: () => alignmentResults, ensembleSpread: () => ensembleSpread, siteResults: () => siteResults, interfaceResults: () => interfaceResults, solventAccessibleArea, heavyAtoms, ligandGroups, architectureModel, domainSets, distinguishingNames, rmsdMatrix: () => rmsdMatrix, rmsdMedoid, scaleBarSpec, pixelsPerAngstrom, sceneCentre, exportDimensions, exportViewer: () => exportViewer, renderPublicationImage, furnitureLayout, legendMetrics, legendWanted, figurePalette, figureScale, releaseExportViewer, labelRecords: () => labelRecords, labelPosition, labelHitAt, labelScreenBox, separateLabels, spotlightResidues: () => spotlightResidues, positionEffect: () => positionEffect, savedViews: () => savedViews, selectionRecords: () => selectionRecords, labelStyle, themeColor, hexLuminance, backgroundSpec, paeTokenLayout, readNpy, materializeEntry, interactionScores, reportedPairIptm, reportedPairIptmMax, interactionResults: () => interactionResults, reportConfidence };
   applyTheme(readJson(themeKey, 'system'));
   selectToolTab('models');
   applyAppearance();
