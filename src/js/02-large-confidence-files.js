@@ -158,7 +158,8 @@
       paeMaximum: pae ? matrixMaximum(pae) : null,
       tokenChainIds: Array.isArray(data.token_chain_ids) ? data.token_chain_ids : null,
       tokenResidueIds: Array.isArray(data.token_res_ids) ? data.token_res_ids : null,
-      chainIds: Array.isArray(data.chain_ids) ? data.chain_ids : null,
+      /* One entry per chain; the AlphaFold Server's summary lists one per token. */
+      chainIds: Array.isArray(data.chain_ids) ? chainOrderFromIds(data.chain_ids) : null,
       /* AlphaFold 3 per-atom pLDDT, in atom order. The mmCIF B-factors carry a rounded copy that can
          differ by up to 0.1; the interface scores read these, as ipsae.py does. */
       atomPlddts: Array.isArray(data.atom_plddts) ? data.atom_plddts.map(Number) : null,
@@ -186,6 +187,9 @@
         if (asset.rank !== null && asset.rank !== undefined) entry.rank = asset.rank;
       });
     });
+    /* A PAE or summary file dropped after scoring changes the scores; recompute what was scored
+       rather than keep showing, exporting and citing the old numbers. */
+    if (interactionResults && interactionResults.byEntry.size) scoreInteractions([...interactionResults.byEntry.keys()].map(entryById).filter(Boolean));
     applyModelOrder();
     if (!root.querySelector('[data-gpv-panel="confidence"]').hidden) renderConfidence();
   }

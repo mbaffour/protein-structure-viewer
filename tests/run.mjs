@@ -6,10 +6,10 @@
    Set PSV_HEADED=1 to watch it run. */
 import { chromium, firefox, webkit } from 'playwright';
 import { createServer } from 'node:http';
-import { mkdtemp, readFile, readdir, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, readFile, readdir, writeFile } from 'node:fs/promises';
 import { createReadStream, existsSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { dirname, extname, join, resolve } from 'node:path';
+import { basename, dirname, extname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { writeFixtures } from './fixtures.mjs';
 
@@ -3450,6 +3450,92 @@ await step('an RNA chain carries pLDDT through its C1′ atoms, so a nucleic-aci
     const info = await page.evaluate(id => { const e = window.__viewerDebug.entries().find(x => x.id === id); return { scores: e.scores.length, mean: e.scores.reduce((a, b) => a + b, 0) / e.scores.length }; }, entry.id);
     if (info.scores !== 8 || Math.abs(info.mean - 74) > 1e-9) throw new Error('RNA pLDDT: ' + JSON.stringify(info));
   } finally { await removeEntries([entry]); }
+});
+
+group('interaction confidence: review fixes');
+/* Each step here reproduced a defect found reviewing 2.47.0–2.48.0 before it was fixed. */
+const max10 = expectedIpsae.cases.colabfold.runs['10_10'].find(row => row.type === 'max');
+const loadFiles = async files => { const before = new Set((await allEntries()).map(e => e.id)); await tab('models'); await page.setInputFiles('#gpv-files', files); await page.waitForTimeout(2500); return (await allEntries()).filter(e => !before.has(e.id)); };
+
+await step('scores computed before the PAE arrived are recomputed when it attaches', async () => {
+  /* Fresh names: confidence files already dropped stay registered and would pair at once. */
+  const structure = join(work, 'stale_unrelaxed_rank_001_alphafold2_multimer_v3_model_2_seed_000.pdb'); await writeFile(structure, await readFile(colabfoldFiles[0], 'utf8'));
+  const scoresFile = join(work, 'stale_scores_rank_001_alphafold2_multimer_v3_model_2_seed_000.json'); await writeFile(scoresFile, await readFile(colabfoldFiles[1], 'utf8'));
+  const added = await loadFiles([structure]);
+  try {
+    await showEntry(added[0].id); await tab('confidence'); await page.click('#gpv-ipsae-run'); await page.waitForTimeout(500);
+    const before = await page.locator('#gpv-ipsae-rows tr td').first().textContent();
+    if (before !== '—') throw new Error('without a PAE ipSAE should be blank, read ' + before);
+    await loadFiles([scoresFile]); await showEntry(added[0].id); await tab('confidence'); await page.waitForTimeout(400);
+    const after = await page.locator('#gpv-ipsae-rows tr td').first().textContent();
+    if (after !== max10.ipSAE.toFixed(3)) throw new Error('after the scores file attached the table still reads ' + after + ' (ipsae.py ' + max10.ipSAE + ')');
+  } finally { await removeEntries(added); }
+});
+
+await step('an experimental structure opened from disk has no pLDDT and is not offered interface scores', async () => {
+  const cif = await readFile(join(predictorDir, 'af3', 'fold_hbdimer_model_0.cif'), 'utf8');
+  const crystal = join(work, 'crystal_from_disk.cif'); await writeFile(crystal, cif.replace(/^data_.*$/m, line => line + "\n_exptl.entry_id XTAL\n_exptl.method 'X-RAY DIFFRACTION'"));
+  const pdbText = await readFile(colabfoldFiles[0], 'utf8');
+  const nmr = join(work, 'nmr_from_disk.pdb'); await writeFile(nmr, 'EXPDTA    SOLUTION NMR\n' + pdbText);
+  const added = await loadFiles([crystal, nmr]);
+  try {
+    for (const entry of added) {
+      await showEntry(entry.id); await tab('confidence');
+      const info = await page.evaluate(id => { const d = window.__viewerDebug; const e = d.entries().find(x => x.id === id); return { scores: e.scores.length, method: e.experimentalMethod, colour: typeof (d.colorOptions(e).colorfunc) }; }, entry.id);
+      if (info.scores !== 0 || !info.method) throw new Error(entry.name + ': B-factors read as pLDDT (' + JSON.stringify(info) + ')');
+      if (!(await page.locator('#gpv-ipsae-run').isDisabled())) throw new Error(entry.name + ': Score chain pairs is enabled');
+      const state = await page.locator('#gpv-ipsae-state').textContent();
+      if (!/is an experimental structure \((x-ray diffraction|solution nmr)\): its B-factors are not pLDDT/.test(state)) throw new Error(entry.name + ': ' + state);
+    }
+  } finally { await removeEntries(added); }
+});
+
+await step('the summary across models pools only models of the same complex, and Score all is not held back by a monomer', async () => {
+  const af3Barnase = ['fold_barnase_barstar_s318_model_0.cif', 'fold_barnase_barstar_s318_full_data_0.json', 'fold_barnase_barstar_s318_summary_confidences_0.json'].map(f => join(publishedDir, 'foldmetrics', 'af3_server', f));
+  const added = await loadFiles([...colabfoldFiles, ...af3Barnase, afdbCif]);
+  try {
+    await tab('models'); await page.click('#gpv-show-all'); await page.waitForTimeout(400);
+    const monomer = added.find(e => /P69905/.test(e.name)); await showEntry(monomer.id); await tab('confidence');
+    if (await page.locator('#gpv-ipsae-all').isDisabled()) throw new Error('Score all shown models is disabled because the current model is a monomer');
+    await page.click('#gpv-ipsae-all'); await page.waitForTimeout(1500);
+    const hbdimer = added.find(e => /rank_001/.test(e.name)); await showEntry(hbdimer.id); await tab('confidence');
+    const rows = await page.locator('#gpv-ipsae-ensemble-rows tr').evaluateAll(list => list.map(row => [...row.querySelectorAll('th,td')].map(cell => cell.textContent)));
+    /* The suite's own model_a/b/c share one sequence and form a third, correctly pooled, row. */
+    const pooled = rows.filter(cells => /^A–B/.test(cells[0]) && !/model_[abc]\.pdb/.test(cells[0]));
+    if (pooled.length !== 2) throw new Error('two different A–B complexes should give two summary rows: ' + JSON.stringify(rows));
+    const synthetic = pooled.find(cells => cells[2] === '2'); const barnase = pooled.find(cells => cells[2] === '1');
+    if (!synthetic || !barnase || synthetic[0] === barnase[0]) throw new Error('rows not told apart: ' + JSON.stringify(pooled));
+  } finally { await removeEntries(added); }
+});
+
+await step('residues told apart only by an insertion code keep their own PAE rows', async () => {
+  /* Residue A:11 relabelled 10A: only the label changes, so every score must stay as it was. */
+  const edited = (await readFile(colabfoldFiles[0], 'utf8')).split('\n').map(line => line.startsWith('ATOM') && line[21] === 'A' && Number(line.slice(22, 26)) === 11 ? line.slice(0, 17) + 'SER' + line.slice(20, 22) + '  10A' + line.slice(27) : line).join('\n');
+  const dir = join(work, 'insertion'); await mkdir(dir, { recursive: true });
+  const structure = join(dir, basename(colabfoldFiles[0])); await writeFile(structure, edited);
+  const added = await loadFiles([structure, colabfoldFiles[1]]);
+  try {
+    await showEntry(added[0].id);
+    const ipsae = await page.evaluate(id => { const d = window.__viewerDebug; const e = d.entries().find(x => x.id === id); return d.interactionScores(e, 10, 10).pairs[0].ipsae; }, added[0].id);
+    if (Math.abs(ipsae - max10.ipSAE) > 6e-7) throw new Error('ipSAE ' + ipsae + ' after relabelling a residue 10A, ' + max10.ipSAE + ' before');
+  } finally { await removeEntries(added); }
+});
+
+await step('the PAE layout is built once per model, float32 arrays stay float32, and chain_ids is stored once per chain', async () => {
+  const added = await loadFiles(['fold_hbdimer_model_0.cif', 'fold_hbdimer_full_data_0.json', 'fold_hbdimer_summary_confidences_0.json'].map(name => join(predictorDir, 'af3', name)).concat(['barnase_barstar_model_0.cif', 'confidence_barnase_barstar_model_0.json', 'pae_barnase_barstar_model_0.npz'].map(f => join(publishedDir, 'foldmetrics', 'boltz2', f))));
+  try {
+    for (const entry of added) await showEntry(entry.id);
+    const info = await page.evaluate(() => {
+      const d = window.__viewerDebug; const boltz = d.entries().find(e => /barnase_barstar_model_0/.test(e.name)); const af3 = d.entries().find(e => /fold_hbdimer_model_0/.test(e.name));
+      const bytes = new Uint8Array(96); const header = "{'descr': '<f4', 'fortran_order': False, 'shape': (2,), }"; bytes.set([0x93, 78, 85, 77, 80, 89, 1, 0]); new DataView(bytes.buffer).setUint16(8, 86, true); for (let i = 0; i < 86; i += 1) bytes[10 + i] = i < header.length ? header.charCodeAt(i) : (i === 85 ? 10 : 32);
+      const withData = new Uint8Array(104); withData.set(bytes); new DataView(withData.buffer).setFloat32(96, 1.5, true); new DataView(withData.buffer).setFloat32(100, -2.25, true);
+      const array = d.readNpy(withData);
+      return { cached: d.paeTokenLayout(boltz) === d.paeTokenLayout(boltz), float32: array.values instanceof Float32Array, values: Array.from(array.values), chainIds: af3.confidence.chainIds };
+    });
+    if (!info.cached) throw new Error('the PAE layout is rebuilt on every call');
+    if (!info.float32 || JSON.stringify(info.values) !== '[1.5,-2.25]') throw new Error('float32 npy read as ' + JSON.stringify(info));
+    if (JSON.stringify(info.chainIds) !== '["A","B"]') throw new Error('per-token chain_ids stored as ' + JSON.stringify(info.chainIds).slice(0, 80));
+  } finally { await removeEntries(added); }
 });
 
 group('share links');

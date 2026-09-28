@@ -2,6 +2,36 @@
 
 All notable changes to this project are recorded here.
 
+## 2.48.1
+
+### Fixed
+
+Found reviewing 2.47.0–2.48.0; each is now a regression step that fails on 2.48.0.
+
+- **A crystal or NMR structure opened from disk was treated as a prediction.** Its B-factors were read
+  as pLDDT — so it was painted on the pLDDT scale and scored with pDockQ (0.019 for 4HHB's α1–β1
+  pair) — whereas the same entry fetched from the PDB was not. A model that declares an experimental
+  method (mmCIF `_exptl.method`, PDB `EXPDTA`) now carries no pLDDT wherever it comes from, and the
+  interaction panel says which method. Predictions, which state no method or *theoretical model*,
+  are unaffected: all 37 real predictions at hand and every fixture are still read as predictions.
+- **Interaction scores went stale when a PAE arrived after scoring.** Scoring a model and then
+  dropping its PAE or summary file left the old, PAE-less scores in the table, the CSV, the methods
+  text and the report. Scored models are now rescored when confidence data attaches.
+- **The summary across models pooled different complexes that shared chain letters.** Two unrelated
+  dimers both called A–B were summarised as one pair (median 0.500 of 0.110 and 0.890). Models are
+  now pooled only when the pair carries the same sequences, and like-named rows say which model or
+  archive they come from.
+- **Score all shown models was disabled whenever the current model was a monomer**, even with
+  scorable complexes shown.
+- **Residues distinguished only by an insertion code shared a PAE row.** Relabelling one residue 10A
+  changed ipSAE from 0.110 to 0.109. Insertion codes now keep their residues apart when the PAE
+  layout is derived from the model.
+- The derived PAE layout was rebuilt on every movement over the PAE map (about 8 ms per event on a
+  35 000-atom model); it is now built once per model. float32 `.npy` arrays are kept as float32 rather
+  than decoded to float64 first, halving the memory a large Boltz PAE takes while loading.
+  AlphaFold Server `chain_ids` lists are stored once per chain when read, not deduplicated by each
+  reader.
+
 ## 2.48.0
 
 ### Added

@@ -231,7 +231,8 @@
     seedChainColors(atoms);
     /* Experimental structures carry crystallographic B-factors, not pLDDT, in the same
        column; do not report them as confidence. */
-    if (!entry.scores.length && entry.collection !== 'RCSB PDB') entry.scores = modelScores(model);
+    entry.experimentalMethod = entry.experimentalMethod ?? experimentalMethod(entry.text);
+    if (!entry.scores.length && entry.collection !== 'RCSB PDB' && !entry.experimentalMethod) entry.scores = modelScores(model);
     entry.originalAtoms = atoms.map(atom => ({ x: atom.x, y: atom.y, z: atom.z }));
     return model;
   }

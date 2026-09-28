@@ -139,6 +139,10 @@ PSV_CHROMIUM=/opt/pw-browsers/chromium/chrome-linux/chrome npm test
   to residues; their interface scores agree with ipsae.py (354 values), ligands left out; a protein–ligand model says
   ligands are not partners; Chai-1's hand-saved PAE pairs and its asymmetric ipTM is reported as the larger direction; a
   PDB entry is not offered prediction-confidence scores; an RNA chain carries pLDDT through its C1′ atoms.
+- Review fixes (2.48.1): scores are recomputed when a PAE attaches after scoring; a crystal or NMR file opened from disk
+  carries no pLDDT and is not scored; the summary pools only models of the same complex and Score all is not held back
+  by a monomer; an insertion code keeps a residue's own PAE row; the PAE layout is cached, float32 stays float32 and
+  per-token chain_ids is stored per chain.
 - Model legend names: a run's file names reduce to model_0 … model_4 (the stem is given back a boundary at a time when
   it would leave only a digit), two unrelated names lose only the shared extension, and a lone name is left whole.
 - Fitting on a region: fitting on `A:1-12` keeps the matched pair count, reports exactly 12 Cα in the fitted-on cell, a
