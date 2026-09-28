@@ -73,6 +73,17 @@
     return scores;
   }
 
+  /* How an experimental structure says what it is: mmCIF _exptl.method or PDB EXPDTA. A crystal
+     structure opened from disk has B-factors in the pLDDT column, as a fetched one does; predictions
+     either say nothing or say THEORETICAL MODEL. */
+  function experimentalMethod(text) {
+    const source = String(text || '');
+    const inline = source.match(/^_exptl\.method\s+(?:'([^']*)'|"([^"]*)"|(\S+))\s*$/m) || source.match(/^EXPDTA\s+(.+?)\s*$/m);
+    /* A loop of several methods (X-ray with neutron, say) is experimental whatever the columns are. */
+    const method = inline ? (inline.slice(1).find(value => value) || '').trim() : /^_exptl\.method\s*$/m.test(source) ? 'experimental methods' : '';
+    return method && !/theoretical|predict|comput|model/i.test(method) ? method : null;
+  }
+
   function mean(values) {
     return values.length ? values.reduce((sum, value) => sum + value, 0) / values.length : null;
   }

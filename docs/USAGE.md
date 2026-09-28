@@ -452,7 +452,9 @@ Chai-1 model has no PAE, so only pDockQ can be computed; the state line says so.
 The predictor's own pair ipTM is shown as the larger of its two directions when it reports them
 differently (Chai-1 does). A structure with neither pLDDT nor PAE — a PDB entry, or a model loaded
 without its confidence files — is not scored: every value would be blank, and *Interfaces* below
-measures its contacts instead.
+measures its contacts instead. A file that declares an experimental method (mmCIF `_exptl.method`
+or PDB `EXPDTA`, anything but *theoretical model*) is read as experimental however it was opened,
+so its B-factors are never taken for pLDDT.
 
 Higher is more confident for all four. They are the model's own estimates of its interface, not
 measurements, and no single threshold separates a real interaction from a spurious one — a

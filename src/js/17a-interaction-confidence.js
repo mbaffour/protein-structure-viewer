@@ -45,21 +45,20 @@
     const atomPlddts = entry.confidence && Array.isArray(entry.confidence.atomPlddts) && entry.confidence.atomPlddts.length === atoms.length ? entry.confidence.atomPlddts : null;
     const position = atomPlddts ? new Map(atoms.map((atom, index) => [atom, index])) : null;
     const plddtOf = atom => atomPlddts ? Number(atomPlddts[position.get(atom)]) : Number(atom.b);
-    const polymerChains = new Set(atoms.filter(atom => !atom.hetflag).map(atom => String(atom.chain ?? '')));
+    const polymerChains = polymerChainSet(atoms);
     const groups = []; const byKey = new Map();
     atoms.forEach(atom => {
       const chain = String(atom.chain ?? '');
       if (!polymerChains.has(chain) || /^(HOH|WAT|DOD)$/i.test(String(atom.resn || ''))) return;
-      const key = chain + '|' + atom.resi + '|' + atom.resn;
-      if (!byKey.has(key)) { const group = { chain, resi: Number(atom.resi), resn: String(atom.resn || '').toUpperCase(), atoms: [] }; byKey.set(key, group); groups.push(group); }
+      const residueKey = chain + '|' + Number(atom.resi) + '|' + insertionCode(atom); const key = residueKey + '|' + atom.resn;
+      if (!byKey.has(key)) { const group = { chain, resi: Number(atom.resi), residueKey, resn: String(atom.resn || '').toUpperCase(), atoms: [] }; byKey.set(key, group); groups.push(group); }
       byKey.get(key).atoms.push(atom);
     });
     const layout = paeTokenLayout(entry);
     const tokens = new Map();
-    if (layout && !layout.mismatch) layout.chainIds.forEach((chain, index) => {
-      const tag = String(chain) + '|' + Number(layout.residueIds[index]);
-      if (!tokens.has(tag)) tokens.set(tag, []);
-      tokens.get(tag).push(index);
+    if (layout && !layout.mismatch) layout.residueKeys.forEach((residueKey, index) => {
+      if (!tokens.has(residueKey)) tokens.set(residueKey, []);
+      tokens.get(residueKey).push(index);
     });
     const residues = [];
     groups.forEach(group => {
@@ -68,7 +67,7 @@
       const beta = group.atoms.find(atom => atom.atom === 'CB' || String(atom.atom).includes('C3') || (group.resn === 'GLY' && atom.atom === 'CA')) || anchor;
       /* A residue AlphaFold 3 tokenised atom by atom (a modified residue) has one token per heavy
          atom in file order; its Cα's token is the one that stands in for it. */
-      const own = tokens.get(group.chain + '|' + group.resi);
+      const own = tokens.get(group.residueKey);
       let token = null;
       if (own && own.length === 1) token = own[0];
       else if (own && own.length > 1) { const heavy = group.atoms.filter(atom => String(atom.elem || '').toUpperCase() !== 'H'); const at = heavy.indexOf(anchor); token = at >= 0 && at < own.length ? own[at] : null; }
@@ -210,7 +209,7 @@
 
   /* Chains with any polymer residue: the partners ipsae.py scores. Ligand and ion chains are left out. */
   function polymerChainOrder(entry) {
-    const polymer = new Set((entry.atoms || []).filter(atom => !atom.hetflag).map(atom => String(atom.chain ?? '')));
+    const polymer = polymerChainSet(entry.atoms);
     return modelChainOrder(entry).filter(chain => polymer.has(chain));
   }
 
@@ -236,12 +235,12 @@
     /* An experimental structure has neither pLDDT nor PAE; every one of these scores would be blank. */
     const unscorable = entry && !interactionScorable(entry);
     root.querySelector('#gpv-ipsae-run').disabled = !entry || chains.length < 2 || unscorable;
-    root.querySelector('#gpv-ipsae-all').disabled = !visibleEntries().some(interactionScorable) || chains.length < 2;
+    root.querySelector('#gpv-ipsae-all').disabled = !visibleEntries().some(interactionScorable);
     const scores = entry && interactionResults ? interactionResults.byEntry.get(entry.id) : null;
     root.querySelector('#gpv-ipsae-csv').disabled = !interactionResults || !interactionResults.byEntry.size;
     root.querySelector('#gpv-ipsae-wrap').hidden = !scores || !scores.pairs.length;
     if (!entry) { state.textContent = 'Show a model with two or more chains.'; renderInteractionEnsemble(); return; }
-    if (unscorable) { state.textContent = displayName(entry) + ' carries no pLDDT or PAE — an experimental structure, or a model without its confidence files — so these prediction-confidence scores do not apply. Interfaces, below, measures its contacts.'; renderInteractionEnsemble(); return; }
+    if (unscorable) { state.textContent = displayName(entry) + (entry.experimentalMethod ? ' is an experimental structure (' + entry.experimentalMethod.toLowerCase() + '): its B-factors are not pLDDT and it has no PAE' : ' carries no pLDDT or PAE — an experimental structure, or a model without its confidence files') + ', so these prediction-confidence scores do not apply. Interfaces, below, measures its contacts.'; renderInteractionEnsemble(); return; }
     if (chains.length < 2) { state.textContent = displayName(entry) + ' has ' + (chains.length ? 'one' : 'no') + ' protein or nucleic-acid chain' + (ligandChains ? ' and ' + ligandChains + ' ligand or ion chain' + (ligandChains === 1 ? '' : 's') + '; ligands are not scored as partners here — the Ligand sites table covers them' : '; interaction scores need two') + '.'; renderInteractionEnsemble(); return; }
     if (!scores) { state.textContent = 'Score the chain pairs of ' + displayName(entry) + ' (' + chains.length + ' chains).'; renderInteractionEnsemble(); return; }
     scores.pairs.forEach(pair => {
@@ -273,13 +272,21 @@
     const scored = interactionResults ? [...interactionResults.byEntry.entries()].map(([id, scores]) => ({ entry: entryById(id), scores })).filter(item => item.entry) : [];
     wrap.hidden = scored.length < 2;
     if (scored.length < 2) return;
+    /* Models are pooled only when the pair is the same complex: the same chain names carrying the
+       same sequences. Two runs that both call their chains A and B are summarised apart. */
     const byPair = new Map();
-    scored.forEach(({ entry, scores }) => scores.pairs.forEach(pair => {
-      const key = pair.chain1 + '–' + pair.chain2;
-      if (!byPair.has(key)) byPair.set(key, []);
-      byPair.get(key).push({ entry, value: pair.ipsae !== null ? pair.ipsae : pair.pdockq, metric: pair.ipsae !== null ? 'ipSAE' : 'pDockQ' });
-    }));
-    byPair.forEach((items, key) => {
+    scored.forEach(({ entry, scores }) => {
+      const sequences = new Map([...residueChains(entry)].map(([chain, residues]) => [String(chain), residues.map(residue => residue.letter).join('')]));
+      scores.pairs.forEach(pair => {
+        const label = pair.chain1 + '–' + pair.chain2;
+        const key = label + '|' + (sequences.get(pair.chain1) || '') + '|' + (sequences.get(pair.chain2) || '');
+        if (!byPair.has(key)) byPair.set(key, { label, items: [] });
+        byPair.get(key).items.push({ entry, value: pair.ipsae !== null ? pair.ipsae : pair.pdockq, metric: pair.ipsae !== null ? 'ipSAE' : 'pDockQ' });
+      });
+    });
+    const labelCount = new Map(); byPair.forEach(({ label }) => labelCount.set(label, (labelCount.get(label) || 0) + 1));
+    byPair.forEach(({ label, items }) => {
+      const key = labelCount.get(label) > 1 ? label + ' · ' + (items[0].entry.collection && items[0].entry.collection !== 'Individual files' ? items[0].entry.collection : displayName(items[0].entry)) : label;
       const values = items.map(item => item.value).filter(Number.isFinite).sort((a, b) => a - b);
       const top = items.slice().sort((a, b) => (a.entry.rank ?? Infinity) - (b.entry.rank ?? Infinity))[0];
       const median = values.length ? (values.length % 2 ? values[(values.length - 1) / 2] : (values[values.length / 2 - 1] + values[values.length / 2]) / 2) : null;

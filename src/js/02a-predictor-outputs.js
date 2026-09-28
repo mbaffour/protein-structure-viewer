@@ -48,10 +48,13 @@
     const count = shape.reduce((product, value) => product * value, 1);
     const [width, read] = type; const start = headerStart + headerLength;
     if (start + count * width > bytes.length) throw new Error('NumPy array shorter than its header says');
-    const values = new Float64Array(count);
-    for (let i = 0; i < count; i += 1) values[i] = read(view, start + i * width, little);
+    /* float32 stays float32: a 4 400-token PAE is 77 MB that way and would be 155 MB as float64. */
+    const Store = descr.slice(1) === 'f4' ? Float32Array : Float64Array;
+    const values = Store === Float32Array && little && (bytes.byteOffset + start) % 4 === 0
+      ? new Float32Array(bytes.buffer, bytes.byteOffset + start, count).slice()
+      : Store.from({ length: count }, (_, i) => read(view, start + i * width, little));
     if (fortran && shape.length === 2) {
-      const [rows, columns] = shape; const ordered = new Float64Array(count);
+      const [rows, columns] = shape; const ordered = new Store(count);
       for (let r = 0; r < rows; r += 1) for (let c = 0; c < columns; c += 1) ordered[r * columns + c] = values[c * rows + r];
       return { shape, values: ordered, dtype: descr };
     }
@@ -161,6 +164,14 @@
     return Array.isArray(ids) ? [...new Set(ids.map(id => String(id)))] : [];
   }
 
+  /* A chain is a polymer if any of its atoms is an ATOM record; ligand and ion chains are all
+     HETATM (AlphaFold 3, Boltz, Chai-1), while a modified residue inside a protein chain is not. */
+  function polymerChainSet(atoms) {
+    return new Set((atoms || []).filter(atom => !atom.hetflag).map(atom => String(atom.chain ?? '')));
+  }
+
+  const insertionCode = atom => String(atom.icode ?? atom.inscode ?? '').trim();
+
   /* Chains in the order the model lists them — the order Boltz and Chai-1 index their
      per-chain scores by. */
   function modelChainOrder(entry) {
@@ -174,21 +185,34 @@
      a ligand (AlphaFold 3 and Boltz-2), or — ColabFold, protein only — one per residue. The
      layout is used only when its length is exactly the matrix size; otherwise nothing is
      guessed and the reason is returned. */
+  /* The layout is asked for on every hover over the PAE map; it is rebuilt only when the matrix or
+     the model's atoms change. */
+  const paeLayoutCache = new WeakMap();
   function paeTokenLayout(entry) {
     const confidence = entry && entry.confidence || {}; const matrix = confidence.pae;
     if (!Array.isArray(matrix) || !matrix.length) return null;
+    const cached = paeLayoutCache.get(confidence);
+    if (cached && cached.matrix === matrix && cached.atoms === entry.atoms) return cached.layout;
+    const layout = derivePaeTokenLayout(entry, confidence, matrix);
+    paeLayoutCache.set(confidence, { matrix, atoms: entry.atoms, layout });
+    return layout;
+  }
+
+  function derivePaeTokenLayout(entry, confidence, matrix) {
     const size = matrix.length;
     if (Array.isArray(confidence.tokenChainIds) && confidence.tokenChainIds.length === size) {
-      return { chainIds: confidence.tokenChainIds, residueIds: Array.isArray(confidence.tokenResidueIds) ? confidence.tokenResidueIds : [], derived: false, size };
+      const residueIds = Array.isArray(confidence.tokenResidueIds) ? confidence.tokenResidueIds : [];
+      return { chainIds: confidence.tokenChainIds, residueIds, residueKeys: confidence.tokenChainIds.map((chain, index) => String(chain) + '|' + Number(residueIds[index]) + '|'), derived: false, size };
     }
     const atoms = entry.atoms || [];
-    if (!atoms.length) return { chainIds: [], residueIds: [], derived: true, size, mismatch: 'the model is not loaded yet' };
-    const polymerChains = new Set(atoms.filter(atom => !atom.hetflag).map(atom => String(atom.chain ?? '')));
+    if (!atoms.length) return { chainIds: [], residueIds: [], residueKeys: [], derived: true, size, mismatch: 'the model is not loaded yet' };
+    const polymerChains = polymerChainSet(atoms);
     const groups = []; const byKey = new Map();
     atoms.forEach(atom => {
       if (/^(HOH|WAT|DOD)$/i.test(String(atom.resn || ''))) return;
-      const chain = String(atom.chain ?? ''); const key = chain + '|' + atom.resi + '|' + atom.resn;
-      if (!byKey.has(key)) { const group = { chain, resi: Number(atom.resi), polymer: polymerChains.has(chain), heavy: 0 }; byKey.set(key, group); groups.push(group); }
+      /* Insertion codes keep 52 and 52A apart, as antibody numbering needs. */
+      const chain = String(atom.chain ?? ''); const residueKey = chain + '|' + Number(atom.resi) + '|' + insertionCode(atom); const key = residueKey + '|' + atom.resn;
+      if (!byKey.has(key)) { const group = { chain, resi: Number(atom.resi), residueKey, polymer: polymerChains.has(chain), heavy: 0 }; byKey.set(key, group); groups.push(group); }
       if (String(atom.elem || '').toUpperCase() !== 'H') byKey.get(key).heavy += 1;
     });
     const layouts = [
@@ -198,14 +222,14 @@
     const layout = layouts.find(candidate => candidate.length === size);
     if (!layout) {
       const residues = groups.filter(group => group.polymer).length; const tokens = layouts[0].length;
-      return { chainIds: [], residueIds: [], derived: true, size, mismatch: 'the PAE has ' + size + ' rows but the model has ' + residues + ' residues' + (tokens !== residues ? ' (' + tokens + ' tokens counting ligand atoms)' : '') };
+      return { chainIds: [], residueIds: [], residueKeys: [], derived: true, size, mismatch: 'the PAE has ' + size + ' rows but the model has ' + residues + ' residues' + (tokens !== residues ? ' (' + tokens + ' tokens counting ligand atoms)' : '') };
     }
-    return { chainIds: layout.map(group => group.chain), residueIds: layout.map(group => group.resi), derived: true, size };
+    return { chainIds: layout.map(group => group.chain), residueIds: layout.map(group => group.resi), residueKeys: layout.map(group => group.residueKey), derived: true, size };
   }
 
   function paeTokenIds(entry) {
     const layout = paeTokenLayout(entry);
-    return layout && !layout.mismatch ? layout : { chainIds: [], residueIds: [], derived: true, size: 0 };
+    return layout && !layout.mismatch ? layout : { chainIds: [], residueIds: [], residueKeys: [], derived: true, size: 0 };
   }
 
   /* Chai-1 files carry no job name, so ranks come from the aggregate score, within one archive. */
