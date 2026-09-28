@@ -11,7 +11,9 @@
    directions and on the combined row: ipSAE, ipSAE_d0chn, ipSAE_d0dom, ipTM_d0chn, pDockQ, pDockQ2,
    LIS, the reported ipTM, and the residue counts n0res, n0chn, n0dom, nres1, nres2, dist1, dist2.
    The reference prints ipSAE-family values to 6 decimals and pDockQ, pDockQ2, LIS to 4, so the
-   tolerances are half a unit in the last printed place; counts must match exactly. Exits non-zero
+   tolerances are half a unit in the last printed place — for the ipSAE family plus 1e-7, because the
+   viewer keeps PAE as float32 and ipsae.py as float64: a true 0.413344501 prints 0.413345 there and
+   is 0.413344481 here (seen on 4 of 186 750 values); counts must match exactly. Exits non-zero
    on any disagreement. The script needs python3 with numpy, `unzip`, and the suite's node_modules
    and vendor/ (run npm test once). The archives are the user's own and are never copied into the
    repository. */
@@ -48,7 +50,7 @@ const cutoffs = [[10, 10], [15, 15]];
 const fields = ['chain1', 'chain2', 'pae', 'dist', 'type', 'ipSAE', 'ipSAE_d0chn', 'ipSAE_d0dom', 'ipTM_af', 'ipTM_d0chn', 'pDockQ', 'pDockQ2', 'LIS', 'n0res', 'n0chn', 'n0dom', 'd0res', 'd0chn', 'd0dom', 'nres1', 'nres2', 'dist1', 'dist2'];
 /* reference column -> [viewer key, tolerance]; tolerance 0 means an exact match */
 const compared = {
-  ipSAE: ['ipsae', 5.1e-7], ipSAE_d0chn: ['ipsaeD0chn', 5.1e-7], ipSAE_d0dom: ['ipsaeD0dom', 5.1e-7], ipTM_d0chn: ['iptmD0chn', 5.1e-7],
+  ipSAE: ['ipsae', 6e-7], ipSAE_d0chn: ['ipsaeD0chn', 6e-7], ipSAE_d0dom: ['ipsaeD0dom', 6e-7], ipTM_d0chn: ['iptmD0chn', 6e-7],
   pDockQ: ['pdockq', 5.1e-5], pDockQ2: ['pdockq2', 5.1e-5], LIS: ['lis', 5.1e-5], ipTM_af: ['iptmModel', 5.1e-4],
   n0res: ['n0res', 0], n0chn: ['n0chn', 0], n0dom: ['n0dom', 0], nres1: ['nres1', 0], nres2: ['nres2', 0], dist1: ['dist1', 0], dist2: ['dist2', 0]
 };

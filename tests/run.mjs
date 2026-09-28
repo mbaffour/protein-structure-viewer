@@ -3185,7 +3185,7 @@ group('interaction confidence');
    residue counts must match exactly. tests/validate-ipsae.mjs runs the same comparison on real
    AlphaFold 3 archives. */
 const expectedIpsae = JSON.parse(await readFile(join(predictorDir, 'expected-ipsae.json'), 'utf8'));
-const ipsaeColumns = { ipSAE: ['ipsae', 5.1e-7], ipSAE_d0chn: ['ipsaeD0chn', 5.1e-7], ipSAE_d0dom: ['ipsaeD0dom', 5.1e-7], ipTM_d0chn: ['iptmD0chn', 5.1e-7], pDockQ: ['pdockq', 5.1e-5], pDockQ2: ['pdockq2', 5.1e-5], LIS: ['lis', 5.1e-5], ipTM_af: ['iptmModel', 5.1e-4], n0res: ['n0res', 0], n0chn: ['n0chn', 0], n0dom: ['n0dom', 0], nres1: ['nres1', 0], nres2: ['nres2', 0], dist1: ['dist1', 0], dist2: ['dist2', 0] };
+const ipsaeColumns = { ipSAE: ['ipsae', 6e-7], ipSAE_d0chn: ['ipsaeD0chn', 6e-7], ipSAE_d0dom: ['ipsaeD0dom', 6e-7], ipTM_d0chn: ['iptmD0chn', 6e-7], pDockQ: ['pdockq', 5.1e-5], pDockQ2: ['pdockq2', 5.1e-5], LIS: ['lis', 5.1e-5], ipTM_af: ['iptmModel', 5.1e-4], n0res: ['n0res', 0], n0chn: ['n0chn', 0], n0dom: ['n0dom', 0], nres1: ['nres1', 0], nres2: ['nres2', 0], dist1: ['dist1', 0], dist2: ['dist2', 0] };
 const viewerIpsae = (pattern, pae, dist) => page.evaluate(({ pattern, pae, dist }) => {
   const debug = window.__viewerDebug; const entry = debug.entries().find(e => new RegExp(pattern).test(e.name));
   debug.materializeEntry(entry);
@@ -3220,7 +3220,7 @@ await step('ColabFold: every score of both directions and the combined row agree
     /* ColabFold scores its own complexes at a 15 Å cutoff, with its own reimplementation. */
     const own = await page.evaluate(() => window.__viewerDebug.entries().find(e => /rank_001/.test(e.name)).confidence.reportedInterface.ipsae);
     const at15 = await viewerIpsae('rank_001', 15, 15);
-    ['A-B', 'B-A'].forEach(key => { const [a, b] = key.split('-'); const mine = at15.asym.find(row => row.chain1 === a && row.chain2 === b).ipsae; if (Math.abs(mine - own[key]) > 5.1e-7) throw new Error('ColabFold reports ' + key + ' ' + own[key] + ', the viewer ' + mine); });
+    ['A-B', 'B-A'].forEach(key => { const [a, b] = key.split('-'); const mine = at15.asym.find(row => row.chain1 === a && row.chain2 === b).ipsae; if (Math.abs(mine - own[key]) > 6e-7) throw new Error('ColabFold reports ' + key + ' ' + own[key] + ', the viewer ' + mine); });
     console.log('       ' + count + ' values against ipsae.py, and ColabFold’s own ipSAE (' + own['A-B'] + ', ' + own['B-A'] + ') reproduced at 15 Å');
   } finally { await removePredictorEntries(); }
 });

@@ -26,8 +26,9 @@ All notable changes to this project are recorded here.
   direction's counts a combined row reports. On the committed fixtures every value agrees with the
   reference to the last place it prints (6 decimals for the ipSAE family, 4 for the rest; counts
   exactly), and ColabFold's own ipSAE, written by its reimplementation at 15 Å, is reproduced too.
-  On eight real AlphaFold 3 runs — 40 models of 2 to 15 chains, homomers and heteromers — 117 900
-  values were compared with ipsae.py, none outside that tolerance (VALIDATION.md).
+  On 31 real AlphaFold 3 runs — 155 models of phage complexes, 2 to 15 chains and up to 2 348
+  residues — 304 650 values were compared with ipsae.py, none outside that tolerance
+  (VALIDATION.md).
 - For a ColabFold model the ipSAE ColabFold wrote for itself is shown beside the viewer's. A Chai-1
   model has no PAE, so only pDockQ is scored, and the state line says why.
 - **Tested on published outputs.** Real files other people have published — one barnase–barstar

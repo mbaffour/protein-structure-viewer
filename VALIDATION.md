@@ -290,10 +290,14 @@ archive at PAE/distance cutoffs 10/10 and 15/15, drives the viewer headless on t
 compares every chain pair in both directions and on the combined row: ipSAE, ipSAE_d0chn, ipSAE_d0dom,
 ipTM_d0chn, pDockQ, pDockQ2, LIS, the ipTM the model reported for the pair, and the counts n0res,
 n0chn, n0dom, nres1, nres2, dist1, dist2. The reference prints the ipSAE family to 6 decimals and
-pDockQ, pDockQ2 and LIS to 4, so the tolerance is half a unit in that place; counts must be equal.
+pDockQ, pDockQ2 and LIS to 4, so the tolerance is half a unit in that place — for the ipSAE family
+with 1 × 10⁻⁷ added, because the viewer keeps PAE as float32 and ipsae.py as float64, and a value on
+a rounding boundary can print differently (a true 0.413344501 prints 0.413345 in the reference and is
+0.413344481 in the viewer; 4 of the 304 650 values below sit on such a boundary). Counts must be equal.
 
-Run on 2026-09-27, viewer 2.48.0, on eight of the user's AlphaFold 3 server runs — 40 models, 2 to 15
-chains, 65 to 1 540 residues, homomers and heteromers:
+Run on 2026-09-27, viewer 2.48.0 (commit 9f88c9f), on 31 of the user's 33 AlphaFold 3 server runs —
+155 models of phage M13, MS2, φX174 and other complexes, 2 to 15 chains, 65 to 2 348 residues,
+homomers and heteromers. The first eight, which found the two bugs below:
 
 | Run | Chains | Residues |
 | --- | ---: | ---: |
@@ -306,9 +310,20 @@ chains, 65 to 1 540 residues, homomers and heteromers:
 | gp63 × 14 | 14 | 1 540 |
 | M13 virion round tip | 15 | 690 |
 
-**117 900 comparisons, none outside tolerance.** The largest difference in every score is exactly the
-rounding of the reference's printed value (5.0 × 10⁻⁷ for the ipSAE family, 5.0 × 10⁻⁵ for pDockQ,
-pDockQ2 and LIS); the reported ipTM and every count agree exactly.
+and 23 more — M13 assembly, initiation, hypothesis and follow-up pools (up to 11 chains and 2 164
+residues), M13 pools 0001–0003 (up to 14 chains and 2 348 residues), MS2 and φX174 confirmations and
+pools.
+
+**304 650 comparisons, none outside tolerance** (117 900 on the first eight, 186 750 on the rest). The
+largest difference in every score is the rounding of the reference's printed value; the reported ipTM
+and every count agree exactly.
+
+The two remaining runs, the 5× subcomplex (4 410 residues, 15 chains) and the pointy tip (3 045
+residues, 15 chains), were not compared: ipsae.py evaluates its kernel with `np.vectorize` over the
+whole N × N matrix for every chain pair, which there needs about 1 GB per model and hours of CPU. The
+viewer scores the 4 410-residue model in under half a second. On that model the smallest inter-chain
+PAE is 11.6 Å, so at a 10 Å cutoff every chain pair's ipSAE is 0 — a property of the prediction,
+checked directly on its full_data file.
 
 What the check found on the way, both now fixed:
 
