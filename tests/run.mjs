@@ -465,6 +465,17 @@ await step('a 900 px window falls back to the stacked layout', async () => {
   if (narrow.sideBySide || !wide.sideBySide) throw new Error(JSON.stringify({ narrow, wide }));
 });
 
+await step('a phone keeps the compact 380 px viewport in workspace layout', async () => {
+  try {
+    await page.setViewportSize({ width: 390, height: 844 });
+    await page.waitForTimeout(500);
+    const stage = await page.locator('#gpv-stage').boundingBox();
+    if (!stage || Math.abs(stage.height - 380) > 1) throw new Error('phone stage: ' + JSON.stringify(stage));
+    const overflow = await page.evaluate(() => document.documentElement.scrollWidth > innerWidth + 1);
+    if (overflow) throw new Error('phone page scrolls horizontally');
+  } finally { await page.setViewportSize({ width: 1280, height: 1000 }); await page.waitForTimeout(500); }
+});
+
 group('import');
 await page.setInputFiles('#gpv-files', models);
 await page.waitForTimeout(2500);
@@ -2974,6 +2985,15 @@ const afdbListing = JSON.stringify([{
 await page.route('https://alphafold.ebi.ac.uk/api/prediction/P69905', route => route.fulfill({ status: 200, contentType: 'application/json', body: afdbListing }));
 await page.route('https://alphafold.ebi.ac.uk/files/AF-P69905-F1-model_v6.cif', route => route.fulfill({ status: 200, contentType: 'chemical/x-mmcif', body: afdbCifBytes }));
 await page.route('https://alphafold.ebi.ac.uk/files/AF-P69905-F1-predicted_aligned_error_v6.json', route => route.fulfill({ status: 200, contentType: 'application/json', body: afdbPaeBytes }));
+
+await step('an unavailable AlphaFold fragment is rejected without loading a different structure', async () => {
+  const before = await page.locator('#gpv-list [data-entry-id]').count();
+  await page.fill('#gpv-fetch-id', 'AF-P69905-F999'); await page.click('#gpv-fetch');
+  await page.waitForFunction(() => !document.querySelector('#gpv-fetch').disabled);
+  const state = await page.locator('#gpv-state').textContent();
+  if (!/no AlphaFold DB model for AF-P69905-F999/.test(state)) throw new Error('state: ' + state);
+  if (await page.locator('#gpv-list [data-entry-id]').count() !== before) throw new Error('an unavailable fragment loaded another model');
+});
 
 await step('fetching P69905 from AlphaFold DB attaches the real 142×142 PAE matrix', async () => {
   await page.fill('#gpv-fetch-id', 'P69905'); await page.click('#gpv-fetch'); await page.waitForTimeout(2500);

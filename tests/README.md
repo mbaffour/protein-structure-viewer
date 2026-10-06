@@ -29,6 +29,19 @@ Chromium binary to skip Playwright's own download — useful in CI images that a
 PSV_CHROMIUM=/opt/pw-browsers/chromium/chrome-linux/chrome npm test
 ```
 
+## Live release smoke test
+
+`npm run test:live` checks the hosted viewer with real CDN, RCSB and AlphaFold DB requests.
+It loads 1UBQ and human alpha-globin, checks the 142-residue PAE matrix, visits every tool tab,
+checks desktop and phone layouts, rejects an unavailable AlphaFold fragment, and fails on browser
+errors. It is intentionally separate from the reproducible regression suite because external
+service outages can fail it. Run it after deploying a release candidate.
+
+To check a local candidate, serve the repository (for example `python3 -m http.server 8765`), then
+run `PSV_URL=http://localhost:8765 npm run test:live`. `PSV_BROWSER=firefox` or `PSV_BROWSER=webkit`
+selects another engine. Screenshots go to `/tmp/psv-release-smoke`; set `PSV_ARTIFACTS` to change that.
+Phone checks emulate viewport dimensions, not a physical phone or its GPU.
+
 ## What it covers
 
 - Boot: 3Dmol present, no error banner, inline icons rendered

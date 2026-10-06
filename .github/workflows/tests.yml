@@ -67,6 +67,9 @@ jobs:
       - name: Check fixtures.mjs loads
         run: node --input-type=module -e "await import('./tests/fixtures.mjs')"
 
+      - name: Check shipped HTML matches source and parses
+        run: node scripts/build.mjs --check
+
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
