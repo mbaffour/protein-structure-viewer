@@ -2,7 +2,7 @@
 
 All notable changes to this project are recorded here.
 
-## Unreleased
+## 2.48.2 — release candidate
 
 ### Fixed
 

@@ -13,12 +13,12 @@ authors:
   - family-names: Awuah
     given-names: Michael Baffour
     email: mbaffour890@gmail.com
-version: 2.48.1
-date-released: 2026-09-28
+version: 2.48.2
+date-released: 2026-10-06
 doi: 10.5281/zenodo.22741487
 license: MIT
 repository-code: "https://github.com/mbaffour/protein-structure-viewer"
-url: "https://mbaffour.github.io/structure-viewer/"
+url: "https://mbaffour.github.io/protein-structure-viewer/"
 keywords:
   - protein structure
   - AlphaFold
