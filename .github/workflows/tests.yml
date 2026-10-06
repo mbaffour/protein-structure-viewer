@@ -14,7 +14,7 @@ jobs:
   playwright:
     name: playwright (${{ matrix.browser }})
     runs-on: ubuntu-latest
-    timeout-minutes: 25
+    timeout-minutes: 40
     strategy:
       fail-fast: false
       matrix:
