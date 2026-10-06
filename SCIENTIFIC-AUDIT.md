@@ -271,9 +271,11 @@ them, and the check against it is recorded in VALIDATION.md. Points a reader sho
   the methods text does.
 - **Ligands are not chain partners**, as in the reference. Protein–ligand confidence is the ligand-site
   PAE of the Ligand sites table, which is still unvalidated (below).
-- **Not cross-validated on real data**: AlphaFold 3 models with modified residues (tokenised atom by
-  atom) or ligands, nucleic-acid chains, and real Boltz or ColabFold runs. The token rules for those
-  cases are tested on the committed fixtures only; none of the real runs available contains them.
+- **Real-data cross-checks and limits.** Published ColabFold and Boltz outputs and AlphaFold 3 models
+  with a ligand or modified residue were compared with `ipsae.py` as recorded in
+  [VALIDATION.md](VALIDATION.md). Real protein–nucleic-acid interfaces and Chai-1 or AlphaFold 2.3
+  outputs have not been cross-checked against `ipsae.py`, which does not read the latter two formats.
+  The ligand-site PAE calculation remains separately unvalidated (below).
 
 ## Ligand-site PAE — still unvalidated (2.23.0)
 
