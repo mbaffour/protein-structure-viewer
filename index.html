@@ -1602,7 +1602,7 @@ html>body{padding:0}</style>
   #generic-protein-viewer.is-workspace .gpv-view-grid.is-fullscreen .gpv-stage { height: 100%; }
   #generic-protein-viewer.is-dragging-splitter, #generic-protein-viewer.is-dragging-splitter * { cursor: col-resize !important; user-select: none; }
   @media (max-width: 1099px) { #generic-protein-viewer.is-workspace .gpv-workspace { display: block; } #generic-protein-viewer.is-workspace .gpv-stage-column, #generic-protein-viewer.is-workspace .gpv-side-panel { position: static; max-height: none; overflow: visible; padding: 0; } #generic-protein-viewer.is-workspace .gpv-splitter { display: none; } #generic-protein-viewer.is-workspace .gpv-stage { height: 480px; } #generic-protein-viewer.is-workspace .gpv-side-panel .gpv-tabs { position: static; margin-top: 14px; } #generic-protein-viewer.is-workspace .gpv-sequence-rows { max-height: none; } }
-  @media (max-width: 520px) { #generic-protein-viewer .gpv-stage { height: 380px; } }
+  @media (max-width: 520px) { #generic-protein-viewer .gpv-stage, #generic-protein-viewer.is-workspace .gpv-stage { height: 380px; } }
 </style>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/3Dmol/2.4.2/3Dmol-min.js" integrity="sha512-hMLvWa58N20AYqzvAVgf4Utdz0jGshnzaknHRzQSm3I7TUeN6ehikRsICUbDB8JIt625tPV3a3s6I9BMrxT0Gg==" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
@@ -1718,7 +1718,7 @@ html>body{padding:0}</style>
   let busyDepth = 0;
   let restoreMotion = null;
   const listPageSize = 60;
-  const viewerVersion = '2.48.1';
+  const viewerVersion = '2.48.2';
   const preferenceKey = 'protein-structure-viewer:preferences';
   const themeKey = 'protein-structure-viewer:theme';
   const labelColors = getComputedStyle(root);
@@ -1762,7 +1762,6 @@ html>body{padding:0}</style>
     }
   }
   const reduceMotion = matchMedia('(prefers-reduced-motion: reduce)').matches;
-
   /* ---------- Small UI helpers ---------- */
 
   function toast(message, kind = 'info') {
@@ -10916,7 +10915,9 @@ applyBackground();
        v6 today), so ask the API for the current URLs instead of guessing. */
     const listing = JSON.parse(await fetchText('https://alphafold.ebi.ac.uk/api/prediction/' + encodeURIComponent(target.accession), 'AlphaFold DB entry'));
     if (!Array.isArray(listing) || !listing.length) throw new Error('no AlphaFold DB model for ' + target.accession);
-    const record = listing.find(item => item.modelEntityId === 'AF-' + target.accession + '-F' + target.fragment) || listing[0];
+    const requested = 'AF-' + target.accession + '-F' + target.fragment;
+    const record = listing.find(item => item && item.modelEntityId === requested);
+    if (!record) throw new Error('no AlphaFold DB model for ' + requested);
     if (!record.cifUrl) throw new Error('AlphaFold DB returned no coordinate file');
     return {
       url: record.cifUrl,
@@ -10980,7 +10981,6 @@ applyBackground();
       button.disabled = false;
     }
   }
-
   /* ---------- Preference persistence ---------- */
 
   const persistedControls = [

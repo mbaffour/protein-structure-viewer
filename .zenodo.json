@@ -9,6 +9,6 @@
   "access_right": "open",
   "keywords": ["protein structure", "AlphaFold", "pLDDT", "predicted aligned error", "structural biology", "molecular visualization", "3Dmol.js"],
   "related_identifiers": [
-    { "identifier": "https://mbaffour.github.io/structure-viewer/", "relation": "isDocumentedBy", "resource_type": "publication-other" }
+    { "identifier": "https://mbaffour.github.io/protein-structure-viewer/", "relation": "isDocumentedBy", "resource_type": "publication-other" }
   ]
 }

@@ -472,11 +472,12 @@ and is idempotent, so the split can be re-derived and audited rather than taken 
 
 ## How to cite
 
-Awuah, M. B. (2026). *Protein Structure Viewer* (version 2.48.1) [software]. Zenodo.
-https://doi.org/10.5281/zenodo.23024065
+Awuah, M. B. (2026). *Protein Structure Viewer* (version 2.48.2) [software]. Zenodo.
+The release-specific DOI is added after Zenodo archives the GitHub release; until then, use the
+[all-versions DOI](https://doi.org/10.5281/zenodo.22741487).
 
 The source is at https://github.com/mbaffour/protein-structure-viewer. Each GitHub release is archived on
-Zenodo with its own DOI; cite the DOI of the release you used (latest release, 2.48.1: https://doi.org/10.5281/zenodo.23024065; all versions: https://doi.org/10.5281/zenodo.22741487). Metadata for reference managers is in
+Zenodo with its own DOI; cite the DOI of the release you used (latest archived release, 2.48.1: https://doi.org/10.5281/zenodo.23024065; all versions: https://doi.org/10.5281/zenodo.22741487). Metadata for reference managers is in
 [`CITATION.cff`](CITATION.cff). Please also cite the rendering library: Rego, N. & Koes, D. (2015).
 3Dmol.js: molecular visualization with WebGL. *Bioinformatics* 31(8), 1322–1324.
 doi:10.1093/bioinformatics/btu829.

@@ -2,6 +2,20 @@
 
 All notable changes to this project are recorded here.
 
+## 2.48.2 — release candidate
+
+### Fixed
+
+- An unavailable AlphaFold DB fragment now reports an error instead of silently loading the first
+  fragment returned for the accession. Shared links retain the requested structure identity.
+- The compact 380 px phone viewport now applies in the default workspace layout too.
+
+### Release checks
+
+- CI verifies that the shipped HTML matches `src/` and that its inline scripts parse.
+- Added an optional live browser smoke test for real CDN, RCSB and AlphaFold DB requests,
+  desktop/phone layouts, tab navigation and unavailable-fragment handling: `cd tests && npm run test:live`.
+
 ## 2.48.1
 
 ### Fixed

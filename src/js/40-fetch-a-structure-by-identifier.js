@@ -26,7 +26,9 @@
        v6 today), so ask the API for the current URLs instead of guessing. */
     const listing = JSON.parse(await fetchText('https://alphafold.ebi.ac.uk/api/prediction/' + encodeURIComponent(target.accession), 'AlphaFold DB entry'));
     if (!Array.isArray(listing) || !listing.length) throw new Error('no AlphaFold DB model for ' + target.accession);
-    const record = listing.find(item => item.modelEntityId === 'AF-' + target.accession + '-F' + target.fragment) || listing[0];
+    const requested = 'AF-' + target.accession + '-F' + target.fragment;
+    const record = listing.find(item => item && item.modelEntityId === requested);
+    if (!record) throw new Error('no AlphaFold DB model for ' + requested);
     if (!record.cifUrl) throw new Error('AlphaFold DB returned no coordinate file');
     return {
       url: record.cifUrl,
@@ -90,4 +92,3 @@
       button.disabled = false;
     }
   }
-

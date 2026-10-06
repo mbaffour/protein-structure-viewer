@@ -1,8 +1,10 @@
 # Validation
 
-Every quantity the viewer reports was compared with an independent implementation on three real
-AlphaFold 3 runs. This file records the method, the results and the limits of the check, and how to
-rerun it on your own run. Last run: 2026-09-15, viewer 2.37.0.
+The core structural quantities below were compared with an independent implementation on three real
+AlphaFold 3 runs. Later sections record separate interaction-confidence checks on real and published
+predictor outputs. This file records the methods, results, limits and ways to rerun them. The core
+three-run check was last run on 2026-09-15 with viewer 2.37.0; the interaction-confidence check was
+run on 2026-09-27 with viewer 2.48.0.
 
 ## Method
 
