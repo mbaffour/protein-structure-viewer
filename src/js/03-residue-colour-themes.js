@@ -485,6 +485,8 @@
 
   function selectModel(entry, fit = true) {
     if (!entry) return;
+    /* The editor and the active label belong to what was on screen; another model is something else. */
+    if (entry.id !== activeId) dismissCanvasText();
     if (!entry.visible) {
       entry.visible = true;
       renderList();
@@ -631,7 +633,27 @@
       const remove = document.createElement('button'); remove.className = 'btn btn-ghost'; remove.type = 'button'; remove.textContent = 'Remove';
       remove.addEventListener('click', () => { remember('label removal'); labelRecords = labelRecords.filter(item => item !== label); renderLabelList(); rebuildOverlays(); updateStatus('Label removed'); });
       tools.append(size, color, show, reset, remove);
-      row.append(copy, tools); list.append(row);
+      /* Dragging is mouse-only by design (a finger drag turns the model), so these are how a label is
+         moved on a touchscreen or from the keyboard. The list is not redrawn on a press, so focus
+         stays on the button and Enter can be pressed again. */
+      const nudge = document.createElement('span'); nudge.className = 'gpv-nudge';
+      nudge.setAttribute('role', 'group'); nudge.setAttribute('aria-label', 'Move the label');
+      [['←', 'Move label left', -12, 0], ['→', 'Move label right', 12, 0], ['↑', 'Move label up', 0, -12], ['↓', 'Move label down', 0, 12]].forEach(([glyph, title, dx, dy]) => {
+        const button = document.createElement('button'); button.className = 'btn btn-ghost'; button.type = 'button'; button.textContent = glyph;
+        button.setAttribute('aria-label', title); button.title = title;
+        button.addEventListener('click', () => { remember('label nudge'); nudgeCanvasText({ kind: 'label', record: label }, dx, dy); reset.disabled = false; rebuildOverlays(); });
+        nudge.append(button);
+      });
+      const select = document.createElement('button'); select.className = 'btn btn-ghost'; select.type = 'button'; select.textContent = 'Select';
+      select.title = 'Make this the active label: the arrow keys move it (Shift for 1 px), Delete removes it, Esc lets go';
+      select.setAttribute('aria-label', 'Select this label to move it with the arrow keys');
+      select.addEventListener('click', () => {
+        setActiveText('label', label);
+        root.querySelector('#gpv-stage').focus({ preventScroll: true });
+        updateStatus('“' + clipText(String(label.text || ''), 40) + '” selected · arrow keys move it, Shift for 1 px, Delete removes it, Esc lets go');
+      });
+      nudge.append(select);
+      row.append(copy, tools, nudge); list.append(row);
     });
   }
 
@@ -656,11 +678,15 @@
      so the screen's placement is not the panel's. Without one the label sits at its own offset. */
   function drawLabels(target, shownIds, scale = 1, placement = null) {
     const byId = entriesById();
+    /* The ring that marks the label the arrow keys move belongs to the screen alone: exports and
+       comparison panels draw into viewers of their own and never get it. */
+    const active = target === viewer ? activeLabelRecord() : null;
     labelRecords.filter(label => shownIds.has(label.entryId)).forEach(label => {
       const anchor = labelAnchor(label, byId);
       const position = (placement && placement.get(label)) || shiftBy(anchor, label.offset);
       if (leaderLength(anchor, position) > leaderMinimum) target.addLine({ start: anchor, end: position, color: label.color || leaderColor(), linewidth: Math.max(1, Math.round(scale)) });
-      target.addLabel(label.text, labelStyle(position, { color: label.color, size: label.size, scale }));
+      const style = labelStyle(position, { color: label.color, size: label.size, scale });
+      target.addLabel(label.text, label === active ? activeLabelStyle(style) : style);
     });
     if (root.querySelector('#gpv-all-labels').checked) {
       const entry = activeEntry();

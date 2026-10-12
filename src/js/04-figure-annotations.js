@@ -102,23 +102,10 @@
     return annotationTools[record.type].label + ' · ' + record.points.map(pointName).join(' → ') + (record.text ? ' · "' + record.text + '"' : '');
   }
 
+  /* A row button is one 12 px step on screen; dyScreen counts upward, as the buttons read. */
   function nudgeAnnotation(record, dxScreen, dyScreen) {
     remember('label nudge');
-    if (record.type === 'screen') {
-      record.dx = (record.dx || 0) + dxScreen * 12;
-      record.dy = (record.dy || 0) - dyScreen * 12;
-    } else {
-      const view = typeof viewer.getView === 'function' ? viewer.getView() : [0, 0, 0, 0, 0, 0, 0, 1];
-      const step = 1.5 * record.size;
-      const right = screenAxisInModelSpace(view, { x: 1, y: 0, z: 0 });
-      const up = screenAxisInModelSpace(view, { x: 0, y: 1, z: 0 });
-      const offset = record.offset || { x: 0, y: 0, z: 0 };
-      record.offset = {
-        x: offset.x + (right.x * dxScreen + up.x * dyScreen) * step,
-        y: offset.y + (right.y * dxScreen + up.y * dyScreen) * step,
-        z: offset.z + (right.z * dxScreen + up.z * dyScreen) * step
-      };
-    }
+    nudgeCanvasText({ kind: record.type === 'screen' ? 'screen' : 'annotation', record }, dxScreen * 12, -dyScreen * 12);
     rebuildOverlays();
   }
 
@@ -503,7 +490,6 @@
 
   let labelDrag = null;
   function startLabelDrag(item, event) {
-    remember('label position');
     labelDrag = { item, x: event.pageX, y: event.pageY, perAngstrom: pixelsPerAngstrom(viewer) || 20, moved: false };
     root.querySelector('#gpv-stage').style.cursor = 'grabbing';
   }
@@ -511,38 +497,33 @@
     const drag = labelDrag; if (!drag) return;
     const dx = event.pageX - drag.x; const dy = event.pageY - drag.y;
     if (!dx && !dy) return;
+    /* The undo step is taken on the first real move, not on the press: a press that only opens the
+       editor has changed nothing and must leave no empty step behind. */
+    if (!drag.moved) remember('label position');
     drag.x = event.pageX; drag.y = event.pageY; drag.moved = true;
-    const record = drag.item.record;
-    if (drag.item.kind === 'screen') {
-      record.dx = (record.dx || 0) + dx; record.dy = (record.dy || 0) + dy;
-    } else {
-      const view = typeof viewer.getView === 'function' ? viewer.getView() : [0, 0, 0, 0, 0, 0, 0, 1];
-      const right = screenAxisInModelSpace(view, { x: 1, y: 0, z: 0 });
-      const up = screenAxisInModelSpace(view, { x: 0, y: 1, z: 0 });
-      const step = 1 / drag.perAngstrom;
-      const offset = record.offset || { x: 0, y: 0, z: 0 };
-      record.offset = {
-        x: offset.x + (right.x * dx - up.x * dy) * step,
-        y: offset.y + (right.y * dx - up.y * dy) * step,
-        z: offset.z + (right.z * dx - up.z * dy) * step
-      };
-      /* Once a hand has been on it the placement is the user's, and Separate labels leaves it alone. */
-      if (drag.item.kind === 'label') delete record.autoPlaced;
-    }
+    nudgeCanvasText(drag.item, dx, dy, drag.perAngstrom);
     rebuildOverlays();
   }
-  function endLabelDrag() {
+  /* A press on a piece of text that never moved was a click on it: that opens the editor for it.
+     A cancelled pointer (no event) is not a click, and while drawing or measuring a click on text
+     does what it always did — nothing — so those modes behave exactly as before. */
+  function endLabelDrag(event) {
     const drag = labelDrag; labelDrag = null;
     root.querySelector('#gpv-stage').style.cursor = '';
     if (!drag) return;
     if (drag.item.kind === 'label') renderLabelList(); else renderAnnotationList();
     if (drag.moved) updateStatus('Label moved · drag it again, or Reset in its row to put it back');
+    else if (event && !annotationActive && !measurementActive) openLabelEditorForItem(drag.item);
   }
 
   let pointerStart = null;
   function watchStageClicks() {
     const stage = root.querySelector('#gpv-stage');
     stage.addEventListener('pointerdown', event => {
+      /* The label editor lives inside the stage; a press on its own field or buttons is not a press
+         on the structure. Anywhere else on the stage closes it, uncommitted, before anything else. */
+      if (isInLabelEditor(event.target)) return;
+      closeLabelEditor(false);
       if (event.button !== 0) return;
       if (event.pointerType !== 'touch') {
         const hit = labelHitAt(event.pageX, event.pageY);
@@ -565,21 +546,31 @@
     stage.addEventListener('pointerup', event => {
       if (!labelDrag) return;
       event.preventDefault(); event.stopPropagation();
-      endLabelDrag();
+      endLabelDrag(event);
     }, true);
     stage.addEventListener('pointercancel', () => { if (labelDrag) endLabelDrag(); }, true);
     stage.addEventListener('pointerup', event => {
       const start = pointerStart; pointerStart = null;
       if (!start || event.button !== 0 || Math.hypot(event.pageX - start.x, event.pageY - start.y) > 4 || Date.now() - start.time > 700) return;
+      /* A finger cannot drag a label (that turns the model), but a tap on one still edits it. */
+      if (event.pointerType === 'touch' && !annotationActive && !measurementActive) {
+        const text = labelHitAt(event.pageX, event.pageY);
+        if (text) { openLabelEditorForItem(text); return; }
+      }
       const hit = pickAtomAt(event.pageX, event.pageY);
-      if (hit) handleAtomClick(hit.entry, hit.atom);
+      /* A click that no drawing or measurement took is a request to label the residue. */
+      if (hit && !handleAtomClick(hit.entry, hit.atom)) openLabelEditorForResidue(hit.entry, hit.atom);
     });
+    /* Scrolling zooms the camera under the editor; the editor goes rather than float over a
+       residue it no longer marks. */
+    stage.addEventListener('wheel', event => { if (!isInLabelEditor(event.target)) closeLabelEditor(false); }, { passive: true });
     /* Hover readout: nearest Cα within a few pixels, at most once per frame, and
        never while a drag is in progress. */
     const readout = root.querySelector('#gpv-hover');
     let hoverFrame = 0; let hoverAt = null;
     stage.addEventListener('pointermove', event => {
       if (event.pointerType === 'touch' || pointerStart) return;
+      if (isInLabelEditor(event.target)) { hoverAt = null; stage.style.cursor = ''; return; }
       hoverAt = { x: event.pageX, y: event.pageY };
       if (hoverFrame) return;
       hoverFrame = requestAnimationFrame(() => {
@@ -587,7 +578,7 @@
         if (!hoverAt) return;
         const overLabel = labelHitAt(hoverAt.x, hoverAt.y);
         stage.style.cursor = overLabel ? 'grab' : '';
-        if (overLabel) { readout.textContent = 'Drag to move “' + clipText(String(overLabel.text || ''), 40) + '”'; return; }
+        if (overLabel) { readout.textContent = 'Drag to move · click to edit “' + clipText(String(overLabel.text || ''), 40) + '”'; return; }
         const hit = pickAtomAt(hoverAt.x, hoverAt.y, true);
         readout.textContent = hit ? describeResidue(hit.entry, hit.atom) + (displayedEntries().length > 1 ? ' · ' + displayName(hit.entry) : '') : '';
         const next = hit ? { entryId: hit.entry.id, chain: hit.atom.chain || '', resi: hit.atom.resi } : null;
@@ -598,10 +589,13 @@
     stage.addEventListener('pointerleave', () => { hoverAt = null; readout.textContent = ''; if (sequenceHover) { sequenceHover = null; renderSequenceSoon(); } });
   }
 
+  /* Returns true when drawing or measuring took the click. The callers that open the label editor
+     (a click in the viewer, a pick in the sequence strip) open it only when this returns false, so
+     the mode check lives here alone; Go to and the contact map call it for selection only. */
   function handleAtomClick(entry, atom) {
     selectResidue(entry, atom);
-    if (annotationActive) { handleAnnotationClick(entry, atom); return; }
-    if (!measurementActive) return;
+    if (annotationActive) { handleAnnotationClick(entry, atom); return true; }
+    if (!measurementActive) return false;
     measurementDraft.push(atomReference(entry, atom));
     const required = root.querySelector('#gpv-measure-type').value === 'angle' ? 3 : 2;
     root.querySelector('#gpv-measure-state').textContent = 'Selected ' + measurementDraft.length + ' of ' + required + ' atoms.';
@@ -612,6 +606,7 @@
       renderMeasurementList(); rebuildOverlays();
       root.querySelector('#gpv-measure-state').textContent = 'Measurement added. Select ' + required + ' atoms for another.';
     }
+    return true;
   }
 
   function toggleMeasurement() {

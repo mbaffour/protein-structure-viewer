@@ -97,7 +97,11 @@ Anything the viewer cannot interpret is skipped and reported in the red notice b
 
 | Key | Action |
 | --- | --- |
-| <kbd>←</kbd> / <kbd>→</kbd> | Previous / next model |
+| <kbd>←</kbd> / <kbd>→</kbd> | Previous / next model (while a label is active they move the label instead) |
+| <kbd>L</kbd> | Open the label editor at the selected residue |
+| <kbd>Enter</kbd> / <kbd>Esc</kbd> | In the label editor: add or update the label / close it without changes |
+| <kbd>←</kbd> <kbd>→</kbd> <kbd>↑</kbd> <kbd>↓</kbd> | Move the active label 8 px (<kbd>Shift</kbd>: 1 px) |
+| <kbd>Delete</kbd> | Remove the active label |
 | <kbd>C</kbd> | Start or pause automatic cycling |
 | <kbd>F</kbd> | Fit every panel to what it displays |
 | <kbd>S</kbd> | Start or stop spinning |
@@ -107,7 +111,7 @@ Anything the viewer cannot interpret is skipped and reported in the red notice b
 | <kbd>1</kbd>–<kbd>6</kbd> | Jump to Models / Appearance / Annotate / Compare / Confidence / Publish |
 | <kbd>Ctrl</kbd>/<kbd>⌘</kbd> + <kbd>Z</kbd> | Undo the last label, selection, measurement or annotation change (add <kbd>Shift</kbd> to redo) |
 | <kbd>?</kbd> | Open in-app help |
-| <kbd>Esc</kbd> | Close help, leave full screen, or stop measuring or drawing |
+| <kbd>Esc</kbd> | Close the label editor or let go of the active label; otherwise close help, leave full screen, or stop measuring or drawing |
 
 Shortcuts are suppressed while you are typing in a field.
 
@@ -243,8 +247,8 @@ marks it.
 
 **Sequence strip.** Under the viewer, each chain of the displayed model is drawn as a row of residues
 coloured by pLDDT (or by chain, when that colouring is on), with residue numbers along the bottom.
-Hover to read a residue, **click** to select it — the label field fills in, ready for *Add or
-update* — **drag** across a range to fill the model, chain, and range fields of *Selections*, and
+Hover to read a residue, **click** to select it — the label editor opens at the residue in the
+viewer, ready for a label — **drag** across a range to fill the model, chain, and range fields of *Selections*, and
 **double-click** to zoom the camera to that residue. Labelled residues carry a small marker above
 their cell and highlighted ranges are underlined in the highlight colour, so the strip doubles as an
 index of your annotations. In **overlay** mode the strip shows one row per displayed model and chain,
@@ -266,9 +270,26 @@ selections, measurements, or figure annotations — additions, removals, text or
 and clears — and <kbd>Shift</kbd> with it redoes. The Undo and Redo buttons beside the residue
 readout do the same. Sixty steps are kept. Loading a scene or *Clear all* starts a fresh history.
 
-**Labels.** With an atom selected, edit the suggested text and press **Add or update**. *Label every
-residue* annotates all Cα atoms of the current model — useful for small structures, unreadable for
-large ones.
+**Labels.** Click a residue in the viewer — or pick one in the sequence strip or the sequence
+letters — and a small label editor opens beside it, naming the residue and holding the suggested
+label (`ALA45 · A`) already selected: type over it and press <kbd>Enter</kbd>, or <kbd>Esc</kbd> to
+close it without changes. A residue that already has a label opens with its text, **Update** and
+**Remove**. Click an existing label, callout text or corner title without dragging it to edit its
+text the same way. <kbd>L</kbd> opens the editor for the residue already selected (after *Go to*, for
+instance). The editor follows the residue as the view turns; clicking elsewhere in the view,
+scrolling, switching models, clearing labels or undoing closes it without changes. While drawing a
+figure annotation or measuring, clicks keep doing that and the editor does not open. The panel's
+field and **Add or update** still work as before.
+
+The label you have just added, edited or clicked is the *active* label, outlined in the accent colour
+on screen (never in an export). The arrow keys move it 8 px at a time (<kbd>Shift</kbd>: 1 px),
+<kbd>Delete</kbd> removes it, and <kbd>Esc</kbd> lets go of it — after which ← and → step through the
+models again. Each row of the label list also has ← → ↑ ↓ buttons that move the label 12 px per press
+and **Select**, which makes it the active label. On a touchscreen, tap a residue to label it and tap
+a label to edit it; use the row arrows to move it, since a finger drag turns the model.
+
+*Label every residue* annotates all Cα atoms of the current model — useful for small structures,
+unreadable for large ones.
 
 **Selections.** Pick a model, optionally a chain, and a residue range (`20-45`, or `20,24,31`, or a
 mix), then **Highlight** it in a chosen colour or **Hide** it. Leaving the chain blank applies the
@@ -570,7 +591,8 @@ in every export, the composite and built figures and the shared report — so a 
 is being named. The move is kept as a model-space offset, which means it holds its place against the
 structure as the camera turns rather than sliding across the screen, and it travels with scenes,
 sessions and share links and is undone with ⌘Z. **Reset** in the label's row puts it back on its
-residue; the arrow buttons in an annotation's row nudge its text by small steps for fine work.
+residue; the arrow buttons in a label's or an annotation's row nudge its text 12 px a press for fine
+work, and the arrow keys move the active label (see *Labels* above).
 
 **Separating labels that overlap.** One label per model at the same residue of superposed models is a
 pile by construction, so *Compare this position* and *Compare these positions* untangle what they place:

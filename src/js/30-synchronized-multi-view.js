@@ -794,6 +794,9 @@
       return;
     }
     if (restoreMotion !== null) return;
+    /* The video records the stage canvas itself, so the on-screen ring around the active label
+       would be in every frame of it. */
+    clearActiveText();
     const button = root.querySelector('#gpv-video');
     const duration = Number(root.querySelector('#gpv-video-length').value) || 5;
     const stream = canvas.captureStream(30);
