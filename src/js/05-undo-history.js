@@ -34,6 +34,8 @@
     /* An open label editor may be editing text this state does not have; it closes uncommitted. The
        active label is held by its key, so it is found again in the restored records if it is there. */
     closeLabelEditor(false);
+    /* The box selection's popover describes a selection this state may not have. */
+    closeBoxPopover(false);
     const alive = record => Boolean(entryById(record.entryId));
     labelRecords = state.labels.filter(alive);
     selectionRecords = state.selections.filter(alive);

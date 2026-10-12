@@ -1537,14 +1537,21 @@ const canvasResidue = async (avoid = [], on = page) => {
     d.displayedEntries().filter(entry => entry.model).forEach(entry => entry.atoms.filter(atom => atom.atom === 'CA').forEach(atom => {
       const key = [entry.id, atom.chain || '', atom.resi].join('|');
       if (avoid.includes(key) || d.labelRecords().some(label => label.key === key)) return;
-      const s = d.viewer.modelToScreen({ x: atom.x, y: atom.y, z: atom.z });
-      if (!s || !Number.isFinite(s.x) || !Number.isFinite(s.y)) return;
+      const projected = d.viewer.modelToScreen({ x: atom.x, y: atom.y, z: atom.z });
+      if (!projected || !Number.isFinite(projected.x) || !Number.isFinite(projected.y)) return;
+      /* Whole pixels: Firefox and WebKit round the pointer position, Chromium does not, and the
+         residue the viewer picks must be the one the tap lands on in every engine. */
+      const s = { x: Math.round(projected.x), y: Math.round(projected.y) };
       if (s.x < left + 140 || s.x > left + rect.width - 140 || s.y < top + 40 || s.y > top + rect.height - 140) return;
       if (s.y - scrollY < 20 || s.y - scrollY > innerHeight - 20) return;
       candidates.push({ entry, atom, key, s, distance: Math.hypot(s.x - centre.x, s.y - centre.y) });
     }));
     candidates.sort((a, b) => a.distance - b.distance);
     for (const c of candidates) {
+      /* The fixture's chain B is chain A shifted 3.4 Å, so a residue's twin can project a pixel
+         away; a tap must have no other Cα within reach of the pick radius. */
+      const rival = candidates.find(other => other !== c && Math.hypot(other.s.x - c.s.x, other.s.y - c.s.y) < 10);
+      if (rival) continue;
       const hit = d.pickAtomAt(c.s.x, c.s.y);
       if (!hit || hit.entry.id !== c.entry.id || (hit.atom.chain || '') !== (c.atom.chain || '') || hit.atom.resi !== c.atom.resi) continue;
       if (d.labelHitAt(c.s.x, c.s.y)) continue;
@@ -1585,6 +1592,15 @@ const labelOnCanvas = async text => {
   if (!label || label.text !== text) throw new Error('labelling ' + target.text + ' from the canvas left ' + JSON.stringify(label));
   return target;
 };
+/* The fixture's two helices run along the viewing axis, so chain B sits directly behind chain A and
+   every Cα has a twin within a pixel of it on screen — which engines then pick differently as they
+   round the pointer position. Turned 90° about X, the twins sit 3.4 Å apart across the screen and a
+   tap has one residue to land on. The orientation is put back after the last canvas step. */
+await step('the view is turned so that every residue has room around it on screen', async () => {
+  await letGo();
+  await focusStage(); await page.keyboard.press('x'); await page.waitForTimeout(500);
+  if (!(await canvasResidue())) throw new Error('no isolated residue on screen even after turning the view');
+});
 await step('clicking a residue opens a label editor beside it, and Enter labels the residue', async () => {
   /* The steps above may leave an editor open from their own stage clicks. */
   await letGo();
@@ -1772,6 +1788,8 @@ await step('a tap on a touchscreen opens the label editor (the touch path)', asy
     const touch = await context.newPage();
     await touch.goto(base + '/index.html?debug=1'); await touch.waitForTimeout(2500);
     await touch.setInputFiles('#gpv-files', [models[0]]); await touch.waitForTimeout(2500);
+    /* A fresh page sits in the default orientation, where every residue has its twin behind it. */
+    await touch.focus('#gpv-stage'); await touch.keyboard.press('x'); await touch.waitForTimeout(500);
     const target = await canvasResidue([], touch);
     if (!target) throw new Error('no residue on screen to tap');
     let path = 'touchscreen.tap';
@@ -1818,6 +1836,276 @@ await step('undo walks the canvas edits back one at a time: added, edited, nudge
     await expect('label', label => !label);
     console.log('       four canvas edits, four undo steps, walked back in order');
   } finally { await letGo(); if (target) await removeLabelByKey(target.key); }
+});
+/* ---- Selecting a region of the model (2.49.0) ----
+   A Shift-drag, or any drag while Drag to select is on, draws a box over the model; the Cα inside
+   become a highlight and a popover offers to label them all. The box is built around a few known Cα
+   atoms, and the residues it should catch are counted with the same projection just before the
+   drag. Each step takes back the selections and labels it made and leaves the mode off. */
+const boxRegion = async (seedKey = null) => {
+  await page.locator('#gpv-stage').scrollIntoViewIfNeeded(); await page.waitForTimeout(200);
+  return page.evaluate(seedKey => {
+    const d = window.__viewerDebug;
+    const rect = document.querySelector('#gpv-stage').getBoundingClientRect();
+    const left = rect.left + scrollX; const top = rect.top + scrollY;
+    const centre = { x: left + rect.width / 2, y: top + rect.height / 2 };
+    const points = [];
+    /* The same residues the app counts as drawn: no hidden chain, nothing under the confidence cut. */
+    const threshold = Number(document.querySelector('#gpv-hide-below').value) || 0;
+    d.displayedEntries().filter(entry => entry.model).forEach(entry => {
+      const hidden = entry.hiddenChains || [];
+      entry.atoms.forEach(atom => {
+        if (atom.atom !== 'CA' || atom.hetflag || hidden.includes(atom.chain || '')) return;
+        if (threshold && entry.scores.length && Number(atom.b) < threshold) return;
+        const s = d.viewer.modelToScreen({ x: atom.x, y: atom.y, z: atom.z });
+        if (!s || !Number.isFinite(s.x) || !Number.isFinite(s.y)) return;
+        points.push({ key: [entry.id, atom.chain || '', atom.resi].join('|'), entryId: entry.id, chain: atom.chain || '', resi: atom.resi, x: s.x, y: s.y });
+      });
+    });
+    if (!points.length) return null;
+    const seed = (seedKey && points.find(point => point.key === seedKey)) || points.slice().sort((a, b) => Math.hypot(a.x - centre.x, a.y - centre.y) - Math.hypot(b.x - centre.x, b.y - centre.y))[0];
+    /* The seed and its neighbours along the chain are the residues the box is drawn around. */
+    const known = points.filter(point => point.entryId === seed.entryId && point.chain === seed.chain && Math.abs(point.resi - seed.resi) <= 2);
+    const clamp = box => ({
+      left: Math.max(Math.round(box.left), Math.round(left) + 12), right: Math.min(Math.round(box.right), Math.round(left + rect.width) - 12),
+      top: Math.max(Math.round(box.top), Math.round(top) + 12, Math.round(scrollY) + 12), bottom: Math.min(Math.round(box.bottom), Math.round(top + rect.height) - 12, Math.round(scrollY + innerHeight) - 12)
+    });
+    let box = clamp({ left: Math.min(...known.map(p => p.x)) - 8, right: Math.max(...known.map(p => p.x)) + 8, top: Math.min(...known.map(p => p.y)) - 8, bottom: Math.max(...known.map(p => p.y)) + 8 });
+    /* No Cα within 2 px of an edge, so how an engine rounds pointer coordinates cannot decide whether
+       a residue is in or out. */
+    const nearEdge = b => points.some(p => ((Math.abs(p.x - b.left) < 2 || Math.abs(p.x - b.right) < 2) && p.y > b.top - 2 && p.y < b.bottom + 2) || ((Math.abs(p.y - b.top) < 2 || Math.abs(p.y - b.bottom) < 2) && p.x > b.left - 2 && p.x < b.right + 2));
+    for (let tries = 0; tries < 20 && nearEdge(box); tries += 1) box = clamp({ left: box.left - 3, right: box.right + 3, top: box.top - 3, bottom: box.bottom + 3 });
+    const keys = [...new Set(points.filter(p => p.x >= box.left && p.x <= box.right && p.y >= box.top && p.y <= box.bottom).map(p => p.key))].sort();
+    return { x0: box.left - scrollX, y0: box.top - scrollY, x1: box.right - scrollX, y1: box.bottom - scrollY, keys, known: known.map(p => p.key), clean: !nearEdge(box) };
+  }, seedKey);
+};
+const selectionsNow = () => page.evaluate(() => JSON.parse(JSON.stringify(window.__viewerDebug.selectionRecords())));
+const boxKeys = records => [...new Set(records.flatMap(record => record.residues.map(resi => [record.entryId, record.chain || '', resi].join('|'))))].sort();
+const boxPopoverShown = () => page.locator('#gpv-box-popover').isVisible();
+const boxModeOn = () => page.evaluate(() => window.__viewerDebug.boxSelectMode());
+const cameraNow = () => page.evaluate(() => window.__viewerDebug.viewer.getView().slice(0, 8));
+const sameCamera = (a, b) => a.every((value, index) => Math.abs(value - b[index]) <= 1e-6);
+/* Down, across in several moves, up — with Shift held unless the toggle is doing the work. Shift is
+   always let go: a Shift left down would turn the next F into full screen. */
+const dragBox = async (region, shift = true) => {
+  if (shift) await page.keyboard.down('Shift');
+  try {
+    await page.mouse.move(region.x0, region.y0); await page.mouse.down();
+    await page.mouse.move((region.x0 + region.x1) / 2, (region.y0 + region.y1) / 2, { steps: 4 });
+    await page.mouse.move(region.x1, region.y1, { steps: 4 });
+    await page.mouse.up();
+  } finally { if (shift) await page.keyboard.up('Shift'); }
+  await page.waitForTimeout(450);
+};
+const closeBoxPopover = async () => { if (await boxPopoverShown()) { await page.click('#gpv-box-popover .gpv-label-editor-close'); await page.waitForTimeout(150); } };
+const boxModeOff = async () => { if (await boxModeOn()) { await page.click('#gpv-box-select'); await page.waitForTimeout(150); } };
+/* Back to the number of selections the step started with, newest rows first. */
+const trimSelections = async count => {
+  for (let guard = 0; guard < 40 && (await selectionsNow()).length > count; guard += 1) {
+    await page.locator('#gpv-selection-list .gpv-entry').last().locator('button:has-text("Remove")').click(); await page.waitForTimeout(200);
+  }
+};
+const removeLabelsByKey = async keys => { for (const key of keys) await removeLabelByKey(key); };
+await step('a Shift-drag over the model highlights exactly the residues inside the box and leaves the camera still', async () => {
+  await letGo();
+  const startCount = (await selectionsNow()).length;
+  try {
+    const region = await boxRegion();
+    if (!region || region.keys.length < 2) throw new Error('no box of residues on screen: ' + JSON.stringify(region));
+    const camera = await cameraNow();
+    const steps = await rememberedSteps();
+    await dragBox(region);
+    if (!sameCamera(await cameraNow(), camera)) throw new Error('the model turned during the Shift-drag');
+    const added = (await selectionsNow()).slice(startCount);
+    if (!added.length) throw new Error('no selection was added · ' + (await page.locator('#gpv-state').textContent()));
+    if (added.some(record => record.action !== 'highlight')) throw new Error('the box made a selection that is not a highlight: ' + JSON.stringify(added));
+    const colour = await page.inputValue('#gpv-selection-color');
+    if (added.some(record => record.color !== colour)) throw new Error('the highlight is not in the chosen colour ' + colour);
+    const got = boxKeys(added);
+    if (JSON.stringify(got) !== JSON.stringify(region.keys)) throw new Error('selected ' + JSON.stringify(got) + ', expected the ' + region.keys.length + ' projected inside: ' + JSON.stringify(region.keys));
+    if (!region.known.every(key => got.includes(key))) throw new Error('the residues the box was drawn around are not all in it');
+    if ((await rememberedSteps()) - steps !== 1) throw new Error('the box selection took ' + ((await rememberedSteps()) - steps) + ' undo steps, not 1');
+    if (!(await boxPopoverShown())) throw new Error('no popover after the box');
+    const summary = ((await page.locator('#gpv-box-popover .gpv-box-popover-summary').textContent()) || '').trim();
+    if (!summary.startsWith(region.keys.length + ' residue')) throw new Error('the popover says "' + summary + '" for ' + region.keys.length + ' residues');
+    if ((await page.getAttribute('#gpv-box-popover', 'aria-label')) !== 'Selected residues') throw new Error('the popover is not labelled "Selected residues"');
+    if ((await focusedId()) !== 'gpv-box-label-all') throw new Error('focus is on ' + (await focusedId()) + ', not Label all');
+    console.log('       ' + summary + ' · ' + added.length + ' highlight row' + (added.length === 1 ? '' : 's') + ' · camera still' + (region.clean ? '' : ' · (an atom sat near an edge)'));
+  } finally { await closeBoxPopover(); await trimSelections(startCount); }
+});
+await step('Label all labels each selected residue but leaves an existing label alone, pushes the new ones apart, and undoes in two steps', async () => {
+  let existing = null; let made = [];
+  const startCount = (await selectionsNow()).length;
+  try {
+    existing = await labelOnCanvas('Kept text');
+    await letGo();
+    const before = await labelByKey(existing.key);
+    const region = await boxRegion(existing.key);
+    if (!region || !region.keys.includes(existing.key) || region.keys.length < 3) throw new Error('no box of residues around the labelled one: ' + JSON.stringify(region));
+    made = region.keys.filter(key => key !== existing.key);
+    await dragBox(region);
+    if (!(await boxPopoverShown())) throw new Error('no popover after the box');
+    const groups = (await selectionsNow()).length - startCount;
+    const steps = await rememberedSteps();
+    await page.keyboard.press('Enter'); await page.waitForTimeout(600);
+    if (await boxPopoverShown()) throw new Error('the popover stayed open after Label all');
+    const labels = await page.evaluate(() => JSON.parse(JSON.stringify(window.__viewerDebug.labelRecords())));
+    const missing = made.filter(key => !labels.some(label => label.key === key));
+    if (missing.length) throw new Error('Label all left ' + missing.length + ' residues unlabelled: ' + missing.join(', '));
+    if (new Set(labels.map(label => label.key)).size !== labels.length) throw new Error('a residue got two labels');
+    const wrong = labels.filter(label => made.includes(label.key) && label.text !== (label.resn || 'RES') + label.resi + (label.chain ? ' · ' + label.chain : ''));
+    if (wrong.length) throw new Error('labels not in the RESN45 · A form: ' + wrong.map(label => label.text).join(', '));
+    const whole = label => JSON.stringify(Object.keys(label).sort().map(name => [name, label[name]]));
+    const kept = labels.find(label => label.key === existing.key);
+    if (!kept || whole(kept) !== whole(before)) throw new Error('the label already there changed: ' + whole(before) + ' → ' + (kept ? whole(kept) : 'gone'));
+    if ((await rememberedSteps()) - steps !== 1) throw new Error('Label all took ' + ((await rememberedSteps()) - steps) + ' undo steps, not 1');
+    const said = ((await page.locator('#gpv-state').textContent()) || '').trim();
+    if (!said.startsWith('Labelled ' + made.length + ' residue')) throw new Error('announced: ' + said);
+    /* Separated: the new labels cover less of each other than they would sitting on their residues. */
+    const cover = await page.evaluate(keys => {
+      const d = window.__viewerDebug;
+      const labels = d.labelRecords().filter(label => keys.includes(label.key));
+      const area = boxes => {
+        let total = 0;
+        for (let i = 0; i < boxes.length; i += 1) for (let j = i + 1; j < boxes.length; j += 1) {
+          const a = boxes[i]; const b = boxes[j]; if (!a || !b) continue;
+          const wide = Math.min(a.x + a.halfWidth, b.x + b.halfWidth) - Math.max(a.x - a.halfWidth, b.x - b.halfWidth);
+          const tall = Math.min(a.y + a.halfHeight, b.y + b.halfHeight) - Math.max(a.y - a.halfHeight, b.y - b.halfHeight);
+          if (wide > 0 && tall > 0) total += wide * tall;
+        }
+        return total;
+      };
+      return { now: area(labels.map(label => d.labelScreenBox(label))), piled: area(labels.map(label => d.labelScreenBox({ ...label, offset: null }))), moved: labels.filter(label => label.autoPlaced).length };
+    }, region.keys);
+    if (cover.piled > 0 && !(cover.moved > 0 && cover.now < cover.piled)) throw new Error('the new labels were not pushed apart: overlap ' + cover.piled.toFixed(0) + ' → ' + cover.now.toFixed(0) + ' px², ' + cover.moved + ' moved');
+    await focusStage();
+    await page.keyboard.press('Control+z'); await page.waitForTimeout(400);
+    const afterOne = await page.evaluate(() => window.__viewerDebug.labelRecords().map(label => label.key));
+    if (made.some(key => afterOne.includes(key))) throw new Error('the first undo did not take the new labels back');
+    if (!afterOne.includes(existing.key)) throw new Error('the first undo took the existing label too');
+    if ((await selectionsNow()).length !== startCount + groups) throw new Error('the first undo took the highlight back as well');
+    await page.keyboard.press('Control+z'); await page.waitForTimeout(400);
+    if ((await selectionsNow()).length !== startCount) throw new Error('the second undo did not take the highlight back');
+    if (!(await labelByKey(existing.key))) throw new Error('the second undo took the existing label');
+    console.log('       ' + said + ' · overlap ' + cover.piled.toFixed(0) + ' → ' + cover.now.toFixed(0) + ' px² · two undos, labels then highlight');
+  } finally {
+    await closeBoxPopover(); await letGo();
+    await removeLabelsByKey(made); if (existing) await removeLabelByKey(existing.key);
+    await trimSelections(startCount);
+  }
+});
+await step('a Shift-drag shorter than 6 px is a click: the label editor opens and nothing is selected', async () => {
+  const startCount = (await selectionsNow()).length;
+  try {
+    await letGo();
+    const target = await canvasResidue();
+    if (!target) throw new Error('no residue on screen to tap');
+    const steps = await rememberedSteps();
+    await page.keyboard.down('Shift');
+    try {
+      await page.mouse.move(target.x, target.y); await page.mouse.down();
+      await page.mouse.move(target.x + 3, target.y + 2, { steps: 2 });
+      await page.mouse.up();
+    } finally { await page.keyboard.up('Shift'); }
+    await page.waitForTimeout(400);
+    if (!(await editorShown())) throw new Error('a 3 × 2 px Shift-drag did not open the label editor');
+    if (!/^Label for /.test((await page.getAttribute('#gpv-label-editor', 'aria-label')) || '')) throw new Error('the editor did not open on a residue');
+    if (await boxPopoverShown()) throw new Error('a click opened the selection popover');
+    if ((await selectionsNow()).length !== startCount) throw new Error('a click made a selection');
+    if ((await rememberedSteps()) !== steps) throw new Error('a click left an undo step');
+  } finally { await closeBoxPopover(); await letGo(); await trimSelections(startCount); }
+});
+await step('with Drag to select on a plain drag selects; Esc turns it off, and so does starting to measure', async () => {
+  const startCount = (await selectionsNow()).length;
+  try {
+    await letGo();
+    await page.click('#gpv-box-select'); await page.waitForTimeout(200);
+    if (!(await boxModeOn())) throw new Error('the toggle did not turn selecting on');
+    if (((await page.locator('#gpv-box-select').textContent()) || '').trim() !== 'Stop selecting') throw new Error('the toggle does not read Stop selecting');
+    if ((await page.getAttribute('#gpv-box-select', 'aria-pressed')) !== 'true') throw new Error('the toggle is not marked pressed');
+    const region = await boxRegion();
+    if (!region || region.keys.length < 2) throw new Error('no box of residues on screen');
+    const camera = await cameraNow();
+    await dragBox(region, false);
+    if (!sameCamera(await cameraNow(), camera)) throw new Error('a drag turned the model while Drag to select was on');
+    const got = boxKeys((await selectionsNow()).slice(startCount));
+    if (JSON.stringify(got) !== JSON.stringify(region.keys)) throw new Error('selected ' + got.length + ' residues, expected ' + region.keys.length);
+    if (!(await boxPopoverShown())) throw new Error('no popover after the box');
+    await closeBoxPopover();
+    if (!(await boxModeOn())) throw new Error('closing the popover turned the mode off');
+    await focusStage(); await page.keyboard.press('Escape'); await page.waitForTimeout(200);
+    if (await boxModeOn()) throw new Error('Esc did not turn Drag to select off');
+    if (((await page.locator('#gpv-box-select').textContent()) || '').trim() !== 'Drag to select') throw new Error('the toggle does not read Drag to select again');
+    await page.click('#gpv-box-select'); await page.waitForTimeout(150);
+    await page.click('#gpv-measure'); await page.waitForTimeout(200);
+    if (await boxModeOn()) throw new Error('starting to measure did not turn Drag to select off');
+    await page.click('#gpv-box-select'); await page.waitForTimeout(150);
+    if (/Stop measuring/.test((await page.locator('#gpv-measure').textContent()) || '')) throw new Error('turning Drag to select on did not stop measuring');
+  } finally {
+    await closeBoxPopover(); await boxModeOff();
+    if (/Stop measuring/.test((await page.locator('#gpv-measure').textContent()) || '')) { await page.click('#gpv-measure'); await page.waitForTimeout(200); }
+    await letGo(); await trimSelections(startCount);
+  }
+});
+await step('Label residues on a highlight row labels its residues, and a hide row has no such button', async () => {
+  const startCount = (await selectionsNow()).length;
+  const fields = { chain: await page.inputValue('#gpv-selection-chain'), range: await page.inputValue('#gpv-selection-range'), action: await page.inputValue('#gpv-selection-action') };
+  let made = [];
+  try {
+    await page.fill('#gpv-selection-chain', 'A'); await page.fill('#gpv-selection-range', '5-7'); await page.selectOption('#gpv-selection-action', 'highlight');
+    await page.click('#gpv-add-selection'); await page.waitForTimeout(400);
+    await page.fill('#gpv-selection-range', '20,21'); await page.selectOption('#gpv-selection-action', 'hide');
+    await page.click('#gpv-add-selection'); await page.waitForTimeout(400);
+    const records = (await selectionsNow()).slice(startCount);
+    if (records.length !== 2) throw new Error('expected a highlight and a hide row, found ' + records.length);
+    const rows = page.locator('#gpv-selection-list .gpv-entry');
+    const count = await rows.count();
+    if (await rows.nth(count - 1).locator('button:has-text("Label residues")').count()) throw new Error('a hide row offers Label residues');
+    const expected = await page.evaluate(record => {
+      const entry = window.__viewerDebug.entries().find(item => item.id === record.entryId);
+      return [...new Set(entry.atoms.filter(atom => atom.atom === 'CA' && !atom.hetflag && (atom.chain || '') === 'A' && record.residues.includes(atom.resi)).map(atom => [entry.id, 'A', atom.resi].join('|')))].sort();
+    }, records[0]);
+    if (!expected.length) throw new Error('chain A has none of residues 5–7');
+    const already = await page.evaluate(() => window.__viewerDebug.labelRecords().map(label => label.key));
+    made = expected.filter(key => !already.includes(key));
+    const steps = await rememberedSteps();
+    await rows.nth(count - 2).locator('button:has-text("Label residues")').click(); await page.waitForTimeout(400);
+    const now = await page.evaluate(() => window.__viewerDebug.labelRecords().map(label => label.key));
+    const missing = expected.filter(key => !now.includes(key));
+    if (missing.length) throw new Error('Label residues left ' + missing.join(', ') + ' unlabelled');
+    if ((await rememberedSteps()) - steps !== 1) throw new Error('Label residues took ' + ((await rememberedSteps()) - steps) + ' undo steps, not 1');
+    const said = ((await page.locator('#gpv-state').textContent()) || '').trim();
+    if (!said.startsWith('Labelled ' + made.length + ' residue')) throw new Error('announced: ' + said);
+    console.log('       ' + said + ' from the A:5-7 highlight row');
+  } finally {
+    await removeLabelsByKey(made); await trimSelections(startCount);
+    await page.fill('#gpv-selection-chain', fields.chain); await page.fill('#gpv-selection-range', fields.range); await page.selectOption('#gpv-selection-action', fields.action);
+  }
+});
+await step('the popover\'s Esc keeps the highlight, and its Undo takes the selection back', async () => {
+  const startCount = (await selectionsNow()).length;
+  try {
+    await letGo();
+    const region = await boxRegion();
+    if (!region || region.keys.length < 2) throw new Error('no box of residues on screen');
+    await dragBox(region);
+    const first = (await selectionsNow()).length;
+    if (first <= startCount || !(await boxPopoverShown())) throw new Error('the first box made no selection or no popover');
+    await page.keyboard.press('Escape'); await page.waitForTimeout(250);
+    if (await boxPopoverShown()) throw new Error('Esc left the popover open');
+    if ((await selectionsNow()).length !== first) throw new Error('Esc took the highlight away');
+    if ((await focusedId()) !== 'gpv-stage') throw new Error('Esc left the focus on ' + (await focusedId()) + ', not the stage');
+    await dragBox(region);
+    const second = (await selectionsNow()).length;
+    if (second <= first || !(await boxPopoverShown())) throw new Error('the second box made no selection or no popover');
+    await page.click('#gpv-box-undo'); await page.waitForTimeout(400);
+    if (await boxPopoverShown()) throw new Error('Undo left the popover open');
+    if ((await selectionsNow()).length !== first) throw new Error('Undo left ' + ((await selectionsNow()).length - startCount) + ' box rows, expected ' + (first - startCount));
+  } finally { await closeBoxPopover(); await trimSelections(startCount); }
+});
+await step('the orientation is put back after the canvas steps', async () => {
+  await letGo();
+  await focusStage(); await page.keyboard.press('Shift+r'); await page.waitForTimeout(500);
 });
 await step('one position is compared across a wild-type and a mutant model: side chains, a label per model, and the difference stated', async () => {
   /* A point mutant of the fixture: chain A residue 15 becomes glycine, everything else identical —

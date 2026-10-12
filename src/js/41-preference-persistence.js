@@ -149,6 +149,7 @@
     stopCycle();
     stopMotion();
     dismissCanvasText();
+    setBoxSelectMode(false);
     viewer.removeAllModels();
     viewer.removeAllLabels();
     viewer.removeAllShapes();
@@ -380,6 +381,8 @@
     if (canvasTextKeydown(event, typing)) return;
     if (event.key === '?') { event.preventDefault(); openHelp(); return; }
     if (event.key === 'Escape') {
+      /* Selecting by dragging is the most passing of the modes, so Esc leaves it first. */
+      if (boxSelectMode) { setBoxSelectMode(false, true); return; }
       if (fullscreen) { setFullscreen(false); return; }
       if (annotationActive) { toggleAnnotating(false); return; }
       if (measurementActive) { toggleMeasurement(); return; }

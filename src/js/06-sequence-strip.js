@@ -133,7 +133,7 @@
   }
 
   function resetSequenceHint() {
-    root.querySelector('#gpv-sequence-hint').textContent = 'Hover to read a residue · click to select it for a label · drag to pick a range · double-click to zoom';
+    root.querySelector('#gpv-sequence-hint').textContent = 'Hover to read a residue · click to select it for a label · drag to pick a range · double-click to zoom · Shift-drag over the model (or Drag to select) picks a region';
   }
 
   /* A residue picked from the strip or the letters counts as an atom click, so

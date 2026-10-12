@@ -176,6 +176,7 @@
     annotationActive = force === null ? !annotationActive : force;
     annotationDraft = [];
     if (annotationActive && measurementActive) toggleMeasurement();
+    if (annotationActive && boxSelectMode) setBoxSelectMode(false);
     setButtonText(root.querySelector('#gpv-annotate'), annotationActive ? 'Stop drawing' : 'Start drawing');
     root.querySelector('#gpv-stage').classList.toggle('is-drawing', annotationActive);
     root.querySelector('#gpv-annotation-state').textContent = annotationActive ? annotationPrompt() : 'Pick a tool, start drawing, then click atoms in the main viewer.';
@@ -520,11 +521,15 @@
   function watchStageClicks() {
     const stage = root.querySelector('#gpv-stage');
     stage.addEventListener('pointerdown', event => {
-      /* The label editor lives inside the stage; a press on its own field or buttons is not a press
-         on the structure. Anywhere else on the stage closes it, uncommitted, before anything else. */
-      if (isInLabelEditor(event.target)) return;
+      /* The label editor and the box selection's popover live inside the stage; a press on their
+         own fields or buttons is not a press on the structure. Anywhere else on the stage closes
+         them — the editor uncommitted, the popover keeping its highlight — before anything else. */
+      if (isInLabelEditor(event.target) || isInBoxPopover(event.target)) return;
       closeLabelEditor(false);
+      closeBoxPopover(false);
       if (event.button !== 0) return;
+      /* Shift (or the Drag to select toggle) makes the drag a selection rectangle (04b). */
+      if (beginBoxSelection(event)) return;
       if (event.pointerType !== 'touch') {
         const hit = labelHitAt(event.pageX, event.pageY);
         if (hit) {
@@ -569,14 +574,15 @@
     const readout = root.querySelector('#gpv-hover');
     let hoverFrame = 0; let hoverAt = null;
     stage.addEventListener('pointermove', event => {
-      if (event.pointerType === 'touch' || pointerStart) return;
-      if (isInLabelEditor(event.target)) { hoverAt = null; stage.style.cursor = ''; return; }
+      if (event.pointerType === 'touch' || pointerStart || boxDrag) return;
+      if (isInLabelEditor(event.target) || isInBoxPopover(event.target)) { hoverAt = null; stage.style.cursor = ''; return; }
       hoverAt = { x: event.pageX, y: event.pageY };
       if (hoverFrame) return;
       hoverFrame = requestAnimationFrame(() => {
         hoverFrame = 0;
         if (!hoverAt) return;
-        const overLabel = labelHitAt(hoverAt.x, hoverAt.y);
+        /* While Drag to select is on, a drag from a label draws a box, so it offers no move. */
+        const overLabel = !boxSelectMode && labelHitAt(hoverAt.x, hoverAt.y);
         stage.style.cursor = overLabel ? 'grab' : '';
         if (overLabel) { readout.textContent = 'Drag to move · click to edit “' + clipText(String(overLabel.text || ''), 40) + '”'; return; }
         const hit = pickAtomAt(hoverAt.x, hoverAt.y, true);
@@ -612,6 +618,7 @@
   function toggleMeasurement() {
     measurementActive = !measurementActive; measurementDraft = [];
     if (measurementActive && annotationActive) toggleAnnotating(false);
+    if (measurementActive && boxSelectMode) setBoxSelectMode(false);
     root.querySelector('#gpv-measure').textContent = measurementActive ? 'Stop measuring' : 'Start measuring';
     const required = root.querySelector('#gpv-measure-type').value === 'angle' ? 3 : 2;
     root.querySelector('#gpv-measure-state').textContent = measurementActive ? 'Select ' + required + ' atoms in the viewer.' : 'Measurement mode is off.';

@@ -28,6 +28,14 @@ All notable changes to this project are recorded here.
 - **Move buttons on every residue label row.** Each row in the label list now has ← → ↑ ↓ buttons
   (12 px a press) and **Select**, which makes that label the active one. Dragging stays mouse-only —
   a finger drag turns the model — so these are how a label is moved on a touchscreen.
+- **Select a region by dragging over the model, and label it in one go.** `Shift` + drag draws a box
+  over the model instead of turning it; every residue whose Cα falls inside becomes a highlight (one
+  row per model and chain, one undo step), and a popover at the box offers **Label all** — a label
+  per residue, `ALA45 · A`, leaving existing labels as they are and pushing the new ones apart so
+  they do not pile up, as one more undo step — **Keep highlight only** or **Undo**. On a touchscreen
+  the **Drag to select** button in Annotate makes any drag draw the box; `Esc` turns it off. Every
+  highlight row in the selection list now has a **Label residues** button that does the same for that
+  highlight.
 
 ### Changed
 

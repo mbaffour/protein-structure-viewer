@@ -18,7 +18,7 @@
   let labelEditorHost = null;
   /* The Annotate panel's readout before anything is selected; the same words as the page's markup,
      so Clear all puts back what a fresh page shows. */
-  const idleResidueText = 'Click a residue in the viewer or the sequence strip to inspect it — a label editor opens at it. L opens it for the selected residue.';
+  const idleResidueText = 'Click a residue in the viewer or the sequence strip to inspect it — a label editor opens at it. L opens it for the selected residue. Shift-drag over the model, or Drag to select, picks a region to highlight and label.';
 
   function canvasTextIdentity(kind, record) {
     if (kind === 'label') return { kind, key: record.key || null, record };
@@ -341,6 +341,7 @@
      model, Clear labels, Clear all — leaves neither behind. Nothing is committed. */
   function dismissCanvasText() {
     closeLabelEditor(false);
+    closeBoxPopover(false);
     activeText = null;
   }
 

@@ -102,6 +102,7 @@ Anything the viewer cannot interpret is skipped and reported in the red notice b
 | <kbd>Enter</kbd> / <kbd>Esc</kbd> | In the label editor: add or update the label / close it without changes |
 | <kbd>←</kbd> <kbd>→</kbd> <kbd>↑</kbd> <kbd>↓</kbd> | Move the active label 8 px (<kbd>Shift</kbd>: 1 px) |
 | <kbd>Delete</kbd> | Remove the active label |
+| <kbd>Shift</kbd> + drag | Draw a box over the model: the residues inside are highlighted, and the popover labels them all (<kbd>Enter</kbd>) or keeps the highlight (<kbd>Esc</kbd>) |
 | <kbd>C</kbd> | Start or pause automatic cycling |
 | <kbd>F</kbd> | Fit every panel to what it displays |
 | <kbd>S</kbd> | Start or stop spinning |
@@ -111,7 +112,7 @@ Anything the viewer cannot interpret is skipped and reported in the red notice b
 | <kbd>1</kbd>–<kbd>6</kbd> | Jump to Models / Appearance / Annotate / Compare / Confidence / Publish |
 | <kbd>Ctrl</kbd>/<kbd>⌘</kbd> + <kbd>Z</kbd> | Undo the last label, selection, measurement or annotation change (add <kbd>Shift</kbd> to redo) |
 | <kbd>?</kbd> | Open in-app help |
-| <kbd>Esc</kbd> | Close the label editor or let go of the active label; otherwise close help, leave full screen, or stop measuring or drawing |
+| <kbd>Esc</kbd> | Close the label editor or let go of the active label; otherwise close help, leave *Drag to select*, leave full screen, or stop measuring or drawing |
 
 Shortcuts are suppressed while you are typing in a field.
 
@@ -294,6 +295,20 @@ unreadable for large ones.
 **Selections.** Pick a model, optionally a chain, and a residue range (`20-45`, or `20,24,31`, or a
 mix), then **Highlight** it in a chosen colour or **Hide** it. Leaving the chain blank applies the
 range to every chain.
+
+**Selecting a region of the model.** Hold <kbd>Shift</kbd> and drag across the model: instead of
+turning, the view draws a box, and every residue whose Cα lies inside it — in every displayed model,
+except hidden chains and residues hidden by the confidence cut — becomes a highlight in the highlight
+colour, one row per model and chain, as a single undo step. A popover at the box says how many
+residues it caught and offers **Label all** (<kbd>Enter</kbd>), which labels each of them
+`ALA45 · A`, leaves residues that already have a label as they are, and pushes the new labels apart so
+they do not land in a pile — one more undo step; **Keep highlight only** (or <kbd>Esc</kbd>); and
+**Undo**, which takes the selection back. A box smaller than 6 px is a click. On a touchscreen, or
+without a Shift key to hand, turn on **Drag to select** beside *Add selection*: while it reads
+**Stop selecting**, any drag draws the box; <kbd>Esc</kbd>, or starting to measure or draw, turns it
+off. Every highlight row in the list also has **Label residues**, which labels that highlight's
+residues the same way. To pick a range by residue number instead of by where it sits, drag across
+the sequence strip.
 
 **Domains.** Name a region — for example *N-lobe*, chain blank for every chain or a chain ID for
 one, residues `1-75` or `1-75,120-140`, a colour — and choose where it applies: **Every model from the

@@ -172,6 +172,13 @@ Phone checks emulate viewport dimensions, not a physical phone or its GPU.
   less with Shift, and ← → leave the models alone until Esc lets go; Delete removes it and undo brings it back; a
   row's arrow button moves its label and Select makes it active; a `touchscreen.tap` in a touch-enabled context opens
   the editor; and add, edit, nudge and remove are four undo steps walked back in order.
+- Selecting a region: a Shift-drag over a box computed from projected Cα atoms leaves the camera where it was and
+  adds highlight records listing exactly the residues projected inside, one undo step, and a popover with that count;
+  Label all labels each of them except one already labelled (whose record is untouched), pushes the new labels apart,
+  in one more undo step, and two undos take back the labels and then the highlight; a Shift-drag under 6 px is a click
+  that opens the label editor; with Drag to select on a plain drag selects, Esc turns the mode off, and starting to
+  measure turns it off too; a highlight row's Label residues labels its residues and a hide row has no such button;
+  the popover's Esc keeps the highlight and its Undo removes it.
 - Legend position: the same figure SVG carries the legend as one row at the bottom left, and as a stack of three or more
   rows on the right when the position is changed; the scene records the choice.
 - Comparing a position: a mutant of `model_a` with chain A residue 15 changed from ALA to GLY is dropped in and shown
