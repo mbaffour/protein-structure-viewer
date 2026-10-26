@@ -148,6 +148,8 @@
     if (structures.length > 1 && !confirm('Remove all ' + structures.length + ' models, plus any labels, selections, measurements, and saved views?')) return;
     stopCycle();
     stopMotion();
+    dismissCanvasText();
+    setBoxSelectMode(false);
     viewer.removeAllModels();
     viewer.removeAllLabels();
     viewer.removeAllShapes();
@@ -179,7 +181,7 @@
     interactionResults = null;
     alignmentResults = [];
     pendingScene = null;
-    root.querySelector('#gpv-residue').textContent = 'Click any atom in the viewer to inspect it.';
+    root.querySelector('#gpv-residue').textContent = idleResidueText;
     root.querySelector('#gpv-label-text').value = '';
     root.querySelector('#gpv-position-set').value = '';
     root.querySelector('#gpv-add-label').disabled = true;
@@ -240,6 +242,7 @@
   });
   root.querySelector('#gpv-clear-labels').addEventListener('click', () => {
     if (labelRecords.length) remember('clearing labels');
+    dismissCanvasText();
     labelRecords = [];
     renderLabelList();
     root.querySelector('#gpv-all-labels').checked = false;
@@ -268,7 +271,7 @@
     setTimeout(() => panelViewers().forEach(target => target.resize()), 0);
     updateStatus(event.target.checked ? 'Synchronized multi-view on · drag any panel' : 'Single view');
   });
-  root.querySelector('#gpv-left-model').addEventListener('change', event => { activeId = Number(event.target.value); root.querySelector('#gpv-current').value = event.target.value; applyStyle(); fitPrimary(); viewer.render(); syncViewsFrom(viewer); });
+  root.querySelector('#gpv-left-model').addEventListener('change', event => { dismissCanvasText(); activeId = Number(event.target.value); root.querySelector('#gpv-current').value = event.target.value; applyStyle(); fitPrimary(); viewer.render(); syncViewsFrom(viewer); });
   root.querySelector('#gpv-sync-mode').addEventListener('change', () => { fitAllViews(); updateStatus(root.querySelector('#gpv-sync-mode').value === 'full' ? 'Cameras locked together' : 'Rotation shared · each panel keeps its own framing'); });
   root.querySelector('#gpv-add-panel').addEventListener('click', () => { const panel = addComparePanel(); if (panel) updateStatus('Added panel ' + (comparePanels.length + 1) + ' · ' + ((entryById(panel.entryId) || {}).name || '')); });
   root.querySelector('#gpv-clear-panels').addEventListener('click', () => { clearComparePanels(); applyStyle(); setTimeout(() => viewer.resize(), 0); updateStatus('Comparison panels removed'); });
@@ -369,13 +372,17 @@
     /* event.target is not always an Element (it can be the document), and a
        shortcut must never swallow a character someone is typing — including the
        "?" that opens help. */
-    if (target instanceof Element && (target.matches('input, select, textarea, [contenteditable]') || target.closest('dialog[open]'))) {
-      if (event.key !== 'Escape') return;
-    }
+    const typing = target instanceof Element && (target.matches('input, select, textarea, [contenteditable]') || Boolean(target.closest('dialog[open]')));
+    if (typing && event.key !== 'Escape') return;
     if ((event.ctrlKey || event.metaKey) && !event.altKey && event.key.toLowerCase() === 'z') { event.preventDefault(); if (event.shiftKey) redo(); else undo(); return; }
     if (event.ctrlKey || event.metaKey || event.altKey) return;
+    /* The label editor, the active label's arrows and Delete, and L come first: while a label is
+       active the arrows move it instead of stepping through the models. */
+    if (canvasTextKeydown(event, typing)) return;
     if (event.key === '?') { event.preventDefault(); openHelp(); return; }
     if (event.key === 'Escape') {
+      /* Selecting by dragging is the most passing of the modes, so Esc leaves it first. */
+      if (boxSelectMode) { setBoxSelectMode(false, true); return; }
       if (fullscreen) { setFullscreen(false); return; }
       if (annotationActive) { toggleAnnotating(false); return; }
       if (measurementActive) { toggleMeasurement(); return; }

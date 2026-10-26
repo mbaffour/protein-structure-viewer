@@ -9,7 +9,7 @@
     'Save named views with captions in Publish. They become lettered figure panels, a caption file, and a guided tour in the report.',
     'Share report packs coordinates, aligned positions, confidence, and PAE into one HTML file a reviewer opens with no install.',
     'Keyboard: F refits every panel, S spins, C cycles models, ← → step through them, 1–6 jump between tabs, ? opens help.',
-    'Click any atom to read its residue and pLDDT, then add a label. Labels travel into the report and into PNG exports.',
+    'Click any atom to read its residue and pLDDT, and a label editor opens right there: type and press Enter. Click a label to edit it; the arrow keys then nudge it (Shift for 1 px) and Delete removes it. Labels travel into the report and into PNG exports.',
     'Download comparison PNG stitches the current panels into one lettered figure at the export size you chose.',
     'Annotate → Figure annotations: start drawing, then click two atoms for an arrow or line, or one atom for a marker or callout.',
     'Scene JSON records everything except coordinates. Archive it next to the structure files to rebuild a figure later.',
@@ -135,6 +135,7 @@
   root.querySelector('#gpv-demo').addEventListener('click', () => { root.querySelector('#gpv-fetch-id').value = '1ubq'; root.querySelector('#gpv-fetch').click(); });
   renderTip();
   watchStageClicks();
+  watchBoxSelection();
   restorePreferences();
   root.querySelector('#gpv-cite-version').textContent = viewerVersion;
   figureFont(); updateExportEstimate();
@@ -143,7 +144,7 @@
   offerSessionRestore();
   /* ?debug=1 exposes a few internals for the regression suite and for bug reports;
      it has no effect otherwise. */
-  if (new URLSearchParams(location.search).has('debug')) window.__viewerDebug = { viewer, pickAtomAt, displayedEntries, activeEntry, colorOptions, sceneSettings, contactResult: () => contactResult, residueData: () => residueData, msaAssets: () => msaAssets, entries: () => structures, nearbyResidues, assemblyDimensions, paeDomains, parseConfidenceBytes, methodsText, alignmentResults: () => alignmentResults, ensembleSpread: () => ensembleSpread, siteResults: () => siteResults, interfaceResults: () => interfaceResults, solventAccessibleArea, heavyAtoms, ligandGroups, architectureModel, domainSets, distinguishingNames, rmsdMatrix: () => rmsdMatrix, rmsdMedoid, scaleBarSpec, pixelsPerAngstrom, sceneCentre, exportDimensions, exportViewer: () => exportViewer, renderPublicationImage, furnitureLayout, legendMetrics, legendWanted, figurePalette, figureScale, releaseExportViewer, labelRecords: () => labelRecords, labelPosition, labelHitAt, labelScreenBox, separateLabels, spotlightResidues: () => spotlightResidues, positionEffect: () => positionEffect, savedViews: () => savedViews, selectionRecords: () => selectionRecords, labelStyle, themeColor, hexLuminance, backgroundSpec, paeTokenLayout, readNpy, materializeEntry, interactionScores, reportedPairIptm, reportedPairIptmMax, interactionResults: () => interactionResults, reportConfidence };
+  if (new URLSearchParams(location.search).has('debug')) window.__viewerDebug = { viewer, pickAtomAt, displayedEntries, activeEntry, colorOptions, sceneSettings, contactResult: () => contactResult, residueData: () => residueData, msaAssets: () => msaAssets, entries: () => structures, nearbyResidues, assemblyDimensions, paeDomains, parseConfidenceBytes, methodsText, alignmentResults: () => alignmentResults, ensembleSpread: () => ensembleSpread, siteResults: () => siteResults, interfaceResults: () => interfaceResults, solventAccessibleArea, heavyAtoms, ligandGroups, architectureModel, domainSets, distinguishingNames, rmsdMatrix: () => rmsdMatrix, rmsdMedoid, scaleBarSpec, pixelsPerAngstrom, sceneCentre, exportDimensions, exportViewer: () => exportViewer, renderPublicationImage, furnitureLayout, legendMetrics, legendWanted, figurePalette, figureScale, releaseExportViewer, labelRecords: () => labelRecords, labelPosition, labelHitAt, labelScreenBox, separateLabels, spotlightResidues: () => spotlightResidues, positionEffect: () => positionEffect, savedViews: () => savedViews, selectionRecords: () => selectionRecords, labelStyle, themeColor, hexLuminance, backgroundSpec, paeTokenLayout, readNpy, materializeEntry, interactionScores, reportedPairIptm, reportedPairIptmMax, interactionResults: () => interactionResults, reportConfidence, activeText: () => { const resolved = activeCanvasText(); return resolved ? { kind: resolved.kind, key: resolved.record.key || null, id: resolved.record.id || null } : null; }, labelEditor: () => (labelEditor ? { kind: labelEditor.kind, key: labelEditor.key || null, id: labelEditor.id || null } : null), undoDepth: () => undoStack.length, rememberedSteps: () => rememberedSteps, boxSelectMode: () => boxSelectMode };
   applyTheme(readJson(themeKey, 'system'));
   selectToolTab('models');
   applyAppearance();

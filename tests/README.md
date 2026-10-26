@@ -163,6 +163,22 @@ Phone checks emulate viewport dimensions, not a physical phone or its GPU.
   nothing selected the selection scope says so.
 - Dragging a label: hovering the label offers to move it, a 70 × −45 px drag moves it by the same amount on screen,
   leaves a model-space offset of more than 1 Å, does not move the camera, and Reset clears it.
+- Labelling on the canvas: a tap on a residue opens the label editor within 40 px of it, holding the suggested text
+  with the focus in it, and Enter adds exactly one label (one undo step), shows it in the list, announces
+  `Label added at …` and hands the focus back to the stage; Esc adds nothing and no undo step; a click on a label that
+  does not move it opens the editor on its text and Enter changes `text` and nothing else; while measuring a click
+  counts for the measurement and opens no editor; a sequence strip pick opens the editor and `L` reopens it for the
+  selected residue without typing the L; the active label moves with ArrowRight (offset changes, `autoPlaced` goes),
+  less with Shift, and ← → leave the models alone until Esc lets go; Delete removes it and undo brings it back; a
+  row's arrow button moves its label and Select makes it active; a `touchscreen.tap` in a touch-enabled context opens
+  the editor; and add, edit, nudge and remove are four undo steps walked back in order.
+- Selecting a region: a Shift-drag over a box computed from projected Cα atoms leaves the camera where it was and
+  adds highlight records listing exactly the residues projected inside, one undo step, and a popover with that count;
+  Label all labels each of them except one already labelled (whose record is untouched), pushes the new labels apart,
+  in one more undo step, and two undos take back the labels and then the highlight; a Shift-drag under 6 px is a click
+  that opens the label editor; with Drag to select on a plain drag selects, Esc turns the mode off, and starting to
+  measure turns it off too; a highlight row's Label residues labels its residues and a hide row has no such button;
+  the popover's Esc keeps the highlight and its Undo removes it.
 - Legend position: the same figure SVG carries the legend as one row at the bottom left, and as a stack of three or more
   rows on the right when the position is changed; the scene records the choice.
 - Comparing a position: a mutant of `model_a` with chain A residue 15 changed from ALA to GLY is dropped in and shown

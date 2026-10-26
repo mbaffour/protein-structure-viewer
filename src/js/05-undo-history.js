@@ -3,6 +3,9 @@
   const historyLimit = 60;
   let undoStack = [];
   let redoStack = [];
+  /* How many undo steps have ever been taken. The stack's length stops at historyLimit, so it cannot
+     say whether an action added a step; this count can (read by the regression suite). */
+  let rememberedSteps = 0;
 
   function snapshotRecords() {
     return structuredClone({ labels: labelRecords, selections: selectionRecords, measurements: measurementRecords, annotations: annotationRecords, domains: domainRecords, positions: spotlightResidues, views: savedViews });
@@ -16,6 +19,7 @@
   /* Call before mutating labels, selections, measurements or annotations. */
   function remember(what) {
     undoStack.push({ what, state: snapshotRecords() });
+    rememberedSteps += 1;
     if (undoStack.length > historyLimit) undoStack.shift();
     redoStack = [];
     renderHistoryButtons();
@@ -27,6 +31,11 @@
   }
 
   function restoreRecords(state) {
+    /* An open label editor may be editing text this state does not have; it closes uncommitted. The
+       active label is held by its key, so it is found again in the restored records if it is there. */
+    closeLabelEditor(false);
+    /* The box selection's popover describes a selection this state may not have. */
+    closeBoxPopover(false);
     const alive = record => Boolean(entryById(record.entryId));
     labelRecords = state.labels.filter(alive);
     selectionRecords = state.selections.filter(alive);

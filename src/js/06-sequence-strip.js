@@ -133,16 +133,19 @@
   }
 
   function resetSequenceHint() {
-    root.querySelector('#gpv-sequence-hint').textContent = 'Hover to read a residue · click to select it for a label · drag to pick a range · double-click to zoom';
+    root.querySelector('#gpv-sequence-hint').textContent = 'Hover to read a residue · click to select it for a label · drag to pick a range · double-click to zoom · Shift-drag over the model (or Drag to select) picks a region';
   }
 
   /* A residue picked from the strip or the letters counts as an atom click, so
      arrows, callouts and measurements can be drawn between residues chosen by
      number rather than by hunting for them in three dimensions. */
   function pickSequenceResidue(entry, atom) {
-    handleAtomClick(entry, atom);
-    root.querySelector('#gpv-sequence-hint').textContent = describeResidue(entry, atom) + (annotationActive ? ' added to the drawing' : measurementActive ? ' added to the measurement' : ' selected · add a label in Annotate, or double-click to zoom to it');
-    if (!root.querySelector('[data-gpv-panel="annotate"]').hidden) root.querySelector('#gpv-label-text').focus();
+    const taken = handleAtomClick(entry, atom);
+    /* A pick nothing else took opens the label editor at the residue, which takes the focus; the
+       panel's field only gets it when the editor did not open. */
+    if (!taken) openLabelEditorForResidue(entry, atom);
+    root.querySelector('#gpv-sequence-hint').textContent = describeResidue(entry, atom) + (annotationActive ? ' added to the drawing' : measurementActive ? ' added to the measurement' : ' selected · type a label and press Enter, or Esc · double-click to zoom to it');
+    if (taken && !root.querySelector('[data-gpv-panel="annotate"]').hidden) root.querySelector('#gpv-label-text').focus();
     updateStatus(residueText(entry, atom));
   }
 

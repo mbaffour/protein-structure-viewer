@@ -867,7 +867,7 @@ html>body{padding:0}</style>
   <div class="gpv-view-grid" id="gpv-view-grid">
     <div class="gpv-view-pane">
       <span class="viz-badge gpv-view-label" id="gpv-left-label" hidden>Primary</span>
-      <div class="card gpv-stage" id="gpv-stage" tabindex="0" role="application" aria-label="Interactive three-dimensional protein structure viewer. Drag to rotate, scroll to zoom, click an atom to inspect it."></div>
+      <div class="card gpv-stage" id="gpv-stage" tabindex="0" role="application" aria-label="Interactive three-dimensional protein structure viewer. Drag to rotate, scroll to zoom, click an atom to inspect and label it. L labels the selected residue; arrow keys move the active label. Shift-drag selects the residues in a box."></div>
       <div class="gpv-stage-empty" id="gpv-stage-empty"><i data-icon="orbit" aria-hidden="true"></i><strong>No structure loaded yet</strong><span class="text-muted">Drop a PDB, CIF, or a zipped AlphaFold, ColabFold, Boltz or Chai-1 result anywhere on this page, or fetch an ID above</span><button class="btn" type="button" id="gpv-demo"><i data-icon="cloud-download" aria-hidden="true"></i>Load an example (PDB 1ubq)</button></div>
       <div class="gpv-scalebar text-small" id="gpv-scalebar" hidden aria-hidden="true"><span id="gpv-scalebar-label"></span><i id="gpv-scalebar-line"></i></div>
       <div class="gpv-busy" id="gpv-busy" hidden aria-hidden="true"><span class="gpv-spinner"></span><span id="gpv-busy-label">Working…</span></div>
@@ -882,7 +882,7 @@ html>body{padding:0}</style>
   <div class="gpv-sequence" id="gpv-sequence" hidden>
     <div class="gpv-sequence-head text-small">
       <strong id="gpv-sequence-title">Sequence</strong>
-      <span class="text-muted" id="gpv-sequence-hint">Hover to read a residue · click to select it for a label · drag to pick a range · double-click to zoom</span>
+      <span class="text-muted" id="gpv-sequence-hint">Hover to read a residue · click to select it for a label · drag to pick a range · double-click to zoom · Shift-drag over the model (or Drag to select) picks a region</span>
       <button class="btn btn-ghost" type="button" id="gpv-sequence-toggle" aria-expanded="true" aria-controls="gpv-sequence-rows">Hide sequence</button>
     </div>
     <div class="gpv-sequence-rows" id="gpv-sequence-rows"></div>
@@ -950,7 +950,7 @@ html>body{padding:0}</style>
   </section>
 
   <section class="gpv-tool-panel" data-gpv-panel="annotate" hidden>
-    <div class="viz-controls gpv-history"><div class="gpv-selected-state" id="gpv-residue">Click a residue in the viewer or in the sequence strip to inspect it.</div><label class="form-label gpv-goto">Go to<input class="form-control" id="gpv-goto" type="text" placeholder="B:45 or 45" aria-label="Residue to go to, optionally with its chain"></label><button class="btn" type="button" id="gpv-goto-run" data-tooltip="Select the residue and zoom to it">Go</button><button class="btn btn-ghost" type="button" id="gpv-undo" disabled data-tooltip="Undo the last label, selection, measurement or annotation change (Ctrl/⌘ + Z)">Undo</button><button class="btn btn-ghost" type="button" id="gpv-redo" disabled data-tooltip="Redo (Ctrl/⌘ + Shift + Z)">Redo</button></div>
+    <div class="viz-controls gpv-history"><div class="gpv-selected-state" id="gpv-residue">Click a residue in the viewer or the sequence strip to inspect it — a label editor opens at it. L opens it for the selected residue. Shift-drag over the model, or Drag to select, picks a region to highlight and label.</div><label class="form-label gpv-goto">Go to<input class="form-control" id="gpv-goto" type="text" placeholder="B:45 or 45" aria-label="Residue to go to, optionally with its chain"></label><button class="btn" type="button" id="gpv-goto-run" data-tooltip="Select the residue and zoom to it">Go</button><button class="btn btn-ghost" type="button" id="gpv-undo" disabled data-tooltip="Undo the last label, selection, measurement or annotation change (Ctrl/⌘ + Z)">Undo</button><button class="btn btn-ghost" type="button" id="gpv-redo" disabled data-tooltip="Redo (Ctrl/⌘ + Shift + Z)">Redo</button></div>
     <div class="viz-controls">
       <label class="form-label">Residue label<input class="form-control" id="gpv-label-text" type="text" placeholder="Custom label"></label>
       <button class="btn" type="button" id="gpv-add-label" disabled>Add or update</button>
@@ -981,6 +981,7 @@ html>body{padding:0}</style>
       <label class="form-label">Action<select class="form-select" id="gpv-selection-action"><option value="highlight">Highlight</option><option value="hide">Hide</option></select></label>
       <label class="form-label">Highlight color<input class="form-control form-control-color" id="gpv-selection-color" type="color" value="#f97316"></label>
       <button class="btn" type="button" id="gpv-add-selection" disabled>Add selection</button>
+      <button class="btn" type="button" id="gpv-box-select" disabled aria-pressed="false" data-tooltip="While on, a drag across the model draws a box instead of turning it: every residue inside is highlighted in the colour above, and you can label them all. With a mouse, Shift + drag does the same without the toggle. Esc stops">Drag to select</button>
       <button class="btn btn-ghost" type="button" id="gpv-clear-selections">Clear selections</button>
     </div>
     <div class="viz-controls">
@@ -1279,14 +1280,19 @@ html>body{padding:0}</style>
       <h3>In the 3D view</h3>
       <ul>
         <li>Drag to rotate, scroll to zoom, right-drag or two-finger drag to pan.</li>
-        <li>Click any atom to inspect its residue, chain, and pLDDT, and to place a label.</li>
+        <li>Click any atom to inspect its residue, chain, and pLDDT; a small label editor opens at it — type the label and press <kbd>Enter</kbd>. Click a label without dragging it to edit its text.</li>
         <li>Use <strong>Figure annotations</strong> in the Annotate tab to draw arrows, lines, residue markers, and text callouts by clicking atoms, and to add corner titles. They follow rotation and alignment and are included in PNG exports and reports.</li>
         <li>Turn on <strong>Synchronized multi-view</strong> in the Compare tab to show up to six models in linked viewports. Dragging, spinning, or rocking any one of them moves them all.</li>
       </ul>
       <h3>Keyboard</h3>
       <table class="table table-sm gpv-shortcuts">
         <tbody>
-          <tr><th><kbd>←</kbd> <kbd>→</kbd></th><td>Previous / next model</td></tr>
+          <tr><th><kbd>←</kbd> <kbd>→</kbd></th><td>Previous / next model (while a label is active they move the label instead)</td></tr>
+          <tr><th><kbd>L</kbd></th><td>Open the label editor at the selected residue</td></tr>
+          <tr><th><kbd>Enter</kbd> / <kbd>Esc</kbd></th><td>In the label editor: add or update the label / close it without changes</td></tr>
+          <tr><th><kbd>←</kbd> <kbd>→</kbd> <kbd>↑</kbd> <kbd>↓</kbd></th><td>Move the active label 8 px (<kbd>Shift</kbd>: 1 px). A label becomes active when you click it, label it, or press <strong>Select</strong> in its row</td></tr>
+          <tr><th><kbd>Delete</kbd></th><td>Remove the active label</td></tr>
+          <tr><th><kbd>Shift</kbd> + drag</th><td>Draw a box over the model: every residue inside is highlighted, and the popover labels them all (<kbd>Enter</kbd>) or keeps the highlight (<kbd>Esc</kbd>). On a touchscreen, turn on <strong>Drag to select</strong> in Annotate</td></tr>
           <tr><th><kbd>C</kbd></th><td>Start or pause automatic cycling</td></tr>
           <tr><th><kbd>F</kbd></th><td>Fit every panel to what it displays</td></tr>
           <tr><th><kbd>S</kbd></th><td>Start or stop spinning</td></tr>
@@ -1295,7 +1301,7 @@ html>body{padding:0}</style>
           <tr><th><kbd>1</kbd> – <kbd>6</kbd></th><td>Jump to a tool tab</td></tr>
           <tr><th><kbd>Ctrl</kbd>/<kbd>⌘</kbd> + <kbd>Z</kbd></th><td>Undo the last label, selection, measurement or annotation change; add <kbd>Shift</kbd> to redo</td></tr>
           <tr><th><kbd>?</kbd></th><td>Open this help</td></tr>
-          <tr><th><kbd>Esc</kbd></th><td>Close help, leave full screen, stop measuring</td></tr>
+          <tr><th><kbd>Esc</kbd></th><td>Close the label editor, or let go of the active label; otherwise close help, leave Drag to select, leave full screen, stop measuring or drawing</td></tr>
         </tbody>
       </table>
       <h3>Your work is kept</h3>
@@ -1402,6 +1408,20 @@ html>body{padding:0}</style>
   #generic-protein-viewer .gpv-nudge { display: inline-flex; gap: 2px; align-items: center; flex: 0 0 auto; }
   #generic-protein-viewer .gpv-nudge .btn { padding: 2px 8px; }
   #generic-protein-viewer .gpv-nudge .form-control { width: 64px; flex: 0 0 auto; padding: 2px 6px; }
+  /* The on-canvas label editor: a popover inside the stage, placed by script next to its residue. */
+  #generic-protein-viewer .gpv-label-editor { position: absolute; z-index: 5; display: grid; gap: 6px; width: 240px; max-width: calc(100% - 8px); padding: 8px; border: 1px solid var(--border); border-radius: var(--radius-md); color: var(--popover-foreground); background: var(--popover); box-shadow: 0 6px 20px -8px rgb(0 0 0 / 35%); cursor: auto; }
+  #generic-protein-viewer .gpv-label-editor[hidden], #generic-protein-viewer .gpv-label-editor .btn[hidden] { display: none; }
+  #generic-protein-viewer .gpv-label-editor-head { display: flex; align-items: center; gap: 6px; min-width: 0; }
+  #generic-protein-viewer .gpv-label-editor-residue { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--muted-foreground); }
+  #generic-protein-viewer .gpv-label-editor-close { min-height: 24px; padding: 0 8px; }
+  #generic-protein-viewer .gpv-label-editor-actions { display: flex; gap: 6px; }
+  /* Box selection: the rectangle being drawn, and its popover in the label editor's card. */
+  #generic-protein-viewer .gpv-box-rect { position: absolute; z-index: 4; pointer-events: none; border: 1px dashed var(--primary); background: color-mix(in srgb, var(--primary) 14%, transparent); }
+  #generic-protein-viewer .gpv-box-rect[hidden] { display: none; }
+  #generic-protein-viewer .gpv-box-popover { width: auto; max-width: min(340px, calc(100% - 8px)); }
+  #generic-protein-viewer .gpv-box-popover .gpv-label-editor-actions { flex-wrap: wrap; }
+  #generic-protein-viewer .gpv-box-popover-summary { flex: 1 1 auto; min-width: 0; }
+  #generic-protein-viewer .gpv-stage.is-box-selecting { outline: 2px dashed var(--primary); outline-offset: -2px; cursor: crosshair; touch-action: none; }
   #generic-protein-viewer .gpv-hint { margin: -2px 0 10px; }
   #generic-protein-viewer .gpv-subheading { font-size: 0.95rem; margin: 14px 0 4px; }
   #generic-protein-viewer .gpv-stage.is-drawing { outline: 2px dashed var(--primary); outline-offset: -2px; cursor: crosshair; }

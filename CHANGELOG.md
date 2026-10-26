@@ -2,6 +2,50 @@
 
 All notable changes to this project are recorded here.
 
+## 2.49.0
+
+### Added
+
+- **Label a residue where you clicked it.** Clicking a residue in the viewer, or picking one in the
+  sequence strip or the sequence letters, opens a small label editor right beside the residue: it
+  names the residue, holds the suggested label (`ALA45 · A`) with the text selected, and takes the
+  label with `Enter` — no trip to the Annotate tab. `Esc` closes it without
+  changes. A residue that already has a label opens with that label's text, an **Update** button and
+  **Remove**. The editor follows the residue as the model turns, spins or zooms, stays inside the
+  viewer when the residue turns out of view, and closes when you click elsewhere in the view, scroll,
+  switch models, clear labels or undo. Drawing and measuring keep their clicks exactly as before: the
+  editor does not open while either is on. Taps on a touchscreen open it too.
+- **Edit a label on the canvas.** Clicking a label, callout text or corner title without dragging it
+  opens the same editor on its text. Only the text changes — a position or domain label keeps its
+  colour, size and kind.
+- **The L key** opens the editor for the residue already selected — by Go to, say — without another
+  click.
+- **An active label you can move from the keyboard.** The label you just added, edited or clicked
+  becomes the active one, drawn with an accent-coloured outline on screen (never in an export). The
+  arrow keys move it 8 px (`Shift`: 1 px), `Delete` removes it, and `Esc`
+  lets go of it, after which ← and → step through the models again as before. Every move and removal
+  is one undo step.
+- **Move buttons on every residue label row.** Each row in the label list now has ← → ↑ ↓ buttons
+  (12 px a press) and **Select**, which makes that label the active one. Dragging stays mouse-only —
+  a finger drag turns the model — so these are how a label is moved on a touchscreen.
+- **Select a region by dragging over the model, and label it in one go.** `Shift` + drag draws a box
+  over the model instead of turning it; every residue whose Cα falls inside becomes a highlight (one
+  row per model and chain, one undo step), and a popover at the box offers **Label all** — a label
+  per residue, `ALA45 · A`, leaving existing labels as they are and pushing the new ones apart so
+  they do not pile up, as one more undo step — **Keep highlight only** or **Undo**. On a touchscreen
+  the **Drag to select** button in Annotate makes any drag draw the box; `Esc` turns it off. Every
+  highlight row in the selection list now has a **Label residues** button that does the same for that
+  highlight.
+
+### Changed
+
+- The arrow buttons on figure annotation rows now move the text 12 px on screen per press, the same
+  step as the label rows, instead of a step in ångström that varied with the zoom.
+- Clicking a label without moving it no longer leaves an empty "label position" step in the undo
+  history; the step is taken when the label actually moves.
+- The hover readout over a label says `Drag to move · click to edit`, the help dialog lists the new
+  keys, and the Annotate tab's readout says that a click opens the label editor.
+
 ## 2.48.2 — release candidate
 
 ### Fixed
