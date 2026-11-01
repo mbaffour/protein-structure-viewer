@@ -149,6 +149,7 @@
     stopCycle();
     stopMotion();
     dismissCanvasText();
+    cancelMeasureTo(false);
     setBoxSelectMode(false);
     viewer.removeAllModels();
     viewer.removeAllLabels();
@@ -314,16 +315,11 @@
   root.querySelector('#gpv-data-csv').addEventListener('click', downloadResidueDataCsv);
   root.querySelector('#gpv-contact-highlight').addEventListener('click', highlightContactInterface);
   root.querySelector('#gpv-contact-csv').addEventListener('click', downloadContactsCsv);
+  root.querySelector('#gpv-contact-distances').addEventListener('click', downloadDistancesCsv);
+  root.querySelector('#gpv-contact-view').addEventListener('change', setContactView);
   root.querySelector('#gpv-contact-png').addEventListener('click', () => { downloadContactPng().catch(error => announce('Could not render the contact map: ' + error.message, 'error')); });
-  root.querySelector('#gpv-contact-canvas').addEventListener('pointermove', event => { const hit = contactAt(event); root.querySelector('#gpv-contact-readout').textContent = hit ? contactPairText(hit) : 'Hover a cell to read the residue pair'; });
-  root.querySelector('#gpv-contact-canvas').addEventListener('click', event => {
-    const hit = contactAt(event); if (!hit || hit.distance === undefined) return;
-    const entry = entryById(contactResult.entryId); if (!entry || !entry.model) return;
-    handleAtomClick(entry, hit.a);
-    const selection = { model: entry.model.getID(), or: [{ chain: hit.a.chain, resi: hit.a.resi }, { chain: hit.b.chain, resi: hit.b.resi }] };
-    try { viewer.zoomTo(selection); viewer.render(); syncViewsFrom(viewer); } catch (error) { /* selection syntax unsupported: keep the current view */ }
-    updateStatus(contactPairText(hit) + ' · selected');
-  });
+  root.querySelector('#gpv-contact-canvas').addEventListener('pointermove', event => { const hit = contactAt(event); root.querySelector('#gpv-contact-readout').textContent = hit ? contactPairText(hit) : 'Hover a cell to read the pair and its Cα–Cα distance'; });
+  root.querySelector('#gpv-contact-canvas').addEventListener('click', measureContactCell);
   root.querySelector('#gpv-label-style').addEventListener('change', applyStyle);
   root.querySelector('[data-gpv-tab="publish"]').addEventListener('click', () => { setTimeout(renderPublicationChecks, 0); setTimeout(renderCompositeControls, 0); });
   renderCompositeControls();

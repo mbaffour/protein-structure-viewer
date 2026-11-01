@@ -179,6 +179,25 @@ Phone checks emulate viewport dimensions, not a physical phone or its GPU.
   that opens the label editor; with Drag to select on a plain drag selects, Esc turns the mode off, and starting to
   measure turns it off too; a highlight row's Label residues labels its residues and a hide row has no such button;
   the popover's Esc keeps the highlight and its Undo removes it.
+- The residue card, marker and Measure to… (2.50.0): the card for a tapped residue names it (and its model, with
+  several loaded), shows the Cα's pLDDT to one decimal, a secondary-structure word or none, and exactly the neighbour
+  count `nearbyResidues` gives that residue at the panel's cutoff; once the card closes the main view draws one label
+  more than `labelRecords` holds — the marker, naming the residue — Esc clears it, and a labelled residue gets none;
+  the card's Measure to… and the `M` key each add one distance record between the two Cα atoms whose drawn value
+  matches the atoms to 0.01 Å, named in the status, as one undo step that undo takes away (tapping the same residue
+  measures nothing and keeps waiting); Esc cancels an armed Measure to… and the next tap opens the card; with
+  measurement mode on the card's button is disabled and `M` arms nothing; and a non-main drawing target and a figure
+  export draw every label but never the marker.
+- The contact and distance map (2.50.0, in 'figure finishing' after the methods-text step, beside the other
+  contact-map steps): A against A gives a square map with no diagonal or mirrored pair stored and a diagonal cell
+  painted like the paper while its contacting neighbour is painted on both sides; All chains lays A and B end to end
+  (60 × 60, blocks 0–30 and 30–60) and A against All chains is twice as wide as tall; in the All distances view a
+  hover over A1–B30 reads `Cα–Cα … · no contact` within 0.01 Å of the atoms, and a contact cell reads the contacts
+  CSV's closest-atom distance; a click on a cell out of contact adds one Cα–Cα distance record (one undo step, which
+  undo takes away); the distances CSV has n(n − 1)/2 rows for A against A and n × m for A–B, three rows match the
+  atoms to 10⁻³ Å and the A1–B30 row has a blank closest-atom distance; the residue card's Distances CSV has one row
+  per other residue, nearest first, the first being the residue the status names; and the All distances PNG
+  downloads with a scale reading `0 Å` to min(40 Å, the largest distance). Each step puts back the A–B contact map at 6 Å.
 - Legend position: the same figure SVG carries the legend as one row at the bottom left, and as a stack of three or more
   rows on the right when the position is changed; the scene records the choice.
 - Comparing a position: a mutant of `model_a` with chain A residue 15 changed from ALA to GLY is dropped in and shown

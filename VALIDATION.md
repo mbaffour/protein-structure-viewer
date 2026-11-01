@@ -22,6 +22,9 @@ run on 2026-09-27 with viewer 2.48.0.
   one chain, hetero groups excluded;
 - the inter-chain contact map of two chains on model 0: every residue pair with a heavy-atom pair
   within the cutoff, with the closest such distance (the Compare tab's *Interface contact map*);
+- the full Cα–Cα distance matrix of the same two chains on model 0, and of the first chain against
+  itself, from the `CA` atom of every standard residue (numpy; the *All distances* view of the Compare
+  tab's *Contact and distance map*, added 2.50.0);
 - the buried surface area of every chain pair in contact on model 0, with `Bio.PDB.SASA.ShrakeRupley`
   set to the viewer's parameters — probe radius 1.4 Å, 92 sphere points per atom, Bondi radii (C 1.70,
   N 1.55, O 1.52, S 1.80 Å; Biopython's defaults are identical for every element these runs contain),
@@ -200,6 +203,27 @@ excluded. The viewer's pair set, interface residue counts and every closest-atom
 | C — phiX174 F–G | A–B | 5 Å | 18 / 18 | 9 + 10 / 9 + 10 | 4.6 × 10⁻⁵ Å | ✓ |
 
 The differences are the four-decimal rounding of the reference values.
+
+## Distance map (added 2.50.0)
+
+Same chain pair as the contact map above, on model 0. `tests/reference.py` writes the Cα–Cα distance
+of every residue of the first chain against every residue of the second, and of the first chain
+against itself (diagonal included), from Biopython's `CA` atoms with numpy, rounded to four decimals.
+`tests/validate.mjs` reads the viewer's matrix through `__viewerDebug.distanceMatrix(entryId, chainA,
+chainB)` — the same axes and coordinates the *All distances* view, its hover readout and the distances
+CSV use — matches residues by number along each axis, and compares every cell. Tolerance 10⁻³ Å; an
+axis that differs (a residue on one side only) fails. The viewer stands a residue without a Cα for its
+P or first atom, the reference leaves it out, so a run with such residues would fail the axis check by
+design; the three runs are proteins with a Cα on every residue.
+
+Run on 2026-11-01 with viewer 2.50.0; the differences are the four-decimal rounding of the
+reference values.
+
+| run | chains | cells (viewer = reference) | largest difference | intra-chain | cells | largest difference | |
+|---|---|---:|---:|---|---:|---:|:--:|
+| A — M13 virion tip | K–F | 73 × 32 = 2 336 | 5.1 × 10⁻⁵ Å | K–K | 73 × 73 = 5 329 | 5.1 × 10⁻⁵ Å | ✓ |
+| B — MS2 maturation protein–coat | A–B | 393 × 130 = 51 090 | 5.3 × 10⁻⁵ Å | A–A | 393 × 393 = 154 449 | 5.4 × 10⁻⁵ Å | ✓ |
+| C — phiX174 F–G | A–B | 427 × 175 = 74 725 | 5.4 × 10⁻⁵ Å | A–A | 427 × 427 = 182 329 | 5.2 × 10⁻⁵ Å | ✓ |
 
 ## MSA statistics (added 2.21.0; Henikoff-weighted conservation added 2.24.0)
 

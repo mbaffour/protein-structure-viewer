@@ -300,7 +300,9 @@
       labelStyle: root.querySelector('#gpv-label-style').value,
       outline: root.querySelector('#gpv-outline').value,
       fog: root.querySelector('#gpv-fog').checked,
-      contacts: contactOwner && chosenNames.has(contactOwner.name) && contactResult.pairs.size ? {
+      /* The report keys its map by residue number, which an all-chains axis repeats from chain to
+         chain, so only maps whose axes are single chains (two chains, or one against itself) go in. */
+      contacts: contactOwner && chosenNames.has(contactOwner.name) && contactResult.pairs.size && !contactResult.allChainsA && !contactResult.allChainsB ? {
         model: contactOwner.name, chainA: contactResult.chainA, chainB: contactResult.chainB, cutoff: contactResult.cutoff, mode: contactResult.mode,
         residuesA: contactResult.rowA.residues.map(atom => atom.resi), residuesB: contactResult.rowB.residues.map(atom => atom.resi),
         pairs: [...contactResult.pairs.entries()].map(([key, d]) => { const [i, j] = key.split('|').map(Number); return [contactResult.rowA.residues[i].resi, contactResult.rowB.residues[j].resi, Math.round(d * 1000) / 1000]; })

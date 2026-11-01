@@ -1,19 +1,24 @@
   /* ---------- Proximity selection ---------- */
 
   let nearbyResult = null;
-  function nearbyResidues() {
-    const entry = activeEntry(); if (!entry || !entry.model) return null;
-    const mode = root.querySelector('#gpv-near-target').value;
+  /* With no options it reads the Annotate panel, as the Highlight button always has. The residue
+     card (04c) asks the same question about one residue of any shown model — not only the active
+     one — by passing { entry, mode: 'residue', residue }; the cutoff still comes from the panel's
+     Within (Å) field, so the card and the proximity tool count with one rule and agree. */
+  function nearbyResidues(options = {}) {
+    const entry = options.entry || activeEntry(); if (!entry || !entry.model) return null;
+    const mode = options.mode || root.querySelector('#gpv-near-target').value;
     const cutoff = Math.min(12, Math.max(2, Number(root.querySelector('#gpv-near-cutoff').value) || 4.5));
     const chain = root.querySelector('#gpv-near-chain').value.trim();
+    const residue = options.residue ? { entryId: entry.id, chain: options.residue.chain || '', resi: options.residue.resi } : selectedResidue;
     const heavy = heavyAtoms(entry);
     let targets;
     if (mode === 'hetero') targets = heavy.filter(atom => atom.hetflag && !isWater(atom));
     else if (mode === 'chain') { if (!chain) return { error: 'Type the chain to measure from' }; targets = heavy.filter(atom => (atom.chain || '') === chain); }
-    else { if (!selectedResidue || selectedResidue.entryId !== entry.id) return { error: 'Click a residue of this model first' }; targets = heavy.filter(atom => (atom.chain || '') === selectedResidue.chain && atom.resi === selectedResidue.resi); }
+    else { if (!residue || residue.entryId !== entry.id) return { error: 'Click a residue of this model first' }; targets = heavy.filter(atom => (atom.chain || '') === residue.chain && atom.resi === residue.resi); }
     if (!targets.length) return { error: mode === 'hetero' ? 'No ligands or ions in ' + displayName(entry) : 'No atoms matched the target' };
     const targetSet = new Set(targets);
-    const candidates = heavy.filter(atom => !atom.hetflag && !targetSet.has(atom) && !(mode === 'chain' && (atom.chain || '') === chain) && !(mode === 'residue' && (atom.chain || '') === selectedResidue.chain && atom.resi === selectedResidue.resi));
+    const candidates = heavy.filter(atom => !atom.hetflag && !targetSet.has(atom) && !(mode === 'chain' && (atom.chain || '') === chain) && !(mode === 'residue' && (atom.chain || '') === residue.chain && atom.resi === residue.resi));
     const grid = spatialGrid(candidates, cutoff); const limit = cutoff * cutoff; const found = new Map();
     targets.forEach(target => grid.near(target).forEach(index => {
       const atom = candidates[index];
