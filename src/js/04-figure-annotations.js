@@ -177,6 +177,7 @@
     annotationDraft = [];
     if (annotationActive && measurementActive) toggleMeasurement();
     if (annotationActive && boxSelectMode) setBoxSelectMode(false);
+    measureToModesChanged();
     setButtonText(root.querySelector('#gpv-annotate'), annotationActive ? 'Stop drawing' : 'Start drawing');
     root.querySelector('#gpv-stage').classList.toggle('is-drawing', annotationActive);
     root.querySelector('#gpv-annotation-state').textContent = annotationActive ? annotationPrompt() : 'Pick a tool, start drawing, then click atoms in the main viewer.';
@@ -600,6 +601,8 @@
      the mode check lives here alone; Go to and the contact map call it for selection only. */
   function handleAtomClick(entry, atom) {
     selectResidue(entry, atom);
+    /* The second click of an armed Measure to… (04c); it is never armed while a mode is on. */
+    if (measureFrom) { finishMeasureTo(entry, atom); return true; }
     if (annotationActive) { handleAnnotationClick(entry, atom); return true; }
     if (!measurementActive) return false;
     measurementDraft.push(atomReference(entry, atom));
@@ -619,6 +622,7 @@
     measurementActive = !measurementActive; measurementDraft = [];
     if (measurementActive && annotationActive) toggleAnnotating(false);
     if (measurementActive && boxSelectMode) setBoxSelectMode(false);
+    measureToModesChanged();
     root.querySelector('#gpv-measure').textContent = measurementActive ? 'Stop measuring' : 'Start measuring';
     const required = root.querySelector('#gpv-measure-type').value === 'angle' ? 3 : 2;
     root.querySelector('#gpv-measure-state').textContent = measurementActive ? 'Select ' + required + ' atoms in the viewer.' : 'Measurement mode is off.';

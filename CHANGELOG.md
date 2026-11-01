@@ -2,6 +2,32 @@
 
 All notable changes to this project are recorded here.
 
+## 2.50.0
+
+### Added
+
+- **The residue card: what a clicked residue is, on the canvas.** The editor that opens at a clicked
+  residue now also says what the residue is, in two short lines above the label field:
+  `GLU57 · chain B` (with the model's name when more than one model is loaded), then
+  `pLDDT 94.8 · α-helix · 7 residues within 4.5 Å` — the Cα's pLDDT for a model with scores, the
+  secondary structure 3Dmol assigned (left out for a model whose file gave it none), and the number of
+  residues with a heavy atom within the Annotate tab's *Within (Å)* cutoff, counted by the proximity
+  tool itself so the two always agree. Nothing on the card is saved.
+- **A marker that keeps naming the selected residue.** While a residue is selected and its model is
+  shown, a small marker on the view reads `GLU57 · B · pLDDT 94.8`, smaller than a label and edged in
+  the accent colour so it is not taken for one. It is drawn on screen only — never in an export, a
+  comparison panel, a figure, a video or the report — and not on a residue that already has a label.
+  `Esc` with nothing else to close clears the selection and the marker, and so does *Clear all*; while
+  the residue's model is not the one shown, the marker is simply not drawn.
+- **Measure to… — the distance between any two residues, in contact or not.** The card's
+  **Measure to…** button, or `M` for the selected residue, keeps the residue as the first point and
+  turns the cursor to a crosshair; the next residue clicked — in the view, the sequence strip or the
+  letters, or with Go to — finishes an ordinary distance measurement between the two Cα atoms, drawn,
+  listed, exported, saved and undone like any other (one undo step). The status line gives the
+  Cα–Cα distance and, when the residues come closer than that, their closest heavy-atom approach:
+  `GLU57 · B — ARG59 · A: Cα–Cα 9.42 Å · closest atoms 3.1 Å`. `Esc` cancels; clicking the same
+  residue again measures nothing. It is unavailable while measurement mode or drawing is on.
+
 ## 2.49.0
 
 ### Added

@@ -114,8 +114,10 @@
     const actions = document.createElement('div'); actions.className = 'gpv-label-editor-actions';
     const commit = document.createElement('button'); commit.type = 'button'; commit.className = 'btn btn-primary'; commit.id = 'gpv-label-editor-commit';
     const remove = document.createElement('button'); remove.type = 'button'; remove.className = 'btn btn-ghost'; remove.id = 'gpv-label-editor-remove'; remove.textContent = 'Remove';
-    actions.append(commit, remove);
-    host.append(head, input, actions);
+    /* The residue card's facts line and Measure to… (04c). */
+    const card = residueCardElements();
+    actions.append(commit, card.measure, remove);
+    host.append(head, card.facts, input, actions);
     /* Enter and Esc are the editor's own. Stopping them here keeps the page's shortcuts from also
        acting on them — Esc would otherwise leave full screen or stop a measurement as well. */
     input.addEventListener('keydown', event => {
@@ -194,6 +196,7 @@
     residue.textContent = residueLine || '';
     residue.hidden = !residueLine;
     host.setAttribute('aria-label', residueLine ? 'Label for ' + residueLine : 'Edit annotation text');
+    fillResidueCard(host, target, residueLine);
     const commit = host.querySelector('#gpv-label-editor-commit');
     commit.textContent = target.kind === 'new' ? 'Label' : 'Update';
     host.querySelector('#gpv-label-editor-remove').hidden = target.kind !== 'label';
@@ -218,6 +221,7 @@
     /* The text it was editing may have been removed from its row, cleared or undone. */
     if (labelEditor.kind !== 'new' && !labelEditorRecord()) { closeLabelEditor(false); return; }
     positionLabelEditor();
+    refreshMeasureToButton();
     labelEditorFrame = requestAnimationFrame(followLabelEditor);
   }
 
@@ -377,11 +381,18 @@
   function canvasTextKeydown(event, typing) {
     if (typing) return false;
     if (event.key === 'Escape') {
+      /* An armed Measure to… is the most passing state of all, so Esc drops it before anything else. */
+      if (cancelMeasureTo(true)) return true;
       if (labelEditor) { closeLabelEditor(true); return true; }
       if (activeText) { clearActiveText(); updateStatus('No label selected'); return true; }
+      /* Then the selected residue and its marker — but only when no mode or full screen is waiting
+         for this Esc: a residue is selected by nearly every click, and Esc must still leave Drag to
+         select, full screen, measuring and drawing in one press, as it always has. */
+      if (selectedResidue && !boxSelectMode && !fullscreen && !annotationActive && !measurementActive) { clearSelectedResidue(); updateStatus('No residue selected'); return true; }
       return false;
     }
     if (event.key.toLowerCase() === 'l') { event.preventDefault(); openLabelEditorForSelection(); return true; }
+    if (event.key.toLowerCase() === 'm') { event.preventDefault(); measureToFromSelection(); return true; }
     /* Arrows belong to the label only while one is active and nothing else (a tab button, say)
        has already taken the key; with nothing active ← and → still step through the models. */
     if (event.defaultPrevented || !activeCanvasText()) return false;

@@ -140,6 +140,9 @@
      arrows, callouts and measurements can be drawn between residues chosen by
      number rather than by hunting for them in three dimensions. */
   function pickSequenceResidue(entry, atom) {
+    /* A pick that finishes Measure to… has said the distance in the status line; nothing here may
+       overwrite it or move the focus to the panel. */
+    if (measureFrom) { handleAtomClick(entry, atom); root.querySelector('#gpv-sequence-hint').textContent = describeResidue(entry, atom) + ' · picked for Measure to…'; return; }
     const taken = handleAtomClick(entry, atom);
     /* A pick nothing else took opens the label editor at the residue, which takes the focus; the
        panel's field only gets it when the editor did not open. */

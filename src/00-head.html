@@ -1280,7 +1280,7 @@ html>body{padding:0}</style>
       <h3>In the 3D view</h3>
       <ul>
         <li>Drag to rotate, scroll to zoom, right-drag or two-finger drag to pan.</li>
-        <li>Click any atom to inspect its residue, chain, and pLDDT; a small label editor opens at it — type the label and press <kbd>Enter</kbd>. Click a label without dragging it to edit its text.</li>
+        <li>Click any atom to inspect its residue: a small card opens at it with the residue, chain, pLDDT, secondary structure and how many residues sit within the Annotate tab's <em>Within (Å)</em> distance — type a label and press <kbd>Enter</kbd>, or press <strong>Measure to…</strong> and click a second residue for the Cα–Cα distance. A small marker keeps naming the selected residue on the view (never in an export). Click a label without dragging it to edit its text.</li>
         <li>Use <strong>Figure annotations</strong> in the Annotate tab to draw arrows, lines, residue markers, and text callouts by clicking atoms, and to add corner titles. They follow rotation and alignment and are included in PNG exports and reports.</li>
         <li>Turn on <strong>Synchronized multi-view</strong> in the Compare tab to show up to six models in linked viewports. Dragging, spinning, or rocking any one of them moves them all.</li>
       </ul>
@@ -1289,6 +1289,7 @@ html>body{padding:0}</style>
         <tbody>
           <tr><th><kbd>←</kbd> <kbd>→</kbd></th><td>Previous / next model (while a label is active they move the label instead)</td></tr>
           <tr><th><kbd>L</kbd></th><td>Open the label editor at the selected residue</td></tr>
+          <tr><th><kbd>M</kbd></th><td>Measure to…: the Cα–Cα distance from the selected residue to the next residue you click (in the view, the sequence strip or with Go to) — added as an ordinary measurement</td></tr>
           <tr><th><kbd>Enter</kbd> / <kbd>Esc</kbd></th><td>In the label editor: add or update the label / close it without changes</td></tr>
           <tr><th><kbd>←</kbd> <kbd>→</kbd> <kbd>↑</kbd> <kbd>↓</kbd></th><td>Move the active label 8 px (<kbd>Shift</kbd>: 1 px). A label becomes active when you click it, label it, or press <strong>Select</strong> in its row</td></tr>
           <tr><th><kbd>Delete</kbd></th><td>Remove the active label</td></tr>
@@ -1301,7 +1302,8 @@ html>body{padding:0}</style>
           <tr><th><kbd>1</kbd> – <kbd>6</kbd></th><td>Jump to a tool tab</td></tr>
           <tr><th><kbd>Ctrl</kbd>/<kbd>⌘</kbd> + <kbd>Z</kbd></th><td>Undo the last label, selection, measurement or annotation change; add <kbd>Shift</kbd> to redo</td></tr>
           <tr><th><kbd>?</kbd></th><td>Open this help</td></tr>
-          <tr><th><kbd>Esc</kbd></th><td>Close the label editor, or let go of the active label; otherwise close help, leave Drag to select, leave full screen, stop measuring or drawing</td></tr>
+          <tr><th><kbd>Esc</kbd></th><td>Cancel an armed Measure to…; close the label editor, or let go of the active label; otherwise close help, leave Drag to select, leave full screen, stop measuring or drawing</td></tr>
+          <tr><th><kbd>Esc</kbd> (nothing else open)</th><td>Clear the selected residue and its marker on the view</td></tr>
         </tbody>
       </table>
       <h3>Your work is kept</h3>
@@ -1414,7 +1416,12 @@ html>body{padding:0}</style>
   #generic-protein-viewer .gpv-label-editor-head { display: flex; align-items: center; gap: 6px; min-width: 0; }
   #generic-protein-viewer .gpv-label-editor-residue { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--muted-foreground); }
   #generic-protein-viewer .gpv-label-editor-close { min-height: 24px; padding: 0 8px; }
-  #generic-protein-viewer .gpv-label-editor-actions { display: flex; gap: 6px; }
+  #generic-protein-viewer .gpv-label-editor-actions { display: flex; flex-wrap: wrap; gap: 6px; }
+  /* The residue card's second line (pLDDT · secondary structure · neighbours) wraps rather than clips. */
+  #generic-protein-viewer .gpv-residue-card-facts { color: var(--muted-foreground); line-height: 1.35; }
+  #generic-protein-viewer .gpv-residue-card-facts[hidden] { display: none; }
+  /* Measure to… is armed: the next click on a residue is its second point. */
+  #generic-protein-viewer .gpv-stage.is-measuring-to { cursor: crosshair; }
   /* Box selection: the rectangle being drawn, and its popover in the label editor's card. */
   #generic-protein-viewer .gpv-box-rect { position: absolute; z-index: 4; pointer-events: none; border: 1px dashed var(--primary); background: color-mix(in srgb, var(--primary) 14%, transparent); }
   #generic-protein-viewer .gpv-box-rect[hidden] { display: none; }

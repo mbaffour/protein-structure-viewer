@@ -13,11 +13,13 @@
     const candidates = entry.atoms.filter(atom => atom.resi === resi && (!chain || String(atom.chain || '').toUpperCase() === chain.toUpperCase()));
     const atom = candidates.find(item => item.atom === 'CA') || candidates[0];
     if (!atom) { announce('No residue ' + text + ' in ' + displayName(entry), 'error'); return; }
+    /* Go to can be the second residue of Measure to…, whose result the status line then keeps. */
+    const measuring = Boolean(measureFrom);
     handleAtomClick(entry, atom);
     const selection = { model: entry.model.getID(), resi };
     if (atom.chain) selection.chain = atom.chain;
     viewer.zoomTo(selection); viewer.render(); syncViewsFrom(viewer);
     sequenceHover = { entryId: entry.id, chain: atom.chain || '', resi }; renderSequenceSoon();
-    updateStatus(residueText(entry, atom));
+    if (!measuring) updateStatus(residueText(entry, atom));
   }
 

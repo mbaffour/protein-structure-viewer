@@ -99,6 +99,7 @@ Anything the viewer cannot interpret is skipped and reported in the red notice b
 | --- | --- |
 | <kbd>←</kbd> / <kbd>→</kbd> | Previous / next model (while a label is active they move the label instead) |
 | <kbd>L</kbd> | Open the label editor at the selected residue |
+| <kbd>M</kbd> | *Measure to…*: the Cα–Cα distance from the selected residue to the next residue you click |
 | <kbd>Enter</kbd> / <kbd>Esc</kbd> | In the label editor: add or update the label / close it without changes |
 | <kbd>←</kbd> <kbd>→</kbd> <kbd>↑</kbd> <kbd>↓</kbd> | Move the active label 8 px (<kbd>Shift</kbd>: 1 px) |
 | <kbd>Delete</kbd> | Remove the active label |
@@ -112,7 +113,7 @@ Anything the viewer cannot interpret is skipped and reported in the red notice b
 | <kbd>1</kbd>–<kbd>6</kbd> | Jump to Models / Appearance / Annotate / Compare / Confidence / Publish |
 | <kbd>Ctrl</kbd>/<kbd>⌘</kbd> + <kbd>Z</kbd> | Undo the last label, selection, measurement or annotation change (add <kbd>Shift</kbd> to redo) |
 | <kbd>?</kbd> | Open in-app help |
-| <kbd>Esc</kbd> | Close the label editor or let go of the active label; otherwise close help, leave *Drag to select*, leave full screen, or stop measuring or drawing |
+| <kbd>Esc</kbd> | Cancel an armed *Measure to…*; close the label editor or let go of the active label; otherwise close help, leave *Drag to select*, leave full screen, or stop measuring or drawing; with none of those, clear the selected residue and its marker |
 
 Shortcuts are suppressed while you are typing in a field.
 
@@ -281,6 +282,35 @@ instance). The editor follows the residue as the view turns; clicking elsewhere 
 scrolling, switching models, clearing labels or undoing closes it without changes. While drawing a
 figure annotation or measuring, clicks keep doing that and the editor does not open. The panel's
 field and **Add or update** still work as before.
+
+**The residue card.** The editor that opens at a residue is also its card. Above the label field it
+says what the residue is, in two short lines: `GLU57 · chain B` (and the model's name when more than
+one model is loaded), then `pLDDT 94.8 · α-helix · 7 residues within 4.5 Å`. The pLDDT is the Cα's
+and appears only for a model with confidence scores; the secondary structure (α-helix, β-strand or
+loop) is the one 3Dmol assigned to the Cα, and is left out for a model whose file gave it none; the
+neighbour count is the proximity tool's own count for that residue (see *Nearby residues* below) —
+residues with any heavy atom within its *Within (Å)* cutoff, 4.5 Å unless you change it — so the card
+and **Highlight nearby residues** always agree. Nothing on the card is saved.
+
+**The residue marker.** While a residue is selected and its model is shown, a small marker on the
+view names it — `GLU57 · B · pLDDT 94.8` — in a smaller type with an accent-coloured border, so it is
+not mistaken for a label. It is screen-only: exports, comparison panels, figures, videos and the
+report never draw it, and a residue that already carries a label gets no marker. <kbd>Esc</kbd> with
+no editor open, no active label and no mode on clears the selection and the marker, and so does
+*Clear all*; while the residue's model is not the one shown, the marker is simply not drawn.
+
+**Measure to….** The card's **Measure to…** button (or <kbd>M</kbd> for the selected residue, without
+opening the card) keeps the residue as the first point and waits for a second: the cursor turns to a
+crosshair and the status says `Click a second residue to measure from GLU57 · B · Esc cancels`. The
+next residue you click — in the view, the sequence strip or the letters, or with *Go to* — finishes it
+as an ordinary distance measurement between the two Cα atoms, drawn, listed, exported, saved and
+undone exactly like one made in measurement mode (one undo step). The status gives the distance and,
+when the residues come closer than their Cα atoms do, the closest heavy-atom approach as well:
+`GLU57 · B — ARG59 · A: Cα–Cα 9.42 Å · closest atoms 3.1 Å` — so a pair in contact and a pair far
+apart are both one click each. Clicking the same residue again measures nothing and keeps waiting;
+<kbd>Esc</kbd> cancels. The button is unavailable while measurement mode or drawing is on, whose
+clicks are already spoken for, and turning either on (or *Drag to select*) drops a waiting
+*Measure to…*.
 
 The label you have just added, edited or clicked is the *active* label, outlined in the accent colour
 on screen (never in an export). The arrow keys move it 8 px at a time (<kbd>Shift</kbd>: 1 px),

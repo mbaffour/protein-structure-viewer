@@ -2103,6 +2103,256 @@ await step('the popover\'s Esc keeps the highlight, and its Undo takes the selec
     if ((await selectionsNow()).length !== first) throw new Error('Undo left ' + ((await selectionsNow()).length - startCount) + ' box rows, expected ' + (first - startCount));
   } finally { await closeBoxPopover(); await trimSelections(startCount); }
 });
+/* ---- The residue card, the residue marker and Measure to… (2.50.0) ----
+   The editor that opens at a residue also says what it is; a marker on the main view keeps naming
+   the selected residue; Measure to… (or M) measures Cα–Cα to the next residue tapped as an ordinary
+   measurement record. Each step takes back what it made and leaves nothing armed and no residue
+   selected. Still in the turned view, so every tap has one residue to land on. */
+const markerNow = () => page.evaluate(() => window.__viewerDebug.residueMarker());
+const selectedNow = () => page.evaluate(() => window.__viewerDebug.selectedResidue());
+const measureArmed = () => page.evaluate(() => window.__viewerDebug.measureFrom());
+const measuresNow = () => page.evaluate(() => JSON.parse(JSON.stringify(window.__viewerDebug.measurementRecords())));
+const statusNow = async () => ((await page.locator('#gpv-state').textContent()) || '').trim();
+/* Esc drops an armed Measure to… first, then the editor and the active label (letGo), then — with
+   nothing else open and no mode on — the selected residue. */
+const clearSelection = async () => {
+  if (await measureArmed()) { await focusStage(); await page.keyboard.press('Escape'); await page.waitForTimeout(150); }
+  await letGo();
+  if (await selectedNow()) { await focusStage(); await page.keyboard.press('Escape'); await page.waitForTimeout(150); }
+};
+/* Back to the number of measurements the step started with, newest rows first. */
+const trimMeasurements = async count => {
+  for (let guard = 0; guard < 20 && (await measuresNow()).length > count; guard += 1) {
+    await page.locator('#gpv-measurement-list .gpv-entry').last().locator('button:has-text("Remove")').click(); await page.waitForTimeout(200);
+  }
+};
+/* The labels drawLabels puts into the main viewer and into any other target, counted without
+   touching 3Dmol's internals: the main viewer's addLabel is shadowed for the one call. */
+const drawnLabels = () => page.evaluate(() => {
+  const d = window.__viewerDebug; const v = d.viewer;
+  const shown = new Set(d.displayedEntries().map(entry => entry.id));
+  const main = [];
+  const own = { label: Object.prototype.hasOwnProperty.call(v, 'addLabel'), line: Object.prototype.hasOwnProperty.call(v, 'addLine') };
+  const original = { label: v.addLabel, line: v.addLine };
+  v.addLabel = text => { main.push(String(text)); return null; };
+  v.addLine = () => null;
+  try { d.drawLabels(v, shown); } finally {
+    if (own.label) v.addLabel = original.label; else delete v.addLabel;
+    if (own.line) v.addLine = original.line; else delete v.addLine;
+  }
+  const other = [];
+  d.drawLabels({ addLabel: text => { other.push(String(text)); return null; }, addLine: () => null }, shown);
+  return { main, other, records: d.labelRecords().filter(label => shown.has(label.entryId)).length, everyResidue: document.querySelector('#gpv-all-labels').checked };
+});
+/* The Cα–Cα distance of two residue keys, from the atoms themselves. */
+const alphaDistance = (firstKey, secondKey) => page.evaluate(([firstKey, secondKey]) => {
+  const d = window.__viewerDebug;
+  const find = key => {
+    const [id, chain, resi] = key.split('|');
+    const entry = d.entries().find(item => item.id === Number(id));
+    return entry && entry.atoms.find(atom => atom.atom === 'CA' && !atom.hetflag && (atom.chain || '') === chain && atom.resi === Number(resi));
+  };
+  const a = find(firstKey); const b = find(secondKey);
+  return a && b ? Math.hypot(a.x - b.x, a.y - b.y, a.z - b.z) : null;
+}, [firstKey, secondKey]);
+/* The newest measurement against what Measure to… promised: a distance between the two Cα atoms,
+   drawn (the list row prints the drawn value) at the distance the atoms give, named in the status,
+   in exactly one undo step — and undo takes it away again. */
+const checkMeasureTo = async (first, second, startCount, steps, how) => {
+  const records = await measuresNow();
+  if (records.length !== startCount + 1) throw new Error(how + ' left ' + (records.length - startCount) + ' new measurements, not 1');
+  const record = records[records.length - 1];
+  if (record.type !== 'distance' || record.points.length !== 2) throw new Error(how + ' made ' + JSON.stringify(record));
+  const keys = record.points.map(point => [point.entryId, point.chain || '', point.resi].join('|') + ':' + point.atom);
+  if (keys[0] !== first.key + ':CA' || keys[1] !== second.key + ':CA') throw new Error(how + ' measured ' + keys.join(' → ') + ', not the two Cα atoms ' + first.key + ' → ' + second.key);
+  const expected = await alphaDistance(first.key, second.key);
+  const row = (await page.locator('#gpv-measurement-list .gpv-entry .gpv-entry-name').last().textContent()) || '';
+  const drawn = Number((row.match(/· ([\d.]+) Å$/) || [])[1]);
+  if (!(Math.abs(drawn - expected) <= 0.01)) throw new Error(how + ': the measurement reads ' + row + ', the atoms are ' + (expected === null ? '—' : expected.toFixed(3)) + ' Å apart');
+  const said = await statusNow();
+  if (!said.includes(first.text) || !said.includes(second.text) || !/Cα–Cα \d+\.\d\d Å/.test(said)) throw new Error(how + ' announced: ' + said);
+  if ((await rememberedSteps()) - steps !== 1) throw new Error(how + ' took ' + ((await rememberedSteps()) - steps) + ' undo steps, not 1');
+  if (await measureArmed()) throw new Error(how + ' is still armed after the second residue');
+  await focusStage(); await page.keyboard.press('Control+z'); await page.waitForTimeout(400);
+  if ((await measuresNow()).length !== startCount) throw new Error('undo did not take the ' + how + ' measurement away');
+  return { drawn, said };
+};
+await step('the residue card names a tapped residue with its pLDDT, secondary structure and the residues within the proximity cutoff', async () => {
+  await clearSelection();
+  const target = await canvasResidue();
+  if (!target) throw new Error('no residue on screen to tap');
+  try {
+    await tap(target.x, target.y); await page.waitForTimeout(400);
+    if (!(await editorShown())) throw new Error('the card did not open at ' + target.text);
+    const card = await page.evaluate(key => {
+      const d = window.__viewerDebug;
+      const [id, chain, resi] = key.split('|');
+      const entry = d.entries().find(item => item.id === Number(id));
+      const ca = entry.atoms.find(atom => atom.atom === 'CA' && !atom.hetflag && (atom.chain || '') === chain && atom.resi === Number(resi));
+      const near = d.nearbyResidues({ entry, mode: 'residue', residue: { chain, resi: Number(resi) } });
+      const facts = document.querySelector('#gpv-residue-card-facts');
+      return {
+        head: document.querySelector('#gpv-label-editor .gpv-label-editor-residue').textContent,
+        name: (ca.resn || 'RES') + ca.resi + (chain ? ' · chain ' + chain : ''),
+        facts: facts.hidden ? '' : facts.textContent,
+        scored: entry.scores.length > 0, b: Number(ca.b), many: d.entries().length > 1,
+        count: near && !near.error ? near.residues.length : null, cutoff: near ? near.cutoff : null,
+        group: document.querySelector('#gpv-label-editor').getAttribute('aria-label') || ''
+      };
+    }, target.key);
+    if (!card.head.startsWith(card.name)) throw new Error('the card names "' + card.head + '", not ' + card.name);
+    if (card.many && !(card.head.length > card.name.length + 3)) throw new Error('with several models loaded the card does not name the model: ' + card.head);
+    if (!/^Label for /.test(card.group)) throw new Error('the card is labelled "' + card.group + '"');
+    const match = card.facts.match(/^(?:pLDDT (\d+\.\d) · )?(?:(α-helix|β-strand|loop) · )?(\d+) residues? within ([\d.]+) Å$/);
+    if (!match) throw new Error('the facts line is not well formed: "' + card.facts + '"');
+    if (card.scored && match[1] !== card.b.toFixed(1)) throw new Error('the card says pLDDT ' + match[1] + ', the Cα\'s B-factor is ' + card.b.toFixed(1));
+    if (!card.scored && match[1]) throw new Error('a model without scores shows pLDDT ' + match[1]);
+    if (card.count === null || Number(match[3]) !== card.count) throw new Error('the card counts ' + match[3] + ' neighbours, the proximity tool ' + card.count);
+    if (Number(match[4]) !== card.cutoff) throw new Error('the card counts within ' + match[4] + ' Å, the panel\'s cutoff is ' + card.cutoff);
+    if (!(await page.locator('#gpv-label-editor-measure').isVisible()) || (await page.locator('#gpv-label-editor-measure').isDisabled())) throw new Error('the card has no usable Measure to…');
+    console.log('       ' + card.head + ' · ' + card.facts);
+  } finally { await clearSelection(); }
+});
+await step('the selected residue is named by a marker on the main view alone; Esc clears it, and a labelled residue gets none', async () => {
+  await clearSelection();
+  let labelled = null;
+  try {
+    const target = await canvasResidue();
+    if (!target) throw new Error('no residue on screen to tap');
+    await tap(target.x, target.y); await page.waitForTimeout(400);
+    await letGo();
+    if (await editorShown() || await activeTextNow()) throw new Error('the editor or an active label is still there');
+    const marker = await markerNow();
+    if (!marker || !marker.startsWith(target.text)) throw new Error('the marker reads ' + JSON.stringify(marker) + ', not ' + target.text);
+    const drawn = await drawnLabels();
+    if (drawn.everyResidue) throw new Error('Label every residue is on; the count below means nothing');
+    if (drawn.main.length !== drawn.records + 1) throw new Error('the main view draws ' + drawn.main.length + ' labels for ' + drawn.records + ' label records');
+    if (!drawn.main.includes(marker)) throw new Error('the main view does not draw the marker: ' + JSON.stringify(drawn.main));
+    await focusStage(); await page.keyboard.press('Escape'); await page.waitForTimeout(200);
+    if (await selectedNow()) throw new Error('Esc left the residue selected');
+    if (await markerNow()) throw new Error('Esc left the marker');
+    if ((await statusNow()) !== 'No residue selected') throw new Error('announced: ' + (await statusNow()));
+    if ((await drawnLabels()).main.length !== drawn.records) throw new Error('the main view still draws an extra label');
+    labelled = await labelOnCanvas('Marker check');
+    await letGo();
+    const picked = await selectedNow();
+    if (!picked || [picked.entryId, picked.chain, picked.resi].join('|') !== labelled.key) throw new Error('labelling did not leave the labelled residue selected');
+    if (await markerNow()) throw new Error('a labelled residue got a marker as well: ' + (await markerNow()));
+    console.log('       "' + marker + '" on screen · Esc cleared it · none on a labelled residue');
+  } finally { await clearSelection(); if (labelled) await removeLabelByKey(labelled.key); await clearSelection(); }
+});
+await step('Measure to… on the card, and M for the selected residue, each measure Cα–Cα to the next residue tapped as one ordinary measurement', async () => {
+  await clearSelection();
+  const startCount = (await measuresNow()).length;
+  try {
+    const first = await canvasResidue();
+    if (!first) throw new Error('no residue on screen to tap');
+    const steps = await rememberedSteps();
+    await tap(first.x, first.y); await page.waitForTimeout(400);
+    if (!(await editorShown())) throw new Error('the card did not open');
+    await page.click('#gpv-label-editor-measure'); await page.waitForTimeout(200);
+    if (await editorShown()) throw new Error('Measure to… left the card open');
+    if (!(await measureArmed())) throw new Error('Measure to… armed nothing');
+    if (!(await statusNow()).startsWith('Click a second residue to measure from ' + first.text)) throw new Error('announced: ' + (await statusNow()));
+    if (!(await page.locator('#gpv-stage.is-measuring-to').count())) throw new Error('the cursor is not a crosshair');
+    const second = await canvasResidue([first.key]);
+    if (!second) throw new Error('no second residue on screen');
+    await tap(second.x, second.y); await page.waitForTimeout(400);
+    if (await editorShown()) throw new Error('the second tap opened the card instead of finishing the measurement');
+    if (await page.locator('#gpv-stage.is-measuring-to').count()) throw new Error('the crosshair stayed after the measurement');
+    const card = await checkMeasureTo(first, second, startCount, steps, 'Measure to…');
+    await clearSelection();
+    const third = await canvasResidue();
+    if (!third) throw new Error('no residue on screen to tap');
+    await tap(third.x, third.y); await page.waitForTimeout(400);
+    await letGo();
+    const keySteps = await rememberedSteps();
+    await focusStage(); await page.keyboard.press('m'); await page.waitForTimeout(200);
+    if (await editorShown()) throw new Error('M opened the card');
+    if (!(await measureArmed())) throw new Error('M armed nothing for ' + third.text);
+    await tap(third.x, third.y); await page.waitForTimeout(400);
+    if ((await measuresNow()).length !== startCount) throw new Error('tapping the same residue again measured something');
+    if (!/nothing measured/.test(await statusNow())) throw new Error('tapping the same residue again announced: ' + (await statusNow()));
+    if (!(await measureArmed())) throw new Error('tapping the same residue again dropped the arm');
+    const fourth = await canvasResidue([third.key]);
+    if (!fourth) throw new Error('no second residue on screen');
+    await tap(fourth.x, fourth.y); await page.waitForTimeout(400);
+    const key = await checkMeasureTo(third, fourth, startCount, keySteps, 'M');
+    console.log('       "' + card.said + '" · and by M: "' + key.said + '" · each one undo step, undone');
+  } finally { await clearSelection(); await trimMeasurements(startCount); }
+});
+await step('Esc cancels an armed Measure to…, and the next tap is an ordinary click again', async () => {
+  await clearSelection();
+  const startCount = (await measuresNow()).length;
+  try {
+    const first = await canvasResidue();
+    if (!first) throw new Error('no residue on screen to tap');
+    await tap(first.x, first.y); await page.waitForTimeout(400);
+    await page.click('#gpv-label-editor-measure'); await page.waitForTimeout(200);
+    if (!(await measureArmed())) throw new Error('Measure to… armed nothing');
+    await focusStage(); await page.keyboard.press('Escape'); await page.waitForTimeout(200);
+    if (await measureArmed()) throw new Error('Esc left Measure to… armed');
+    if (!/cancelled/.test(await statusNow())) throw new Error('announced: ' + (await statusNow()));
+    if (await page.locator('#gpv-stage.is-measuring-to').count()) throw new Error('the crosshair stayed after Esc');
+    if (!(await selectedNow())) throw new Error('the Esc that cancelled also cleared the selected residue');
+    const second = await canvasResidue([first.key]);
+    if (!second) throw new Error('no second residue on screen');
+    await tap(second.x, second.y); await page.waitForTimeout(400);
+    if ((await measuresNow()).length !== startCount) throw new Error('a tap after the cancel still measured');
+    if (!(await editorShown())) throw new Error('a tap after the cancel did not open the card');
+  } finally { await clearSelection(); await trimMeasurements(startCount); }
+});
+await step('with measurement mode on, the card\'s Measure to… is disabled and M does not arm', async () => {
+  await clearSelection();
+  const startCount = (await measuresNow()).length;
+  try {
+    await page.click('#gpv-measure'); await page.waitForTimeout(200);
+    if (!/Stop measuring/.test((await page.locator('#gpv-measure').textContent()) || '')) throw new Error('measurement mode did not start');
+    const target = await canvasResidue();
+    if (!target) throw new Error('no residue on screen to tap');
+    await tap(target.x, target.y); await page.waitForTimeout(400);
+    if (await editorShown()) throw new Error('the card opened while measuring');
+    await focusStage(); await page.keyboard.press('l'); await page.waitForTimeout(300);
+    if (!(await editorShown())) throw new Error('L did not open the card for the selected residue');
+    const button = page.locator('#gpv-label-editor-measure');
+    if (!(await button.isVisible()) || !(await button.isDisabled())) throw new Error('Measure to… is not disabled while measuring');
+    if (!/measurement mode/.test((await button.getAttribute('title')) || '')) throw new Error('the disabled button says: ' + (await button.getAttribute('title')));
+    await letGo();
+    await focusStage(); await page.keyboard.press('m'); await page.waitForTimeout(200);
+    if (await measureArmed()) throw new Error('M armed Measure to… while measuring');
+  } finally {
+    if (/Stop measuring/.test((await page.locator('#gpv-measure').textContent()) || '')) { await page.click('#gpv-measure'); await page.waitForTimeout(200); }
+    await clearSelection(); await trimMeasurements(startCount);
+  }
+});
+await step('a figure export and the comparison panels never draw the residue marker', async () => {
+  await clearSelection();
+  let labelled = null;
+  try {
+    /* One label record, so the export has a label of its own to show the count is being made. */
+    labelled = await labelOnCanvas('Export check');
+    await letGo();
+    const target = await canvasResidue([labelled.key]);
+    if (!target) throw new Error('no second residue on screen to tap');
+    await tap(target.x, target.y); await page.waitForTimeout(400);
+    await letGo();
+    const marker = await markerNow();
+    if (!marker) throw new Error('no marker to look for');
+    const drawn = await drawnLabels();
+    if (drawn.other.length !== drawn.records || drawn.other.includes(marker)) throw new Error('a panel target gets ' + drawn.other.length + ' labels for ' + drawn.records + ' records: ' + JSON.stringify(drawn.other));
+    const exported = await page.evaluate(async () => {
+      const d = window.__viewerDebug;
+      const proto = Object.getPrototypeOf(d.viewer); const original = proto.addLabel; const texts = [];
+      proto.addLabel = function (text, ...rest) { if (this !== d.viewer) texts.push(String(text)); return original.call(this, text, ...rest); };
+      try { await d.renderPublicationImage(); } finally { proto.addLabel = original; d.releaseExportViewer(); }
+      return texts;
+    });
+    if (!exported.includes('Export check')) throw new Error('the export drew none of the labels, so it cannot show the marker is missing: ' + JSON.stringify(exported));
+    if (exported.includes(marker)) throw new Error('the figure export drew the marker "' + marker + '"');
+    if (!(await markerNow())) throw new Error('the export took the marker off the screen');
+    console.log('       "' + marker + '" on screen · not in a ' + exported.length + '-label export or a panel');
+  } finally { await clearSelection(); if (labelled) await removeLabelByKey(labelled.key); await clearSelection(); }
+});
 await step('the orientation is put back after the canvas steps', async () => {
   await letGo();
   await focusStage(); await page.keyboard.press('Shift+r'); await page.waitForTimeout(500);

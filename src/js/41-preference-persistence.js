@@ -149,6 +149,7 @@
     stopCycle();
     stopMotion();
     dismissCanvasText();
+    cancelMeasureTo(false);
     setBoxSelectMode(false);
     viewer.removeAllModels();
     viewer.removeAllLabels();

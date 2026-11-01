@@ -26,6 +26,7 @@
        selected and fed a measurement would do neither well. */
     if (boxSelectMode && annotationActive) toggleAnnotating(false);
     if (boxSelectMode && measurementActive) toggleMeasurement();
+    measureToModesChanged();
     const button = root.querySelector('#gpv-box-select');
     if (button) { setButtonText(button, boxSelectMode ? 'Stop selecting' : 'Drag to select'); button.setAttribute('aria-pressed', String(boxSelectMode)); }
     root.querySelector('#gpv-stage').classList.toggle('is-box-selecting', boxSelectMode);

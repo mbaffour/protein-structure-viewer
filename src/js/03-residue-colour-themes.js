@@ -485,7 +485,9 @@
 
   function selectModel(entry, fit = true) {
     if (!entry) return;
-    /* The editor and the active label belong to what was on screen; another model is something else. */
+    /* The editor and the active label belong to what was on screen; another model is something else.
+       The selected residue stays selected — the panel names its model — and its marker is simply not
+       drawn while that model is not shown. */
     if (entry.id !== activeId) dismissCanvasText();
     if (!entry.visible) {
       entry.visible = true;
@@ -556,6 +558,8 @@
     root.querySelector('#gpv-label-text').value = saved ? saved.text : (atom.resn || 'RES') + atom.resi + (atom.chain ? ' · ' + atom.chain : '');
     root.querySelector('#gpv-add-label').disabled = false;
     updatePositionCompare();
+    /* The residue marker (04c) moves to the residue just selected. */
+    rebuildOverlays();
   }
 
   function addOrEditLabel() {
@@ -688,6 +692,9 @@
       const style = labelStyle(position, { color: label.color, size: label.size, scale });
       target.addLabel(label.text, label === active ? activeLabelStyle(style) : style);
     });
+    /* The selected residue's marker is the screen's alone, like the ring above. */
+    const marker = target === viewer ? residueMarkerSpec(shownIds) : null;
+    if (marker) target.addLabel(marker.text, marker.style);
     if (root.querySelector('#gpv-all-labels').checked) {
       const entry = activeEntry();
       if (entry && shownIds.has(entry.id)) {
