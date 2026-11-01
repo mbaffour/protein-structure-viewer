@@ -1,8 +1,9 @@
 """Independent reference values for an AlphaFold 3 run, computed with Biopython + numpy.
 Mirrors the viewer's definitions: Cα pairs matched by chain|resi, Kabsch superposition
 onto model 0, RMSF around the mean Cα position across all superposed models, Rg over Cα,
-exact maximum Cα–Cα distance, heavy-atom residue contacts within a cutoff of one chain, and the
-inter-chain residue contact map (pairs with closest heavy-atom distance) for two chains, and the
+exact maximum Cα–Cα distance, heavy-atom residue contacts within a cutoff of one chain, the
+inter-chain residue contact map (pairs with closest heavy-atom distance) for two chains, the full
+Cα–Cα distance matrix of those two chains and of the first chain against itself, and the
 buried surface area of every contacting chain pair by Shrake-Rupley (Bio.PDB.SASA)."""
 import sys, json, glob, re, warnings
 import Bio
@@ -75,6 +76,21 @@ for a in chain_atoms(map_a):
         if key not in pairs or pairs[key] > d: pairs[key] = d
 out['contact_map'] = {'chains': [map_a, map_b], 'cutoff': cutoff, 'pairs': len(pairs), 'residues_a': len({k[0] for k in pairs}), 'residues_b': len({k[1] for k in pairs}),
     'all_pairs': [[k[0], k[1], round(v, 4)] for k, v in sorted(pairs.items())], 'chain_pair_counts': pair_counts}
+
+# Distance map on model 0 (added 2.50.0): the full Calpha-Calpha matrix of the contact-map chain pair
+# (every residue of map_a against every residue of map_b) and the intra-chain matrix of map_a alone
+# (diagonal included), from the CA atom of every standard residue, as numpy does it. Mirrors the
+# viewer's Compare -> Contact and distance map, All distances view.
+def ca_axis(chain_id):
+    found = [(r.id[1], r['CA'].coord.astype(float)) for r in model0[chain_id] if r.id[0] == ' ' and 'CA' in r] if chain_id in model0 else []
+    return [k for k, _ in found], np.array([c for _, c in found], dtype=float).reshape(-1, 3)
+def ca_matrix(xa, xb):
+    return np.sqrt(((xa[:, None, :] - xb[None, :, :]) ** 2).sum(-1))
+ids_a, xyz_a = ca_axis(map_a); ids_b, xyz_b = ca_axis(map_b)
+out['distance_map'] = {'chains': [map_a, map_b], 'residues_a': ids_a, 'residues_b': ids_b,
+    'ca': [[round(float(v), 4) for v in row] for row in ca_matrix(xyz_a, xyz_b)],
+    'intra': {'chain': map_a, 'residues': ids_a, 'ca': [[round(float(v), 4) for v in row] for row in ca_matrix(xyz_a, xyz_a)]}}
+print('distance map', [map_a, map_b], len(ids_a), 'x', len(ids_b), '; intra', map_a, len(ids_a), 'x', len(ids_a))
 
 # Buried surface area of every chain pair in contact, on model 0, with Biopython's Shrake–Rupley
 # (Bio.PDB.SASA) configured to the viewer's parameters: probe 1.4 Å, 92 sphere points, Bondi radii
@@ -161,4 +177,4 @@ for a3m in sorted(glob.glob(f'{folder}/*unpaired*.a3m')):
     out['msa'].append({'file': os.path.basename(a3m), 'query': query, 'sequences': len(rows), 'depth': depth, 'identity': [round(v, 6) for v in ident], 'conservation': [round(v, 6) for v in cons], 'conservation_unweighted': [round(v, 6) for v in cons_raw]})
 print('msa', [(m['file'][-30:], m['sequences'], len(m['query'])) for m in out['msa']])
 json.dump(out, open(f'{folder}/reference.json', 'w'), indent=1)
-print(json.dumps({k: v for k, v in out.items() if k != 'contacts'}, indent=1)); print('contacts', out['contacts']['count'], out['contacts']['residues'][:6]); print('contact map', out['contact_map']['chains'], out['contact_map']['pairs'], 'pairs; chain pairs with contacts:', out['contact_map']['chain_pair_counts'])
+print(json.dumps({k: v for k, v in out.items() if k not in ('contacts', 'distance_map')}, indent=1)); print('contacts', out['contacts']['count'], out['contacts']['residues'][:6]); print('contact map', out['contact_map']['chains'], out['contact_map']['pairs'], 'pairs; chain pairs with contacts:', out['contact_map']['chain_pair_counts'])

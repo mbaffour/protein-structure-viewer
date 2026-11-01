@@ -1094,21 +1094,24 @@ html>body{padding:0}</style>
     <p class="text-muted text-small gpv-hint">Every panel follows the others as you drag, spin, or rock. <strong>Rotation only</strong> keeps each model framed on its own centre, which suits assemblies of different size. <strong>Rotation and zoom</strong> locks the cameras completely, which suits superposed models of the same target after <em>Align visible</em>.</p>
     <div class="gpv-list" id="gpv-compare-panels" aria-label="Comparison panels"></div>
     <details class="gpv-contacts" id="gpv-contacts" open>
-      <summary>Interface contact map</summary>
+      <summary>Contact and distance map</summary>
+      <p class="text-muted text-small gpv-hint">Rows are the first chain, columns the second. Pick the same chain twice for the square map of one chain, or <strong>All chains</strong> to lay every chain end to end. <strong>Contacts within cutoff</strong> shows the residue pairs whose atoms come closer than the cutoff; <strong>All distances</strong> colours every pair by its Cα–Cα distance, contacts or not. Hover a cell to read the pair; click it to draw that distance on the model as a measurement.</p>
       <div class="viz-controls">
-        <label class="form-label">Chain<select class="form-select" id="gpv-contact-a" aria-label="First chain"></select></label>
-        <label class="form-label">against chain<select class="form-select" id="gpv-contact-b" aria-label="Second chain"></select></label>
-        <label class="form-label">Atoms<select class="form-select" id="gpv-contact-atoms"><option value="heavy">Any heavy atom</option><option value="ca">Cα only</option></select></label>
+        <label class="form-label">Chain<select class="form-select" id="gpv-contact-a" aria-label="First chain" data-tooltip="Rows of the map: one chain, or All chains end to end"></select></label>
+        <label class="form-label">against chain<select class="form-select" id="gpv-contact-b" aria-label="Second chain" data-tooltip="Columns of the map: another chain, the same chain for an intra-chain map, or All chains"></select></label>
+        <label class="form-label">Atoms<select class="form-select" id="gpv-contact-atoms" data-tooltip="What counts as a contact. Above 1 500 residues on an axis the map uses Cα only"><option value="heavy">Any heavy atom</option><option value="ca">Cα only</option></select></label>
         <label class="form-label">Cutoff (Å)<input class="form-control" id="gpv-contact-cutoff" type="number" min="3" max="15" step="0.5" value="4.5"></label>
-        <button class="btn" type="button" id="gpv-contact-run" disabled data-tooltip="Residue pairs of the two chains with atoms closer than the cutoff, as a map: rows are the first chain, columns the second">Compute contacts</button>
+        <label class="form-label">View<select class="form-select" id="gpv-contact-view" data-tooltip="Contacts within cutoff: the pairs closer than the cutoff. All distances: every pair coloured by its Cα–Cα distance, 0 Å dark to the largest distance (at most 40 Å) light"><option value="contacts">Contacts within cutoff</option><option value="distances">All distances</option></select></label>
+        <button class="btn" type="button" id="gpv-contact-run" disabled data-tooltip="Residue pairs of the two chains with atoms closer than the cutoff, and the Cα–Cα distance of every pair, as a map: rows are the first chain, columns the second">Compute map</button>
         <button class="btn" type="button" id="gpv-contact-highlight" disabled data-tooltip="Highlight every interface residue of both chains in the 3D view">Highlight interface</button>
-        <button class="btn" type="button" id="gpv-contact-png" disabled data-tooltip="Contact map with axes and title at 300 dpi">Download map PNG</button>
-        <button class="btn" type="button" id="gpv-contact-csv" disabled data-tooltip="One row per residue pair with the closest atom distance">Download contacts CSV</button>
+        <button class="btn" type="button" id="gpv-contact-png" disabled data-tooltip="The map as shown — contacts or all distances — with axes, title and scale at 300 dpi">Download map PNG</button>
+        <button class="btn" type="button" id="gpv-contact-csv" disabled data-tooltip="One row per residue pair within the cutoff, with the closest atom distance">Download contacts CSV</button>
+        <button class="btn" type="button" id="gpv-contact-distances" disabled data-tooltip="Every residue pair of the map, contacts or not: Cα–Cα distance and, within the cutoff, the closest heavy-atom distance. At most 2 000 000 rows">Download distances CSV</button>
       </div>
-      <p class="text-small text-muted" id="gpv-contact-state">Show a model with two or more chains.</p>
+      <p class="text-small text-muted" id="gpv-contact-state">Show a model to map its residue contacts and distances.</p>
       <div id="gpv-contact-wrap" hidden>
-        <canvas class="gpv-contact-canvas" id="gpv-contact-canvas" width="560" height="560" role="img" aria-label="Residue contact map"></canvas>
-        <div class="text-small text-muted" id="gpv-contact-readout">Hover a cell to read the residue pair · click a contact to select both residues and zoom to them</div>
+        <canvas class="gpv-contact-canvas" id="gpv-contact-canvas" width="560" height="560" role="img" aria-label="Residue contact and distance map"></canvas>
+        <div class="text-small text-muted" id="gpv-contact-readout">Hover a cell to read the pair and its Cα–Cα distance · click a cell to measure that distance on the model</div>
       </div>
     </details>
   </section>
@@ -1338,7 +1341,7 @@ html>body{padding:0}</style>
         <li><em>Confidence → Colour by MSA</em> reads the alignment inside an AlphaFold 3 archive (or an .a3m you add) and colours matching chains by conservation (Henikoff position-based sequence weights by default, switchable), identity to the query or coverage; the legend, exports and methods text follow.</li>
         <li><em>Publish → Download composite figure</em> stitches the 3D view with the PAE heatmap, the pLDDT profile and the contact map into one lettered figure at print size, each panel rendered at output resolution.</li>
         <li>The <em>Publication checklist</em> at the foot of the Publish tab lists what a journal or reviewer would flag about the current figure — no physical size, low resolution, small text, colour-blind-unsafe colours, missing legend, scale bar in perspective, unsuperposed models, no title — with one-click fixes.</li>
-        <li><em>Compare → Interface contact map</em> draws every residue pair of two chains within a cutoff, closer pairs darker; hover reads the pair, a click selects both residues, <em>Highlight interface</em> colours the interface, and the map and pair list download as PNG and CSV. <em>Annotate → Label style</em> switches every label between boxed and plain text.</li>
+        <li><em>Compare → Contact and distance map</em> draws every residue pair of two chains (or one chain against itself, or all chains) within a cutoff, closer pairs darker, or with <em>All distances</em> every pair by its Cα–Cα distance; hover reads the pair and its distance, a click draws that distance on the model as a measurement, <em>Highlight interface</em> colours the interface, and the map, the contacts and every distance download as PNG and CSV. <em>Annotate → Label style</em> switches every label between boxed and plain text.</li>
         <li><em>Appearance → Outline</em> draws a silhouette line around every element (thin for most figures, bold for small panels) and <em>Depth cueing</em> fades the far side; both apply to panels and exports. In the composition table, <em>Faded</em> blends a chain into the background to spotlight the others. <em>Publish → Journal preset</em> sets width, resolution, text size and font from a journal's figure guide, and <em>Download one panel per model</em> renders every model from the same camera into one lettered figure.</li>
         <li>The <em>layout</em> button in the header (panel icon) switches between the side-panel workspace, where the 3D view stays pinned while you work in the scrolling tool panel, and the stacked layout. The tool panel sits on the left; the arrows button beside it swaps the two sides. Drag the divider between them to give tables more room; double-click it to reset. Screens narrower than 1100 px always stack.</li>
         <li><em>Publish → Save session file</em> writes one ZIP with the models, confidence data, alignment, annotations, domains, views and settings; open it later with <em>Open session file</em> or by dropping it on the page, on any computer, with no other files. Scene JSON remains the light option that expects the original files.</li>

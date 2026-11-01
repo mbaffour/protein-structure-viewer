@@ -10,7 +10,7 @@ interpretation caveats see [`SCIENTIFIC-AUDIT.md`](../SCIENTIFIC-AUDIT.md).
 - [Composite figure](#composite-figure)
 - [Publication checklist](#publication-checklist)
 - [Figure finishing](#figure-finishing)
-- [Interface contact map](#interface-contact-map)
+- [Contact and distance map](#contact-and-distance-map)
 - [Getting structures in](#getting-structures-in)
 - [Keyboard shortcuts](#keyboard-shortcuts)
 - [Models tab](#models-tab)
@@ -312,6 +312,12 @@ apart are both one click each. Clicking the same residue again measures nothing 
 clicks are already spoken for, and turning either on (or *Drag to select*) drops a waiting
 *Measure to…*.
 
+**Distances from this residue.** The card's **Distances CSV** button downloads the residue against
+every other residue of its model — `chain, resi, resn, ca_distance, min_heavy_distance`, the Cα–Cα
+distance and the closest approach of any two heavy atoms, both in Å — nearest first, and the status
+names the nearest residue. The residue itself is left out, so the first row is its nearest neighbour.
+For a whole map of distances, see *Contact and distance map* in the Compare tab.
+
 The label you have just added, edited or clicked is the *active* label, outlined in the accent colour
 on screen (never in an export). The arrow keys move it 8 px at a time (<kbd>Shift</kbd>: 1 px),
 <kbd>Delete</kbd> removes it, and <kbd>Esc</kbd> lets go of it — after which ← and → step through the
@@ -448,20 +454,53 @@ the cameras completely, which suits superposed models after **Align visible**. *
 views and scene manifests, and the shared report opens with the same panels.
 
 
-### Interface contact map
+### Contact and distance map
 
-At the foot of the Compare tab. Choose two chains of the current model, a **cutoff** (default
-4.5 Å) and whether **any heavy atom** or **Cα only** counts, then **Compute contacts**. Every
-residue pair whose atoms come within the cutoff is a cell in the map — the first chain runs down
-the side, the second along the top, and closer pairs are darker; faint lines mark every 10, 25,
-50 or 100 residues depending on chain length. Hover a cell to read the pair and the closest-atom
-distance; click a contact to select both residues and zoom to them. **Highlight interface** adds
-two selections, one per chain, in the interface colour. **Download map PNG** writes the map with
-axes, title and distance scale at 300 dpi; **Download contacts CSV** lists one row per pair with
-the closest-atom distance. The definition is the same heavy-atom distance rule as *Nearby
-residues*, which VALIDATION.md checks against Biopython, and the methods text states the rule and
-the counts. A predicted interface is still a prediction: read the contact map alongside the
-inter-chain PAE and the interface pTM before believing it.
+At the foot of the Compare tab (called *Interface contact map* before 2.50.0). Choose two chains of
+the current model, a **cutoff** (default 4.5 Å) and whether **any heavy atom** or **Cα only** counts,
+then **Compute map**. The first chain runs down the side, the second along the top; faint lines mark
+every 10, 25, 50 or 100 residues depending on chain length.
+
+- **Which chains.** Two different chains give the interface map. The **same chain twice** gives the
+  familiar square residue–residue map of one chain, symmetric about an empty diagonal (a residue is
+  never in contact with itself, and each pair is counted once). **All chains**, in either select, lays
+  every chain of the model end to end along that axis, with a thin divider between chains. Above
+  1 500 residues on an axis the map uses **Cα only** whatever you chose, and says so: a heavy-atom
+  search over every pair of thousands of residues would be too slow.
+- **View.** *Contacts within cutoff* draws the pairs whose atoms come within the cutoff, closer pairs
+  darker, as the map always has. *All distances* colours **every** pair by its Cα–Cα distance (P–P
+  for nucleotides) on a continuous scale from 0 Å (dark) to the largest distance on the map or 40 Å,
+  whichever is smaller (light) — the pairs that touch and the ones that do not. The cutoff still
+  decides which pairs are contacts for the contacts CSV and **Highlight interface**.
+- **Hover** any cell to read the pair with its Cα–Cα distance, and the closest heavy-atom distance
+  when the pair is a contact: `A:GLU 57 — B:ARG 59 · Cα–Cα 9.42 Å · closest atoms 3.12 Å`, or
+  `… · Cα–Cα 21.70 Å · no contact within 4.5 Å`.
+- **Click** any cell to draw that distance on the model: an ordinary distance measurement between
+  the two residues' Cα atoms — listed, exported, saved and undone like one made in measurement mode,
+  in one undo step — with the first residue selected and the view zoomed to the pair. A distance
+  between two residues that do not interact is one click away.
+
+**Highlight interface** adds one selection per chain involved (two for a pair of chains) in the
+interface colour. **Download map PNG** writes the map as shown — contacts or all distances — with
+axes, title and a distance scale in Å at 300 dpi. **Download contacts CSV** lists one row per pair in
+contact with the closest-atom distance. **Download distances CSV** lists **every** pair of the map in
+long form — `model, chain_a, resi_a, resn_a, chain_b, resi_b, resn_b, ca_distance_angstrom,
+min_heavy_distance_angstrom` — in residue order; the last column is blank for a pair outside the
+cutoff on a heavy-atom map, and equals the Cα distance on a Cα map. A map of one chain against itself
+writes each pair once and never a residue with itself, n(n − 1)/2 rows; two different axes give
+n × m rows (less any residue that is on both). The file stops at **2 000 000 rows** — an all-chains
+map of a large assembly would otherwise run to tens of millions — and the status line says when it
+did; map fewer chains for the rest.
+
+For one residue against everything else, the residue card's **Distances CSV** (Annotate tab, *The
+residue card*) is quicker.
+
+The contact definition is the same heavy-atom distance rule as *Nearby residues*; VALIDATION.md checks
+the pair set, every closest-atom distance and the full Cα–Cα matrix against Biopython and numpy. The
+methods text states the rule and the counts, or for the *All distances* view the Cα–Cα scale. The
+shared report carries the contact map of two chains or of one chain against itself (not an all-chains
+map, whose residue numbers repeat from chain to chain). A predicted interface is still a prediction:
+read the contact map alongside the inter-chain PAE and the interface pTM before believing it.
 
 ## Confidence tab
 

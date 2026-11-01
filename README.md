@@ -221,7 +221,7 @@ dataset, so legend, strip, exports, report and methods text follow and state whi
 ## Composite figure
 
 Publish → *Download composite figure* stitches the 3D view with the PAE heatmap, the pLDDT profile
-and the interface contact map into one lettered figure at the chosen print size, each panel rendered
+and the contact or distance map into one lettered figure at the chosen print size, each panel rendered
 at output resolution with a caption. Tick the panels you want; unavailable ones are greyed out.
 
 ## What the report carries
@@ -320,13 +320,17 @@ export with no physical size, low resolution, small text, colour-blind-unsafe ch
 missing legend, a scale bar in perspective, unsuperposed models, no title — with one-click fixes.
 The badge reads *ready* when nothing remains.
 
-## Interface contact map
+## Contact and distance map
 
-Compare → *Interface contact map*: choose two chains, a cutoff and whether any heavy atom or
-only Cα counts, and the viewer draws every residue pair within the cutoff as a map, closer pairs
-darker. Hover reads the pair, a click selects both residues and zooms to them, *Highlight
-interface* colours the interface in 3D, and the map and the pair list download as a 300 dpi PNG
-and a CSV. The methods text states the rule and the counts.
+Compare → *Contact and distance map*: choose two chains (the same chain twice for the square
+map of one chain, or *All chains* end to end), a cutoff and whether any heavy atom or only Cα
+counts, and the viewer draws every residue pair within the cutoff as a map, closer pairs darker.
+The *All distances* view colours every pair by its Cα–Cα distance instead, whether the residues
+touch or not. Hover reads the pair and its distances; a click draws that distance on the model as
+a measurement, *Highlight interface* colours the interface in 3D, and the map, the contacts and
+every distance download as a 300 dpi PNG and CSVs. A residue's card on the canvas offers *Measure
+to…* another residue and a CSV of its distances to every residue of the model. The methods text
+states the rule and the counts; the Cα–Cα matrix is checked against Biopython in VALIDATION.md.
 
 ## Figure finishing
 

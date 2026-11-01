@@ -637,6 +637,183 @@ await step('the plain label style is a scene setting and the methods text names 
   if (!/Inter-chain contacts between chains A and B/.test(text)) throw new Error(text.slice(-200));
   await tab('models');
 });
+/* ---- The contact and distance map (2.50.0) ----
+   The contact map's axes may be one chain twice or all chains, and its All distances view reads,
+   measures and exports every residue pair, contacts or not. Every step puts the map back to the
+   A–B contact view at 6 Å that the steps around it expect, and takes back any measurement it made. */
+const computeMap = async (a, b, view = 'contacts') => {
+  await tab('compare');
+  await page.selectOption('#gpv-contact-a', a); await page.selectOption('#gpv-contact-b', b);
+  await page.selectOption('#gpv-contact-atoms', 'heavy'); await page.selectOption('#gpv-contact-view', view);
+  await page.fill('#gpv-contact-cutoff', '6'); await page.click('#gpv-contact-run'); await page.waitForTimeout(500);
+};
+const restoreMap = () => computeMap('A', 'B');
+const mapShape = () => page.evaluate(() => {
+  const c = window.__viewerDebug.contactResult(); const canvas = document.querySelector('#gpv-contact-canvas');
+  return c ? { n: c.rowA.residues.length, m: c.rowB.residues.length, symmetric: c.symmetric, width: canvas.width, height: canvas.height, pairs: c.pairs.size, blocks: c.axisA.blocks.map(block => [block.chain, block.start, block.end]), entryId: c.entryId } : null;
+});
+/* The viewport point at the centre of cell (i, j) of the on-screen map: rows down, columns across. */
+const mapCellPoint = async (i, j) => {
+  await page.locator('#gpv-contact-canvas').scrollIntoViewIfNeeded(); await page.waitForTimeout(150);
+  const box = await page.locator('#gpv-contact-canvas').boundingBox(); const shape = await mapShape();
+  return { x: box.x + (j + 0.5) * box.width / shape.m, y: box.y + (i + 0.5) * box.height / shape.n };
+};
+/* Cα–Cα distances straight from the atoms of the map's model, for [chainA, resiA, chainB, resiB] rows. */
+const atomDistances = list => page.evaluate(list => {
+  const d = window.__viewerDebug; const c = d.contactResult(); const entry = d.entries().find(item => item.id === c.entryId);
+  const ca = (chain, resi) => entry.atoms.find(atom => atom.atom === 'CA' && !atom.hetflag && (atom.chain || '') === chain && atom.resi === resi);
+  return list.map(([ca1, r1, ca2, r2]) => { const a = ca(ca1, r1); const b = ca(ca2, r2); return a && b ? Math.hypot(a.x - b.x, a.y - b.y, a.z - b.z) : null; });
+}, list);
+const csvCells = line => [...line.matchAll(/"((?:[^"]|"")*)"/g)].map(match => match[1].replace(/""/g, '"'));
+/* `direct` presses the button through the DOM: the residue card follows its residue on the stage,
+   so a pointer click would wait for it to hold still. */
+const downloadText = async (selector, direct = false) => {
+  const download = page.waitForEvent('download', { timeout: 60000 });
+  if (direct) await page.evaluate(id => document.querySelector(id).click(), selector); else await page.click(selector);
+  const saved = await download;
+  return { name: saved.suggestedFilename(), lines: (await readFile(await saved.path(), 'utf8')).split('\n') };
+};
+const undoSteps = () => page.evaluate(() => window.__viewerDebug.rememberedSteps());
+const undoOnce = async () => { await page.evaluate(() => document.querySelector('#gpv-stage').focus({ preventScroll: true })); await page.keyboard.press('Control+z'); await page.waitForTimeout(400); };
+await step('an intra-chain map is square with an empty diagonal, and All chains lays both chains end to end', async () => {
+  try {
+    await computeMap('A', 'A');
+    const intra = await page.evaluate(() => {
+      const c = window.__viewerDebug.contactResult(); const keys = [...c.pairs.keys()].map(key => key.split('|').map(Number));
+      return { diagonal: keys.filter(([i, j]) => i === j).length, lower: keys.filter(([i, j]) => j < i).length, state: document.querySelector('#gpv-contact-state').textContent };
+    });
+    const shape = await mapShape();
+    if (shape.n !== 30 || shape.m !== 30 || !shape.symmetric || shape.width !== shape.height || !(shape.pairs > 0) || intra.diagonal || intra.lower || !/^\d+ residue pairs? within 6 Å/.test(intra.state)) throw new Error('intra-chain: ' + JSON.stringify({ ...shape, ...intra }));
+    /* On the canvas the diagonal is paper like a distant pair, while its neighbour in contact is
+       painted on both sides of the diagonal alike. */
+    const pixels = await page.evaluate(() => {
+      const canvas = document.querySelector('#gpv-contact-canvas'); const m = window.__viewerDebug.contactResult().rowB.residues.length; const cell = canvas.width / m;
+      const at = (i, j) => [...canvas.getContext('2d').getImageData(Math.floor((j + 0.5) * cell), Math.floor((i + 0.5) * cell), 1, 1).data].join(',');
+      return { diagonal: at(12, 12), neighbour: at(12, 13), mirror: at(13, 12), far: at(0, m - 1) };
+    });
+    if (pixels.diagonal !== pixels.far || pixels.neighbour === pixels.diagonal || pixels.neighbour !== pixels.mirror) throw new Error('diagonal cells: ' + JSON.stringify(pixels));
+    await computeMap('*all*', '*all*');
+    const all = await mapShape();
+    if (all.n !== 60 || all.m !== 60 || JSON.stringify(all.blocks) !== '[["A",0,30],["B",30,60]]' || all.width !== all.height) throw new Error('all chains: ' + JSON.stringify(all));
+    await computeMap('A', '*all*');
+    const mixed = await mapShape();
+    if (mixed.n !== 30 || mixed.m !== 60 || mixed.width !== 2 * mixed.height) throw new Error('chain A against all chains: ' + JSON.stringify(mixed));
+    console.log('       A–A ' + shape.pairs + ' pairs on a ' + shape.width + ' px square · all chains ' + all.n + ' × ' + all.m + ' (' + all.pairs + ' pairs) · A × all ' + mixed.width + ' × ' + mixed.height + ' px');
+  } finally { await restoreMap(); }
+});
+await step('All distances reads the Cα–Cα distance of a pair out of contact, and the closest atoms of a pair in contact', async () => {
+  try {
+    await computeMap('A', 'B');
+    const contacts = await downloadText('#gpv-contact-csv');
+    await page.selectOption('#gpv-contact-view', 'distances'); await page.waitForTimeout(300);
+    const shape = await mapShape();
+    /* A1 against B30: 45 Å apart along the helix axis, nowhere near a contact. */
+    let point = await mapCellPoint(0, shape.m - 1);
+    await page.mouse.move(point.x, point.y); await page.waitForTimeout(200);
+    const far = (await page.locator('#gpv-contact-readout').textContent()) || '';
+    const farValue = Number((far.match(/Cα–Cα (\d+\.\d+) Å · no contact/) || [])[1]);
+    const [farDirect] = await atomDistances([['A', 1, 'B', 30]]);
+    if (!/^A:ALA 1 — B:ALA 30/.test(far) || !(Math.abs(farValue - farDirect) <= 0.01)) throw new Error('far cell reads "' + far + '", the atoms are ' + farDirect.toFixed(3) + ' Å apart');
+    /* A pair from the contacts CSV: the readout's closest atoms are the CSV's distance. */
+    const row = csvCells(contacts.lines[1]);
+    const pair = await page.evaluate(([resiA, resiB]) => { const c = window.__viewerDebug.contactResult(); return [c.rowA.residues.findIndex(atom => atom.resi === resiA), c.rowB.residues.findIndex(atom => atom.resi === resiB)]; }, [Number(row[2]), Number(row[5])]);
+    point = await mapCellPoint(pair[0], pair[1]);
+    await page.mouse.move(point.x, point.y); await page.waitForTimeout(200);
+    const near = (await page.locator('#gpv-contact-readout').textContent()) || '';
+    const closest = Number((near.match(/Cα–Cα \d+\.\d+ Å · closest atoms (\d+\.\d+) Å/) || [])[1]);
+    if (!(Math.abs(closest - Number(row[7])) <= 0.01)) throw new Error('contact cell reads "' + near + '", the contacts CSV says ' + row[7] + ' Å');
+    console.log('       ' + far + ' · ' + near);
+  } finally { await restoreMap(); }
+});
+await step('a click on a map cell out of contact measures that Cα–Cα distance on the model in one undo step', async () => {
+  try {
+    await computeMap('A', 'B', 'distances');
+    const startCount = await page.evaluate(() => window.__viewerDebug.measurementRecords().length); const steps = await undoSteps();
+    const shape = await mapShape();
+    const point = await mapCellPoint(2, shape.m - 3);
+    await tap(point.x, point.y); await page.waitForTimeout(400);
+    const records = await page.evaluate(() => JSON.parse(JSON.stringify(window.__viewerDebug.measurementRecords())));
+    if (records.length !== startCount + 1) throw new Error((records.length - startCount) + ' new measurements, not 1');
+    const record = records[records.length - 1];
+    const keys = record.points.map(item => (item.chain || '') + item.resi + ':' + item.atom);
+    if (record.type !== 'distance' || keys.join(' ') !== 'A3:CA B28:CA' || record.points.some(item => item.entryId !== shape.entryId)) throw new Error('made ' + JSON.stringify(record));
+    const [expected] = await atomDistances([['A', 3, 'B', 28]]);
+    const listed = (await page.locator('#gpv-measurement-list .gpv-entry .gpv-entry-name').last().textContent()) || '';
+    const drawn = Number((listed.match(/· ([\d.]+) Å$/) || [])[1]);
+    if (!(Math.abs(drawn - expected) <= 0.01)) throw new Error('the measurement reads ' + listed + ', the atoms are ' + expected.toFixed(3) + ' Å apart');
+    const said = ((await page.locator('#gpv-state').textContent()) || '').trim();
+    if (!/ALA3 · A — ALA28 · B: Cα–Cα \d+\.\d\d Å/.test(said)) throw new Error('status: ' + said);
+    if ((await undoSteps()) - steps !== 1) throw new Error('took ' + ((await undoSteps()) - steps) + ' undo steps, not 1');
+    await undoOnce();
+    if ((await page.evaluate(() => window.__viewerDebug.measurementRecords().length)) !== startCount) throw new Error('undo did not take the measurement away');
+    console.log('       ' + said);
+  } finally {
+    await page.evaluate(() => document.querySelector('#gpv-stage').focus({ preventScroll: true })); await page.keyboard.press('Escape'); await page.waitForTimeout(150);
+    await restoreMap();
+  }
+});
+await step('the distances CSV writes every pair of the map, blank closest atoms outside the cutoff', async () => {
+  try {
+    /* One chain against itself: each unordered pair once, no residue with itself — n(n − 1)/2 rows. */
+    await computeMap('A', 'A', 'distances');
+    let csv = await downloadText('#gpv-contact-distances');
+    const header = csvCells(csv.lines[0]).join(',');
+    if (header !== 'model,chain_a,resi_a,resn_a,chain_b,resi_b,resn_b,ca_distance_angstrom,min_heavy_distance_angstrom') throw new Error('header: ' + header);
+    if (csv.lines.length - 1 !== 30 * 29 / 2) throw new Error('intra-chain rows ' + (csv.lines.length - 1) + ', not 435');
+    if (!/Distances CSV downloaded · 435 residue pairs/.test((await page.locator('#gpv-state').textContent()) || '')) throw new Error('status: ' + await page.locator('#gpv-state').textContent());
+    const spot = [1, 200, csv.lines.length - 1].map(index => csvCells(csv.lines[index]));
+    const direct = await atomDistances(spot.map(row => [row[1], Number(row[2]), row[4], Number(row[5])]));
+    spot.forEach((row, k) => { if (!(Math.abs(Number(row[7]) - direct[k]) <= 0.001)) throw new Error('row ' + row.join(',') + ' vs ' + direct[k]); });
+    /* Two chains, heavy atoms: n × m rows; a pair out of contact has no closest-atom distance. */
+    await computeMap('A', 'B', 'distances');
+    csv = await downloadText('#gpv-contact-distances');
+    if (csv.lines.length - 1 !== 900) throw new Error('A–B rows ' + (csv.lines.length - 1) + ', not 900');
+    const far = csvCells(csv.lines.find(line => /^"[^"]*","A","1","ALA","B","30",/.test(line)) || '');
+    if (far.length !== 9 || far[8] !== '') throw new Error('A1–B30 row: ' + far.join(','));
+    const contact = csv.lines.map(csvCells).find(row => row[8] !== '' && row[0] !== 'model');
+    if (!contact || !(Number(contact[8]) <= 6)) throw new Error('no pair in contact carries its closest-atom distance');
+    console.log('       A–A 435 rows · A–B 900 rows · A1–B30 ' + far[7] + ' Å, no contact · ' + contact.slice(1, 7).join(' ') + ' closest ' + contact[8] + ' Å');
+  } finally { await restoreMap(); }
+});
+await step('Distances from this residue lists every other residue of the model, nearest first and named in the status', async () => {
+  try {
+    await tab('annotate'); await page.fill('#gpv-goto', 'A:5'); await page.click('#gpv-goto-run'); await page.waitForTimeout(400);
+    if (!(await page.locator('#gpv-label-editor').isVisible())) { await page.evaluate(() => document.querySelector('#gpv-stage').focus({ preventScroll: true })); await page.keyboard.press('l'); await page.waitForTimeout(300); }
+    if (!(await page.locator('#gpv-label-editor-distances').isVisible())) throw new Error('the residue card has no Distances CSV button');
+    const csv = await downloadText('#gpv-label-editor-distances', true);
+    if (csvCells(csv.lines[0]).join(',') !== 'chain,resi,resn,ca_distance,min_heavy_distance') throw new Error('header: ' + csv.lines[0]);
+    const residues = await page.evaluate(() => { const d = window.__viewerDebug; const entry = d.entries().find(item => item.id === d.selectedResidue().entryId); return new Set(entry.atoms.filter(atom => !atom.hetflag).map(atom => (atom.chain || '') + '|' + atom.resi)).size; });
+    if (csv.lines.length - 1 !== residues - 1) throw new Error((csv.lines.length - 1) + ' rows for ' + residues + ' residues (the residue itself is left out)');
+    const said = ((await page.locator('#gpv-state').textContent()) || '').trim();
+    const named = said.match(/nearest ([A-Z]+)(-?\d+)(?: · (\S+))? at (\d+\.\d+) Å/);
+    const first = csvCells(csv.lines[1]);
+    if (!named || named[2] !== first[1] || (named[3] || '') !== first[0] || !(Math.abs(Number(named[4]) - Number(first[3])) <= 0.01)) throw new Error('status "' + said + '" against first row ' + first.join(','));
+    const [direct] = await page.evaluate(([chain, resi]) => {
+      const d = window.__viewerDebug; const entry = d.entries().find(item => item.id === d.selectedResidue().entryId);
+      const ca = (c, r) => entry.atoms.find(atom => atom.atom === 'CA' && (atom.chain || '') === c && atom.resi === r);
+      const a = ca('A', 5); const b = ca(chain, resi); return [Math.hypot(a.x - b.x, a.y - b.y, a.z - b.z)];
+    }, [first[0], Number(first[1])]);
+    if (!(Math.abs(Number(first[3]) - direct) <= 0.001)) throw new Error('first row ' + first.join(',') + ', atoms ' + direct);
+    const sorted = csv.lines.slice(1).map(line => Number(csvCells(line)[3])).every((value, k, list) => !k || list[k - 1] <= value);
+    if (!sorted) throw new Error('rows are not nearest first');
+    console.log('       ' + (csv.lines.length - 1) + ' rows · ' + said);
+  } finally {
+    for (let k = 0; k < 2; k += 1) { await page.evaluate(() => document.querySelector('#gpv-stage').focus({ preventScroll: true })); await page.keyboard.press('Escape'); await page.waitForTimeout(150); }
+    await page.fill('#gpv-goto', '');
+    await restoreMap();
+  }
+});
+await step('the All distances map exports as a PNG whose scale runs from 0 Å to its maximum', async () => {
+  try {
+    await computeMap('A', 'B', 'distances');
+    const download = await (async () => { const wait = page.waitForEvent('download', { timeout: 60000 }); await page.click('#gpv-contact-png'); return wait; })();
+    const png = await readFile(await download.path());
+    if (png.toString('latin1', 1, 4) !== 'PNG' || !png.includes('pHYs') || !/^distance-map-/.test(download.suggestedFilename())) throw new Error('not a distance-map PNG with resolution: ' + download.suggestedFilename());
+    const scale = await page.evaluate(() => { const c = window.__viewerDebug.contactResult(); return { ...c.lastScale, caMax: c.caMax }; });
+    if (scale.view !== 'distances' || scale.labels[0] !== '0 Å' || !/^\d+(\.\d)? Å$/.test(scale.labels[1]) || Math.abs(scale.maximum - Math.min(40, scale.caMax)) > 1e-9) throw new Error('scale: ' + JSON.stringify(scale));
+    console.log('       ' + download.suggestedFilename() + ' · ' + png.readUInt32BE(16) + ' × ' + png.readUInt32BE(20) + ' px · scale ' + scale.labels.join('–'));
+  } finally { await restoreMap(); await tab('models'); }
+});
 
 await step('search filters the model list', async () => {
   await page.fill('#gpv-model-search', 'model_c'); await page.waitForTimeout(400);

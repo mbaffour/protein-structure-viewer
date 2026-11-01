@@ -8,7 +8,8 @@
     return {
       pae: Boolean(entry && entry.confidence && Array.isArray(entry.confidence.pae) && entry.confidence.pae.length),
       profile: shown.some(item => item.scores.length),
-      contacts: Boolean(contactResult && entry && contactResult.entryId === entry.id && contactResult.pairs.size),
+      /* The All distances view is a figure even when no pair is within the cutoff. */
+      contacts: Boolean(contactResult && entry && contactResult.entryId === entry.id && (contactResult.pairs.size || contactResult.view === 'distances')),
       architecture: Boolean(entry && architectureModel(entry)),
       matrix: Boolean(rmsdMatrix && rmsdMatrix.names.length >= 2),
       rmsf: Boolean(ensembleSpread && ensembleSpread.values.size)
@@ -81,7 +82,7 @@
         const profile = plddtProfileSvg();
         if (profile) { const image = await loadImage('data:image/svg+xml;charset=utf-8,' + encodeURIComponent(profile.svg)); panels.push({ image, caption: 'Per-residue pLDDT' + (displayedEntries().filter(item => item.scores.length).length > 1 ? ' of the displayed models' : ''), aspect: profile.width / profile.height }); }
       }
-      if (wanted.contacts) { const canvas = document.createElement('canvas'); drawContactMap(canvas, true, Math.max(1, Math.round(cell / 600 * 2))); panels.push({ image: canvas, caption: 'Contacts between chains ' + (contactResult.chainA || '—') + ' and ' + (contactResult.chainB || '—') + ' within ' + contactResult.cutoff + ' Å' }); }
+      if (wanted.contacts) { const canvas = document.createElement('canvas'); drawContactMap(canvas, true, Math.max(1, Math.round(cell / 600 * 2))); panels.push({ image: canvas, caption: contactCaption() }); }
       if (wanted.rmsf) {
         const profile = rmsfProfileSvg();
         if (profile) { const image = await loadImage('data:image/svg+xml;charset=utf-8,' + encodeURIComponent(profile.svg)); panels.push({ image, caption: 'Per-residue Cα RMSF across ' + ensembleSpread.count + ' aligned models' }); }

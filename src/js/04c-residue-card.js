@@ -63,7 +63,11 @@
     const measure = document.createElement('button');
     measure.type = 'button'; measure.className = 'btn btn-ghost'; measure.id = 'gpv-label-editor-measure'; measure.textContent = 'Measure to…';
     measure.addEventListener('click', measureToFromCard);
-    return { facts, measure };
+    const distances = document.createElement('button');
+    distances.type = 'button'; distances.className = 'btn btn-ghost'; distances.id = 'gpv-label-editor-distances'; distances.textContent = 'Distances CSV';
+    distances.title = 'Download the distance from this residue to every residue of its model — Cα–Cα and closest heavy atoms — nearest first';
+    distances.addEventListener('click', downloadResidueDistancesFromCard);
+    return { facts, measure, distances };
   }
 
   /* Called by openLabelEditor once the head line is set. A residue's card gets the two lines and
@@ -71,15 +75,16 @@
   function fillResidueCard(host, target, residueLine) {
     const facts = host.querySelector('#gpv-residue-card-facts');
     const measure = host.querySelector('#gpv-label-editor-measure');
+    const distances = host.querySelector('#gpv-label-editor-distances');
     const entry = residueLine && target.kind !== 'annotation' ? entryById(target.entryId) : null;
-    if (!entry || !target.atom) { facts.hidden = true; facts.textContent = ''; measure.hidden = true; return; }
+    if (!entry || !target.atom) { facts.hidden = true; facts.textContent = ''; measure.hidden = true; distances.hidden = true; return; }
     const chain = target.atom.chain || '';
     const atom = residueAlphaCarbon(entry, chain, target.atom.resi) || target.atom;
     /* The model is named only when there is more than one to tell apart. */
     host.querySelector('.gpv-label-editor-residue').textContent = (atom.resn || 'RES') + atom.resi + (chain ? ' · chain ' + chain : '') + (structures.length > 1 ? ' · ' + displayName(entry) : '');
     const text = residueCardFacts(entry, atom);
     facts.textContent = text; facts.hidden = !text;
-    measure.hidden = false;
+    measure.hidden = false; distances.hidden = false;
     refreshMeasureToButton();
   }
 
@@ -175,18 +180,78 @@
     }
     cancelMeasureTo(false);
     const fromEntry = entryById(from.entryId);
-    const first = fromEntry && residueAlphaCarbon(fromEntry, from.chain, from.resi);
-    const second = residueAlphaCarbon(entry, chain, atom.resi);
-    if (!first || !second) { updateStatus('The first residue’s model is no longer loaded · nothing measured'); return; }
+    const made = fromEntry && measureResiduePair(fromEntry, from, entry, { chain, resi: atom.resi });
+    if (!made) { updateStatus('The first residue’s model is no longer loaded · nothing measured'); return; }
+    updateStatus(from.name + ' — ' + made.summary);
+  }
+
+  /* The record measurement mode would have made for a click on each residue's Cα: drawn by
+     drawMeasurements, listed, exported, saved and undone exactly like one, as one undo step. Shared
+     by Measure to… and a click on the distance map (19), so the two can never make different
+     records. Returns the two atoms, the distances and the status-line wording after the first
+     residue's name, or null when either residue has no atoms loaded. */
+  function measureResiduePair(entryA, residueA, entryB, residueB) {
+    const chainA = residueA.chain || ''; const chainB = residueB.chain || '';
+    const first = residueAlphaCarbon(entryA, chainA, residueA.resi);
+    const second = residueAlphaCarbon(entryB, chainB, residueB.resi);
+    if (!first || !second) return null;
     remember('measurement');
-    measurementRecords.push({ id: nextAnnotationId++, type: 'distance', points: [atomReference(fromEntry, first), atomReference(entry, second)] });
+    measurementRecords.push({ id: nextAnnotationId++, type: 'distance', points: [atomReference(entryA, first), atomReference(entryB, second)] });
     renderMeasurementList(); rebuildOverlays();
     const distance = Math.sqrt(squaredDistance(first, second));
-    const closest = closestHeavyAtomDistance(fromEntry, from, entry, { chain, resi: atom.resi });
+    const closest = closestHeavyAtomDistance(entryA, { chain: chainA, resi: residueA.resi }, entryB, { chain: chainB, resi: residueB.resi });
     const pair = [first, second].map(item => (item.atom === 'CA' ? 'Cα' : item.atom || 'atom')).join('–');
     /* The closest approach is worth a mention only when it says something the Cα distance does not. */
     const contact = closest !== null && closest < distance - 0.05 ? ' · closest atoms ' + closest.toFixed(1) + ' Å' : '';
-    updateStatus(from.name + ' — ' + labelEditorDefaultText(second) + ': ' + pair + ' ' + distance.toFixed(2) + ' Å' + contact);
+    return { first, second, distance, closest, summary: labelEditorDefaultText(second) + ': ' + pair + ' ' + distance.toFixed(2) + ' Å' + contact };
+  }
+
+  /* Distances from this residue: the card's residue against every residue of its model (one
+     representative atom per residue, as the sequence strip and the distance map use — the Cα, else
+     a nucleotide's P), with the closest heavy-atom approach for every one of them. One residue
+     against a model is a few hundred thousand distance checks at most, so nothing is cut off by a
+     cutoff here. The residue itself is left out: its distance to itself says nothing, and the
+     first row is then the nearest other residue. Rows nearest first. */
+  function residueDistanceRows(entry, chain, resi) {
+    const origin = residueAlphaCarbon(entry, chain, resi);
+    if (!origin) return null;
+    const heavy = heavyAtoms(entry).filter(atom => !isWater(atom));
+    const own = heavy.filter(atom => (atom.chain || '') === chain && atom.resi === resi);
+    /* One pass over the model's heavy atoms, each tried against the few atoms of this residue. */
+    const closest = new Map();
+    heavy.forEach(atom => {
+      if (atom.hetflag) return;
+      const atomChain = atom.chain || '';
+      if (atomChain === chain && atom.resi === resi) return;
+      let best = Infinity;
+      for (const mine of own) { const d2 = squaredDistance(atom, mine); if (d2 < best) best = d2; }
+      const key = atomChain + '|' + atom.resi;
+      if (!closest.has(key) || closest.get(key) > best) closest.set(key, best);
+    });
+    const rows = [];
+    residueRows(entry).forEach(row => row.residues.forEach(atom => {
+      if (row.chain === chain && atom.resi === resi) return;
+      const best = closest.get(row.chain + '|' + atom.resi);
+      rows.push({ chain: row.chain, resi: atom.resi, resn: atom.resn || '', ca: Math.sqrt(squaredDistance(origin, atom)), heavy: best === undefined || !Number.isFinite(best) ? null : Math.sqrt(best) });
+    }));
+    rows.sort((x, y) => x.ca - y.ca || compareChains(x.chain, y.chain) || x.resi - y.resi);
+    return { origin, rows };
+  }
+
+  function downloadResidueDistancesFromCard() {
+    const editor = labelEditor;
+    if (!editor || editor.kind === 'annotation' || !editor.atom) return;
+    const entry = entryById(editor.entryId);
+    if (!entry || !entry.model) { updateStatus('That residue’s model is no longer loaded'); return; }
+    const chain = editor.atom.chain || '';
+    const result = residueDistanceRows(entry, chain, editor.atom.resi);
+    if (!result || !result.rows.length) { updateStatus('No other residues in this model to measure to'); return; }
+    const lines = [['chain', 'resi', 'resn', 'ca_distance', 'min_heavy_distance'].map(csvCell).join(',')];
+    result.rows.forEach(row => lines.push([row.chain, row.resi, row.resn, row.ca.toFixed(3), row.heavy === null ? '' : row.heavy.toFixed(3)].map(csvCell).join(',')));
+    const name = labelEditorDefaultText(result.origin);
+    downloadBlob(lines.join('\n'), 'text/csv', 'distances-from-' + (chain ? chain + '-' : '') + result.origin.resi + '.csv');
+    const nearest = result.rows[0];
+    updateStatus('Distances from ' + name + ' · ' + plural(result.rows.length, 'residue') + ' · nearest ' + (nearest.resn || 'RES') + nearest.resi + (nearest.chain ? ' · ' + nearest.chain : '') + ' at ' + nearest.ca.toFixed(2) + ' Å (Cα–Cα)');
   }
 
   /* The marker naming the selected residue on the main viewer: `GLU57 · B · pLDDT 94.8`, smaller

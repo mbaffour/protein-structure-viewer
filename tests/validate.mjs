@@ -6,7 +6,8 @@
 
    Compared: mean Cα pLDDT per model, Kabsch RMSD of every model onto model 0 (Cα paired by chain and
    residue id), per-residue Cα RMSF across the superposed models, radius of gyration and exact Cα extent,
-   the residue set within <cutoff> Å of <chain>, and the
+   the residue set within <cutoff> Å of <chain>, the inter-chain contact map and the full Cα–Cα distance
+   matrix of the same chain pair and of its first chain against itself, and the
    buried surface area of the chain interfaces (Shrake–Rupley, against Bio.PDB.SASA). Exits non-zero when any value disagrees beyond
    the tolerances below. Requires the suite's node_modules and vendor/ (run npm test once). */
 import { chromium } from 'playwright';
@@ -95,6 +96,33 @@ if (reference.contact_map) {
     let worst = 0; referencePairs.forEach((d, key) => { if (viewerPairs.has(key)) worst = Math.max(worst, Math.abs(viewerPairs.get(key) - d)); });
     check('contact map · largest distance difference over ' + referencePairs.size + ' pairs (Å)', worst, 0, 0.001);
   }
+}
+
+/* distance map on model 0 (added 2.50.0): the viewer's Cα–Cα matrix for the contact-map chain pair and
+   for the first chain against itself, cell by cell against numpy. Residues are matched by number along
+   each axis; a residue on one side and not the other is counted and fails the axis check. */
+if (reference.distance_map) {
+  const dm = reference.distance_map;
+  const compareMatrix = async (label, chainA, chainB, idsA, idsB, matrix) => {
+    const viewerMatrix = await page.evaluate(([a, b]) => {
+      const d = window.__viewerDebug; const entry = d.entries().find(item => /_model_0\./.test(item.name));
+      const result = entry && d.distanceMatrix(entry.id, a, b);
+      return result ? { a: result.a, b: result.b, ca: result.ca.map(row => Array.from(row)) } : null;
+    }, [chainA, chainB]);
+    if (!viewerMatrix) { rows.push({ label: label + ' (axes)', viewer: NaN, reference: idsA.length * idsB.length, delta: NaN, ok: false }); failed += 1; return; }
+    const rowOf = new Map(viewerMatrix.a.map((resi, i) => [resi, i])); const columnOf = new Map(viewerMatrix.b.map((resi, j) => [resi, j]));
+    const missing = idsA.filter(resi => !rowOf.has(resi)).length + idsB.filter(resi => !columnOf.has(resi)).length;
+    const sameAxes = missing === 0 && viewerMatrix.a.length === idsA.length && viewerMatrix.b.length === idsB.length;
+    rows.push({ label: label + ' · residues on the axes', viewer: viewerMatrix.a.length + viewerMatrix.b.length, reference: idsA.length + idsB.length, delta: sameAxes ? 0 : NaN, ok: sameAxes }); if (!sameAxes) failed += 1;
+    let worst = 0; let cells = 0;
+    idsA.forEach((resiA, i) => {
+      const vi = rowOf.get(resiA); if (vi === undefined) return;
+      idsB.forEach((resiB, j) => { const vj = columnOf.get(resiB); if (vj === undefined) return; worst = Math.max(worst, Math.abs(viewerMatrix.ca[vi][vj] - matrix[i][j])); cells += 1; });
+    });
+    check(label + ' · largest Cα–Cα difference over ' + cells + ' cells (Å)', worst, 0, 0.001);
+  };
+  await compareMatrix('distance map ' + dm.chains.join('–'), dm.chains[0], dm.chains[1], dm.residues_a, dm.residues_b, dm.ca);
+  await compareMatrix('distance map ' + dm.intra.chain + '–' + dm.intra.chain + ' (intra-chain)', dm.intra.chain, dm.intra.chain, dm.intra.residues, dm.intra.residues, dm.intra.ca);
 }
 
 /* buried surface area of the chain interfaces on model 0 (Confidence tab → Interfaces).
