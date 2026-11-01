@@ -227,7 +227,7 @@ at output resolution with a caption. Tick the panels you want; unavailable ones 
 ## What the report carries
 
 The shared HTML report reproduces the outline, depth cueing and faded chains, and shows the
-interface contact map beside the PAE heatmap when one was computed for a model in the report.
+contact map (of single chains) beside the PAE heatmap when one was computed for a model in the report.
 
 ## Superposing models
 
@@ -390,7 +390,7 @@ computes, with Biopython and numpy, the mean Cα pLDDT, the Kabsch RMSD of each 
 per-residue Cα RMSF across the superposed models, radius of gyration, exact Cα extent and the residue
 set within a cutoff of one chain; `tests/validate.mjs` drives the real viewer on the same files and
 compares. On three AlphaFold 3 runs (an M13 virion tip, an MS2 maturation-protein–coat complex and a
-phiX174 F–G complex) all 130 comparisons — including the interface contact map, the MSA statistics (weighted and unweighted conservation) and
+phiX174 F–G complex) all 130 comparisons — including the contact map and, since 2.50.0, the full Cα–Cα distance matrix, the MSA statistics (weighted and unweighted conservation) and
 buried surface area — agree within tolerance (rounding of the reference for distances; 5 % for
 buried surface area, which two 92-point Shrake–Rupley samplings cannot match more closely).
 [`VALIDATION.md`](VALIDATION.md) has the tables, what is and is not covered, and how to rerun the check on

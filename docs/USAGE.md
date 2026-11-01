@@ -1022,7 +1022,7 @@ carried into the shared report.
 In the Publish tab, under the export buttons. **Download composite figure** renders one lettered
 figure at the chosen print size and resolution: panel A is the 3D view as it stands (with the legend
 and scale bar you have chosen), followed by the panels you tick — the **PAE heatmap** of the current
-model, the **pLDDT profile** of the displayed models, and the **interface contact map** when one has
+model, the **pLDDT profile** of the displayed models, and the **contact or distance map** when one has
 been computed in the Compare tab. Each panel is rendered fresh at output resolution, never scaled up
 from the screen, and carries a caption; the file carries its resolution. Choose one, two or three
 columns. Panels that are not available for the current model are greyed out with the reason in their
