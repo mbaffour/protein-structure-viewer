@@ -20,13 +20,24 @@
      per atom per viewer, panel and export, so the pass is made once per residue. */
   let distanceColourCache = null;
   /* The selection the view was last coloured for, so a click on the residue already selected (or a
-     second selectResidue for the same one) does not restyle every model again. */
+     second selectResidue for the same one) does not restyle every model again. Set by applyStyle — the
+     view's own restyle — and by nothing else: the sequence strip colours its cells through the same
+     colour function, and when the strip repainted first (Go to always did) the view was never
+     recoloured, and stayed grey under a legend saying no residue was selected. */
   let distanceColourDrawn = null;
+  /* The selection the status line last named, so every change of residue is said, whether or not the
+     view had to be restyled for it. */
+  let distanceColourAnnounced = null;
   let distanceRecolourTimer = 0;
 
   function distanceColourKey() {
     const picked = selectedResidue;
-    return picked ? picked.entryId + '|' + picked.chain + '|' + picked.resi : '';
+    return picked ? picked.entryId + '|' + picked.chain + '|' + picked.resi + '|' + insertionCodeOf(picked) : '';
+  }
+
+  /* Called by applyStyle once the view has been restyled. */
+  function distanceColourStyled() {
+    if (root.querySelector('#gpv-color-mode').value === 'fromresidue') distanceColourDrawn = distanceColourKey();
   }
 
   /* The selected residue and the words for it, or null when nothing is selected or its model is gone. */
@@ -37,17 +48,17 @@
     if (!entry) return null;
     const residue = (picked.resn || 'RES') + residueNumber(picked);
     return {
-      entry, chain: picked.chain || '', resi: picked.resi,
+      entry, chain: picked.chain || '', resi: picked.resi, icode: insertionCodeOf(picked),
       short: residueName(picked),
       long: residue + (picked.chain ? ' of chain ' + picked.chain : '') + (structures.length > 1 ? ' in ' + displayName(entry) : '')
     };
   }
 
-  function distanceFromResidueValues(entry, chain, resi) {
-    const key = entry.id + '|' + chain + '|' + resi;
+  function distanceFromResidueValues(entry, chain, resi, icode = '') {
+    const key = entry.id + '|' + chain + '|' + resi + '|' + icode;
     if (distanceColourCache && distanceColourCache.key === key && distanceColourCache.atoms === entry.atoms) return distanceColourCache.values;
-    const result = residueDistanceRows(entry, chain, resi);
-    const values = result ? new Map(result.rows.map(row => [row.chain + '|' + row.resi, row.heavy])) : null;
+    const result = residueDistanceRows(entry, chain, resi, icode);
+    const values = result ? new Map(result.rows.map(row => [row.chain + '|' + row.resi + '|' + row.icode, row.heavy])) : null;
     distanceColourCache = { key, atoms: entry.atoms, values };
     return values;
   }
@@ -60,15 +71,15 @@
      atom. Hetero groups and water have no distance of their own here — the rows are
      the polymer residues — so they are grey, unless they are the selected residue itself. */
   function distanceFromResidueColorFunc(entry) {
-    distanceColourDrawn = distanceColourKey();
     const picked = selectedResidue;
     if (!picked || picked.entryId !== entry.id) return () => distanceFromResidueGrey;
-    const values = distanceFromResidueValues(entry, picked.chain || '', picked.resi);
+    const code = insertionCodeOf(picked);
+    const values = distanceFromResidueValues(entry, picked.chain || '', picked.resi, code);
     return atom => {
       const chain = atom.chain || '';
-      if (chain === (picked.chain || '') && atom.resi === picked.resi) return distanceFromResidueSelf;
+      if (sameResidue(atom, picked.chain, picked.resi, code)) return distanceFromResidueSelf;
       if (!values || atom.hetflag) return distanceFromResidueGrey;
-      const value = values.get(chain + '|' + atom.resi);
+      const value = values.get(chain + '|' + atom.resi + '|' + insertionCodeOf(atom));
       return value === undefined || value === null ? distanceFromResidueGrey : distanceFromResidueBand(value);
     };
   }
@@ -80,18 +91,25 @@
 
   /* Called whenever the selected residue changes (selectResidue, clearSelectedResidue). Deferred to
      after the click that changed it, so the restyle never runs in the middle of a click handler, and
-     the status line that click wrote is kept rather than replaced by applyStyle's "Ready" — except the
-     "Click a residue first" hint the mode itself put up, which a residue now selected answers. */
+     the status line that click wrote is kept rather than replaced by applyStyle's "Ready". The view is
+     restyled when it was not already drawn for this residue, and the status names the residue on every
+     change: a line that already names it (Go to's readout, a Measure to… result) is kept; anything
+     else — the "Click a residue first" hint, a line about the residue before — gives way to
+     "Coloured by distance from …". Before 2.52.0 the line kept naming the first residue clicked. */
   function distanceColourSelectionChanged() {
     if (root.querySelector('#gpv-color-mode').value !== 'fromresidue') return;
-    if (distanceRecolourTimer || distanceColourKey() === distanceColourDrawn) return;
+    if (distanceRecolourTimer) return;
+    if (distanceColourKey() === distanceColourDrawn && distanceColourKey() === distanceColourAnnounced) return;
     distanceRecolourTimer = setTimeout(() => {
       distanceRecolourTimer = 0;
-      if (root.querySelector('#gpv-color-mode').value !== 'fromresidue' || distanceColourKey() === distanceColourDrawn) return;
+      if (root.querySelector('#gpv-color-mode').value !== 'fromresidue') return;
+      const key = distanceColourKey();
       const state = root.querySelector('#gpv-state'); const said = state.textContent;
-      applyStyle();
+      if (key !== distanceColourDrawn) applyStyle();
+      distanceColourAnnounced = key;
       const target = distanceColourTarget();
-      state.textContent = target && said.startsWith(distanceColourHint) ? 'Coloured by distance from ' + target.short : said;
+      const namesIt = target && (said.includes(target.short) || said.includes(residueName(selectedResidue, 'prose')));
+      state.textContent = target && !namesIt ? 'Coloured by distance from ' + target.short : said;
     }, 0);
   }
 

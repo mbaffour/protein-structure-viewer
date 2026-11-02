@@ -233,6 +233,68 @@ All notable changes to this project are recorded here.
 - ***Copy PNG to clipboard* stated the size asked for**, and rendered without the second try the
   downloads make when the browser gives the canvas less than it asked. It now renders as they do and
   states the size copied, with *rendered at … dpi, the most this GPU allows* when it had to be lowered.
+- **Colour by distance stayed grey after Go to.** The sequence strip's colour lookup marked the view as
+  already drawn, so whenever the strip repainted first — after Go to always, after a click about one
+  time in five, and on Firefox after the first clicks — the model stayed grey under a key saying no
+  residue was selected, and a figure exported then printed that key. Every change of residue now
+  recolours the view and its key, and the status names the residue the colours are measured from now,
+  not the first one clicked.
+- **Residues told apart only by an insertion code were one residue** to Measure to…, the card's contacts
+  and its Distances CSV: *Measure to…* from 57 to 57B in closest atoms recorded 57 N to 57 N, 0.00 Å; the
+  card at 57A left out 57 and 57B, its bonded neighbours, as itself, and its CSV said *Distances from
+  ALA57*. They are three residues there now, and in the card's count, *Highlight*, *Highlight nearby
+  residues*, a box selection, the contact map's *Highlight* and its zoom, Go to's framing, *Compare
+  this position* and *Align visible*'s chain-and-number pairing. The Distances CSV and the contacts copy
+  write `57A` in `resi` (the column count is unchanged).
+- **A file opened while a figure was rendering** went in between the export's steps: the image showed
+  the old models and its key the new model's chains. It now waits for the figure to finish, saying
+  *Export in progress — 1brs.cif will load when it finishes*, then loads; a fetch waits the same way.
+- **Fetch by identifier left an armed *Measure to…* armed**, so the next click measured into the fetched
+  structure. A fetch now cancels it as an opened file does. In the synchronized multi-view an opened
+  file is put in the primary panel, as a fetch already was, and both say *in the primary panel*; an
+  archive opened on an empty page says it switched to *one model at a time (View mode)*. A fetch that
+  cannot reach the server says *Could not reach the PDB (1ubq) — check the network and the id* on every
+  engine, rather than the browser's own words (*Failed to fetch*, *Load failed*, *NetworkError…*).
+- **Two models could share one short name** in an exported Model key, the RMSD matrix, the site figure
+  and the position comparison: names differing past the 28th character were clipped alike, and 1brs.cif
+  and its second copy became *cif* and *cif (2)*. Short names are now unique after clipping (a name that
+  would repeat keeps its end), and a stem is never cut down to its extension (*1brs*, *1brs (2)*).
+- **Depth cueing, the surface, Okabe–Ito, Low confidence and the legend on exports were forgotten** at
+  the next visit, though USAGE said appearance and export choices were remembered; a user who turned the
+  export legend off got it back without noticing. They are remembered now.
+- **Past eight models the colours repeated with nothing to tell them apart**, and the strip said
+  *8 models* beside *10 displayed*. Models now take twelve distinct colours before repeating, and the
+  strip says *first 8 of 10 models*.
+- **Emphasise with one shown model** said it had faded the others and took an undo step that changed
+  nothing; it is off below two shown models (*Needs two shown models*), and the row's fade switch now
+  says what it did.
+- **Removing the alignment reference** left the deviation colours to turn grey with only *Removed
+  syn_b.pdb* to say why. The status now says the alignment was cleared with it, and that Restore
+  coordinates puts the others back.
+- **← → in the synchronized multi-view could show one model in two panels** and leave another in none,
+  while the count read *1 displayed*. The model chosen now swaps places with the primary one
+  (*… moved to panel 2*), and the count reads every panel (*3 displayed / 3 loaded · 3 panels*).
+- **A measurement on a hidden model still answered Show and the arrows**: the camera went to empty space
+  and the status said the text had moved. Its row now says *not drawn* and why, and Show, the arrows and
+  Edit say *Show model_a.pdb first …* and move nothing; a measurement between two models in different
+  panels of the multi-view says it is drawn in none.
+- **Keyboard**: <kbd>Enter</kbd> in a measurement row's text field moves the focus to the row's *Show*,
+  so <kbd>Ctrl</kbd>/<kbd>⌘</kbd>+<kbd>Z</kbd> undoes the text straight away (it did nothing while the
+  field kept the focus); in the clipboard fallback box <kbd>Esc</kbd> closes it and ⌘Z undoes. The
+  measurement editor — Atoms, Name the atoms, colour, Dashed — opens from the keyboard: the row's new
+  **Edit**, or <kbd>Enter</kbd> on the measurement made active with **Select**; Tab walks it, Esc closes
+  it.
+- **Light theme: muted text and every ghost button were 3.2:1 on white** — the card's facts, the contacts'
+  atoms, the measurement rows, Show, Remove, the arrows. They are 5.6:1 now; the dark theme is unchanged.
+- **Nucleotides and ions were called Cα**: the contacts' last column read *Cα 6.01 Å* between two
+  nucleotides and the card offered *Cα–Cα*, Distances CSV said *(Cα–Cα)*, and *Measure to…* a calcium ion
+  said *C1–Cα*. A nucleotide is measured and named by its P (*P–P*), an ion by its own atom name, and the
+  contact map's chain menu counts an RNA or DNA chain in *nt*.
+- **Polish, round 2**: Help says *Appearance → Colour scheme*; a label row's arrows say *Label moved up ·
+  Reset puts it back*; every control in a measurement row is read out with its measurement, and the
+  editor's × is *Close the editor*; at 1400 × 900 the card with Contacts open keeps *Distances CSV* in
+  view; Interfaces' *Highlight* uses Annotate's *Highlight colour*, as every other highlight does, and
+  its own colour well is gone.
 - **Polish, continued**: the Annotate readout and the status name a renamed model by its new name and
   the residue as the card does (`Wild type · ALA12 · chain B · atom CA`), the label list writes
   `ALA12 · chain B`, the selection list *all chains* rather than *chain —*, and the contact map's readout

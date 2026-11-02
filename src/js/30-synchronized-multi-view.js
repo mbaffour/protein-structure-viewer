@@ -262,9 +262,12 @@
     return total.map(value => value / points.length);
   }
 
+  /* By chain, residue number and insertion code: 57A pairs with 57A. Keyed by number alone, 57, 57A and
+     57B were one key and the last of them stood in for all three. A calcium ion is not a Cα. */
   function identifierPairs(reference, target) {
-    const referenceMap = new Map(reference.atoms.filter(atom => atom.atom === 'CA').map(atom => [(atom.chain || '') + '|' + atom.resi, atom]));
-    const pairs = target.atoms.filter(atom => atom.atom === 'CA' && referenceMap.has((atom.chain || '') + '|' + atom.resi)).map(atom => [referenceMap.get((atom.chain || '') + '|' + atom.resi), atom]);
+    const alpha = atom => atom.atom === 'CA' && !atom.hetflag;
+    const referenceMap = new Map(reference.atoms.filter(alpha).map(atom => [residueCodeTag(atom), atom]));
+    const pairs = target.atoms.filter(atom => alpha(atom) && referenceMap.has(residueCodeTag(atom))).map(atom => [referenceMap.get(residueCodeTag(atom)), atom]);
     return { pairs, method: 'chain/residue IDs', identity: null, chainPairs: null };
   }
 
@@ -490,8 +493,8 @@
       const dy = pair[0].y - pair[1].y;
       const dz = pair[0].z - pair[1].z;
       const distance = Math.sqrt(dx * dx + dy * dy + dz * dz);
-      target.deviations.set(residueTag(pair[1]), distance);
-      const tag = residueTag(pair[0]);
+      target.deviations.set(residueCodeTag(pair[1]), distance);
+      const tag = residueCodeTag(pair[0]);
       if (!target.alignedPairs.has(tag)) target.alignedPairs.set(tag, pair[1]);
       reference.deviationSamples.set(tag, [...(reference.deviationSamples.get(tag) || []), distance]);
       if (!fitSet || fitSet.has(pair[1])) fitSquaredError += dx * dx + dy * dy + dz * dz;
@@ -1004,7 +1007,7 @@
     const point = item => ({ model: nameOf(item.entryId), chain: item.chain, resi: item.resi, ...icodeOf(item), atom: item.atom, index: item.index });
     return {
       labels: labelRecords.filter(kept).map(label => ({ model: nameOf(label.entryId), chain: label.chain, resi: label.resi, ...icodeOf(label), atom: label.atom, text: label.text, color: label.color, size: label.size, ...(label.kind === 'domain' || label.kind === 'position' ? { kind: label.kind } : {}), ...(labelOffsetLength(label) ? { offset: label.offset } : {}) })),
-      selections: selectionRecords.filter(kept).map(record => ({ model: nameOf(record.entryId), chain: record.chain, residues: record.residues, action: record.action, color: record.color })),
+      selections: selectionRecords.filter(kept).map(record => ({ model: nameOf(record.entryId), chain: record.chain, residues: record.residues, ...(Array.isArray(record.icodes) ? { icodes: record.icodes } : {}), action: record.action, color: record.color })),
       /* A measurement's text, value switch, offset, colour and dash only when they differ from the
          defaults, so a scene with none of them reads exactly as it did before they existed. */
       measurements: measurementRecords.filter(keptPoints).map(record => ({ type: record.type, points: record.points.map(point), ...(record.text ? { text: record.text } : {}), ...(record.showValue === false ? { showValue: false } : {}), ...(labelOffsetLength(record) ? { offset: record.offset } : {}), ...(measurementColor(record) ? { color: record.color } : {}), ...(record.dashed === false ? { dashed: false } : {}) })),
@@ -1013,7 +1016,7 @@
       annotations: annotationRecords.filter(keptPoints).map(record => ({ type: record.type, text: record.text, color: record.color, size: record.size, dashed: record.dashed, corner: record.corner, offset: record.offset, distance: record.distance, dx: record.dx, dy: record.dy, points: record.points.map(point) })),
       /* Compared positions belong to no single model — they are a chain and a residue number applied
          to whatever is shown — so they survive a share link that drops some models. */
-      positions: spotlightResidues.map(spot => ({ chain: spot.chain, resi: spot.resi }))
+      positions: spotlightResidues.map(spot => ({ chain: spot.chain, resi: spot.resi, ...(insertionCodeOf(spot) ? { icode: insertionCodeOf(spot) } : {}) }))
     };
   }
 

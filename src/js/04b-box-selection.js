@@ -150,12 +150,14 @@
     const groups = new Map();
     picks.forEach(({ entry, atom }) => {
       const id = entry.id + '|' + (atom.chain || '');
-      if (!groups.has(id)) groups.set(id, { entryId: entry.id, chain: atom.chain || '', residues: [] });
-      groups.get(id).residues.push(atom.resi);
+      if (!groups.has(id)) groups.set(id, { entryId: entry.id, chain: atom.chain || '', residues: new Map() });
+      groups.get(id).residues.set(residueNumber(atom), atom);
     });
     const color = root.querySelector('#gpv-selection-color').value;
     remember('box selection');
-    groups.forEach(group => selectionRecords.push({ id: nextAnnotationId++, entryId: group.entryId, chain: group.chain, residues: [...new Set(group.residues)].sort((a, b) => a - b), action: 'highlight', color }));
+    /* 57, 57A and 57B are three residues: a box over 57A alone highlights 57A alone. */
+    const byNumber = (a, b) => a.resi - b.resi || (insertionCodeOf(a) < insertionCodeOf(b) ? -1 : insertionCodeOf(a) > insertionCodeOf(b) ? 1 : 0);
+    groups.forEach(group => selectionRecords.push({ id: nextAnnotationId++, entryId: group.entryId, chain: group.chain, ...selectionResidues([...group.residues.values()].sort(byNumber)), action: 'highlight', color }));
     renderSelectionList(); applyStyle();
     const models = new Set(picks.map(pick => pick.entry.id)).size;
     const summary = plural(picks.length, 'residue') + ' in ' + plural(groups.size, 'chain') + ' of ' + plural(models, 'model');

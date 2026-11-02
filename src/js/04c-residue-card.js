@@ -78,7 +78,7 @@
     if (entry.scores.length && Number.isFinite(Number(atom.b))) parts.push('pLDDT ' + Number(atom.b).toFixed(1));
     const ss = secondaryStructureWord(entry, atom);
     if (ss) parts.push(ss);
-    const near = entry.model ? nearbyResidues({ entry, mode: 'residue', residue: { chain: atom.chain || '', resi: atom.resi } }) : null;
+    const near = entry.model ? nearbyResidues({ entry, mode: 'residue', residue: { chain: atom.chain || '', resi: atom.resi, icode: insertionCodeOf(atom) } }) : null;
     const nearText = near && !near.error ? plural(near.residues.length, 'residue') + ' within ' + near.cutoff + ' Å' : '';
     return { parts, nearText };
   }
@@ -167,6 +167,9 @@
     own.forEach(item => { item.hidden = false; });
     const select = host.querySelector('#gpv-label-editor-measure-atoms');
     if (select.value !== measureAtoms) select.value = measureAtoms;
+    /* A nucleotide stands for itself by its P: its card says P–P, never Cα–Cα. */
+    const representative = atomWord(atom);
+    select.options[0].textContent = representative === 'Cα' ? 'Cα–Cα' : representative + '–' + representative;
     refreshMeasureToButton();
   }
 
@@ -242,7 +245,7 @@
     refreshMeasureToButton();
   }
 
-  /* Every residue's heavy atoms, in file order, keyed chain|resi — so the closest-pair search below
+  /* Every residue's heavy atoms, in file order, keyed chain|resi|icode — so the closest-pair search below
      does not filter the whole model once per pair when a contacts list asks it twenty times over, or
      the validation once per residue of a chain. Cached on the atoms array it indexes; the atoms are
      the model's own objects, so a superposition that moves them moves what the index holds. */
@@ -250,7 +253,7 @@
     if (!entry.residueAtomCache || entry.residueAtomCache.atoms !== entry.atoms) {
       const map = new Map();
       heavyAtoms(entry).forEach(atom => {
-        const key = (atom.chain || '') + '|' + atom.resi;
+        const key = (atom.chain || '') + '|' + atom.resi + '|' + insertionCodeOf(atom);
         if (!map.has(key)) map.set(key, []);
         map.get(key).push(atom);
       });
@@ -262,10 +265,12 @@
   /* The closest approach of the two residues' heavy atoms — what says whether they touch, which the
      Cα–Cα distance alone does not — as the pair of atoms itself, so a measurement can be drawn
      between them. A residue has a few dozen atoms at most, so every pair is tried; a tie keeps the
-     first pair found in atom order, so the answer never depends on anything but the file. */
+     first pair found in atom order, so the answer never depends on anything but the file. A residue is
+     its chain, number and insertion code: 57, 57A and 57B are three residues — before 2.52.0 they were
+     one atom set, and Measure to… from 57 to 57B paired an atom with itself (0.00 Å). */
   function closestHeavyAtomPair(entryA, residueA, entryB, residueB) {
-    const atomsA = residueHeavyAtomIndex(entryA).get((residueA.chain || '') + '|' + residueA.resi) || [];
-    const atomsB = residueHeavyAtomIndex(entryB).get((residueB.chain || '') + '|' + residueB.resi) || [];
+    const atomsA = residueHeavyAtomIndex(entryA).get((residueA.chain || '') + '|' + residueA.resi + '|' + insertionCodeOf(residueA)) || [];
+    const atomsB = residueHeavyAtomIndex(entryB).get((residueB.chain || '') + '|' + residueB.resi + '|' + insertionCodeOf(residueB)) || [];
     let best = Infinity; let a = null; let b = null;
     for (const first of atomsA) {
       for (const second of atomsB) {
@@ -321,13 +326,12 @@
      or adding it — so Measure all can add a whole list under one step. */
   function residuePairMeasurement(entryA, residueA, entryB, residueB, atoms = 'ca') {
     const chainA = residueA.chain || ''; const chainB = residueB.chain || '';
-    /* A residue that says its insertion code (the selected residue, the card's) is that residue; a
-       contacts row, which does not, is any residue of that number. */
-    const codeOf = residue => ('icode' in residue ? insertionCodeOf(residue) : null);
-    const alphaA = residueAlphaCarbon(entryA, chainA, residueA.resi, codeOf(residueA));
-    const alphaB = residueAlphaCarbon(entryB, chainB, residueB.resi, codeOf(residueB));
+    /* Every caller names the residue with its insertion code ('' for none): the selected residue, the
+       card's, a contacts row, a cell of the distance map. */
+    const alphaA = residueAlphaCarbon(entryA, chainA, residueA.resi, insertionCodeOf(residueA));
+    const alphaB = residueAlphaCarbon(entryB, chainB, residueB.resi, insertionCodeOf(residueB));
     if (!alphaA || !alphaB) return null;
-    const nearest = closestHeavyAtomPair(entryA, { chain: chainA, resi: residueA.resi }, entryB, { chain: chainB, resi: residueB.resi });
+    const nearest = closestHeavyAtomPair(entryA, residueA, entryB, residueB);
     const closest = nearest ? nearest.distance : null;
     /* A residue with no heavy atom has no closest pair to draw; its Cα (or stand-in) still has a place. */
     const byAtoms = atoms === 'closest' && nearest;
@@ -335,7 +339,7 @@
     const second = byAtoms ? nearest.b : alphaB;
     const record = { id: nextAnnotationId++, type: 'distance', points: [atomReference(entryA, first), atomReference(entryB, second)] };
     const distance = Math.sqrt(squaredDistance(first, second));
-    const pair = [first, second].map(item => (item.atom === 'CA' ? 'Cα' : item.atom || 'atom')).join('–');
+    const pair = [first, second].map(atomWord).join('–');
     /* The closest approach is worth a mention only when it says something the Cα distance does not —
        and is the distance itself when the closest atoms were measured. */
     const contact = !byAtoms && closest !== null && closest < distance - 0.05 ? ' · closest atoms ' + closest.toFixed(1) + ' Å' : '';
@@ -347,31 +351,37 @@
      a nucleotide's P), with the closest heavy-atom approach for every one of them. One residue
      against a model is a few hundred thousand distance checks at most, so nothing is cut off by a
      cutoff here. The residue itself is left out: its distance to itself says nothing, and the
-     first row is then the nearest other residue. Rows nearest first. */
-  function residueDistanceRows(entry, chain, resi) {
-    const origin = residueAlphaCarbon(entry, chain, resi);
+     first row is then the nearest other residue. Rows nearest first. A residue is its chain, number
+     and insertion code: 57A is measured from as itself, and 57 and 57B are rows of their own. Each row
+     says which atoms its distance joins: Cα–Cα for amino acids, P–P for nucleotides. */
+  function residueDistanceRows(entry, chain, resi, icode = '') {
+    const origin = residueAlphaCarbon(entry, chain, resi, icode);
     if (!origin) return null;
     const heavy = heavyAtoms(entry).filter(atom => !isWater(atom));
-    const own = heavy.filter(atom => (atom.chain || '') === chain && atom.resi === resi);
+    const own = heavy.filter(atom => sameResidue(atom, chain, resi, icode));
     /* One pass over the model's heavy atoms, each tried against the few atoms of this residue. */
     const closest = new Map();
     heavy.forEach(atom => {
-      if (atom.hetflag) return;
-      const atomChain = atom.chain || '';
-      if (atomChain === chain && atom.resi === resi) return;
+      if (atom.hetflag || sameResidue(atom, chain, resi, icode)) return;
       let best = Infinity;
       for (const mine of own) { const d2 = squaredDistance(atom, mine); if (d2 < best) best = d2; }
-      const key = atomChain + '|' + atom.resi;
+      const key = (atom.chain || '') + '|' + atom.resi + '|' + insertionCodeOf(atom);
       if (!closest.has(key) || closest.get(key) > best) closest.set(key, best);
     });
     const rows = [];
     residueRows(entry).forEach(row => row.residues.forEach(atom => {
-      if (row.chain === chain && atom.resi === resi) return;
-      const best = closest.get(row.chain + '|' + atom.resi);
-      rows.push({ chain: row.chain, resi: atom.resi, resn: atom.resn || '', ca: Math.sqrt(squaredDistance(origin, atom)), heavy: best === undefined || !Number.isFinite(best) ? null : Math.sqrt(best) });
+      if (sameResidue(atom, chain, resi, icode)) return;
+      const best = closest.get(row.chain + '|' + atom.resi + '|' + insertionCodeOf(atom));
+      rows.push({ chain: row.chain, resi: atom.resi, icode: insertionCodeOf(atom), resn: atom.resn || '', ca: Math.sqrt(squaredDistance(origin, atom)), atoms: atomWord(origin) + '–' + atomWord(atom), heavy: best === undefined || !Number.isFinite(best) ? null : Math.sqrt(best) });
     }));
-    rows.sort((x, y) => x.ca - y.ca || compareChains(x.chain, y.chain) || x.resi - y.resi);
+    rows.sort((x, y) => x.ca - y.ca || compareChains(x.chain, y.chain) || x.resi - y.resi || (x.icode < y.icode ? -1 : x.icode > y.icode ? 1 : 0));
     return { origin, rows };
+  }
+
+  /* How an atom is written beside a distance: an amino acid's Cα as Cα, every other atom by its own
+     name — a nucleotide's P, a calcium ion's CA (which is not a Cα). */
+  function atomWord(atom) {
+    return atom.atom === 'CA' && !atom.hetflag ? 'Cα' : atom.atom || 'atom';
   }
 
   function downloadResidueDistancesFromCard() {
@@ -380,14 +390,16 @@
     const entry = entryById(editor.entryId);
     if (!entry || !entry.model) { updateStatus('That residue’s model is no longer loaded'); return; }
     const chain = editor.atom.chain || '';
-    const result = residueDistanceRows(entry, chain, editor.atom.resi);
+    const result = residueDistanceRows(entry, chain, editor.atom.resi, insertionCodeOf(editor.atom));
     if (!result || !result.rows.length) { updateStatus('No other residues in this model to measure to'); return; }
+    /* The column stays ca_distance; between nucleotides it is the P–P distance (USAGE). The residue
+       number carries its insertion code, 57A, so the column count never changes. */
     const lines = [['chain', 'resi', 'resn', 'ca_distance', 'min_heavy_distance'].map(csvCell).join(',')];
-    result.rows.forEach(row => lines.push([row.chain, row.resi, row.resn, row.ca.toFixed(3), row.heavy === null ? '' : row.heavy.toFixed(3)].map(csvCell).join(',')));
+    result.rows.forEach(row => lines.push([row.chain, residueNumber(row), row.resn, row.ca.toFixed(3), row.heavy === null ? '' : row.heavy.toFixed(3)].map(csvCell).join(',')));
     const name = labelEditorDefaultText(result.origin);
-    downloadBlob(lines.join('\n'), 'text/csv', 'distances-from-' + (chain ? chain + '-' : '') + result.origin.resi + '.csv');
+    downloadBlob(lines.join('\n'), 'text/csv', 'distances-from-' + (chain ? chain + '-' : '') + residueNumber(result.origin) + '.csv');
     const nearest = result.rows[0];
-    updateStatus('Distances from ' + name + ' · ' + plural(result.rows.length, 'residue') + ' · nearest ' + residueName(nearest) + ' at ' + nearest.ca.toFixed(2) + ' Å (Cα–Cα)');
+    updateStatus('Distances from ' + name + ' · ' + plural(result.rows.length, 'residue') + ' · nearest ' + residueName(nearest) + ' at ' + nearest.ca.toFixed(2) + ' Å (' + nearest.atoms + ')');
   }
 
   /* The marker naming the selected residue on the main viewer: `GLU57 · B · pLDDT 94.8`, smaller
@@ -424,7 +436,7 @@
     if (!hover || !shownIds.has(hover.entryId)) return null;
     const entry = entryById(hover.entryId);
     if (!entry || !entry.model || (entry.hiddenChains || []).includes(hover.chain)) return null;
-    const atom = residueAlphaCarbon(entry, hover.chain, hover.resi);
+    const atom = residueAlphaCarbon(entry, hover.chain, hover.resi, insertionCodeOf(hover));
     return atom ? { text: labelEditorDefaultText(atom), style: residueMarkerStyle(atom) } : null;
   }
 
@@ -472,25 +484,28 @@
   /* The residue's contacts at `cutoff` (the Annotate panel's Within when left out), nearest first by
      closest heavy-atom distance: { cutoff, rows: [{ chain, resi, resn, closest, atomA, atomB, ca,
      bond }], near } — atomA is this residue's atom, atomB the contact's, bond is contactBond's — or
-     nearbyResidues' { error }. */
-  function residueContactRows(entry, chain, resi, cutoff) {
-    const near = nearbyResidues({ entry, mode: 'residue', residue: { chain, resi }, cutoff });
+     nearbyResidues' { error }. The residue and every row carry the insertion code, so the card at 57A
+     lists 57 and 57B, its bonded neighbours, rather than counting them as itself. `reach` names the two
+     atoms the last column measures between: Cα–Cα, or P–P for nucleotides. */
+  function residueContactRows(entry, chain, resi, cutoff, icode = '') {
+    const near = nearbyResidues({ entry, mode: 'residue', residue: { chain, resi, icode }, cutoff });
     if (!near) return { error: 'That residue’s model is not loaded' };
     if (near.error) return near;
-    const origin = residueAlphaCarbon(entry, chain, resi);
+    const origin = residueAlphaCarbon(entry, chain, resi, icode);
     const rows = near.residues.map(item => {
-      const pair = closestHeavyAtomPair(entry, { chain, resi }, entry, item);
-      const other = residueAlphaCarbon(entry, item.chain, item.resi);
+      const pair = closestHeavyAtomPair(entry, { chain, resi, icode }, entry, item);
+      const other = residueAlphaCarbon(entry, item.chain, item.resi, insertionCodeOf(item));
       const row = {
-        chain: item.chain, resi: item.resi, resn: item.resn,
+        chain: item.chain, resi: item.resi, icode: insertionCodeOf(item), resn: item.resn,
         closest: pair ? pair.distance : null, atomA: pair ? pair.a.atom || '' : '', atomB: pair ? pair.b.atom || '' : '',
-        ca: origin && other ? Math.sqrt(squaredDistance(origin, other)) : null
+        ca: origin && other ? Math.sqrt(squaredDistance(origin, other)) : null,
+        reach: origin && other ? atomWord(origin) + '–' + atomWord(other) : ''
       };
       row.bond = contactBond(pair ? pair.a.resn || '' : '', row);
       return row;
     });
     const nearestFirst = value => (value === null ? Infinity : value);
-    rows.sort((x, y) => nearestFirst(x.closest) - nearestFirst(y.closest) || compareChains(x.chain, y.chain) || x.resi - y.resi);
+    rows.sort((x, y) => nearestFirst(x.closest) - nearestFirst(y.closest) || compareChains(x.chain, y.chain) || x.resi - y.resi || (x.icode < y.icode ? -1 : x.icode > y.icode ? 1 : 0));
     return { cutoff: near.cutoff, rows, near };
   }
 
@@ -534,7 +549,7 @@
   function openResidueContacts() {
     const picked = cardResidue();
     if (!picked) { updateStatus('That residue’s model is no longer loaded'); return; }
-    if (!cardContacts) cardContacts = { entryId: picked.entry.id, chain: picked.chain, resi: picked.resi, ...residueContactRows(picked.entry, picked.chain, picked.resi) };
+    if (!cardContacts) cardContacts = { entryId: picked.entry.id, chain: picked.chain, resi: picked.resi, icode: picked.icode, ...residueContactRows(picked.entry, picked.chain, picked.resi, undefined, picked.icode) };
     renderResidueContacts();
     setContactsExpanded(true);
     positionLabelEditor();
@@ -571,7 +586,7 @@
       const item = document.createElement('li');
       const button = document.createElement('button');
       button.type = 'button'; button.className = 'gpv-residue-contact';
-      button.dataset.chain = row.chain; button.dataset.resi = String(row.resi);
+      button.dataset.chain = row.chain; button.dataset.resi = residueNumber(row);
       button.dataset.closest = row.closest === null ? '' : row.closest.toFixed(3);
       button.dataset.atoms = row.atomA + '–' + row.atomB;
       button.dataset.bond = row.bond || '';
@@ -583,12 +598,13 @@
       button.append(
         name,
         part('gpv-contact-closest', row.closest === null ? '—' : row.closest.toFixed(2) + ' Å'),
-        /* Cα as the Cα column and the status line write it; the raw names stay in data-atoms and the copy. */
+        /* Cα as the Cα column and the status line write it; the raw names stay in data-atoms and the copy.
+           The last column names its atoms: Cα between amino acids, P–P between nucleotides. */
         part('gpv-contact-atoms', row.atomA && row.atomB ? [row.atomA, row.atomB].map(name => (name === 'CA' ? 'Cα' : name)).join('–') : ''),
-        part('gpv-contact-ca', row.ca === null ? '' : 'Cα ' + row.ca.toFixed(2) + ' Å')
+        part('gpv-contact-ca', row.ca === null ? '' : (row.reach === 'Cα–Cα' || !row.reach ? 'Cα' : row.reach) + ' ' + row.ca.toFixed(2) + ' Å')
       );
       button.title = 'Measure to ' + contactRowName(row) + (bondText ? ' (' + bondText + ')' : '') + ' (' + (measureAtoms === 'closest' ? 'closest atoms' : 'Cα–Cα') + ')';
-      const point = () => setContactHover({ entryId: found.entryId, chain: row.chain, resi: row.resi });
+      const point = () => setContactHover({ entryId: found.entryId, chain: row.chain, resi: row.resi, icode: row.icode });
       button.addEventListener('mouseenter', point);
       button.addEventListener('focus', point);
       button.addEventListener('mouseleave', () => setContactHover(null));
@@ -603,7 +619,7 @@
   }
 
   function setContactHover(target) {
-    const same = target && contactHover && target.entryId === contactHover.entryId && target.chain === contactHover.chain && target.resi === contactHover.resi;
+    const same = target && contactHover && target.entryId === contactHover.entryId && target.chain === contactHover.chain && target.resi === contactHover.resi && insertionCodeOf(target) === insertionCodeOf(contactHover);
     if (same || (!target && !contactHover)) return;
     contactHover = target;
     rebuildOverlays();
@@ -614,7 +630,7 @@
   function liveContacts() {
     const picked = cardResidue();
     const found = cardContacts;
-    if (!picked || !found || found.entryId !== picked.entry.id || found.chain !== picked.chain || found.resi !== picked.resi) return null;
+    if (!picked || !found || found.entryId !== picked.entry.id || found.chain !== picked.chain || found.resi !== picked.resi || insertionCodeOf(found) !== picked.icode) return null;
     return { picked, found };
   }
 
@@ -658,7 +674,7 @@
 
   function contactsText(found) {
     const lines = [['residue', 'chain', 'resi', 'resn', 'closest_distance', 'closest_atoms', 'bond', 'ca_distance'].join('\t')];
-    found.rows.forEach(row => lines.push([contactRowName(row), row.chain, row.resi, row.resn, row.closest === null ? '' : row.closest.toFixed(3), row.atomA + '–' + row.atomB, row.bond || '', row.ca === null ? '' : row.ca.toFixed(3)].join('\t')));
+    found.rows.forEach(row => lines.push([contactRowName(row), row.chain, residueNumber(row), row.resn, row.closest === null ? '' : row.closest.toFixed(3), row.atomA + '–' + row.atomB, row.bond || '', row.ca === null ? '' : row.ca.toFixed(3)].join('\t')));
     return lines.join('\n');
   }
 
@@ -688,15 +704,15 @@
     return entry && entry.model ? entry : null;
   }
 
-  function debugResidueContacts(entryId, chain, resi, cutoff) {
+  function debugResidueContacts(entryId, chain, resi, cutoff, icode = '') {
     const entry = debugEntry(entryId); if (!entry) return null;
-    const found = residueContactRows(entry, chain || '', Number(resi), cutoff);
+    const found = residueContactRows(entry, chain || '', Number(resi), cutoff, icode || '');
     return found.error ? null : found.rows.map(row => ({ ...row }));
   }
 
-  function debugResidueDistances(entryId, chain, resi) {
+  function debugResidueDistances(entryId, chain, resi, icode = '') {
     const entry = debugEntry(entryId); if (!entry) return null;
-    const result = residueDistanceRows(entry, chain || '', Number(resi));
+    const result = residueDistanceRows(entry, chain || '', Number(resi), icode || '');
     return result ? result.rows.map(row => ({ ...row })) : null;
   }
 

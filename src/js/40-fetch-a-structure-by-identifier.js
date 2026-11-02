@@ -70,24 +70,58 @@
     return { entry, source, note };
   }
 
+  /* An export renders one state of the page. Every export path sets the busy badge to "Rendering …"
+     (or "Embedding …" for the report, "Saving session…") from its first line to its last, and a model
+     added between its awaits used to reach its legend but not its image. While that badge is up, an
+     import (31 loadFiles) or a fetch waits for it to come down, and says so. */
+  const exportBusyLabel = /^(Rendering|Embedding|Saving session)/;
+  function exportRendering() {
+    const badge = root.querySelector('#gpv-busy');
+    return Boolean(badge && !badge.hidden && exportBusyLabel.test(root.querySelector('#gpv-busy-label').textContent));
+  }
+
+  function afterExportRenders(what) {
+    updateStatus('Export in progress — ' + what + ' will load when it finishes');
+    return new Promise(resolve => {
+      const badge = root.querySelector('#gpv-busy');
+      const check = () => { if (exportRendering()) return; observer.disconnect(); setTimeout(resolve, 0); };
+      const observer = new MutationObserver(check);
+      observer.observe(badge, { attributes: true, attributeFilter: ['hidden'], childList: true, characterData: true, subtree: true });
+      check();
+    });
+  }
+
   async function fetchStructure() {
     const field = root.querySelector('#gpv-fetch-id');
-    if (!parseIdentifier(field.value)) {
+    const target = parseIdentifier(field.value);
+    if (!target) {
       announce('Enter a four-character PDB ID (1ubq), a UniProt accession (P69905), or an AlphaFold DB name (AF-P0DTC2-F1)', 'error');
       field.focus();
       return;
     }
+    const id = field.value.trim();
     const button = root.querySelector('#gpv-fetch');
-    const done = setBusy('Fetching ' + field.value.trim() + '…');
     button.disabled = true;
+    if (exportRendering()) await afterExportRenders(id);
+    /* An armed Measure to… was armed among the models already open; the next click may land on the
+       fetched one, and must open its card rather than measure into it — as for an import. */
+    cancelMeasureTo(true);
+    const done = setBusy('Fetching ' + id + '…');
     try {
-      const { entry, source, note } = await fetchIdentifier(field.value);
+      const { entry, source, note } = await fetchIdentifier(id);
       selectModel(entry, true, true);
       dismissSessionBanner();
       field.value = '';
-      announce('Loaded ' + entry.name + ' from ' + source.collection + note);
+      const comparing = root.querySelector('#gpv-side-by-side').checked && comparePanels.length > 0;
+      announce('Loaded ' + entry.name + ' from ' + source.collection + note + (comparing ? ' · in the primary panel' : ''));
     } catch (error) {
-      announce('Could not fetch that structure: ' + error.message, 'error');
+      /* A request that never got an answer (offline, blocked) throws the browser's own TypeError, worded
+         differently by every engine and saying nothing about what to do; that wording goes to the
+         console only. An answer the server gave (no such entry) keeps its own words. */
+      if (error instanceof TypeError) {
+        console.warn('Fetch of ' + id + ' failed:', error);
+        announce('Could not reach ' + (target.kind === 'pdb' ? 'the PDB' : 'AlphaFold DB') + ' (' + id + ') — check the network and the id', 'error');
+      } else announce('Could not fetch that structure: ' + error.message, 'error');
     } finally {
       done();
       button.disabled = false;

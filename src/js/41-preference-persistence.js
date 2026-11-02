@@ -5,7 +5,10 @@
     '#gpv-export-mode', '#gpv-print-width', '#gpv-print-custom', '#gpv-print-aspect', '#gpv-print-dpi', '#gpv-print-text', '#gpv-figure-font', '#gpv-scale-bar', '#gpv-legend-position', '#gpv-image-format',
     '#gpv-view-mode', '#gpv-order', '#gpv-alignment-mode', '#gpv-fit-scope', '#gpv-position-cutoff', '#gpv-export-size', '#gpv-export-scale',
     '#gpv-panel-columns', '#gpv-video-length', '#gpv-cycle-speed', '#gpv-speed', '#gpv-report-scope',
-    '#gpv-position-figure-deviation', '#gpv-ipsae-pae', '#gpv-ipsae-dist'
+    '#gpv-position-figure-deviation', '#gpv-ipsae-pae', '#gpv-ipsae-dist',
+    /* Depth cueing, the surface, the Okabe–Ito palette, Low confidence and the legend on exports: USAGE
+       promised these were remembered and they came back at their defaults. */
+    '#gpv-fog', '#gpv-surface', '#gpv-safe-palette', '#gpv-hide-below', '#gpv-export-legend'
   ];
 
   function savePreferences() {
@@ -38,6 +41,9 @@
     });
     root.querySelector('#gpv-cycle-value').textContent = Number(root.querySelector('#gpv-cycle-speed').value).toFixed(1) + ' s';
     root.querySelector('#gpv-speed-value').textContent = Number(root.querySelector('#gpv-speed').value).toFixed(2).replace(/0$/, '') + '×';
+    /* The palette switch is read through a flag, and depth cueing is the viewer's own setting. */
+    safePaletteOn = root.querySelector('#gpv-safe-palette').checked;
+    if (root.querySelector('#gpv-fog').checked) applyAppearance();
   }
 
   root.querySelector('#gpv-files').addEventListener('change', event => loadFiles([...event.target.files]));
@@ -421,6 +427,12 @@
        shortcut must never swallow a character someone is typing — including the
        "?" that opens help. */
     const typing = target instanceof Element && (target.matches('input:not([type=checkbox]):not([type=radio]):not([type=range]):not([type=color]):not([type=button]):not([type=file]), select, textarea, [contenteditable]') || Boolean(target.closest('dialog[open]')));
+    /* The read-only box the clipboard fallback puts text in holds nothing to type or undo: Esc closes
+       it, and ⌘Z / Ctrl+Z undoes in the app, as anywhere else outside a field. */
+    if (target instanceof Element && target.id === 'gpv-copy-fallback-text') {
+      if (event.key === 'Escape') { event.preventDefault(); root.querySelector('#gpv-copy-fallback-close').click(); updateStatus('Copy box closed'); return; }
+      if ((event.ctrlKey || event.metaKey) && !event.altKey && event.key.toLowerCase() === 'z') { event.preventDefault(); if (event.shiftKey) redo(); else undo(); return; }
+    }
     /* A field or the help dialog owns every key it gets, Esc included: Esc there cancels a rename or
        closes the dialog, and must not also leave full screen, Drag to select, drawing or measuring.
        A switch, slider or colour well is not typing, so the shortcuts still work after a click on one. */

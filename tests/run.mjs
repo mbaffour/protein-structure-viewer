@@ -1927,7 +1927,8 @@ await step('in the multi-view ← → drive the primary panel; a removed model t
     if (!add.disabled || add.title !== 'Every loaded model already has a panel') throw new Error('Add panel with every model in a panel: ' + JSON.stringify(add));
     await fresh.evaluate(() => document.querySelector('#gpv-stage').focus({ preventScroll: true })); await fresh.keyboard.press('ArrowRight'); await fresh.waitForTimeout(800);
     const after = await fresh.evaluate(() => ({ current: document.querySelector('#gpv-current').value, left: document.querySelector('#gpv-left-model').value, badge: document.querySelector('#gpv-left-label').textContent, mode: document.querySelector('#gpv-view-mode').value }));
-    if (after.current !== after.left || after.badge !== 'model_b.pdb' || !/^Showing model_b\.pdb in the primary panel$/.test(await freshStatus(fresh))) throw new Error('→ in the multi-view: ' + JSON.stringify(after) + ' · ' + await freshStatus(fresh));
+    /* Since round 2 of the stress loop → swaps model_b out of its panel rather than showing it twice. */
+    if (after.current !== after.left || after.badge !== 'model_b.pdb' || !/^Showing model_b\.pdb in the primary panel( · model_a\.pdb moved to panel 2)?$/.test(await freshStatus(fresh))) throw new Error('→ in the multi-view: ' + JSON.stringify(after) + ' · ' + await freshStatus(fresh));
     await fresh.click('[data-gpv-tab="models"]');
     await fresh.locator('#gpv-list .gpv-entry', { hasText: 'model_c.pdb' }).locator('button', { hasText: 'Remove' }).click(); await fresh.waitForTimeout(800);
     const status = await freshStatus(fresh);
@@ -1950,6 +1951,216 @@ await step('Hide all says so on the stage and in the status, and Cycle waits for
 /* Five pages opened and closed in a row: put the main page back in front, as after the report, so its
    animation frames (the hover readout runs on them) are not held back as a background page's. */
 await page.bringToFront();
+
+/* j2-block-A begin */
+/* ---- Stress loop, round 2: loading, models, appearance and Compare (Fixer J, 2.52.0) ----
+   On pages of their own. Every step's name ends "(round 2)". */
+const j2Shown = fresh => fresh.evaluate(() => window.__viewerDebug.displayedEntries().map(entry => entry.name));
+const j2Set = (fresh, selector, value) => fresh.evaluate(([selector, value]) => {
+  const control = document.querySelector(selector);
+  if (control.type === 'checkbox') control.checked = value; else control.value = value;
+  control.dispatchEvent(new Event('input', { bubbles: true })); control.dispatchEvent(new Event('change', { bubbles: true }));
+}, [selector, value]);
+/* A residue's Cα, framed with the whole model, tapped where it is drawn (on a whole pixel). */
+const j2TapResidue = async (fresh, chain, resi) => {
+  await fresh.locator('#gpv-stage').scrollIntoViewIfNeeded(); await fresh.waitForTimeout(100);
+  const point = await fresh.evaluate(([chain, resi]) => {
+    const d = window.__viewerDebug; d.viewer.zoomTo(); d.viewer.render();
+    const atom = d.entries()[0].atoms.find(item => item.chain === chain && item.resi === resi && item.atom === 'CA');
+    const s = d.viewer.modelToScreen({ x: atom.x, y: atom.y, z: atom.z });
+    return { x: Math.round(s.x - scrollX), y: Math.round(s.y - scrollY) };
+  }, [chain, resi]);
+  await fresh.mouse.move(point.x, point.y); await fresh.mouse.down(); await fresh.waitForTimeout(60); await fresh.mouse.up(); await fresh.waitForTimeout(500);
+};
+await step('distance colouring follows every selection: Go to recolours the view and its key, and the status names the residue it is measured from now (round 2)', async () => {
+  /* The strip's colour lookup marked the view as drawn, so when the strip repainted first — Go to,
+     always — the view stayed grey under "No residue selected"; and after the first click the status
+     kept naming that first residue. */
+  const fresh = await freshViewer([models[0]]);
+  try {
+    await fresh.click('[data-gpv-tab="appearance"]'); await j2Set(fresh, '#gpv-color-mode', 'fromresidue'); await fresh.waitForTimeout(300);
+    const legend = () => freshText(fresh, '#gpv-plddt-legend');
+    await freshGoTo(fresh, 'A:5'); await fresh.waitForTimeout(300);
+    let key = await legend();
+    if (!/Distance from ALA5 · A/.test(key) || /No residue selected/.test(key)) throw new Error('after Go to A:5 the key reads "' + key + '"');
+    const far = await fresh.evaluate(() => { const d = window.__viewerDebug; const entry = d.entries()[0]; return d.colorOptions(entry).colorfunc(entry.atoms.find(atom => atom.chain === 'A' && atom.resi === 30 && atom.atom === 'CA')); });
+    if (far !== '#d1d5db') throw new Error('A:30 is coloured ' + far + ', not the >20 Å band');
+    await freshGoTo(fresh, 'A:20'); await fresh.waitForTimeout(300);
+    key = await legend();
+    if (!/Distance from ALA20 · A/.test(key)) throw new Error('after Go to A:20 the key reads "' + key + '"');
+    /* A click: the status names the residue clicked, not the one before. */
+    await j2TapResidue(fresh, 'A', 2);
+    const picked = await fresh.evaluate(() => window.__viewerDebug.selectedResidue());
+    if (!picked || (picked.chain === 'A' && picked.resi === 20)) throw new Error('setup: the tap selected ' + JSON.stringify(picked));
+    await fresh.evaluate(() => document.querySelector('#gpv-stage').focus({ preventScroll: true })); await fresh.keyboard.press('Escape'); await fresh.waitForTimeout(300);
+    const name = 'ALA' + picked.resi + ' · ' + picked.chain;
+    const status = await freshStatus(fresh);
+    if (!status.includes(name)) throw new Error('after a click on ' + name + ' the status reads "' + status + '"');
+    key = await legend();
+    if (!key.includes('Distance from ' + name)) throw new Error('after a click on ' + name + ' the key reads "' + key + '"');
+    console.log('       Go to A:5 → key names it · A:30 in the >20 Å band · click on ' + name + ' → "' + status + '"');
+  } finally { await fresh.close(); }
+});
+await step('short model names are told apart after clipping, and a stem is never cut down to its extension (round 2)', async () => {
+  /* A legend or RMSD matrix named two models "chai_hbdimer / pred.model_i…" alike, and 1brs.cif and its
+     second copy "cif" and "cif (2)". */
+  const fresh = await freshViewer();
+  try {
+    const cases = await fresh.evaluate(() => {
+      const shorten = window.__viewerDebug.distinguishingNames;
+      return {
+        copies: shorten(['1brs.cif', '1brs.cif (2)']),
+        mixed: shorten(['1brs.cif', 'chai_hbdimer / pred.model_idx_0.cif', 'chai_hbdimer / pred.model_idx_1.cif']),
+        boltz: shorten(['hbdimer / hbdimer_model_1.cif', 'hbdimer / hbdimer_model_1.cif (2)', '5cha.cif'])
+      };
+    });
+    if (cases.copies.join('|') !== '1brs|1brs (2)') throw new Error('copies: ' + JSON.stringify(cases.copies));
+    for (const [what, names] of Object.entries(cases)) {
+      if (new Set(names).size !== names.length || names.some(name => name.length > 28 || /^cif/.test(name))) throw new Error(what + ': ' + JSON.stringify(names));
+    }
+    console.log('       ' + cases.copies.join(', ') + ' · ' + cases.mixed.join(', '));
+  } finally { await fresh.close(); }
+});
+await step('a file opened while a figure renders waits for it, and says so (round 2)', async () => {
+  /* The import went ahead between the export's awaits: the image showed the old models and its key the
+     new ones' chains, and the import's own status was lost. */
+  const fresh = await freshViewer([models[0]]);
+  try {
+    await printPlan(fresh, '178', '600');
+    const download = fresh.waitForEvent('download', { timeout: 180000 });
+    await fresh.click('#gpv-image');
+    const rendering = await fresh.evaluate(() => !document.querySelector('#gpv-busy').hidden && /^Rendering/.test(document.querySelector('#gpv-busy-label').textContent));
+    if (!rendering) throw new Error('setup: the export was not rendering when the file was opened');
+    await fresh.setInputFiles('#gpv-files', [models[2]]); await fresh.waitForTimeout(200);
+    const during = { models: (await freshEntries(fresh)).length, status: await freshStatus(fresh), still: await fresh.evaluate(() => !document.querySelector('#gpv-busy').hidden) };
+    await download; await fresh.waitForTimeout(3000);
+    const after = { models: (await freshEntries(fresh)).map(entry => entry.name), status: await freshStatus(fresh) };
+    if (during.still && (during.models !== 1 || !/^Export in progress — model_c\.pdb will load when it finishes$/.test(during.status))) throw new Error('during the export: ' + JSON.stringify(during));
+    if (after.models.join() !== 'model_a.pdb,model_c.pdb' || !/^Loaded 1 model/.test(after.status)) throw new Error('after the export: ' + JSON.stringify(after));
+    console.log('       during: ' + during.status + ' · after: ' + after.status);
+  } finally { await fresh.close(); }
+});
+await step('a fetch cancels an armed Measure to…, and an import or a fetch in the multi-view goes to the primary panel and says so (round 2)', async () => {
+  /* The fetch left Measure to… armed, and the next click measured into the fetched structure; in the
+     multi-view an import said "showing" a model no panel showed, and a fetch replaced the primary
+     panel without a word. */
+  const fresh = await freshViewer([models[0], models[1]]);
+  try {
+    const cif = cifFromPdb(await readFile(models[0], 'utf8'));
+    await fresh.route('https://files.rcsb.org/**', route => route.fulfill({ status: 200, contentType: 'chemical/x-mmcif', body: cif }));
+    await freshGoTo(fresh, 'A:5'); await fresh.evaluate(() => document.querySelector('#gpv-stage').focus({ preventScroll: true })); await fresh.keyboard.press('m'); await fresh.waitForTimeout(200);
+    if (!(await fresh.evaluate(() => window.__viewerDebug.measureFrom()))) throw new Error('setup: Measure to… is not armed');
+    await fresh.click('[data-gpv-tab="models"]'); await fresh.fill('#gpv-fetch-id', '1tst'); await fresh.click('#gpv-fetch'); await fresh.waitForTimeout(2500);
+    const armed = await fresh.evaluate(() => ({ from: window.__viewerDebug.measureFrom(), crosshair: document.querySelector('#gpv-stage').classList.contains('is-measuring-to') }));
+    if (armed.from || armed.crosshair) throw new Error('after the fetch Measure to… is still armed: ' + JSON.stringify(armed));
+    /* The multi-view: an import and a fetch each take the primary panel. */
+    await fresh.click('[data-gpv-tab="compare"]'); await fresh.click('#gpv-add-panel'); await fresh.waitForTimeout(800);
+    await fresh.setInputFiles('#gpv-files', [models[2]]); await fresh.waitForTimeout(2000);
+    let status = await freshStatus(fresh); let shown = await j2Shown(fresh);
+    if (!/showing model_c\.pdb in the primary panel/.test(status) || shown.join() !== 'model_c.pdb') throw new Error('import in the multi-view: ' + status + ' · primary ' + JSON.stringify(shown));
+    await fresh.click('[data-gpv-tab="models"]'); await fresh.fill('#gpv-fetch-id', '2tst'); await fresh.click('#gpv-fetch'); await fresh.waitForTimeout(2500);
+    status = await freshStatus(fresh); shown = await j2Shown(fresh);
+    if (!/^Loaded 2tst\.cif from RCSB PDB · in the primary panel$/.test(status) || shown.join() !== '2tst.cif') throw new Error('fetch in the multi-view: ' + status + ' · primary ' + JSON.stringify(shown));
+    console.log('       fetch disarmed Measure to… · ' + status);
+  } finally { await fresh.close(); }
+});
+await step('an archive opened on an empty page says it switched to one model at a time (round 2)', async () => {
+  const fresh = await freshViewer();
+  try {
+    await j2Set(fresh, '#gpv-view-mode', 'overlay');
+    await fresh.setInputFiles('#gpv-files', [join(here, 'fixtures', 'predictors', 'boltz_results_hbdimer.zip')]);
+    const seen = [];
+    for (let wait = 0; wait < 40; wait += 1) { const now = await freshStatus(fresh); if (seen[seen.length - 1] !== now) seen.push(now); if (/^Loaded/.test(now)) break; await fresh.waitForTimeout(250); }
+    const status = seen[seen.length - 1];
+    console.log('       ' + JSON.stringify(seen));
+    if (!/^Loaded 2 models from 1 source · showing hbdimer \/ hbdimer_model_0\.cif · one model at a time \(View mode\)/.test(status)) throw new Error('status: ' + status);
+  } finally { await fresh.close(); }
+});
+await step('a fetch that cannot reach the server says which server and what to check, in the same words on every engine (round 2)', async () => {
+  /* It quoted the engine's own TypeError: "Failed to fetch", "Load failed", "NetworkError when
+     attempting to fetch resource." A page of its own without the console check: the refused request
+     itself is logged by the browser. */
+  const fresh = await browser.newPage({ viewport: { width: 1280, height: 1000 } });
+  fresh.on('pageerror', error => noteError('FRESH PAGEERROR: ' + error.message));
+  try {
+    await fresh.route('https://files.rcsb.org/**', route => route.abort('internetdisconnected'));
+    await fresh.goto(base + '/index.html?debug=1'); await fresh.waitForTimeout(2000);
+    await fresh.fill('#gpv-fetch-id', '1ubq'); await fresh.click('#gpv-fetch'); await fresh.waitForTimeout(1500);
+    const status = await freshStatus(fresh);
+    if (status !== 'Could not reach the PDB (1ubq) — check the network and the id') throw new Error('status: ' + status);
+    if (await fresh.locator('#gpv-fetch').isDisabled()) throw new Error('Fetch stayed disabled');
+  } finally { await fresh.close(); }
+});
+await step('depth cueing, the surface, Okabe–Ito, Low confidence and the legend on exports are remembered after a reload (round 2)', async () => {
+  const fresh = await freshViewer([models[0]]);
+  try {
+    const wanted = { '#gpv-fog': true, '#gpv-surface': 'translucent', '#gpv-safe-palette': true, '#gpv-hide-below': '50', '#gpv-export-legend': false };
+    for (const [selector, value] of Object.entries(wanted)) { await j2Set(fresh, selector, value); await fresh.waitForTimeout(150); }
+    await fresh.goto(base + '/index.html?debug=1'); await fresh.waitForTimeout(2000);
+    const back = await fresh.evaluate(selectors => Object.fromEntries(selectors.map(selector => { const control = document.querySelector(selector); return [selector, control.type === 'checkbox' ? control.checked : control.value]; })), Object.keys(wanted));
+    const lost = Object.entries(wanted).filter(([selector, value]) => back[selector] !== value);
+    if (lost.length) throw new Error('not remembered: ' + JSON.stringify(lost.map(([selector, value]) => [selector, value, back[selector]])));
+  } finally { await fresh.close(); }
+});
+await step('ten models get ten colours, and the strip says it draws the first eight of them (round 2)', async () => {
+  /* Models 9 and 10 took models 1 and 2's colours with nothing to tell them apart, and the strip said
+     "8 models" beside "10 displayed". */
+  const text = await readFile(models[0], 'utf8'); const files = [];
+  for (let index = 1; index <= 10; index += 1) { const file = join(work, 'j2_m' + String(index).padStart(2, '0') + '.pdb'); await writeFile(file, text); files.push(file); }
+  const fresh = await freshViewer([]);
+  try {
+    await j2Set(fresh, '#gpv-view-mode', 'overlay');
+    await fresh.setInputFiles('#gpv-files', files);
+    await fresh.waitForFunction(() => window.__viewerDebug.entries().length === 10 && / models/.test(document.querySelector('#gpv-sequence-title').textContent), null, { timeout: 30000 }).catch(() => {});
+    const state = await fresh.evaluate(() => ({ colours: window.__viewerDebug.entries().map(entry => entry.color), title: document.querySelector('#gpv-sequence-title').textContent }));
+    if (new Set(state.colours).size !== 10) throw new Error('colours: ' + JSON.stringify(state.colours));
+    if (!/^first 8 of 10 models/.test(state.title)) throw new Error('strip title: ' + state.title);
+  } finally { await fresh.close(); }
+});
+await step('Emphasise needs two shown models, and the Fade switch says what it did (round 2)', async () => {
+  const fresh = await freshViewer([models[0]]);
+  try {
+    const emphasise = name => fresh.locator('#gpv-list [aria-label="Emphasise ' + name + '"]');
+    if (!(await emphasise('model_a.pdb').isDisabled()) || (await emphasise('model_a.pdb').getAttribute('title')) !== 'Needs two shown models') throw new Error('Emphasise with one model: disabled ' + (await emphasise('model_a.pdb').isDisabled()) + ', title ' + (await emphasise('model_a.pdb').getAttribute('title')));
+    await fresh.click('#gpv-list [aria-label="Fade model_a.pdb"]'); await fresh.waitForTimeout(300);
+    const faded = await freshStatus(fresh);
+    if (faded !== 'model_a.pdb is drawn faded, as context') throw new Error('the Fade switch said: ' + faded);
+    await fresh.click('#gpv-list [aria-label="Fade model_a.pdb"]'); await fresh.waitForTimeout(300);
+    await fresh.setInputFiles('#gpv-files', [models[1]]); await fresh.waitForTimeout(1500);
+    await j2Set(fresh, '#gpv-view-mode', 'overlay'); await fresh.waitForTimeout(300);
+    if (await emphasise('model_a.pdb').isDisabled()) throw new Error('Emphasise stays disabled with two shown models');
+    await fresh.locator('#gpv-list [data-entry-id]').nth(1).locator('input[type="checkbox"]').first().uncheck(); await fresh.waitForTimeout(300);
+    if ((await fresh.evaluate(() => window.__viewerDebug.entries().filter(entry => entry.visible).length)) !== 1) throw new Error('setup: model_b is still shown');
+    if (!(await emphasise('model_a.pdb').isDisabled())) throw new Error('Emphasise is enabled with the other model hidden');
+  } finally { await fresh.close(); }
+});
+await step('removing the alignment reference says the alignment went with it (round 2)', async () => {
+  const fresh = await freshViewer([models[0], models[1], models[2]]);
+  try {
+    const [, second] = await freshEntries(fresh);
+    await fresh.click('[data-gpv-tab="compare"]'); await j2Set(fresh, '#gpv-reference', String(second.id)); await fresh.click('#gpv-align'); await fresh.waitForTimeout(2500);
+    await fresh.click('[data-gpv-tab="models"]');
+    await fresh.click('#gpv-list [aria-label="Remove model_b.pdb"]'); await fresh.waitForTimeout(600);
+    const status = await freshStatus(fresh);
+    if (!/^Removed model_b\.pdb · it was the alignment reference — alignment cleared/.test(status)) throw new Error('status: ' + status);
+    const aligned = await fresh.evaluate(() => window.__viewerDebug.alignmentResults().length);
+    if (aligned) throw new Error(aligned + ' alignment rows left');
+  } finally { await fresh.close(); }
+});
+await step('in the multi-view → swaps the next model into the primary panel instead of showing it twice, and the count reads every panel (round 2)', async () => {
+  const fresh = await freshViewer([models[0], models[1], models[2]]);
+  try {
+    await fresh.click('[data-gpv-tab="compare"]'); await fresh.click('#gpv-add-panel'); await fresh.waitForTimeout(600); await fresh.click('#gpv-add-panel'); await fresh.waitForTimeout(800);
+    const badges = () => fresh.evaluate(() => [...document.querySelectorAll('#gpv-view-grid .gpv-view-label')].filter(label => !label.hidden).map(label => label.textContent));
+    await fresh.evaluate(() => document.querySelector('#gpv-stage').focus({ preventScroll: true })); await fresh.keyboard.press('ArrowRight'); await fresh.waitForTimeout(800);
+    const shown = await badges(); const count = await freshText(fresh, '#gpv-count'); const status = await freshStatus(fresh);
+    if (new Set(shown).size !== shown.length || shown.length !== 3) throw new Error('panels after →: ' + JSON.stringify(shown) + ' · ' + status);
+    if (!/^3 displayed \/ 3 loaded · 3 panels$/.test(count)) throw new Error('count: ' + count);
+    if (!/moved to panel/.test(status)) throw new Error('status: ' + status);
+    console.log('       ' + shown.join(' | ') + ' · ' + count + ' · ' + status);
+  } finally { await fresh.close(); }
+});
+/* j2-block-A end */
 
 group('annotate');
 await tab('annotate');
@@ -4908,11 +5119,12 @@ await step('measurement text says what it is in the status and the undo history,
     if ((await freshMeasures(fresh))[0].color) throw new Error('Default left the colour ' + (await freshMeasures(fresh))[0].color);
     if ((await freshSteps(fresh)) - steps !== 1) throw new Error('Default took ' + ((await freshSteps(fresh)) - steps) + ' undo steps');
     if (!(await fresh.locator('#gpv-measurement-list .gpv-entry').first().locator('button:has-text("Default")').isDisabled())) throw new Error('Default stays enabled with the default colour');
-    /* Enter in the row's text and Space on Dashed keep the focus on that control. */
+    /* Enter in the row's text hands the focus to the row's Show (since round 2 of the stress loop: a
+       focused field counts as typing, so ⌘Z after Enter did nothing); Space on Dashed keeps it. */
     const text = fresh.locator('#gpv-measurement-list .gpv-entry').first().locator('input[type="text"]');
     await text.fill('H-bond'); await text.press('Enter'); await fresh.waitForTimeout(200);
-    const focusText = await fresh.evaluate(() => { const a = document.activeElement; return a && a.matches('#gpv-measurement-list input[type="text"]') ? a.value : a ? a.tagName + '#' + a.id : null; });
-    if (focusText !== 'H-bond') throw new Error('after Enter in the row the focus is on ' + focusText);
+    const focusText = await fresh.evaluate(() => { const a = document.activeElement; return a && a.closest('#gpv-measurement-list') ? a.dataset.control : a ? a.tagName + '#' + a.id : null; });
+    if (focusText !== 'show' || (await freshMeasures(fresh))[0].text !== 'H-bond') throw new Error('after Enter in the row the focus is on ' + focusText);
     const dashed = fresh.locator('#gpv-measurement-list .gpv-entry').first().locator('input[data-control="dashed"]');
     await dashed.focus(); await fresh.keyboard.press('Space'); await fresh.waitForTimeout(200);
     const focusBox = await fresh.evaluate(() => { const a = document.activeElement; return a ? a.dataset.control || a.tagName : null; });
@@ -4992,7 +5204,7 @@ await step('every Remove names its row, and Rename, Emphasise, Reset, the builde
     if (!(await fresh.locator(measurementRow).count())) throw new Error('setup: Measure to… made no measurement');
     await fresh.locator(measurementRow + ' [aria-label="Move the text right"]').last().click(); await fresh.waitForTimeout(200);
     await fresh.locator(measurementRow + ' button:has-text("Reset")').last().focus(); await fresh.keyboard.press('Enter'); await fresh.waitForTimeout(300);
-    if ((await focused()) !== 'Show' || !(await fresh.evaluate(() => document.activeElement.closest('#gpv-measurement-list')))) throw new Error('after the measurement\'s Reset the focus is on ' + (await focused()));
+    if (!/^Show( the measurement|$)/.test(await focused()) || !(await fresh.evaluate(() => document.activeElement.closest('#gpv-measurement-list')))) throw new Error('after the measurement\'s Reset the focus is on ' + (await focused()));
     /* A domain's scope. */
     await fresh.fill('#gpv-domain-name', 'N-lobe'); await fresh.fill('#gpv-domain-range', '1-15'); await fresh.selectOption('#gpv-domain-scope', 'source'); await fresh.click('#gpv-add-domain'); await fresh.waitForTimeout(300);
     const scope = fresh.locator('#gpv-domain-list .gpv-entry [aria-label="Where the domain applies"]').first();
@@ -5180,6 +5392,254 @@ await step('a per-residue table says how many rows it could not read', async () 
     if (!/^[^·]*: 3 values .* · 2 rows skipped/.test(said)) throw new Error('loading 5 rows with 2 unreadable said: ' + said);
   } finally { await fresh.close(); }
 });
+
+/* j2-block-B begin */
+/* ---- Stress loop, round 2: the card, contacts, measurements and the keyboard (Fixer J, 2.52.0) ----
+   On pages of their own. Every step's name ends "(round 2)". */
+/* A straight two-chain model whose chain A runs 50…56, 57, 57A, 57B, 60…64: an extended backbone,
+   3.8 Å a residue, so each C sits 1.4 Å from the next N (a peptide bond by geometry), and chain B
+   alongside at 5 Å so the card has contacts on both chains. */
+const j2InsertionModel = async () => {
+  const numbering = [[50, ' '], [51, ' '], [52, ' '], [53, ' '], [54, ' '], [55, ' '], [56, ' '], [57, ' '], [57, 'A'], [57, 'B'], [60, ' '], [61, ' '], [62, ' '], [63, ' '], [64, ' ']];
+  const lines = []; let serial = 1;
+  const residue = (chain, resi, icode, x, y) => {
+    lines.push(pdbAtom('ATOM', serial++, 'N', 'ALA', chain, resi, [x - 1.2, y + 0.5, 0], 'N', icode));
+    lines.push(pdbAtom('ATOM', serial++, 'CA', 'ALA', chain, resi, [x, y, 0], 'C', icode));
+    lines.push(pdbAtom('ATOM', serial++, 'C', 'ALA', chain, resi, [x + 1.2, y + 0.5, 0], 'C', icode));
+    lines.push(pdbAtom('ATOM', serial++, 'O', 'ALA', chain, resi, [x + 1.2, y + 1.7, 0], 'O', icode));
+    lines.push(pdbAtom('ATOM', serial++, 'CB', 'ALA', chain, resi, [x, y - 1.0, 1.2], 'C', icode));
+  };
+  numbering.forEach(([resi, icode], index) => residue('A', resi, icode, index * 3.8, 0));
+  numbering.forEach((unused, index) => residue('B', 50 + index, ' ', index * 3.8, 5));
+  const file = join(work, 'j2_insertions.pdb'); await writeFile(file, lines.join('\n') + '\nEND\n');
+  return file;
+};
+const j2Status = async fresh => ((await fresh.locator('#gpv-state').textContent()) || '').trim();
+const j2Card = async (fresh, where) => {
+  await freshGoTo(fresh, where);
+  await fresh.evaluate(() => document.querySelector('#gpv-stage').focus({ preventScroll: true }));
+  await fresh.keyboard.press('l'); await fresh.waitForTimeout(400);
+  if (!(await fresh.locator('#gpv-label-editor').isVisible())) throw new Error('the card did not open at ' + where);
+};
+await step('insertion codes: Measure to… from 57 to 57B measures 57B, and the card at 57A lists 57 and 57B as its bonded neighbours (round 2)', async () => {
+  /* Before: 57, 57A and 57B were one atom set wherever a residue was looked up by chain and number —
+     Measure to… 57 → 57B in closest atoms recorded 57 N to 57 N, 0.00 Å; the card at 57A left 57 and
+     57B out of its contacts as "itself", and its Distances CSV was "Distances from ALA57". */
+  const fresh = await freshViewer([await j2InsertionModel()]);
+  try {
+    await j2Card(fresh, 'A:57');
+    await fresh.selectOption('#gpv-label-editor-measure-atoms', 'closest'); await fresh.waitForTimeout(200);
+    await fresh.evaluate(() => document.querySelector('#gpv-label-editor-measure').click()); await fresh.waitForTimeout(300);
+    await freshGoTo(fresh, 'A:57B');
+    const record = await fresh.evaluate(() => { const list = window.__viewerDebug.measurementRecords(); const last = list[list.length - 1]; return last ? JSON.parse(JSON.stringify(last.points)) : null; });
+    const status = await j2Status(fresh);
+    if (!record || record[0].icode || record[1].icode !== 'B') throw new Error('Measure to… 57 → 57B recorded ' + JSON.stringify(record) + ' · ' + status);
+    const value = Number((status.match(/([\d.]+) Å/) || [])[1]);
+    if (!(value > 3)) throw new Error('57 → 57B closest atoms: ' + status);
+    /* The card at 57A. */
+    await fresh.evaluate(() => document.querySelector('#gpv-stage').focus({ preventScroll: true })); await fresh.keyboard.press('Escape'); await fresh.waitForTimeout(150);
+    await j2Card(fresh, 'A:57A');
+    await fresh.evaluate(() => document.querySelector('#gpv-label-editor-contacts').click()); await fresh.waitForTimeout(400);
+    const rows = await fresh.evaluate(() => [...document.querySelectorAll('#gpv-residue-contacts-rows .gpv-residue-contact')].map(button => ({ chain: button.dataset.chain, resi: button.dataset.resi, bond: button.dataset.bond })));
+    const bonded = rows.filter(row => row.chain === 'A' && row.bond === 'peptide').map(row => row.resi).sort();
+    if (bonded.join() !== '57,57B') throw new Error('the card at 57A: peptide-bonded ' + JSON.stringify(bonded) + ' of ' + JSON.stringify(rows));
+    if (rows.some(row => row.chain === 'A' && row.resi === '57A')) throw new Error('57A lists itself: ' + JSON.stringify(rows));
+    const facts = (await fresh.locator('#gpv-residue-card-facts').textContent()) || '';
+    if (!facts.includes(rows.length + ' residues within')) throw new Error('count "' + facts + '" vs ' + rows.length + ' rows');
+    /* Distances CSV: from ALA57A, 57 and 57B rows of their own, the column count unchanged. */
+    const download = fresh.waitForEvent('download', { timeout: 30000 });
+    await fresh.evaluate(() => document.querySelector('#gpv-label-editor-distances').click());
+    const csv = (await readFile(await (await download).path(), 'utf8')).split('\n');
+    const csvStatus = await j2Status(fresh);
+    if (!/^Distances from ALA57A · A/.test(csvStatus)) throw new Error('Distances CSV status: ' + csvStatus);
+    const resis = csv.slice(1).map(line => csvCells(line)).filter(cells => cells[0] === 'A').map(cells => cells[1]);
+    if (!resis.includes('57') || !resis.includes('57B') || resis.includes('57A') || csv[0].split(',').length !== 5) throw new Error('Distances CSV header ' + csv[0] + ' · chain A rows ' + JSON.stringify(resis));
+    /* Highlight: 57 and 57B by their codes, and 57A not among them. */
+    await fresh.evaluate(() => document.querySelector('#gpv-residue-contacts-highlight').click()); await fresh.waitForTimeout(300);
+    const chainA = await fresh.evaluate(() => { const record = window.__viewerDebug.selectionRecords().find(item => item.chain === 'A'); return record ? { residues: record.residues, icodes: record.icodes || null } : null; });
+    const keys = chainA ? chainA.residues.map((resi, index) => resi + (chainA.icodes ? chainA.icodes[index] : '')) : [];
+    if (!keys.includes('57') || !keys.includes('57B') || keys.includes('57A')) throw new Error('Highlight on chain A: ' + JSON.stringify(chainA));
+    console.log('       57 → 57B ' + value + ' Å · 57A bonded to ' + bonded.join(' and ') + ' · ' + rows.length + ' contacts · CSV ' + resis.length + ' chain-A rows');
+  } finally { await fresh.close(); }
+});
+await step('a nucleotide is measured by its P and a calcium ion by its own name, never as a Cα, and an RNA chain counts nucleotides (round 2)', async () => {
+  /* The contacts' last column read "Cα 6.01 Å" between two nucleotides, the card offered "Cα–Cα",
+     Distances CSV said "(Cα–Cα)", Measure to… a calcium ion said "C1–Cα", and the contact map's chain
+     menu counted an RNA chain in "aa". */
+  const lines = []; let serial = 1;
+  ['A', 'U', 'G', 'C', 'A', 'U'].forEach((resn, index) => {
+    const x = index * 6;
+    [['P', 0, 0, 'P'], ['OP1', 0, 1.4, 'O'], ["C4'", 1.5, -1, 'C'], ["C1'", 2.5, -1.5, 'C'], ['N1', 3.6, -1, 'N']].forEach(([name, dx, dy, element]) => lines.push(pdbAtom('ATOM', serial++, name, resn, 'R', index + 1, [x + dx, dy, 0], element)));
+  });
+  lines.push(pdbAtom('HETATM', serial++, 'C1', 'LIG', 'L', 1, [0, 8, 0], 'C'), pdbAtom('HETATM', serial++, 'C2', 'LIG', 'L', 1, [1.4, 8, 0], 'C'));
+  lines.push(pdbAtom('HETATM', serial++, 'CA', 'CA', 'L', 2, [0, 12, 0], 'CA'));
+  const file = join(work, 'j2_rna.pdb'); await writeFile(file, lines.join('\n') + '\nEND\n');
+  const fresh = await freshViewer([file]);
+  try {
+    await j2Card(fresh, 'R:3');
+    const option = await fresh.evaluate(() => document.querySelector('#gpv-label-editor-measure-atoms').options[0].textContent);
+    if (option !== 'P–P') throw new Error('the card offers "' + option + '"');
+    await fresh.evaluate(() => document.querySelector('#gpv-label-editor-contacts').click()); await fresh.waitForTimeout(300);
+    const last = await fresh.evaluate(() => [...document.querySelectorAll('#gpv-residue-contacts-rows .gpv-contact-ca')].map(cell => cell.textContent));
+    if (!last.length || last.some(text => !/^P–P \d/.test(text))) throw new Error('the contacts\' last column: ' + JSON.stringify(last));
+    const download = fresh.waitForEvent('download', { timeout: 30000 });
+    await fresh.evaluate(() => document.querySelector('#gpv-label-editor-distances').click()); await download;
+    const csvStatus = await j2Status(fresh);
+    if (!/\(P–P\)$/.test(csvStatus)) throw new Error('Distances CSV: ' + csvStatus);
+    /* Measure to… from the ligand to the calcium ion. */
+    await fresh.evaluate(() => document.querySelector('#gpv-stage').focus({ preventScroll: true })); await fresh.keyboard.press('Escape'); await fresh.waitForTimeout(150);
+    await freshGoTo(fresh, 'L:1'); await fresh.evaluate(() => document.querySelector('#gpv-stage').focus({ preventScroll: true })); await fresh.keyboard.press('m'); await fresh.waitForTimeout(200);
+    await freshGoTo(fresh, 'L:2');
+    const ion = await j2Status(fresh);
+    if (/Cα/.test(ion) || !/–CA \d/.test(ion)) throw new Error('Measure to… the calcium ion: ' + ion);
+    await fresh.click('[data-gpv-tab="compare"]'); await fresh.waitForTimeout(200);
+    const menu = await fresh.evaluate(() => [...document.querySelector('#gpv-contact-a').options].map(option => option.textContent));
+    if (!menu.includes('R · 6 nt')) throw new Error('the contact map\'s chain menu: ' + JSON.stringify(menu));
+    console.log('       ' + last[0] + ' · ' + csvStatus.split(' · ').pop() + ' · ' + ion);
+  } finally { await fresh.close(); }
+});
+/* Two models, one measurement on the first: A:5 → A:12 by Measure to…. */
+const j2Measured = async () => {
+  const fresh = await freshViewer([models[0], models[1]]);
+  await freshGoTo(fresh, 'A:5'); await fresh.evaluate(() => document.querySelector('#gpv-stage').focus({ preventScroll: true })); await fresh.keyboard.press('m'); await fresh.waitForTimeout(200);
+  await freshGoTo(fresh, 'A:12');
+  if (!(await fresh.evaluate(() => window.__viewerDebug.measurementRecords().length))) { await fresh.close(); throw new Error('setup: Measure to… made no measurement'); }
+  await fresh.evaluate(() => document.querySelector('#gpv-stage').focus({ preventScroll: true })); await fresh.keyboard.press('Escape'); await fresh.waitForTimeout(150);
+  return fresh;
+};
+await step('a measurement whose model is hidden says so: its row, Show and the arrows move nothing (round 2)', async () => {
+  /* Show sent the camera to empty space and said "Centred on …", and → said "Measurement text moved
+     right" for text no one could see. */
+  const fresh = await j2Measured();
+  try {
+    const [, second] = await freshEntries(fresh);
+    await fresh.click('[data-gpv-tab="models"]'); await j2Set(fresh, '#gpv-view-mode', 'single'); await j2Set(fresh, '#gpv-current', String(second.id)); await fresh.waitForTimeout(400);
+    await fresh.click('[data-gpv-tab="annotate"]'); await fresh.waitForTimeout(150);
+    const row = fresh.locator('#gpv-measurement-list .gpv-entry').first();
+    const view = () => fresh.evaluate(() => window.__viewerDebug.viewer.getView().map(value => value.toFixed(4)).join());
+    const before = await view();
+    await row.locator('[data-control="show"]').click(); await fresh.waitForTimeout(200);
+    const shown = await j2Status(fresh);
+    if (shown !== 'Show model_a.pdb first — this measurement is not drawn while it is hidden' || (await view()) !== before) throw new Error('Show on a hidden model: ' + shown);
+    await row.locator('[data-control="right"]').click(); await fresh.waitForTimeout(200);
+    const offset = await fresh.evaluate(() => window.__viewerDebug.measurementRecords()[0].offset || null);
+    if (offset) throw new Error('→ moved hidden text to ' + JSON.stringify(offset));
+    const marked = await row.evaluate(element => ({ undrawn: element.classList.contains('is-undrawn'), title: element.title }));
+    if (!marked.undrawn || !/^Show model_a\.pdb first/.test(marked.title)) throw new Error('the row: ' + JSON.stringify(marked));
+  } finally { await fresh.close(); }
+});
+await step('Enter in a measurement row hands the focus to its Show so ⌘Z undoes, and Esc and ⌘Z work in the copy box (round 2)', async () => {
+  const fresh = await j2Measured();
+  try {
+    await fresh.click('[data-gpv-tab="annotate"]'); await fresh.waitForTimeout(150);
+    const text = fresh.locator('#gpv-measurement-list .gpv-entry').first().locator('input[type="text"]');
+    await text.fill('H-bond'); await text.press('Enter'); await fresh.waitForTimeout(250);
+    const focus = await fresh.evaluate(() => document.activeElement && document.activeElement.dataset.control);
+    if (focus !== 'show') throw new Error('after Enter the focus is on ' + focus);
+    await fresh.keyboard.press('Control+z'); await fresh.waitForTimeout(250);
+    const undone = { text: await fresh.evaluate(() => window.__viewerDebug.measurementRecords()[0].text || ''), status: await j2Status(fresh) };
+    if (undone.text || !/^Undid measurement text/.test(undone.status)) throw new Error('Ctrl+Z after Enter: ' + JSON.stringify(undone));
+    /* The copy box: the clipboard refused. */
+    await fresh.evaluate(() => { if (navigator.clipboard) navigator.clipboard.writeText = () => Promise.reject(new Error('refused by the test')); });
+    await fresh.click('#gpv-measurements-copy'); await fresh.waitForTimeout(300);
+    if (await fresh.locator('#gpv-copy-fallback').isHidden()) throw new Error('setup: the copy box did not open');
+    await fresh.focus('#gpv-copy-fallback-text');
+    const depth = await fresh.evaluate(() => window.__viewerDebug.undoDepth());
+    await fresh.keyboard.press('Control+z'); await fresh.waitForTimeout(250);
+    if ((await fresh.evaluate(() => window.__viewerDebug.undoDepth())) !== depth - 1) throw new Error('Ctrl+Z in the copy box did not undo');
+    await fresh.keyboard.press('Escape'); await fresh.waitForTimeout(200);
+    if (!(await fresh.locator('#gpv-copy-fallback').isHidden())) throw new Error('Esc left the copy box open');
+  } finally { await fresh.close(); }
+});
+await step('the measurement editor opens from the keyboard: Edit in the row, or Enter on the selected measurement; Tab walks it and Esc closes it (round 2)', async () => {
+  const fresh = await j2Measured();
+  try {
+    await fresh.click('[data-gpv-tab="annotate"]'); await fresh.waitForTimeout(150);
+    const row = fresh.locator('#gpv-measurement-list .gpv-entry').first();
+    await row.locator('[data-control="select"]').focus(); await fresh.keyboard.press('Enter'); await fresh.waitForTimeout(200);
+    await fresh.keyboard.press('Enter'); await fresh.waitForTimeout(300);
+    let editor = await fresh.evaluate(() => window.__viewerDebug.labelEditor());
+    if (!editor || editor.kind !== 'measurement') throw new Error('Enter on the selected measurement opened ' + JSON.stringify(editor));
+    await fresh.keyboard.press('Tab'); await fresh.waitForTimeout(100);
+    const inside = await fresh.evaluate(() => Boolean(document.activeElement && document.activeElement.closest('#gpv-label-editor')));
+    if (!inside) throw new Error('Tab left the editor');
+    await fresh.keyboard.press('Escape'); await fresh.waitForTimeout(200);
+    if (await fresh.evaluate(() => window.__viewerDebug.labelEditor())) throw new Error('Esc left the editor open');
+    await row.locator('[data-control="edit"]').focus(); await fresh.keyboard.press('Enter'); await fresh.waitForTimeout(300);
+    editor = await fresh.evaluate(() => window.__viewerDebug.labelEditor());
+    if (!editor || editor.kind !== 'measurement') throw new Error('Edit opened ' + JSON.stringify(editor));
+  } finally { await fresh.close(); }
+});
+await step('a measurement row names every control after its measurement, and the editor\'s × is "Close the editor" (round 2)', async () => {
+  const fresh = await j2Measured();
+  try {
+    const labels = await fresh.evaluate(() => [...document.querySelectorAll('#gpv-measurement-list .gpv-entry')][0].querySelectorAll('[aria-label]').length && [...[...document.querySelectorAll('#gpv-measurement-list .gpv-entry')][0].querySelectorAll('input, button')].map(element => element.getAttribute('aria-label') || '(none: ' + element.textContent + ')'));
+    const named = labels.filter(label => /ALA5 · A CA ↔ ALA12 · A CA/.test(label));
+    for (const want of ['Colour of the measurement', 'Show the measurement', 'Dashed — the measurement', 'Show value — the measurement', 'Edit the measurement']) if (!named.some(label => label.startsWith(want))) throw new Error('no "' + want + ' …" among ' + JSON.stringify(labels));
+    await fresh.click('[data-gpv-tab="annotate"]'); await fresh.locator('#gpv-measurement-list [data-control="edit"]').first().click(); await fresh.waitForTimeout(300);
+    const close = await fresh.locator('#gpv-label-editor .gpv-label-editor-close').getAttribute('aria-label');
+    if (close !== 'Close the editor') throw new Error('the editor\'s × is "' + close + '"');
+  } finally { await fresh.close(); }
+});
+await step('in the light theme muted text and ghost buttons reach 4.5:1 (round 2)', async () => {
+  /* They were rgba(26, 28, 31, 0.494) on white: 3.2:1. */
+  const fresh = await freshViewer([models[0], models[1]], { colorScheme: 'light' });
+  try {
+    await freshGoTo(fresh, 'A:5'); await fresh.evaluate(() => document.querySelector('#gpv-stage').focus({ preventScroll: true })); await fresh.keyboard.press('m'); await fresh.waitForTimeout(200);
+    await freshGoTo(fresh, 'A:12');
+    await j2Card(fresh, 'A:8');
+    const worst = await fresh.evaluate(() => {
+      const parse = value => (value.match(/[\d.]+/g) || []).map(Number);
+      const lum = ([r, g, b]) => { const c = [r, g, b].map(v => { v /= 255; return v <= 0.03928 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4; }); return 0.2126 * c[0] + 0.7152 * c[1] + 0.0722 * c[2]; };
+      const background = element => { for (let node = element; node; node = node.parentElement) { const c = parse(getComputedStyle(node).backgroundColor); if (c.length >= 3 && (c[3] === undefined || c[3] >= 0.99)) return c.slice(0, 3); } return [255, 255, 255]; };
+      const ratio = element => {
+        const c = parse(getComputedStyle(element).color); const bg = background(element); const a = c[3] === undefined ? 1 : c[3];
+        const fg = c.slice(0, 3).map((v, i) => v * a + bg[i] * (1 - a)); const [l1, l2] = [lum(fg), lum(bg)].sort((x, y) => y - x);
+        return (l1 + 0.05) / (l2 + 0.05);
+      };
+      const items = [...document.querySelectorAll('#gpv-measurement-list .btn-ghost:not(:disabled), #gpv-measurement-list .gpv-entry-source, #gpv-label-editor .btn-ghost:not(:disabled), #gpv-residue-card-facts, #gpv-label-editor .gpv-label-editor-residue')].filter(element => element.offsetParent && element.textContent.trim());
+      return items.map(element => ({ what: (element.id || element.className) + ' "' + element.textContent.trim().slice(0, 20) + '"', ratio: ratio(element) })).sort((a, b) => a.ratio - b.ratio)[0];
+    });
+    if (!worst || worst.ratio < 4.5) throw new Error('lowest contrast ' + JSON.stringify(worst));
+    console.log('       lowest ' + worst.ratio.toFixed(2) + ':1 (' + worst.what + ')');
+  } finally { await fresh.close(); }
+});
+await step('Help says "Colour scheme", and a label row\'s arrows say what they did (round 2)', async () => {
+  const fresh = await freshViewer([models[0]]);
+  try {
+    const help = await fresh.evaluate(() => document.querySelector('#gpv-help').textContent);
+    if (/Color scheme/.test(help) || !/Colour scheme → Distance from selected residue/.test(help)) throw new Error('Help still spells "Color scheme"');
+    await freshGoTo(fresh, 'A:5'); await fresh.click('#gpv-add-label'); await fresh.waitForTimeout(300);
+    await fresh.click('#gpv-label-list .gpv-entry [aria-label="Move label up"]'); await fresh.waitForTimeout(200);
+    const status = await j2Status(fresh);
+    if (status !== 'Label moved up · Reset puts it back') throw new Error('the label row\'s ↑ said: ' + status);
+  } finally { await fresh.close(); }
+});
+await step('at 1400 × 900 the card with Contacts open keeps Distances CSV in view (round 2)', async () => {
+  const fresh = await freshViewer([join(here, 'fixtures', 'experimental', '5cha.cif')], { viewport: { width: 1400, height: 900 } });
+  try {
+    await j2Card(fresh, 'B:57');
+    await fresh.evaluate(() => document.querySelector('#gpv-label-editor-contacts').click()); await fresh.waitForTimeout(500);
+    const fit = await fresh.evaluate(() => {
+      const host = document.querySelector('#gpv-label-editor'); const box = host.getBoundingClientRect(); const button = document.querySelector('#gpv-label-editor-distances').getBoundingClientRect();
+      return { scrollTop: host.scrollTop, scroll: host.scrollHeight, client: host.clientHeight, below: Math.round(button.bottom - (box.top + host.clientTop + host.clientHeight)) };
+    });
+    if (fit.scrollTop || fit.below > 0) throw new Error('Distances CSV ends ' + fit.below + ' px below the card\'s edge: ' + JSON.stringify(fit));
+  } finally { await fresh.close(); }
+});
+await step('an interface\'s Highlight takes Annotate\'s Highlight colour, as every other highlight does (round 2)', async () => {
+  const fresh = await freshViewer([join(here, 'fixtures', 'experimental', '1brs.cif')]);
+  try {
+    if (await fresh.locator('#gpv-interface-color').count()) throw new Error('Interfaces still has a colour well of its own');
+    await j2Set(fresh, '#gpv-selection-color', '#123456');
+    await fresh.evaluate(() => document.querySelector('#gpv-interface-run').click());
+    await fresh.waitForFunction(() => document.querySelectorAll('#gpv-contacts-rows button').length > 0, null, { timeout: 60000 });
+    await fresh.evaluate(() => document.querySelector('#gpv-contacts-rows button').click()); await fresh.waitForTimeout(300);
+    const colours = await fresh.evaluate(() => [...new Set(window.__viewerDebug.selectionRecords().map(record => record.color))]);
+    if (colours.join() !== '#123456') throw new Error('the interface highlight is ' + JSON.stringify(colours));
+  } finally { await fresh.close(); }
+});
+/* j2-block-B end */
 
 group('confidence');
 await tab('confidence');

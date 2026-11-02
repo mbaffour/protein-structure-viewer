@@ -1164,7 +1164,6 @@ html>body{padding:0}</style>
       <label class="form-label gpv-slider-label">Contact cutoff <span id="gpv-interface-cutoff-value">4.0 Å</span><input class="form-range" id="gpv-interface-cutoff" type="range" min="3" max="6" step="0.5" value="4"></label>
       <button class="btn" type="button" id="gpv-interface-run" disabled><i data-icon="crosshair" aria-hidden="true"></i>Analyse interfaces</button>
       <button class="btn" type="button" id="gpv-interface-csv" disabled>Download interface CSV</button>
-      <label class="form-label">Highlight colour<input class="form-control form-control-color" id="gpv-interface-color" type="color" value="#e11d48"></label>
       <span class="text-muted text-small" id="gpv-interface-state"></span>
     </div>
     <div class="table-responsive" id="gpv-contacts-wrap" hidden><table class="table table-sm" aria-label="Inter-chain interface geometry"><thead><tr><th>Chain pair</th><th class="text-end">Atom contacts</th><th class="text-end">Residue pairs</th><th class="text-end">Interface residues</th><th class="text-end">Buried surface (Å²)</th><th></th></tr></thead><tbody id="gpv-contacts-rows"></tbody></table></div>
@@ -1286,7 +1285,7 @@ html>body{padding:0}</style>
       <h3>In the 3D view</h3>
       <ul>
         <li>Drag to rotate, scroll to zoom, right-drag or two-finger drag to pan.</li>
-        <li>Click any atom to inspect its residue: a small card opens at it with the residue, chain, pLDDT, secondary structure and how many residues sit within the Annotate tab's <em>Within (Å)</em> distance — type a label and press <kbd>Enter</kbd>, or press <strong>Measure to…</strong> and click a second residue for the distance — Cα–Cα, or the closest pair of heavy atoms when the card's <em>Measure</em> choice says <em>closest atoms</em> (remembered). The neighbour count, or <strong>Contacts</strong>, lists those residues nearest first with their closest atoms and Cα–Cα distance: hover a row to name it on the view, click it to measure it, or use <strong>Measure all</strong> (one undo step), <strong>Highlight</strong> or <strong>Copy</strong>. <em>Appearance → Color scheme → Distance from selected residue</em> colours the model by each residue's closest heavy-atom distance to the selected one. A small marker keeps naming the selected residue on the view (never in an export). Click a label without dragging it to edit its text.</li>
+        <li>Click any atom to inspect its residue: a small card opens at it with the residue, chain, pLDDT, secondary structure and how many residues sit within the Annotate tab's <em>Within (Å)</em> distance — type a label and press <kbd>Enter</kbd>, or press <strong>Measure to…</strong> and click a second residue for the distance — Cα–Cα, or the closest pair of heavy atoms when the card's <em>Measure</em> choice says <em>closest atoms</em> (remembered). The neighbour count, or <strong>Contacts</strong>, lists those residues nearest first with their closest atoms and Cα–Cα distance: hover a row to name it on the view, click it to measure it, or use <strong>Measure all</strong> (one undo step), <strong>Highlight</strong> or <strong>Copy</strong>. <em>Appearance → Colour scheme → Distance from selected residue</em> colours the model by each residue's closest heavy-atom distance to the selected one. A small marker keeps naming the selected residue on the view (never in an export). Click a label without dragging it to edit its text.</li>
         <li>Use <strong>Figure annotations</strong> in the Annotate tab to draw arrows, lines, residue markers, and text callouts by clicking atoms, and to add corner titles. They follow rotation and alignment and are included in PNG exports and reports.</li>
         <li>Turn on <strong>Synchronized multi-view</strong> in the Compare tab to show up to six models in linked viewports. Dragging, spinning, or rocking any one of them moves them all.</li>
       </ul>
@@ -1373,6 +1372,11 @@ html>body{padding:0}</style>
      colour, 2.9:1 on white, so text in the accent takes a darker blue in the light theme (5:1 on white,
      4.6:1 on the --accent tint). The dark theme keeps the accent it has. */
   #generic-protein-viewer { --accent-ink: light-dark(rgb(11 107 203), rgb(131 195 255)); --accent-foreground: var(--accent-ink); }
+  /* Muted text and every ghost button take this ink. At 49.4 % it was 3.2:1 on white in the light
+     theme — the card's facts, the contacts' atoms, the measurement rows, Show, Remove and the arrows
+     among them; at 68 % it is 5.6:1 on white and above 4.5:1 on the panel's grey. The dark theme
+     already passes and keeps its value. */
+  #generic-protein-viewer { --muted-foreground: light-dark(rgb(26 28 31 / 68%), rgb(255 255 255 / 49.8%)); }
   #generic-protein-viewer .btn:not(.btn-primary, .viz-tile):is([aria-pressed="true"], [aria-selected="true"], .is-selected) { border-color: var(--accent-ink); background: var(--accent-ink); }
   #generic-protein-viewer .viz-controls { margin-bottom: 12px; align-items: end; }
   #generic-protein-viewer .form-label { min-width: 126px; flex: 1 1 138px; }
@@ -1454,7 +1458,8 @@ html>body{padding:0}</style>
   #generic-protein-viewer .gpv-residue-contacts-tools { display: flex; flex-wrap: wrap; gap: 4px; }
   #generic-protein-viewer .gpv-residue-contacts-tools .btn { min-height: 26px; padding: 0 8px; }
   /* About nine rows, then the list scrolls inside the card. */
-  #generic-protein-viewer .gpv-residue-contacts-rows { max-height: 13.5em; margin: 0; padding: 0; overflow-y: auto; list-style: none; border: 1px solid var(--border); border-radius: var(--radius-sm, 4px); }
+  #generic-protein-viewer #gpv-measurement-list .gpv-entry.is-undrawn .gpv-entry-source::after { content: " · " attr(data-undrawn); }
+  #generic-protein-viewer .gpv-residue-contacts-rows { max-height: 11em; margin: 0; padding: 0; overflow-y: auto; list-style: none; border: 1px solid var(--border); border-radius: var(--radius-sm, 4px); }
   #generic-protein-viewer .gpv-residue-contact { display: grid; grid-template-columns: minmax(0, 1fr) auto auto auto; gap: 6px; align-items: baseline; width: 100%; min-height: 1.5em; padding: 0 6px; border: 0; background: none; color: inherit; font: inherit; font-size: 0.8125rem; font-variant-numeric: tabular-nums; text-align: left; cursor: pointer; }
   #generic-protein-viewer .gpv-residue-contact:hover, #generic-protein-viewer .gpv-residue-contact:focus-visible { background: color-mix(in srgb, var(--primary) 14%, transparent); outline: none; }
   #generic-protein-viewer .gpv-contact-name { min-width: 0; }

@@ -44,10 +44,12 @@
     const rows = entry && entry.model ? residueRows(entry) : [];
     const previous = [first.value, second.value];
     const total = rows.reduce((sum, row) => sum + row.residues.length, 0);
+    /* An RNA or DNA chain counts nucleotides, not amino acids; a mixed set counts residues. */
+    const unit = residues => (residues.every(isNucleotide) ? ' nt' : residues.some(isNucleotide) ? ' residues' : ' aa');
     [first, second].forEach((select, index) => {
       select.replaceChildren();
-      rows.forEach(row => { const option = document.createElement('option'); option.value = row.chain; option.textContent = (row.chain || '—') + ' · ' + row.residues.length + ' aa'; select.append(option); });
-      if (rows.length) { const option = document.createElement('option'); option.value = contactAllChains; option.textContent = 'All chains · ' + total + ' aa'; select.append(option); }
+      rows.forEach(row => { const option = document.createElement('option'); option.value = row.chain; option.textContent = (row.chain || '—') + ' · ' + row.residues.length + unit(row.residues); select.append(option); });
+      if (rows.length) { const option = document.createElement('option'); option.value = contactAllChains; option.textContent = 'All chains · ' + total + unit(rows.flatMap(row => row.residues)); select.append(option); }
       const kept = previous[index] === contactAllChains ? rows.length > 0 : rows.some(row => row.chain === previous[index]);
       if (kept) select.value = previous[index]; else if (rows[Math.min(index, rows.length - 1)]) select.value = rows[Math.min(index, rows.length - 1)].chain;
     });
@@ -130,7 +132,7 @@
     /* Interface residues per side; for a symmetric map both sides are the same set. */
     const sideA = new Set(); const sideB = new Set();
     pairs.forEach((d, key) => { const [i, j] = key.split('|').map(Number); sideA.add(i); sideB.add(j); if (symmetric) { sideA.add(j); sideB.add(i); } });
-    const interfaceOf = (axis, side) => [...side].sort((x, y) => x - y).map(i => ({ chain: axis.residues[i].chain || '', resi: axis.residues[i].resi }));
+    const interfaceOf = (axis, side) => [...side].sort((x, y) => x - y).map(i => ({ chain: axis.residues[i].chain || '', resi: axis.residues[i].resi, icode: insertionCodeOf(axis.residues[i]) }));
     const interfaceA = interfaceOf(axisA, sideA); const interfaceB = interfaceOf(axisB, sideB);
     /* The scale of the All distances view: 0 Å to the largest distance on the map, at most 40 Å,
        so a large assembly's long distances do not wash out the contacts. */
@@ -296,7 +298,9 @@
     cancelMeasureTo(false);
     selectResidue(entry, hit.a);
     const made = measureResiduePair(entry, hit.a, entry, hit.b);
-    const selection = { model: entry.model.getID(), or: [{ chain: hit.a.chain, resi: hit.a.resi }, { chain: hit.b.chain, resi: hit.b.resi }] };
+    /* The two residues by chain, number and insertion code: zooming to 57 must not frame 57A and 57B too. */
+    const either = atom => sameResidue(atom, hit.a.chain, hit.a.resi, insertionCodeOf(hit.a)) || sameResidue(atom, hit.b.chain, hit.b.resi, insertionCodeOf(hit.b));
+    const selection = { model: entry.model.getID(), resi: [hit.a.resi, hit.b.resi], predicate: either };
     try { viewer.zoomTo(selection); viewer.render(); syncViewsFrom(viewer); } catch (error) { /* selection syntax unsupported: keep the current view */ }
     updateStatus(made ? labelEditorDefaultText(made.first) + ' — ' + made.summary + ' · measured' : contactPairText(hit) + ' · selected');
   }
@@ -310,8 +314,9 @@
     /* One selection per chain, first axis first — two for a pair of chains, as always; one for an
        intra-chain map; one per chain involved when an axis is all chains. */
     const byChain = new Map();
-    [...contactResult.interfaceA, ...contactResult.interfaceB].forEach(item => { if (!byChain.has(item.chain)) byChain.set(item.chain, new Set()); byChain.get(item.chain).add(item.resi); });
-    byChain.forEach((residues, chain) => selectionRecords.push({ id: nextAnnotationId++, entryId: entry.id, chain, residues: [...residues].sort((x, y) => x - y), action: 'highlight', color }));
+    [...contactResult.interfaceA, ...contactResult.interfaceB].forEach(item => { if (!byChain.has(item.chain)) byChain.set(item.chain, new Map()); byChain.get(item.chain).set(residueNumber(item), item); });
+    const byNumber = (a, b) => a.resi - b.resi || (insertionCodeOf(a) < insertionCodeOf(b) ? -1 : insertionCodeOf(a) > insertionCodeOf(b) ? 1 : 0);
+    byChain.forEach((residues, chain) => selectionRecords.push({ id: nextAnnotationId++, entryId: entry.id, chain, ...selectionResidues([...residues.values()].sort(byNumber)), action: 'highlight', color }));
     renderSelectionList(); applyStyle();
     updateStatus('Interface highlighted · ' + [...byChain.entries()].map(([chain, residues], index) => residues.size + (index ? '' : ' residue' + (residues.size === 1 ? '' : 's')) + ' on chain ' + (chain || '—')).join(', '));
   }

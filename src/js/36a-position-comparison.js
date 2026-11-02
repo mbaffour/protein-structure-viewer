@@ -16,7 +16,7 @@
     const text = String(resn || 'RES').trim() || 'RES';
     return text.charAt(0).toUpperCase() + text.slice(1).toLowerCase();
   }
-  const positionTag = spot => (spot.chain ? spot.chain + ':' : '') + spot.resi;
+  const positionTag = spot => (spot.chain ? spot.chain + ':' : '') + residueNumber(spot);
 
   /* The model every other model is compared against: the reference of the superposition that is
      current, when it is one of the shown models. Without one there is nothing to pair through. */
@@ -41,7 +41,7 @@
       const map = new Map();
       try {
         caPairs(reference, entry).pairs.forEach(pair => {
-          const tag = residueTag(pair[0]);
+          const tag = residueCodeTag(pair[0]);
           if (!map.has(tag)) map.set(tag, pair[1]);
         });
       } catch (error) { /* a model with too few Cα atoms simply has no pairing */ }
@@ -51,21 +51,22 @@
   }
 
   /* The atom one model carries at a position: the residue the alignment placed opposite the
-     reference's, whatever its number, and the same chain and number when there is no pairing. */
-  function positionAtomIn(entry, chain, resi, reference) {
+     reference's, whatever its number, and the same chain, number and insertion code when there is no
+     pairing. */
+  function positionAtomIn(entry, chain, resi, reference, icode = '') {
     if (reference && entry !== reference) {
-      const partner = positionPairing(reference, entry).get((chain || '') + '|' + resi);
+      const partner = positionPairing(reference, entry).get(residueCodeTag({ chain, resi, icode }));
       if (partner) return partner;
     }
-    const candidates = entry.atoms.filter(atom => !atom.hetflag && atom.resi === resi && (atom.chain || '') === (chain || ''));
+    const candidates = entry.atoms.filter(atom => !atom.hetflag && sameResidue(atom, chain, resi, icode));
     return candidates.find(item => item.atom === 'CA') || candidates[0] || null;
   }
 
   /* Every shown model that has this position, with the atom the label hangs on. */
-  function positionAtoms(chain, resi) {
+  function positionAtoms(chain, resi, icode = '') {
     const reference = positionReference();
     return displayedEntries().filter(entry => entry.model).map(entry => {
-      const atom = positionAtomIn(entry, chain, resi, reference);
+      const atom = positionAtomIn(entry, chain, resi, reference, icode);
       return atom ? { entry, atom } : null;
     }).filter(Boolean);
   }
@@ -86,7 +87,7 @@
   const positionEffectSites = () => (positionEffect ? positionEffect.spots || [positionEffect.spot] : []);
   function positionEffectIsOnly(spot) {
     const sites = positionEffectSites();
-    return sites.length === 1 && (sites[0].chain || '') === (spot.chain || '') && sites[0].resi === spot.resi;
+    return sites.length === 1 && (sites[0].chain || '') === (spot.chain || '') && sites[0].resi === spot.resi && insertionCodeOf(sites[0]) === insertionCodeOf(spot);
   }
   /* 'A:15', or '4 compared sites' once the table covers a set. */
   function positionEffectSubject() {
@@ -113,7 +114,7 @@
 
   /* The readout: one line naming the position, what each model has there, and whether they differ. */
   function positionReadout(spot) {
-    const found = positionAtoms(spot.chain, spot.resi);
+    const found = positionAtoms(spot.chain, spot.resi, insertionCodeOf(spot));
     if (!found.length) return positionTag(spot) + ' · in none of the shown models';
     const identities = found.map(item => positionResidueName(item.atom.resn));
     const renumbered = found.some(item => item.atom.resi !== spot.resi);
@@ -128,7 +129,7 @@
 
   /* The same comparison as a sentence for the figure legend. */
   function positionSentence(spot) {
-    const found = positionAtoms(spot.chain, spot.resi);
+    const found = positionAtoms(spot.chain, spot.resi, insertionCodeOf(spot));
     if (!found.length) return null;
     const drawn = root.querySelector('#gpv-position-sticks').checked ? 'is drawn as side-chain sticks and labelled' : 'is labelled';
     const identities = found.map(item => positionResidueName(item.atom.resn));
@@ -179,13 +180,13 @@
     if (!others.length) return null;
     /* A position the reference itself does not carry has nothing to measure from and is dropped, so
        spots and site rows describe the same residues in the same order. */
-    const sites = asked.map(item => ({ spot: item, atom: positionAtomIn(reference, item.chain, item.resi, null) })).filter(item => item.atom);
+    const sites = asked.map(item => ({ spot: item, atom: positionAtomIn(reference, item.chain, item.resi, null, insertionCodeOf(item)) })).filter(item => item.atom);
     if (!sites.length) return null;
     const site = sites[0].atom;
     const cutoff = positionCutoff();
     const heavy = heavyAtoms(reference).filter(atom => !atom.hetflag);
-    const siteTags = new Set(sites.map(item => residueTag(item.atom)));
-    const isSiteAtom = atom => siteTags.has(residueTag(atom));
+    const siteTags = new Set(sites.map(item => residueCodeTag(item.atom)));
+    const isSiteAtom = atom => siteTags.has(residueCodeTag(atom));
     const siteAtoms = heavy.filter(isSiteAtom);
     if (!siteAtoms.length) return null;
     const candidates = heavy.filter(atom => !isSiteAtom(atom));
@@ -195,14 +196,14 @@
     siteAtoms.forEach(target => grid.near(target).forEach(index => {
       const atom = candidates[index];
       if (squaredDistance(atom, target) > limit) return;
-      const tag = residueTag(atom);
+      const tag = residueCodeTag(atom);
       if (!found.has(tag)) found.set(tag, atom);
     }));
     const allNames = distinguishingNames([reference, ...others].map(displayName));
     const deviationsOf = atom => others.map(entry => {
       if (!entry.deviations) return null;
-      const partner = positionPairing(reference, entry).get(residueTag(atom));
-      const value = partner ? entry.deviations.get(residueTag(partner)) : undefined;
+      const partner = positionPairing(reference, entry).get(residueCodeTag(atom));
+      const value = partner ? entry.deviations.get(residueCodeTag(partner)) : undefined;
       return Number.isFinite(value) ? value : null;
     });
     const rowFor = (atom, isSite) => {
@@ -229,8 +230,8 @@
       neighbourCount: neighbours.length
     };
     return {
-      spots: sites.map(item => ({ chain: item.spot.chain, resi: item.spot.resi })),
-      spot: { chain: sites[0].spot.chain, resi: sites[0].spot.resi }, cutoff,
+      spots: sites.map(item => ({ chain: item.spot.chain, resi: item.spot.resi, ...(insertionCodeOf(item.spot) ? { icode: insertionCodeOf(item.spot) } : {}) })),
+      spot: { chain: sites[0].spot.chain, resi: sites[0].spot.resi, ...(insertionCodeOf(sites[0].spot) ? { icode: insertionCodeOf(sites[0].spot) } : {}) }, cutoff,
       reference: allNames[0], models: allNames.slice(1),
       rows: [...siteRows, ...neighbours], summary
     };
@@ -358,7 +359,7 @@
      each model writing its own residue. Shared by the one-position press and the set press so both
      leave exactly the same records behind. */
   function addComparedPosition(spot, found) {
-    if (!spotlightResidues.some(item => item.chain === spot.chain && item.resi === spot.resi)) spotlightResidues.push({ chain: spot.chain, resi: spot.resi });
+    if (!spotlightResidues.some(item => item.chain === spot.chain && item.resi === spot.resi && insertionCodeOf(item) === insertionCodeOf(spot))) spotlightResidues.push({ chain: spot.chain, resi: spot.resi, ...(insertionCodeOf(spot) ? { icode: insertionCodeOf(spot) } : {}) });
     found.forEach(({ entry, atom }) => {
       const key = residueKey(entry.id, atom.chain || '', atom.resi, insertionCodeOf(atom));
       const record = {
@@ -376,21 +377,24 @@
     if (displayedEntries().filter(entry => entry.model).length < 2) { announce('Show at least two models to compare a position across them', 'error'); return; }
     const chain = selectedResidue.chain || '';
     const resi = selectedResidue.resi;
-    const found = positionAtoms(chain, resi);
+    /* The selected residue with its insertion code: comparing 57A compares 57A, not 57. */
+    const icode = insertionCodeOf(selectedResidue);
+    const spot = { chain, resi, ...(icode ? { icode } : {}) };
+    const found = positionAtoms(chain, resi, icode);
     if (found.length < 2) {
-      announce(positionTag({ chain, resi }) + ' is in only ' + found.length + ' of the shown models · check the chain and the numbering', 'error');
+      announce(positionTag(spot) + ' is in only ' + found.length + ' of the shown models · check the chain and the numbering', 'error');
       return;
     }
     remember('position comparison');
-    addComparedPosition({ chain, resi }, found);
-    positionEffect = alignmentResults.length ? computePositionEffect({ chain, resi }) : null;
+    addComparedPosition(spot, found);
+    positionEffect = alignmentResults.length ? computePositionEffect(spot) : null;
     renderPositionEffect();
     /* One label per model at one residue of superposed models is a pile by construction; stack them
        before the view is rebuilt so the press produces a figure, not a repair job. */
     separateLabels({ include: label => label.kind === 'position' });
     renderLabelList(); applyStyle(); rebuildOverlays();
     renderPositionState();
-    announce(positionReadout({ chain, resi }));
+    announce(positionReadout(spot));
   }
 
   /* ---- A whole set of positions at once ----
@@ -460,7 +464,7 @@
     const compared = [];
     let skipped = 0;
     parsed.spots.forEach(spot => {
-      const found = positionAtoms(spot.chain, spot.resi);
+      const found = positionAtoms(spot.chain, spot.resi, insertionCodeOf(spot));
       if (found.length < 2) { skipped += 1; return; }
       compared.push({ spot, found });
     });

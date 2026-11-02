@@ -281,6 +281,39 @@
     measurementChanged(record);
   }
 
+  /* Why a measurement is not drawn on any view, or null when it is: a model it joins is hidden (One at a
+     time shows one model; a switch can hide any), or, in the synchronized multi-view, its models are in
+     different panels — each panel draws only what lies within its own model. A row's Show and arrows
+     used to answer for a measurement no one could see: the camera went to empty space and the status
+     said "Measurement text moved right". */
+  function measurementUndrawnReason(record) {
+    const ids = [...new Set(record.points.map(point => point.entryId))];
+    const entries = ids.map(entryById);
+    if (entries.some(entry => !entry)) return 'Its model is no longer loaded';
+    const shown = new Set(displayedEntries().map(entry => entry.id));
+    if (ids.every(id => shown.has(id))) return null;
+    const comparing = root.querySelector('#gpv-side-by-side').checked && comparePanels.length > 0;
+    const inPanel = id => comparePanels.some(panel => panel.entryId === id);
+    if (comparing) {
+      if (ids.length === 1 && inPanel(ids[0])) return null;
+      if (ids.every(id => shown.has(id) || inPanel(id))) return 'It joins models in different panels, so no panel draws it — show them in one view (Overlay) to see it';
+    }
+    const hidden = entries.find(entry => !shown.has(entry.id) && !(comparing && inPanel(entry.id)));
+    return 'Show ' + displayName(hidden) + ' first — this measurement is not drawn while it is hidden';
+  }
+
+  /* The rows say which measurements are not drawn, without being rebuilt: applyStyle calls this. */
+  function markUndrawnMeasurements() {
+    root.querySelectorAll('#gpv-measurement-list .gpv-entry[data-measurement-id]').forEach(row => {
+      const record = measurementRecords.find(item => item.id === Number(row.dataset.measurementId));
+      const reason = record ? measurementUndrawnReason(record) : null;
+      row.classList.toggle('is-undrawn', Boolean(reason));
+      const where = row.querySelector('.gpv-entry-source');
+      if (reason) row.title = reason; else row.removeAttribute('title');
+      if (where) where.dataset.undrawn = reason ? 'not drawn' : '';
+    });
+  }
+
   function centreOnMeasurement(record) {
     const anchor = measurementAnchor(null, record);
     if (!anchor || typeof viewer.getView !== 'function' || typeof viewer.setView !== 'function') return;
@@ -341,9 +374,15 @@
       text.setAttribute('aria-label', 'Text for the measurement ' + named);
       const commit = () => { if (setMeasurementText(record, text.value)) { measurementChanged(record); updateStatus('Measurement text updated'); } };
       text.addEventListener('change', commit);
-      /* Enter commits where the field is: the row is rebuilt around it and the focus comes back to it,
-         rather than a blur committing after the focus has already gone to the page. */
-      text.addEventListener('keydown', event => { if (event.key === 'Enter') { event.preventDefault(); commit(); } });
+      /* Enter commits where the field is, rather than a blur committing after the focus has already
+         gone to the page, and hands the focus to the row's Show: a field still focused counts as typing,
+         so ⌘Z right after Enter did nothing at all. The row keeps its focus mark. */
+      text.addEventListener('keydown', event => {
+        if (event.key !== 'Enter') return;
+        event.preventDefault(); commit();
+        const own = root.querySelector('#gpv-measurement-list .gpv-entry[data-row-id="' + record.id + '"] [data-control="show"]');
+        if (own) own.focus({ preventScroll: true });
+      });
       /* The one element of the row with this class: what it names ends in the value, which the
          regression suite reads off the end of it. */
       const where = document.createElement('span'); where.className = 'gpv-entry-name gpv-entry-source text-small';
@@ -351,7 +390,7 @@
       copy.append(text, where);
       const tools = document.createElement('span'); tools.className = 'gpv-edit-tools';
       const color = document.createElement('input'); color.className = 'form-control form-control-color'; color.type = 'color';
-      color.value = measurementColor(record) || '#e11d48'; color.setAttribute('aria-label', 'Measurement colour'); color.dataset.control = 'color';
+      color.value = measurementColor(record) || '#e11d48'; color.setAttribute('aria-label', 'Colour of the measurement ' + named); color.dataset.control = 'color';
       color.title = 'Colour of the line and the label';
       const colourDefault = measurementDefaultButton(null); colourDefault.dataset.control = 'default';
       colourDefault.disabled = !measurementColor(record);
@@ -362,6 +401,7 @@
       const toggle = (name, field, what, title) => {
         const wrap = document.createElement('label'); wrap.className = 'form-check gpv-check text-small'; wrap.title = title;
         const box = document.createElement('input'); box.type = 'checkbox'; box.className = 'form-check-input'; box.checked = record[field] !== false; box.dataset.control = field;
+        box.setAttribute('aria-label', name + ' — the measurement ' + named);
         box.addEventListener('change', () => setMeasurementFlag(record, field, box.checked, what));
         const words = document.createElement('span'); words.className = 'form-check-label'; words.textContent = name;
         wrap.append(box, words);
@@ -371,9 +411,15 @@
       const value = toggle('Show value', 'showValue', 'measurement value', 'Write the distance or angle after the text; with no text the value is always written');
       const show = document.createElement('button'); show.className = 'btn btn-ghost'; show.type = 'button'; show.textContent = 'Show'; show.dataset.control = 'show';
       show.title = 'Centre the view on this measurement without changing the zoom';
-      show.addEventListener('click', () => { centreOnMeasurement(record); updateStatus('Centred on ' + measurementRowText(record)); });
+      show.setAttribute('aria-label', 'Show the measurement ' + named);
+      show.addEventListener('click', () => {
+        const undrawn = measurementUndrawnReason(record);
+        if (undrawn) { updateStatus(undrawn); return; }
+        centreOnMeasurement(record); updateStatus('Centred on ' + measurementRowText(record));
+      });
       const reset = document.createElement('button'); reset.className = 'btn btn-ghost'; reset.type = 'button'; reset.textContent = 'Reset'; reset.dataset.control = 'reset'; reset.dataset.controlFallback = 'show';
       reset.title = 'Put the text back where it started'; reset.disabled = labelOffsetLength(record) === 0;
+      reset.setAttribute('aria-label', 'Put back the text of the measurement ' + named);
       reset.addEventListener('click', () => { remember('measurement position'); record.offset = null; delete record.autoPlaced; measurementChanged(record); updateStatus('Measurement text put back in place'); });
       const remove = document.createElement('button'); remove.className = 'btn btn-ghost'; remove.type = 'button'; remove.textContent = 'Remove'; remove.dataset.control = 'remove';
       remove.setAttribute('aria-label', 'Remove the measurement ' + named);
@@ -381,26 +427,44 @@
       tools.append(color, colourDefault, dashed, value, show, reset, remove);
       /* The arrows and Select, as a label row has them: the way to move the text without a mouse. */
       const nudge = document.createElement('span'); nudge.className = 'gpv-nudge';
-      nudge.setAttribute('role', 'group'); nudge.setAttribute('aria-label', 'Move the measurement text');
+      nudge.setAttribute('role', 'group'); nudge.setAttribute('aria-label', 'Move the text of the measurement ' + named);
       [['←', 'Move the text left', -12, 0, 'left'], ['→', 'Move the text right', 12, 0, 'right'], ['↑', 'Move the text up', 0, -12, 'up'], ['↓', 'Move the text down', 0, 12, 'down']].forEach(([glyph, title, dx, dy, direction]) => {
         const button = document.createElement('button'); button.className = 'btn btn-ghost'; button.type = 'button'; button.textContent = glyph;
         button.setAttribute('aria-label', title); button.title = title; button.dataset.control = direction;
-        button.addEventListener('click', () => { remember('measurement text move'); nudgeCanvasText({ kind: 'measurement', record }, dx, dy); reset.disabled = false; rebuildOverlays(); updateStatus('Measurement text moved ' + direction); });
+        button.addEventListener('click', () => {
+          const undrawn = measurementUndrawnReason(record);
+          if (undrawn) { updateStatus(undrawn); return; }
+          remember('measurement text move'); nudgeCanvasText({ kind: 'measurement', record }, dx, dy); reset.disabled = false; rebuildOverlays(); updateStatus('Measurement text moved ' + direction);
+        });
         nudge.append(button);
       });
       const select = document.createElement('button'); select.className = 'btn btn-ghost'; select.type = 'button'; select.textContent = 'Select'; select.dataset.control = 'select';
       select.title = 'Make this the active text: the arrow keys move it (Shift for 1 px), Delete removes the measurement, Esc lets go';
-      select.setAttribute('aria-label', 'Select this measurement to move its text with the arrow keys');
+      select.setAttribute('aria-label', 'Select the measurement ' + named + ' to move its text with the arrow keys');
       select.addEventListener('click', () => {
         setActiveText('measurement', record);
         root.querySelector('#gpv-stage').focus({ preventScroll: true });
-        updateStatus('“' + clipText(measurementLabelText(record), 40) + '” selected · arrow keys move it, Shift for 1 px, Delete removes it, Esc lets go');
+        updateStatus('“' + clipText(measurementLabelText(record), 40) + '” selected · arrow keys move it, Shift for 1 px, Enter opens its editor, Delete removes it, Esc lets go');
       });
-      nudge.append(select);
+      /* The editor — Atoms, Name the atoms, Show value, colour, Dashed — from the keyboard: it opened only
+         on a click on the value. Tab walks it and Esc closes it, as for a label. */
+      const edit = document.createElement('button'); edit.className = 'btn btn-ghost'; edit.type = 'button'; edit.textContent = 'Edit'; edit.dataset.control = 'edit';
+      edit.title = 'Open this measurement’s editor on the view: its text, the atoms it joins, Name the atoms, colour and line (Enter on the selected measurement does the same)';
+      edit.setAttribute('aria-label', 'Edit the measurement ' + named);
+      edit.addEventListener('click', () => openMeasurementEditorFromRow(record));
+      nudge.append(select, edit);
       row.dataset.measurementId = String(record.id);
       row.append(copy, tools, nudge); list.append(row);
     });
     restoreListFocus(list, kept);
+    markUndrawnMeasurements();
+  }
+
+  function openMeasurementEditorFromRow(record) {
+    const undrawn = measurementUndrawnReason(record);
+    if (undrawn) { updateStatus(undrawn); return; }
+    openLabelEditorForItem({ kind: 'measurement', record });
+    updateStatus('Editing ' + measurementRowText(record) + ' · Tab walks the editor, Enter keeps the text, Esc closes it');
   }
 
   /* ---- The editor's measurement row ----
@@ -425,7 +489,7 @@
     const value = check('gpv-measure-editor-value', 'Show value', 'Write the distance or angle after the text');
     value.box.addEventListener('change', () => { const record = editorMeasurement(); if (record) setMeasurementFlag(record, 'showValue', value.box.checked, 'measurement value'); });
     const color = document.createElement('input'); color.type = 'color'; color.className = 'form-control form-control-color'; color.id = 'gpv-measure-editor-color';
-    color.title = 'Colour of the line and the label'; color.setAttribute('aria-label', 'Measurement colour');
+    color.title = 'Colour of the line and the label'; color.setAttribute('aria-label', 'Colour of the measurement');
     color.addEventListener('input', () => {
       const record = editorMeasurement(); if (!record) return;
       if (!color.dataset.remembered) { remember('measurement colour'); color.dataset.remembered = '1'; }
@@ -463,7 +527,7 @@
     const [first, second] = record.points;
     const entryA = entryById(first.entryId); const entryB = entryById(second.entryId);
     if (!entryA || !entryB || !entryA.model || !entryB.model) return null;
-    if (first.entryId === second.entryId && (first.chain || '') === (second.chain || '') && first.resi === second.resi) return null;
+    if (first.entryId === second.entryId && (first.chain || '') === (second.chain || '') && first.resi === second.resi && insertionCodeOf(first) === insertionCodeOf(second)) return null;
     const residueA = { chain: first.chain || '', resi: first.resi, icode: insertionCodeOf(first) }; const residueB = { chain: second.chain || '', resi: second.resi, icode: insertionCodeOf(second) };
     const atomA = resolvePoint(first); const atomB = resolvePoint(second);
     const nearest = closestHeavyAtomPair(entryA, residueA, entryB, residueB);

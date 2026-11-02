@@ -273,13 +273,19 @@
   }
 
   async function loadFiles(files) {
+    /* Its own list: an import may wait for an export below, and a drop's FileList is not the page's to keep. */
+    files = Array.from(files || []);
     if (!files.length) return;
+    /* An export renders one state of the page: a file opened while it renders waits for it, so the
+       image and its legend describe the same models (40). */
+    if (exportRendering()) await afterExportRenders(files.length === 1 ? files[0].name : files.length + ' files');
     showImportErrors([]);
     listLimit = listPageSize;
     const doneBusy = setBusy('Importing ' + files.length + ' file' + (files.length === 1 ? '' : 's') + '…');
     /* What this import added, as against what earlier ones did: the first new model becomes the
        current one, and only confidence files read now may be reported as attached. */
     const wasEmpty = structures.length === 0;
+    const modeBefore = root.querySelector('#gpv-view-mode').value;
     const assetsBefore = confidenceAssets.length;
     let firstNew = null; let restoredSession = false;
     stopCycle(); stopMotion();
@@ -390,6 +396,10 @@
     const newAssets = confidenceAssets.slice(assetsBefore);
     const attachedNow = newAssets.some(asset => structures.some(entry => assetFitsEntry(asset, entry)));
     renderList();
+    /* In the synchronized multi-view the current model is the primary panel's, as Current model and
+       ← → make it: the import said "showing" a model no panel showed. */
+    const intoPanel = Boolean(firstNew && !restoredSession && structures.includes(firstNew) && root.querySelector('#gpv-side-by-side').checked && comparePanels.length);
+    if (intoPanel) root.querySelector('#gpv-left-model').value = String(firstNew.id);
     applyStyle();
     const active = activeEntry();
     if (loaded && active && active.model) viewer.zoomTo({ model: active.model.getID() });
@@ -402,7 +412,9 @@
       const added = alignments.length ? 'Alignment added: ' + clipText(alignments.join(', '), 80) : '';
       /* Only this import's confidence files count: the session-wide list made every later import, a
          failed one included, end "· confidence attached". */
-      const showing = loaded && firstNew && !restoredSession && structures.includes(firstNew) ? ' · showing ' + displayName(firstNew) : '';
+      /* An archive opened on an empty page switches to One at a time, and says so, as ← → do. */
+      const switched = modeBefore !== 'single' && root.querySelector('#gpv-view-mode').value === 'single' ? ' · one model at a time (View mode)' : '';
+      const showing = loaded && firstNew && !restoredSession && structures.includes(firstNew) ? ' · showing ' + displayName(firstNew) + (intoPanel ? ' in the primary panel' : switched) : '';
       const note = loaded ? 'Loaded ' + loaded + ' model' + (loaded === 1 ? '' : 's') + ' from ' + files.length + ' source' + (files.length === 1 ? '' : 's') + (added ? ' · ' + added : '') + showing + (attachedNow ? ' · confidence attached' : '')
         : added || (pendingScene ? 'Scene loaded; now add its matching structure files' : newAssets.length ? (attachedNow ? 'Confidence data attached to the open models' : 'Confidence data loaded; add matching structures') : 'No supported structures found');
       updateStatus(note + (deferredPae ? ' · skipped ' + deferredPae + ' large PAE files for performance' : '') + (skipped ? ' · ' + skipped + ' skipped' : ''));
@@ -765,10 +777,29 @@
 
   /* The five models of one run share a long file-name stem, and five identical truncations name
      nothing. Drop what every name has in common, at a word boundary, and keep the rest — unless
-     that leaves too little to read, in which case the full names are clipped as before. */
+     that leaves too little to read, in which case the full names are clipped. The file extension is
+     set aside first, so the stem shared by 1brs.cif and its second copy is never cut down to "cif"
+     and "cif (2)"; and the names are made unique after clipping, so two models whose names differ
+     only past the 28th character are not both "chai_hbdimer / pred.model_i…" in a legend or the RMSD
+     matrix: a clipped name that would repeat keeps its end instead, and one that still repeats is
+     numbered. */
   function distinguishingNames(names) {
+    if (names.length < 2) return names.map(name => clipText(name, 28));
+    const finish = list => {
+      const clippedMiddle = name => (name.length <= 28 ? name : name.slice(0, 12) + '…' + name.slice(-15));
+      let out = list.map(name => clipText(name, 28));
+      const repeated = value => out.filter(item => item === value).length > 1;
+      out = out.map((name, index) => (repeated(name) ? clippedMiddle(list[index]) : name));
+      const seen = new Map();
+      return out.map(name => {
+        const count = (seen.get(name) || 0) + 1; seen.set(name, count);
+        return count === 1 ? name : clipText(name, 23) + ' (' + count + ')';
+      });
+    };
+    const stems = names.map(name => name.replace(/\.(?:cif|mmcif|pdb|ent)((?: \(\d+\))?)$/i, '$1'));
+    if (new Set(names).size !== names.length) return finish(names);
+    if (new Set(stems).size === stems.length) names = stems;
     const clipped = names.map(name => clipText(name, 28));
-    if (names.length < 2 || new Set(names).size !== names.length) return clipped;
     const boundary = /[ ._\-/|:]/;
     const backToBoundary = value => { let out = value; while (out && !boundary.test(out[out.length - 1])) out = out.slice(0, -1); return out; };
     let prefix = names[0];
@@ -781,8 +812,8 @@
        the prefix is given back one boundary at a time until what is left reads on its own. */
     for (;;) {
       const trimmed = names.map(name => name.slice(prefix.length, name.length - suffix.length).trim());
-      if (trimmed.every(name => name.length >= 3) && new Set(trimmed).size === trimmed.length) return trimmed.map(name => clipText(name, 28));
-      if (!prefix) return clipped;
+      if (trimmed.every(name => name.length >= 3) && new Set(trimmed).size === trimmed.length) return finish(trimmed);
+      if (!prefix) return clipped.length && new Set(clipped).size === clipped.length ? clipped : finish(names);
       prefix = backToBoundary(prefix.slice(0, -1));
     }
   }

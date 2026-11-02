@@ -121,7 +121,7 @@
     const head = document.createElement('div'); head.className = 'gpv-label-editor-head';
     const residue = document.createElement('span'); residue.className = 'gpv-label-editor-residue text-small';
     const close = document.createElement('button'); close.type = 'button'; close.className = 'btn btn-ghost gpv-label-editor-close';
-    close.textContent = '×'; close.title = 'Close (Esc)'; close.setAttribute('aria-label', 'Close the label editor');
+    close.textContent = '×'; close.title = 'Close (Esc)'; close.setAttribute('aria-label', 'Close the editor');
     head.append(residue, close);
     const input = document.createElement('input');
     input.id = 'gpv-label-editor-text'; input.className = 'form-control'; input.type = 'text'; input.maxLength = 120;
@@ -492,6 +492,13 @@
     /* Arrows belong to the label only while one is active and nothing else (a tab button, say)
        has already taken the key; with nothing active ← and → still step through the models. */
     if (event.defaultPrevented || !activeCanvasText()) return false;
+    /* Enter on the selected measurement — after its row's Select, which hands the focus to the stage —
+       opens its editor, so its atoms and Name the atoms are not mouse-only. A focused button or field
+       keeps its own Enter. */
+    const resolved = activeCanvasText();
+    if (event.key === 'Enter' && resolved.kind === 'measurement' && !labelEditor && !(event.target instanceof Element && event.target.closest('button, input, select, textarea, a, summary'))) {
+      event.preventDefault(); openMeasurementEditorFromRow(resolved.record); return true;
+    }
     const step = event.shiftKey ? 1 : 8;
     const moves = { ArrowLeft: [-step, 0], ArrowRight: [step, 0], ArrowUp: [0, -step], ArrowDown: [0, step] };
     if (moves[event.key]) { event.preventDefault(); nudgeActiveText(moves[event.key][0], moves[event.key][1], event.repeat); return true; }

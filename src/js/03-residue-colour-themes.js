@@ -160,7 +160,9 @@
     if (spotlightResidues.length && root.querySelector('#gpv-position-sticks').checked) {
       spotlightResidues.forEach(spot => {
         if (spot.chain && (entry.hiddenChains || []).includes(spot.chain)) return;
-        model.setStyle(spot.chain ? { chain: spot.chain, resi: spot.resi } : { resi: spot.resi }, { stick: { radius: 0.22, colorscheme: 'default' } }, true);
+        const selection = spot.chain ? { chain: spot.chain, resi: spot.resi } : { resi: spot.resi };
+        if (insertionCodeOf(spot)) selection.predicate = atom => insertionCodeOf(atom) === insertionCodeOf(spot);
+        model.setStyle(selection, { stick: { radius: 0.22, colorscheme: 'default' } }, true);
       });
     }
     const surface = root.querySelector('#gpv-surface').value;
@@ -182,9 +184,13 @@
   const isWater = atom => waterNames.includes(String(atom.resn || '').toUpperCase());
 
   const residueTag = atom => (atom.chain || '') + '|' + atom.resi;
+  /* The tag with the insertion code, where one residue is looked up as itself — an alignment pair, a
+     deviation, a compared position — so 100, 100A and 100B are three. A residue without a code has the
+     same tag as before. Domains and PAE tokens, which are number ranges, keep residueTag. */
+  const residueCodeTag = atom => residueTag(atom) + (insertionCodeOf(atom) ? '|' + insertionCodeOf(atom) : '');
   const deviationBands = [[1, '#2563eb', '<1 Å'], [2, '#22c55e', '1–2 Å'], [4, '#eab308', '2–4 Å'], [8, '#f97316', '4–8 Å'], [Infinity, '#dc2626', '≥8 Å']];
   function deviationColor(entry, atom) {
-    const value = entry.deviations ? entry.deviations.get(residueTag(atom)) : undefined;
+    const value = entry.deviations ? entry.deviations.get(residueCodeTag(atom)) : undefined;
     if (value === undefined) return '#9ca3af';
     return deviationBands.find(([limit]) => value < limit)[1];
   }
@@ -257,7 +263,8 @@
     root.querySelector('#gpv-clear-panels').disabled = comparePanels.length === 0;
     root.querySelector('#gpv-compare-image').disabled = !comparing;
     root.querySelector('#gpv-compare-svg').disabled = !comparing;
-    if (comparing) root.querySelector('#gpv-count').textContent += ' · ' + (comparePanels.length + 1) + ' panels';
+    /* Across the panels: three models in three panels is "3 displayed", not the primary's 1. */
+    if (comparing) root.querySelector('#gpv-count').textContent = new Set([...visible.map(entry => entry.id), ...comparePanels.map(panel => panel.entryId).filter(id => entryById(id))]).size + ' displayed / ' + structures.length + ' loaded · ' + (comparePanels.length + 1) + ' panels';
   }
 
   function materializeEntry(entry) {
@@ -317,11 +324,15 @@
     }
     releaseHiddenModels(shown);
     applySelections(shown);
+    /* Colour by distance (03a) is drawn now for the residue selected now. */
+    distanceColourStyled();
     renderScreenLegend();
     renderSequenceSoon();
     renderComposition();
     rebuildOverlays(false);
     renderComparePanels();
+    /* A measurement row says when what it measures is not drawn (04). */
+    markUndrawnMeasurements();
     viewer.render();
     if (!root.querySelector('[data-gpv-panel="confidence"]').hidden) renderConfidence();
     updateStatus();
@@ -384,7 +395,7 @@
       visible.type = 'checkbox';
       visible.checked = entry.visible;
       visible.setAttribute('aria-label', 'Show ' + entry.name);
-      visible.addEventListener('change', () => { entry.visible = visible.checked; applyStyle(); renderAlignmentResults(); });
+      visible.addEventListener('change', () => { entry.visible = visible.checked; applyStyle(); renderAlignmentResults(); renderEmphasiseButtons(); });
       visibleLabel.append(visible);
 
       const copy = document.createElement('span');
@@ -442,16 +453,21 @@
       const fade = document.createElement('input');
       fade.className = 'form-check-input'; fade.type = 'checkbox'; fade.checked = Boolean(entry.faded);
       fade.setAttribute('aria-label', 'Fade ' + entry.name);
-      fade.addEventListener('change', () => { remember('model fade'); entry.faded = fade.checked; applyStyle(); renderSequenceSoon(); });
+      fade.addEventListener('change', () => { remember('model fade'); entry.faded = fade.checked; applyStyle(); renderSequenceSoon(); updateStatus(displayName(entry) + (fade.checked ? ' is drawn faded, as context' : ' is drawn solid again')); });
       fadeLabel.append(fade);
 
       const focus = document.createElement('button');
       focus.className = 'btn btn-ghost'; focus.type = 'button'; focus.textContent = 'Emphasise';
       focus.title = 'Draw this model solid and fade every other shown model';
       focus.setAttribute('aria-label', 'Emphasise ' + entry.name); focus.dataset.control = 'emphasise';
+      /* Emphasis fades the other shown models; with one shown there is none to fade, and the press used
+         to say it had faded them and take an undo step that changed nothing. */
+      const shownCount = structures.filter(item => item.visible).length;
+      if (shownCount < 2 || !entry.visible) { focus.disabled = true; focus.title = shownCount < 2 ? 'Needs two shown models' : 'Show this model to emphasise it'; }
       focus.addEventListener('click', () => {
-        remember('emphasis');
         const shown = structures.filter(item => item.visible && item.model);
+        if (shown.length < 2 || !shown.includes(entry)) { updateStatus(shown.length < 2 ? 'Only one model is shown — nothing to fade · Emphasise needs two shown models' : 'Show ' + displayName(entry) + ' first to emphasise it'); return; }
+        remember('emphasis');
         const alone = entry.faded === false && shown.every(item => item === entry || item.faded);
         shown.forEach(item => { item.faded = alone ? false : item !== entry; });
         renderList(); applyStyle(); renderSequenceSoon();
@@ -478,6 +494,8 @@
      on. Otherwise Add or update would label a "Missing model", and the card would follow a residue
      that is no longer drawn. */
   function removeModelEntry(entry) {
+    const hadAlignment = alignmentResults.length > 0;
+    const wasReference = hadAlignment && Number(root.querySelector('#gpv-reference').value) === entry.id;
     dismissCanvasText();
     if (selectedResidue && selectedResidue.entryId === entry.id) clearSelectedResidue(false);
     if (entry.model) viewer.removeModel(entry.model);
@@ -514,8 +532,18 @@
     renderList();
     applyStyle();
     const primary = root.querySelector('#gpv-side-by-side').checked ? activeEntry() : null;
-    announce('Removed ' + displayName(entry) + (panelsClosed.length ? ' · its panel' + (panelsClosed.length === 1 ? '' : 's') + ' closed' : '') + (wasPrimary && primary ? ' · the primary panel now shows ' + displayName(primary) : ''));
+    /* The alignment was made with this model: its table, deviations and agreement go with it, and the
+       status says so — the colours that relied on them turn grey with nothing else to explain why. The
+       other models stay where the superposition put them, which Restore coordinates puts back. */
+    const aligned = !hadAlignment ? '' : wasReference
+      ? ' · it was the alignment reference — alignment cleared' + (structures.some(item => item.superposed) ? '; Restore coordinates puts the others back' : '')
+      : ' · alignment cleared — Align visible again to compare the others';
+    announce('Removed ' + displayName(entry) + (panelsClosed.length ? ' · its panel' + (panelsClosed.length === 1 ? '' : 's') + ' closed' : '') + (wasPrimary && primary ? ' · the primary panel now shows ' + displayName(primary) : '') + aligned);
   }
+
+  /* The model colours: the eight of the palette, then four more as distinct from them and from each
+     other, so a ninth model is not drawn in the first one's violet. Past twelve they repeat (USAGE). */
+  const modelPalette = [...palette, '#0f766e', '#92400e', '#4338ca', '#65a30d'];
 
   function addStructure(name, text, format, sourcePath = name, collection = 'Individual files', lazy = false) {
     const entry = {
@@ -525,7 +553,7 @@
       collection,
       model: null,
       visible: true,
-      color: palette[structures.length % palette.length],
+      color: modelPalette[structures.length % modelPalette.length],
       text,
       format,
       sourcePath,
@@ -585,7 +613,15 @@
        choice, where the status used to say "Showing" a model no panel showed. The View mode is not
        the multi-view's, so it is left alone. */
     const comparing = root.querySelector('#gpv-side-by-side').checked;
-    if (comparing) root.querySelector('#gpv-left-model').value = String(entry.id);
+    /* In the multi-view a model already in another panel swaps places with the primary one, rather than
+       showing twice while the model it replaced is in no panel. */
+    let swapped = null;
+    if (comparing) {
+      const previous = Number(root.querySelector('#gpv-left-model').value);
+      const panel = comparePanels.find(item => item.entryId === entry.id);
+      if (panel && previous && previous !== entry.id && entryById(previous)) { panel.entryId = previous; swapped = { panel: comparePanels.indexOf(panel) + 2, entry: entryById(previous) }; renderPanelControls(); }
+      root.querySelector('#gpv-left-model').value = String(entry.id);
+    }
     const mode = root.querySelector('#gpv-view-mode');
     const leftOverlay = !keepMode && !comparing && mode.value !== 'single';
     if (leftOverlay) { mode.value = 'single'; savePreferences(); }
@@ -596,7 +632,18 @@
     if (activeRow) activeRow.textContent = average === null ? 'pLDDT —' : average.toFixed(1);
     if (fit && entry.model) { viewer.zoomTo({ model: entry.model.getID() }); viewer.render(); }
     if (comparing) syncViewsFrom(viewer);
-    updateStatus('Showing ' + displayName(entry) + (comparing ? ' in the primary panel' : leftOverlay ? ' · one model at a time (View mode)' : ''));
+    updateStatus('Showing ' + displayName(entry) + (comparing ? ' in the primary panel' + (swapped ? ' · ' + displayName(swapped.entry) + ' moved to panel ' + swapped.panel : '') : leftOverlay ? ' · one model at a time (View mode)' : ''));
+  }
+
+  /* The rows' Emphasise follows the shown models without rebuilding the list. */
+  function renderEmphasiseButtons() {
+    const shownCount = structures.filter(item => item.visible).length;
+    root.querySelectorAll('#gpv-list [data-entry-id]').forEach(row => {
+      const button = row.querySelector('[data-control="emphasise"]'); const entry = entryById(Number(row.dataset.entryId));
+      if (!button || !entry) return;
+      button.disabled = shownCount < 2 || !entry.visible;
+      button.title = shownCount < 2 ? 'Needs two shown models' : !entry.visible ? 'Show this model to emphasise it' : 'Draw this model solid and fade every other shown model';
+    });
   }
 
   function selectRelative(delta, fit = true) {
@@ -765,10 +812,10 @@
          stays on the button and Enter can be pressed again. */
       const nudge = document.createElement('span'); nudge.className = 'gpv-nudge';
       nudge.setAttribute('role', 'group'); nudge.setAttribute('aria-label', 'Move the label');
-      [['←', 'Move label left', -12, 0], ['→', 'Move label right', 12, 0], ['↑', 'Move label up', 0, -12], ['↓', 'Move label down', 0, 12]].forEach(([glyph, title, dx, dy]) => {
+      [['←', 'Move label left', -12, 0, 'left'], ['→', 'Move label right', 12, 0, 'right'], ['↑', 'Move label up', 0, -12, 'up'], ['↓', 'Move label down', 0, 12, 'down']].forEach(([glyph, title, dx, dy, direction]) => {
         const button = document.createElement('button'); button.className = 'btn btn-ghost'; button.type = 'button'; button.textContent = glyph;
         button.setAttribute('aria-label', title); button.title = title;
-        button.addEventListener('click', () => { remember('label nudge'); nudgeCanvasText({ kind: 'label', record: label }, dx, dy); reset.disabled = false; rebuildOverlays(); });
+        button.addEventListener('click', () => { remember('label nudge'); nudgeCanvasText({ kind: 'label', record: label }, dx, dy); reset.disabled = false; rebuildOverlays(); updateStatus('Label moved ' + direction + ' · Reset puts it back'); });
         nudge.append(button);
       });
       const select = document.createElement('button'); select.className = 'btn btn-ghost'; select.type = 'button'; select.textContent = 'Select';
@@ -869,6 +916,30 @@
     return [...residues];
   }
 
+  /* A selection record names its residues by number, as it always has; one that takes in a residue
+     with an insertion code also carries `icodes`, a list as long as `residues` ('' for none), so 57,
+     57A and 57B stay three residues. Records without codes keep their old shape. */
+  function selectionResidues(items) {
+    const residues = items.map(item => item.resi);
+    const icodes = items.map(item => insertionCodeOf(item));
+    return icodes.some(Boolean) ? { residues, icodes } : { residues };
+  }
+
+  function selectionResidueKeys(record) {
+    return record.residues.map((resi, index) => resi + (Array.isArray(record.icodes) && record.icodes[index] ? record.icodes[index] : ''));
+  }
+
+  /* The atoms a record takes in, as a 3Dmol selection: by number, and by insertion code when it has them. */
+  function selectionSpec(record) {
+    const selection = { resi: record.residues };
+    if (record.chain) selection.chain = record.chain;
+    if (Array.isArray(record.icodes)) {
+      const keys = new Set(selectionResidueKeys(record));
+      selection.predicate = atom => keys.has(residueNumber(atom));
+    }
+    return selection;
+  }
+
   function applySelections(shown = new Set(displayedEntries())) {
     const byId = entriesById();
     selectionRecords.forEach(record => {
@@ -876,8 +947,7 @@
       /* A record can outlive its model: the entry may have been released to save
          memory, or its coordinates may have failed to parse. */
       if (!entry || !entry.model || !shown.has(entry)) return;
-      const selection = { resi: record.residues };
-      if (record.chain) selection.chain = record.chain;
+      const selection = selectionSpec(record);
       if (record.action === 'hide') entry.model.setStyle(selection, {});
       else if (typeof entry.model.addStyle === 'function') entry.model.addStyle(selection, { stick: { color: record.color, radius: 0.25 }, sphere: { color: record.color, scale: 0.3 } });
     });
@@ -895,7 +965,7 @@
       name.className = 'gpv-entry-name';
       /* compactRange (28-figure-legend.js) folds a long selection into runs — "10–20" instead of
          "10, 11, 12, 13 … 20" — the same way the figure legend and domain ranges already read. */
-      name.textContent = displayName(entry) + ' · ' + (record.chain ? 'chain ' + record.chain : 'all chains') + ' · ' + compactRange(record.residues) + ' · ' + record.action;
+      name.textContent = displayName(entry) + ' · ' + (record.chain ? 'chain ' + record.chain : 'all chains') + ' · ' + (Array.isArray(record.icodes) ? clipText(selectionResidueKeys(record).join(', '), 60) : compactRange(record.residues)) + ' · ' + record.action;
       const remove = document.createElement('button');
       remove.className = 'btn btn-ghost'; remove.type = 'button'; remove.textContent = 'Remove';
       remove.setAttribute('aria-label', 'Remove the selection ' + name.textContent);

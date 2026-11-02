@@ -134,13 +134,16 @@
       cells.forEach((value, index) => { const cell = document.createElement(index === 0 ? 'th' : 'td'); cell.textContent = value; if (index > 0) cell.className = 'text-end'; tr.append(cell); });
       const action = document.createElement('td');
       const highlight = document.createElement('button'); highlight.className = 'btn btn-ghost'; highlight.type = 'button'; highlight.textContent = 'Highlight';
+      highlight.title = 'Highlight this interface’s residues in the Annotate tab’s Highlight colour';
       highlight.addEventListener('click', () => highlightInterface(row));
       action.append(highlight); tr.append(action); body.append(tr);
     });
   }
 
   function highlightInterface(row) {
-    const entryId = interfaceResults.entryId; const color = root.querySelector('#gpv-interface-color').value;
+    /* One highlight colour for the whole viewer: Annotate's, as the contact map, the card, Near and
+       Ligand sites use. Interfaces had a colour well of its own until 2.52.0. */
+    const entryId = interfaceResults.entryId; const color = root.querySelector('#gpv-selection-color').value;
     const entry = entryById(entryId); if (!entry) return;
     remember('interface highlight');
     [[row.chains[0], row.residuesA], [row.chains[1], row.residuesB]].forEach(([chain, residues]) => {

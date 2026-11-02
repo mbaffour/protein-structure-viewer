@@ -37,6 +37,9 @@
     handleAtomClick(entry, atom);
     const selection = { model: entry.model.getID(), resi };
     if (atom.chain) selection.chain = atom.chain;
+    /* Frame the residue itself: 57A, not 57, 57A and 57B together. */
+    const code = insertionCodeOf(atom);
+    selection.predicate = item => insertionCodeOf(item) === code;
     viewer.zoomTo(selection); viewer.render(); syncViewsFrom(viewer);
     sequenceHover = { entryId: entry.id, chain: atom.chain || '', resi, icode: insertionCodeOf(atom) }; renderSequenceSoon();
     if (!measuring) updateStatus(residueText(entry, atom));

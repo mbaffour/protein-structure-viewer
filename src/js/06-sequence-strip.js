@@ -77,7 +77,7 @@
     const labelled = new Set(labelRecords.filter(label => label.entryId === entry.id && (label.chain || '') === row.chain).map(label => label.resi + '|' + insertionCodeOf(label)));
     const highlighted = new Map();
     selectionRecords.filter(record => record.entryId === entry.id && record.action === 'highlight' && (!record.chain || record.chain === row.chain))
-      .forEach(record => record.residues.forEach(resi => highlighted.set(resi, record.color)));
+      .forEach(record => (Array.isArray(record.icodes) ? selectionResidueKeys(record) : record.residues.map(resi => 'any|' + resi)).forEach(key => highlighted.set(key, record.color)));
     const threshold = entry.scores.length ? hideBelow() : 0;
     const chainHidden = (entry.hiddenChains || []).includes(row.chain);
     row.residues.forEach((atom, index) => {
@@ -86,7 +86,8 @@
       context.globalAlpha = chainHidden || (threshold && Number(atom.b) < threshold) ? 0.22 : 1;
       context.fillRect(x, 4, Math.max(0.5, cell - gap), 12);
       context.globalAlpha = 1;
-      const mark = highlighted.get(atom.resi);
+      /* A record with insertion codes marks exactly its residues; one without, every residue of the number, as the view draws it. */
+      const mark = highlighted.get(residueNumber(atom)) || highlighted.get('any|' + atom.resi);
       if (mark) { context.fillStyle = mark; context.fillRect(x, 18, Math.max(0.5, cell - gap), 3); }
       if (cell >= 9) {
         const fill = sequenceColor(entry, atom);
@@ -225,7 +226,11 @@
     const chainNote = planned.length > shown.length ? ' · first ' + shown.length + ' of ' + planned.length + ' rows' : '';
     const cut = hideBelow();
     const cutNote = cut && entries.some(entry => entry.scores.length) ? ' · pLDDT below ' + cut + ' hidden' : '';
-    root.querySelector('#gpv-sequence-title').textContent = (multi ? entries.length + ' models' : displayName(entries[0])) + ' · ' + total + ' residues' + colourNote + cutNote + chainNote;
+    /* The strip draws the first eight shown models; the title says so when more are shown, rather than
+       reading "8 models" beside "10 displayed". */
+    const shownModels = multi ? displayedEntries().filter(entry => entry.model).length : 1;
+    const modelsNote = shownModels > entries.length ? 'first ' + entries.length + ' of ' + shownModels + ' models' : entries.length + ' models';
+    root.querySelector('#gpv-sequence-title').textContent = (multi ? modelsNote : displayName(entries[0])) + ' · ' + total + ' residues' + colourNote + cutNote + chainNote;
     const key = shown.map(item => item.entry.id + ':' + item.row.chain + ((item.entry.hiddenChains || []).includes(item.row.chain) ? '!' : '') + ((item.entry.fadedChains || []).includes(item.row.chain) ? '~' : '')).join(',');
     rows.classList.toggle('is-multi', multi);
     if (rows.dataset.key !== key) {

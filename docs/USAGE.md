@@ -60,7 +60,13 @@ the upload card. Several archives can be dropped together.
 
 AlphaFold DB entries are resolved through the EBI API rather than by guessing a file name, so the
 current model version is always used, and the entry's predicted-aligned-error file is pulled in with
-the coordinates when it is available.
+the coordinates when it is available. A fetched model joins the view as an opened file does: it becomes
+the current model (in the synchronized multi-view, the primary panel's, and the status says so) and
+cancels an armed *Measure to…*. When the request cannot reach the server at all — offline, or blocked
+— the status says *Could not reach the PDB (1ubq) — check the network and the id* (or *AlphaFold DB*);
+an entry the server does not have says so in its own words. A file opened or fetched while a figure is
+rendering waits for the figure to finish (*Export in progress — 1brs.cif will load when it finishes*),
+so the image and its legend show the same models.
 
 **Confidence and ranking metadata.** Drop these alongside (or inside) your models and they attach
 automatically by file-name matching:
@@ -148,6 +154,8 @@ panel of the same model that line up exactly.
   models are hidden* with a **Show all** button.
 - Each row has its own visibility switch, mean pLDDT readout, colour picker, and remove button.
   Changing a row's colour switches the colour scheme to *Per structure* so the change is visible.
+  Models take twelve distinct colours in the order they are opened; past twelve the colours repeat
+  (the *Model* key on the view names every shown model).
   **Remove** takes the model's labels, selections, measurements and annotations with it, closes the
   residue card and clears the selected residue if they were on that model, drops the alignment and
   comparison it was part of, closes any comparison panel showing it, and says *Removed …* (`· its panel
@@ -278,8 +286,9 @@ Notes on the colour schemes:
 - **Transparent** background is the right choice for figures that will be composited; PNG export
   preserves the alpha channel.
 
-Appearance choices, export settings, and animation speeds are remembered in the browser between
-sessions.
+Appearance choices — style, colour scheme, projection, outline, label style, background, hetero
+groups, depth cueing, surface, the Okabe–Ito palette and *Low confidence* — export settings (the
+legend on exports included), and animation speeds are remembered in the browser between sessions.
 
 ## Annotate tab
 
@@ -307,7 +316,8 @@ index of your annotations. In **overlay** mode the strip shows one row per displ
 active model first, so the pLDDT of competing predictions lines up residue by residue; one-at-a-time
 and side-by-side views show the active model alone. Hovering the PAE heatmap in the Confidence tab
 marks both residues of the pair on the strip in magenta. *Hide sequence* collapses it; the choice is
-remembered. Very large sets show the first twenty-four rows.
+remembered. Very large sets show the first twenty-four rows, and the strip draws at most eight models
+at once: with more shown its title says so (*first 8 of 10 models*).
 
 **Sequence letters.** Open *Sequence letters* under the strip to read each chain's one-letter
 sequence, fifty residues a line in blocks of ten with the first residue number of each line in the
@@ -347,7 +357,8 @@ residues with any heavy atom within its *Within (Å)* cutoff, 4.5 Å unless you 
 and **Highlight nearby residues** always agree; changing the cutoff recounts an open card and its
 contacts list. The cutoff runs from 2 to 12 Å: a value outside that is set to the nearest end, in the
 field as well as in the count. Nothing on the card is saved. The card never runs past the bottom of the view: when it
-is taller than the view (a phone, five or six panels), it scrolls. It closes when its residue is no
+is taller than the view (a phone, five or six panels), it scrolls; at a desktop size the contacts list
+is kept short enough that the card's buttons stay in view. It closes when its residue is no
 longer drawn — its model or chain hidden, or cut by *Low confidence*.
 
 **The residue marker.** While a residue is selected and its model is shown, a small marker on the
@@ -377,7 +388,11 @@ to… cancelled*, and the crosshair goes.
 **Distances from this residue.** The card's **Distances CSV** button downloads the residue against
 every other residue of its model — `chain, resi, resn, ca_distance, min_heavy_distance`, the Cα–Cα
 distance and the closest approach of any two heavy atoms, both in Å — nearest first, and the status
-names the nearest residue. The residue itself is left out, so the first row is its nearest neighbour.
+names the nearest residue. A residue with an insertion code is written with it in `resi` (`57A`), so
+the columns stay the same; 57, 57A and 57B are three rows, and the card at 57A measures from 57A. For
+nucleotides `ca_distance` is the distance between their P atoms, and the status and the contacts list
+say *P–P* rather than *Cα*; an ion or a ligand atom is named by its own atom name (a calcium ion is
+`CA`, never *Cα*). The residue itself is left out, so the first row is its nearest neighbour.
 For a whole map of distances, see *Contact and distance map* in the Compare tab.
 
 **Contacts.** The neighbour count on the card (`6 residues within 4.5 Å` — a link) or the card's
@@ -386,7 +401,7 @@ tool counts — any heavy atom within the *Within (Å)* cutoff of any heavy atom
 and hetero groups never listed, so the list, the count and **Highlight nearby residues** always agree —
 nearest first by closest heavy-atom distance, with the two atoms (this residue's first) and the
 Cα–Cα distance: `ARG59 · B   2.87 Å  NH1–OD1   Cα 9.42 Å`. Every row names its chain, the residue's own
-included. About nine rows show, then the list scrolls. Hover a row (or Tab to it) and a temporary
+included. The first few rows show (about four on a desktop), then the list scrolls. Hover a row (or Tab to it) and a temporary
 label names that residue on the view — never a record, never exported. Click a row to measure it as an
 ordinary measurement (the list stays open); **Measure all** measures every row in one undo step,
 leaving out a contact already measured between the same two atoms (`10 measurements … · 10 new · 1
@@ -497,12 +512,20 @@ can be chosen again (for this session; a scene saves the atoms it is on). **Remo
 deletes it. Drag the text to move it (a thin leader line in the measurement's colour leads back to the
 line once it has moved), or click **Select** in its row and use the arrow keys — 8 px a press, 1 px with
 <kbd>Shift</kbd> — and <kbd>Delete</kbd> to remove it; <kbd>Esc</kbd> lets go. Every change is one undo
-step.
+step. From the keyboard the editor opens with the row's **Edit**, or with <kbd>Enter</kbd> once **Select**
+has made the measurement active; <kbd>Tab</kbd> walks its controls and <kbd>Esc</kbd> closes it, as for
+a label.
 
 Each measurement has a row in *Measurements*: its text field, the atoms and value it joins, a colour
 and its **Default**,
 **Dashed**, **Show value**, **Show** (centres the view on it without changing the zoom), **Reset** (puts
-the text back where it started), **Remove**, and the arrow buttons and **Select** a label row has.
+the text back where it started), **Remove**, the arrow buttons and **Select** a label row has, and
+**Edit**, which opens the editor. Each control is read out with the measurement it belongs to.
+<kbd>Enter</kbd> in the text field keeps the text and moves the focus to the row's **Show**, so
+<kbd>Ctrl</kbd>/<kbd>⌘</kbd>+<kbd>Z</kbd> undoes it straight away. A measurement whose model is hidden
+(One at a time shows one model), or one between two models that sit in different panels of the
+multi-view, is not drawn: its row says *not drawn* and why, and **Show**, the arrows and **Edit** say so
+instead of moving anything.
 Hovering a row draws that measurement's line thicker on the view (never in an export).
 **Copy measurements** copies every measurement as tab-separated text, and **Download measurements CSV**
 writes the same table — `type`, then `model`, `chain`, `resi`, `resn` and `atom` for each of three points
@@ -656,7 +679,8 @@ ipTM are what speak to domain and chain placement.
 interfaces**. For every pair of chains in contact the table lists heavy-atom contacts, residue pairs,
 interface residues on each chain, and buried surface area — the solvent-accessible area each chain
 loses on forming the pair, by Shrake–Rupley with a 1.4 Å probe and 92 points per atom. **Highlight**
-adds the interface residues of a pair as a coloured selection you can manage in the Annotate tab;
+adds the interface residues of a pair as a selection in Annotate's *Highlight colour* — the one colour
+every highlight in the viewer uses — which you can manage in the Annotate tab;
 **Download interface CSV** exports the table with the residue lists. This is geometry of the model as
 loaded — it says how the prediction is packed, not whether the interaction exists — so read it next
 to the chain-pair ipTM and PAE above it.
@@ -790,7 +814,8 @@ current matrix used.
 **Emphasising one model.** An overlay of several models drawn identically is a tangle. Each row of the
 Models list carries a fade switch, and **Emphasise** fades every other shown model in one press: the
 emphasised model keeps its colour and full ribbon while the others are mixed towards the paper and
-drawn thin, so the figure reads as one subject against context. Pressing **Emphasise** again on a
+drawn thin, so the figure reads as one subject against context. It needs two shown models (with one
+there is nothing to fade, and the button says *Needs two shown models*). Pressing **Emphasise** again on a
 model that is already the only solid one puts them all back. Fading is per model and independent of
 the per-chain fading in the composition table, it dims the sequence strip as well, and it is carried
 by scenes, session files, share links and the shared report.
