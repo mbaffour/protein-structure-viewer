@@ -2916,6 +2916,383 @@ await step('on α-chymotrypsin (5CHA), His57 of chain B lists Ser195 · C at NE2
     await tab(startTab);
   }
 });
+/* ---- Measurements you can read, edit, place and export (2.52.0) ----
+   A measurement's text is canvas text like a label's: a click on it opens the editor (words before
+   the value, Name the atoms, Show value, colour, Dashed, Cα or closest atoms, Remove), a drag or the
+   arrow keys move it, and its row in the Annotate list carries the same controls. Every step makes
+   its measurement from the card's contacts list, so the label sits between two residues it can be
+   found at, and takes back what it made: records, undo steps, the editor, the active text. Still in
+   the turned view. */
+/* Where a measurement's label is on screen (viewport pixels), and what the hit test finds there. */
+const measurementLabelScreen = async id => {
+  await page.locator('#gpv-stage').scrollIntoViewIfNeeded(); await page.waitForTimeout(100);
+  return page.evaluate(id => {
+    const d = window.__viewerDebug; const record = d.measurementRecords().find(item => item.id === id);
+    if (!record) return null;
+    const anchor = d.measurementAnchor(null, record); if (!anchor) return null;
+    const o = record.offset || { x: 0, y: 0, z: 0 };
+    const s = d.viewer.modelToScreen({ x: anchor.x + (o.x || 0), y: anchor.y + (o.y || 0), z: anchor.z + (o.z || 0) });
+    if (!s || !Number.isFinite(s.x) || !Number.isFinite(s.y)) return null;
+    const hit = d.labelHitAt(s.x, s.y);
+    return { x: s.x - scrollX, y: s.y - scrollY, hit: hit ? { kind: hit.kind, id: hit.record.id || null } : null };
+  }, id);
+};
+const measurementById = id => page.evaluate(id => { const record = window.__viewerDebug.measurementRecords().find(item => item.id === id); return record ? JSON.parse(JSON.stringify(record)) : null; }, id);
+const measurementRow = async id => page.locator('#gpv-measurement-list .gpv-entry').nth(await page.evaluate(id => window.__viewerDebug.measurementRecords().findIndex(item => item.id === id), id));
+const valueOf = text => Number((String(text).match(/· ([\d.]+) Å$/) || [])[1]);
+/* A Cα–Cα measurement from a residue on screen to its nearest contact, made by a click on the
+   card's first contacts row, with the card closed again and the label findable on screen. */
+const measureNearestContact = async (avoid = []) => {
+  await clearSelection(); await setMeasureChoice('ca');
+  const target = await canvasResidue(avoid);
+  if (!target) throw new Error('no residue on screen to tap');
+  await openCardAt(target);
+  await page.click('#gpv-label-editor-contacts'); await page.waitForTimeout(250);
+  const rows = await contactRowsNow();
+  if (!rows.length) throw new Error(target.text + ' has no contacts to measure to');
+  await page.locator('#gpv-residue-contacts-rows .gpv-residue-contact').first().click(); await page.waitForTimeout(300);
+  await clearSelection();
+  const records = await measuresNow();
+  const record = records[records.length - 1];
+  const spot = await measurementLabelScreen(record.id);
+  if (!spot || !spot.hit || spot.hit.kind !== 'measurement' || spot.hit.id !== record.id) throw new Error('the measurement\'s label is not found on screen: ' + JSON.stringify(spot));
+  return { target, row: rows[0], record, spot };
+};
+const openMeasurementEditor = async id => {
+  const spot = await measurementLabelScreen(id);
+  if (!spot) throw new Error('the measurement has no label on screen');
+  await tap(spot.x, spot.y); await page.waitForTimeout(350);
+  const editor = await page.evaluate(() => window.__viewerDebug.labelEditor());
+  if (!(await editorShown()) || !editor || editor.kind !== 'measurement' || editor.id !== id) throw new Error('a click on the measurement\'s label opened ' + JSON.stringify(editor));
+};
+const editorHead = async () => ((await page.locator('#gpv-label-editor .gpv-label-editor-residue').textContent()) || '').trim();
+await step('a measurement\'s label opens its editor on the canvas; Name the atoms, Enter, and the label and the list read the text before the value', async () => {
+  const startCount = (await measuresNow()).length;
+  try {
+    const { record } = await measureNearestContact();
+    const steps = await rememberedSteps();
+    await openMeasurementEditor(record.id);
+    const head = await editorHead();
+    const listed = await newestMeasurementText();
+    const value = valueOf(listed);
+    if (!head.startsWith('Distance · ') || valueOf(head) !== value || !Number.isFinite(value)) throw new Error('the editor\'s head line reads "' + head + '", the row "' + listed + '"');
+    if (!(await page.locator('#gpv-measure-editor').isVisible())) throw new Error('the measurement controls are not shown');
+    if (!(await page.locator('#gpv-label-editor-remove').isVisible())) throw new Error('Remove is not offered for a measurement');
+    if (await page.locator('#gpv-label-editor-measure').isVisible()) throw new Error('a measurement\'s editor offers Measure to…');
+    if ((await page.inputValue('#gpv-label-editor-text')) !== '') throw new Error('the text field starts with "' + (await page.inputValue('#gpv-label-editor-text')) + '"');
+    await page.click('#gpv-measure-editor-atoms'); await page.waitForTimeout(150);
+    const atoms = await page.evaluate(id => window.__viewerDebug.measurementAtomsText(window.__viewerDebug.measurementRecords().find(item => item.id === id)), record.id);
+    if ((await page.inputValue('#gpv-label-editor-text')) !== atoms) throw new Error('Name the atoms put "' + (await page.inputValue('#gpv-label-editor-text')) + '", not "' + atoms + '"');
+    if ((await measurementById(record.id)).text) throw new Error('Name the atoms committed the text before Enter');
+    await page.focus('#gpv-label-editor-text'); await page.keyboard.press('Enter'); await page.waitForTimeout(300);
+    if (await editorShown()) throw new Error('Enter left the editor open');
+    const after = await measurementById(record.id);
+    if (after.text !== atoms) throw new Error('the record\'s text is "' + after.text + '", not "' + atoms + '"');
+    const row = await measurementRow(record.id);
+    if ((await row.locator('.gpv-edit-copy input').inputValue()) !== atoms) throw new Error('the row\'s text field reads "' + (await row.locator('.gpv-edit-copy input').inputValue()) + '"');
+    const drawn = await page.evaluate(id => window.__viewerDebug.measurementLabelText(window.__viewerDebug.measurementRecords().find(item => item.id === id)), record.id);
+    if (drawn !== atoms + ' · ' + listed.split(' · ').pop()) throw new Error('the label reads "' + drawn + '"');
+    if ((await rememberedSteps()) - steps !== 1) throw new Error('the text took ' + ((await rememberedSteps()) - steps) + ' undo steps, not 1');
+    const active = await activeTextNow();
+    if (!active || active.kind !== 'measurement' || active.id !== record.id) throw new Error('the measurement is not the active text after Enter: ' + JSON.stringify(active));
+    await letGo();
+    await undoOnce();
+    if ((await measurementById(record.id)).text) throw new Error('undo did not take the text away');
+    console.log('       "' + drawn + '"');
+  } finally { await letGo(); await trimMeasurements(startCount); await clearSelection(); }
+});
+await step('dragging a measurement\'s label stores an offset, Reset clears it, and the arrow keys nudge the active measurement', async () => {
+  const startCount = (await measuresNow()).length;
+  try {
+    const { record } = await measureNearestContact();
+    const steps = await rememberedSteps();
+    const view = await page.evaluate(() => window.__viewerDebug.viewer.getView());
+    const spot = await measurementLabelScreen(record.id);
+    await page.mouse.move(spot.x, spot.y); await page.mouse.down();
+    await page.mouse.move(spot.x + 60, spot.y - 40, { steps: 10 }); await page.mouse.up(); await page.waitForTimeout(350);
+    const dragged = await measurementById(record.id);
+    if (!dragged.offset || Math.hypot(dragged.offset.x, dragged.offset.y, dragged.offset.z) < 0.5) throw new Error('the drag left the offset ' + JSON.stringify(dragged.offset));
+    const moved = await measurementLabelScreen(record.id);
+    if (Math.abs(moved.x - spot.x - 60) > 14 || Math.abs(moved.y - spot.y + 40) > 14) throw new Error('the label moved ' + (moved.x - spot.x).toFixed(0) + ', ' + (moved.y - spot.y).toFixed(0) + ' px for a drag of 60, -40');
+    if ((await page.evaluate(() => window.__viewerDebug.viewer.getView())).some((value, index) => Math.abs(value - view[index]) > 1e-6)) throw new Error('the camera moved during the drag');
+    if (await editorShown()) throw new Error('a drag opened the editor');
+    const row = await measurementRow(record.id);
+    if (await row.locator('button:has-text("Reset")').isDisabled()) throw new Error('Reset stayed disabled after the drag');
+    await row.locator('button:has-text("Select")').click(); await page.waitForTimeout(200);
+    const active = await activeTextNow();
+    if (!active || active.kind !== 'measurement' || active.id !== record.id) throw new Error('Select made ' + JSON.stringify(active) + ' active');
+    await focusStage(); await page.keyboard.press('ArrowRight'); await page.waitForTimeout(250);
+    const nudged = await measurementById(record.id);
+    if (JSON.stringify(nudged.offset) === JSON.stringify(dragged.offset)) throw new Error('ArrowRight did not move the active measurement');
+    const shifted = await measurementLabelScreen(record.id);
+    if (Math.abs(shifted.x - moved.x - 8) > 3 || Math.abs(shifted.y - moved.y) > 3) throw new Error('ArrowRight moved the label ' + (shifted.x - moved.x).toFixed(1) + ', ' + (shifted.y - moved.y).toFixed(1) + ' px, not 8, 0');
+    await letGo();
+    await (await measurementRow(record.id)).locator('button:has-text("Reset")').click(); await page.waitForTimeout(250);
+    if ((await measurementById(record.id)).offset) throw new Error('Reset left an offset');
+    if (!(await (await measurementRow(record.id)).locator('button:has-text("Reset")').isDisabled())) throw new Error('Reset is still enabled with the text in place');
+    if ((await rememberedSteps()) - steps !== 3) throw new Error('drag, arrow and Reset took ' + ((await rememberedSteps()) - steps) + ' undo steps, not 3');
+    await undoOnce();
+    const back = await measurementById(record.id);
+    if (JSON.stringify(back.offset) !== JSON.stringify(nudged.offset)) throw new Error('undoing Reset put back ' + JSON.stringify(back.offset));
+    console.log('       dragged ' + (moved.x - spot.x).toFixed(0) + ', ' + (moved.y - spot.y).toFixed(0) + ' px · arrow 8 px · reset · three undo steps');
+  } finally { await letGo(); await trimMeasurements(startCount); await clearSelection(); }
+});
+await step('colour, Dashed and Show value from the row and the editor reach the record and one undo step each', async () => {
+  const startCount = (await measuresNow()).length;
+  const setColour = (selector, value) => page.evaluate(([selector, value]) => {
+    const input = typeof selector === 'string' ? document.querySelector(selector) : null;
+    input.value = value; input.dispatchEvent(new Event('input', { bubbles: true })); input.dispatchEvent(new Event('change', { bubbles: true }));
+  }, [selector, value]);
+  try {
+    const { record } = await measureNearestContact();
+    const index = (await measuresNow()).findIndex(item => item.id === record.id);
+    const rowSelector = '#gpv-measurement-list .gpv-entry:nth-child(' + (index + 1) + ')';
+    const one = async (what, action, check) => {
+      const before = await rememberedSteps();
+      await action(); await page.waitForTimeout(200);
+      const now = await measurementById(record.id);
+      const problem = check(now);
+      if (problem) throw new Error(what + ': ' + problem);
+      if ((await rememberedSteps()) - before !== 1) throw new Error(what + ' took ' + ((await rememberedSteps()) - before) + ' undo steps, not 1');
+    };
+    /* The row. */
+    await page.hover(rowSelector); await page.waitForTimeout(150);
+    if ((await page.evaluate(() => window.__viewerDebug.measurementHover())) !== record.id) throw new Error('hovering the row does not mark the measurement');
+    await one('the row\'s colour', () => setColour(rowSelector + ' input[type="color"]', '#00aa55'), now => (now.color === '#00aa55' ? null : 'colour ' + now.color));
+    await one('the row\'s Dashed', () => page.locator(rowSelector + ' label:has-text("Dashed") input').uncheck(), now => (now.dashed === false ? null : 'dashed ' + now.dashed));
+    await one('the row\'s text', async () => { await page.fill(rowSelector + ' .gpv-edit-copy input', 'H-bond'); await page.press(rowSelector + ' .gpv-edit-copy input', 'Enter'); }, now => (now.text === 'H-bond' ? null : 'text ' + now.text));
+    await one('the row\'s Show value', () => page.locator(rowSelector + ' label:has-text("Show value") input').uncheck(), now => (now.showValue === false ? null : 'showValue ' + now.showValue));
+    const plain = await page.evaluate(id => window.__viewerDebug.measurementLabelText(window.__viewerDebug.measurementRecords().find(item => item.id === id)), record.id);
+    if (plain !== 'H-bond') throw new Error('with Show value off the label reads "' + plain + '"');
+    await page.mouse.move(5, 5); await page.waitForTimeout(150);
+    if ((await page.evaluate(() => window.__viewerDebug.measurementHover())) !== null) throw new Error('leaving the row left the measurement marked');
+    /* The editor shows what the row set, and changes it back. */
+    await openMeasurementEditor(record.id);
+    const shown = await page.evaluate(() => ({ colour: document.querySelector('#gpv-measure-editor-color').value, dashed: document.querySelector('#gpv-measure-editor-dashed').checked, value: document.querySelector('#gpv-measure-editor-value').checked, text: document.querySelector('#gpv-label-editor-text').value }));
+    if (shown.colour !== '#00aa55' || shown.dashed || shown.value || shown.text !== 'H-bond') throw new Error('the editor opened on ' + JSON.stringify(shown));
+    await one('the editor\'s colour', () => setColour('#gpv-measure-editor-color', '#3355ff'), now => (now.color === '#3355ff' ? null : 'colour ' + now.color));
+    await one('the editor\'s Dashed', () => page.check('#gpv-measure-editor-dashed'), now => (now.dashed !== false ? null : 'dashed ' + now.dashed));
+    await one('the editor\'s Show value', () => page.check('#gpv-measure-editor-value'), now => (now.showValue !== false ? null : 'showValue ' + now.showValue));
+    const full = await page.evaluate(id => window.__viewerDebug.measurementLabelText(window.__viewerDebug.measurementRecords().find(item => item.id === id)), record.id);
+    if (!/^H-bond · [\d.]+ Å$/.test(full)) throw new Error('with Show value on the label reads "' + full + '"');
+    if ((await page.inputValue(rowSelector + ' input[type="color"]')) !== '#3355ff') throw new Error('the row\'s colour did not follow the editor');
+    console.log('       row: colour, dashed, text, value · editor: colour, dashed, value · one undo step each · "' + full + '"');
+  } finally { await letGo(); await trimMeasurements(startCount); await clearSelection(); }
+});
+await step('the editor\'s Atoms select re-points a Cα–Cα measurement to the closest atoms and back', async () => {
+  const startCount = (await measuresNow()).length;
+  try {
+    const { record, row, target } = await measureNearestContact();
+    await openMeasurementEditor(record.id);
+    if (!(await page.locator('#gpv-measure-editor-pair').isVisible())) throw new Error('no Atoms choice for a two-residue distance');
+    if ((await page.inputValue('#gpv-measure-editor-pair')) !== 'ca') throw new Error('a Cα–Cα measurement shows "' + (await page.inputValue('#gpv-measure-editor-pair')) + '"');
+    let steps = await rememberedSteps();
+    await page.selectOption('#gpv-measure-editor-pair', 'closest'); await page.waitForTimeout(250);
+    const closest = await measurementById(record.id);
+    const [atomA, atomB] = row.atoms.split('–');
+    if (closest.id !== record.id || closest.points[0].atom !== atomA || closest.points[1].atom !== atomB) throw new Error('closest atoms joined ' + closest.points.map(pointKey).join(' → ') + ', the contacts row names ' + row.atoms);
+    if (pointKey(closest.points[0]).split(':')[0] !== target.key) throw new Error('the first point left ' + target.text);
+    const listed = valueOf(await newestMeasurementText());
+    if (!(Math.abs(listed - row.closest) <= 0.006)) throw new Error('the measurement reads ' + listed + ' Å, the contacts row ' + row.closest);
+    if (valueOf(await editorHead()) !== listed) throw new Error('the head line did not follow: ' + (await editorHead()));
+    if ((await rememberedSteps()) - steps !== 1) throw new Error('re-pointing took ' + ((await rememberedSteps()) - steps) + ' undo steps');
+    if ((await page.inputValue('#gpv-measure-editor-pair')) !== 'closest') throw new Error('the select does not show closest atoms');
+    steps = await rememberedSteps();
+    await page.selectOption('#gpv-measure-editor-pair', 'ca'); await page.waitForTimeout(250);
+    const back = await measurementById(record.id);
+    if (back.points.map(point => point.atom).join(',') !== 'CA,CA') throw new Error('Cα–Cα joined ' + back.points.map(pointKey).join(' → '));
+    if ((await rememberedSteps()) - steps !== 1) throw new Error('re-pointing back took ' + ((await rememberedSteps()) - steps) + ' undo steps');
+    console.log('       ' + target.text + ' → ' + row.name + ': Cα–Cα, then ' + row.atoms + ' ' + listed.toFixed(2) + ' Å, then Cα–Cα · same record');
+  } finally { await letGo(); await trimMeasurements(startCount); await clearSelection(); }
+});
+await step('a scene round-trip keeps a measurement\'s text, colour, dashed, Show value and offset', async () => {
+  const startCount = (await measuresNow()).length;
+  const startTab = await page.evaluate(() => (document.querySelector('[data-gpv-tab][aria-selected="true"]') || {}).dataset.gpvTab || 'annotate');
+  const fields = record => JSON.stringify({ text: record.text || '', showValue: record.showValue !== false, offset: record.offset ? [record.offset.x, record.offset.y, record.offset.z].map(value => value.toFixed(6)) : null, color: record.color || null, dashed: record.dashed !== false, points: record.points.map(pointKey) });
+  try {
+    const { record } = await measureNearestContact();
+    await page.evaluate(id => {
+      const d = window.__viewerDebug; const item = d.measurementRecords().find(entry => entry.id === id);
+      Object.assign(item, { text: 'Salt bridge', showValue: false, offset: { x: 1.25, y: -2.5, z: 0.75 }, color: '#7c3aed', dashed: false });
+    }, record.id);
+    const before = fields(await measurementById(record.id));
+    await tab('publish');
+    const download = page.waitForEvent('download', { timeout: 20000 });
+    await page.click('#gpv-save-scene');
+    const file = join(work, 'scene-measurement.json'); await (await download).saveAs(file);
+    const saved = JSON.parse(await readFile(file, 'utf8'));
+    const written = (saved.measurements || (saved.overlays && saved.overlays.measurements) || []).slice(-1)[0] || null;
+    await page.evaluate(id => { const d = window.__viewerDebug; const item = d.measurementRecords().find(entry => entry.id === id); delete item.text; delete item.offset; delete item.color; delete item.showValue; delete item.dashed; }, record.id);
+    await page.setInputFiles('#gpv-load-scene', file); await page.waitForTimeout(2500);
+    const records = await measuresNow();
+    if (records.length !== startCount + 1) throw new Error('the restored scene has ' + (records.length - startCount) + ' new measurements, not 1');
+    const after = fields(records[records.length - 1]);
+    if (after !== before) throw new Error('the scene changed the measurement:\n  before ' + before + '\n  after  ' + after);
+    if (written && (written.text !== 'Salt bridge' || written.color !== '#7c3aed' || written.dashed !== false || written.showValue !== false || !written.offset)) throw new Error('the scene wrote ' + JSON.stringify(written));
+    console.log('       text, colour, solid line, value hidden and offset survive save and load');
+  } finally { await tab('annotate'); await letGo(); await trimMeasurements(startCount); await clearSelection(); await tab(startTab); }
+});
+await step('the SVG export carries the measurement\'s text, colour and placed position', async () => {
+  const startCount = (await measuresNow()).length;
+  const startTab = await page.evaluate(() => (document.querySelector('[data-gpv-tab][aria-selected="true"]') || {}).dataset.gpvTab || 'annotate');
+  try {
+    const { record } = await measureNearestContact();
+    /* Text, a colour and a hand-placed offset, through the row and a drag as a user would. */
+    const row = await measurementRow(record.id);
+    await row.locator('.gpv-edit-copy input').fill('Salt bridge'); await row.locator('.gpv-edit-copy input').press('Enter'); await page.waitForTimeout(200);
+    await page.evaluate(id => { const index = window.__viewerDebug.measurementRecords().findIndex(item => item.id === id); const input = document.querySelectorAll('#gpv-measurement-list .gpv-entry')[index].querySelector('input[type="color"]'); input.value = '#0a7d4f'; input.dispatchEvent(new Event('input', { bubbles: true })); input.dispatchEvent(new Event('change', { bubbles: true })); }, record.id);
+    const spot = await measurementLabelScreen(record.id);
+    await page.mouse.move(spot.x, spot.y); await page.mouse.down(); await page.mouse.move(spot.x + 70, spot.y + 50, { steps: 8 }); await page.mouse.up(); await page.waitForTimeout(300);
+    const placed = await measurementById(record.id);
+    if (!placed.offset || placed.text !== 'Salt bridge' || placed.color !== '#0a7d4f') throw new Error('the measurement was not set up: ' + JSON.stringify(placed));
+    await tab('publish');
+    const download = page.waitForEvent('download', { timeout: 120000 });
+    await page.click('#gpv-svg');
+    const svg = await readFile(await (await download).path(), 'utf8');
+    const text = new RegExp('<text x="(-?[\\d.]+)" y="(-?[\\d.]+)"[^>]*fill="#0a7d4f">Salt bridge · ([\\d.]+) Å</text>').exec(svg);
+    if (!text) throw new Error('the SVG has no "Salt bridge · … Å" text in #0a7d4f');
+    const lines = [...svg.matchAll(/<line x1="(-?[\d.]+)" y1="(-?[\d.]+)" x2="(-?[\d.]+)" y2="(-?[\d.]+)" stroke="#0a7d4f"[^>]*\/>/g)].map(match => ({ a: { x: Number(match[1]), y: Number(match[2]) }, b: { x: Number(match[3]), y: Number(match[4]) }, dashed: match[0].includes('stroke-dasharray') }));
+    const measured = lines.find(line => line.dashed); const leader = lines.find(line => !line.dashed);
+    if (!measured || !leader) throw new Error('the SVG has ' + lines.length + ' lines in the measurement\'s colour; it needs the dashed measurement and a solid leader');
+    const middle = { x: (measured.a.x + measured.b.x) / 2, y: (measured.a.y + measured.b.y) / 2 };
+    const label = { x: Number(text[1]), y: Number(text[2]) };
+    if (Math.hypot(leader.a.x - middle.x, leader.a.y - middle.y) > 3) throw new Error('the leader starts at ' + JSON.stringify(leader.a) + ', not at the middle of the measurement ' + JSON.stringify(middle));
+    if (Math.hypot(leader.b.x - label.x, leader.b.y - label.y) > 0.05) throw new Error('the leader ends at ' + JSON.stringify(leader.b) + ', the label is at ' + JSON.stringify(label));
+    if (Math.hypot(label.x - middle.x, label.y - middle.y) < 20) throw new Error('the label sits on the measurement: the offset did not reach the SVG');
+    console.log('       "Salt bridge · ' + text[3] + ' Å" in #0a7d4f, ' + Math.hypot(label.x - middle.x, label.y - middle.y).toFixed(0) + ' px from the line with a leader back to it');
+  } finally { await tab('annotate'); await letGo(); await trimMeasurements(startCount); await clearSelection(); await tab(startTab); }
+});
+await step('Separate labels moves a measurement label off a residue label it covers, and the per-panel placement does the same at print size', async () => {
+  /* A residue label dragged onto a measurement's value: the label is placed by hand and keeps its
+     place, so the press has to move the measurement's text — on screen, and again for the print-size
+     panel of an exported figure, where nothing on screen may move. */
+  const startCount = (await measuresNow()).length;
+  const startLabels = await page.evaluate(() => window.__viewerDebug.labelRecords().length);
+  const startTab = await page.evaluate(() => (document.querySelector('[data-gpv-tab][aria-selected="true"]') || {}).dataset.gpvTab || 'annotate');
+  const startPlan = await page.evaluate(() => ({
+    mode: document.querySelector('#gpv-export-mode').value, width: document.querySelector('#gpv-print-width').value,
+    dpi: document.querySelector('#gpv-print-dpi').value, text: document.querySelector('#gpv-print-text').value
+  }));
+  const covers = (a, b) => Math.abs(a.x - b.x) < a.halfWidth + b.halfWidth && Math.abs(a.y - b.y) < a.halfHeight + b.halfHeight;
+  let target = null;
+  try {
+    await clearSelection(); await setMeasureChoice('ca');
+    target = await canvasResidue();
+    if (!target) throw new Error('no residue on screen to tap');
+    await openCardAt(target);
+    await page.keyboard.type('Site'); await page.keyboard.press('Enter'); await page.waitForTimeout(300);
+    await letGo();
+    /* The label's own card: a tap on the label opens it, Contacts and the first row measure. */
+    const at = await labelScreen(target.key);
+    await tap(at.x, at.y); await page.waitForTimeout(350);
+    if (!(await editorShown())) throw new Error('a tap on the label did not open its card');
+    await page.click('#gpv-label-editor-contacts'); await page.waitForTimeout(250);
+    await page.locator('#gpv-residue-contacts-rows .gpv-residue-contact').first().click(); await page.waitForTimeout(300);
+    await clearSelection();
+    const records = await measuresNow();
+    if (records.length !== startCount + 1) throw new Error('the contacts row made ' + (records.length - startCount) + ' measurements');
+    const record = records[records.length - 1];
+    /* The label dragged onto the measurement's value. */
+    const value = await measurementLabelScreen(record.id);
+    const from = await labelScreen(target.key);
+    await page.mouse.move(from.x, from.y); await page.mouse.down();
+    await page.mouse.move(value.x, value.y, { steps: 8 }); await page.mouse.up(); await page.waitForTimeout(300);
+    const boxes = () => page.evaluate(([key, id]) => {
+      const d = window.__viewerDebug;
+      const label = d.labelRecords().find(item => item.key === key); const measurement = d.measurementRecords().find(item => item.id === id);
+      return { label: d.labelScreenBox(label), measurement: d.measurementScreenBox(measurement), labelOffset: JSON.stringify(label.offset || null), offset: measurement.offset ? JSON.parse(JSON.stringify(measurement.offset)) : null, auto: Boolean(measurement.autoPlaced) };
+    }, [target.key, record.id]);
+    const piled = await boxes();
+    if (!piled.label || !piled.measurement || !covers(piled.label, piled.measurement)) throw new Error('the label does not cover the measurement after the drag: ' + JSON.stringify(piled));
+    if (await page.locator('#gpv-labels-separate').isDisabled()) throw new Error('Separate labels is disabled');
+    const steps = await rememberedSteps();
+    await page.click('#gpv-labels-separate'); await page.waitForTimeout(500);
+    const apart = await boxes();
+    if (!apart.offset || !apart.auto) throw new Error('the measurement was not moved: ' + JSON.stringify(apart));
+    if (apart.labelOffset !== piled.labelOffset) throw new Error('the hand-placed label was moved');
+    if (covers(apart.label, apart.measurement)) throw new Error('the label and the measurement still cover each other: ' + JSON.stringify(apart));
+    const said = await statusNow();
+    if (said !== '1 measurement moved apart') throw new Error('Separate labels said: ' + said);
+    if ((await rememberedSteps()) - steps !== 1) throw new Error('the press took ' + ((await rememberedSteps()) - steps) + ' undo steps');
+    if (await (await measurementRow(record.id)).locator('button:has-text("Reset")').isDisabled()) throw new Error('the moved measurement\'s Reset is disabled');
+    await undoOnce();
+    const undone = await boxes();
+    if (undone.offset || undone.labelOffset !== piled.labelOffset) throw new Error('undo left ' + JSON.stringify(undone));
+    /* Print size: the same pile, exported. The figure's placement must part them in the file while
+       the records on screen stay exactly as they are. */
+    const before = JSON.stringify(await measurementById(record.id)) + JSON.stringify(await labelByKey(target.key));
+    await tab('publish');
+    await page.selectOption('#gpv-export-mode', 'print'); await page.selectOption('#gpv-print-width', '85');
+    await page.selectOption('#gpv-print-dpi', '300'); await page.selectOption('#gpv-print-text', '10'); await page.waitForTimeout(400);
+    const download = page.waitForEvent('download', { timeout: 180000 });
+    await page.click('#gpv-svg');
+    const svg = await readFile(await (await download).path(), 'utf8');
+    const after = JSON.stringify(await measurementById(record.id)) + JSON.stringify(await labelByKey(target.key));
+    if (after !== before) throw new Error('the export moved the records on screen');
+    const words = await page.evaluate(id => window.__viewerDebug.measurementLabelText(window.__viewerDebug.measurementRecords().find(item => item.id === id)), record.id);
+    const printed = text => {
+      const found = new RegExp('<g><rect [^>]*?width="([\\d.]+)"[^>]*/><text x="(-?[\\d.]+)" y="(-?[\\d.]+)"[^>]*font-size="([\\d.]+)"[^>]*>' + text + '</text></g>').exec(svg);
+      if (!found) throw new Error('the exported SVG has no box for ' + text);
+      return { x: Number(found[2]), y: Number(found[3]), halfWidth: Number(found[1]) / 2, halfHeight: Number(found[4]) * 0.8 };
+    };
+    const label = printed('Site'); const measurement = printed(words);
+    if (covers(label, measurement)) throw new Error('the exported figure prints "Site" over "' + words + '": ' + JSON.stringify({ label, measurement }));
+    console.log('       on screen: moved ' + Math.hypot(apart.measurement.x - piled.measurement.x, apart.measurement.y - piled.measurement.y).toFixed(0) + ' px, "' + said + '", undone · in print: ' + Math.abs(label.y - measurement.y).toFixed(0) + ' px apart for boxes ' + (label.halfHeight * 2).toFixed(0) + ' px tall');
+  } finally {
+    await tab('publish');
+    await page.selectOption('#gpv-print-width', startPlan.width); await page.selectOption('#gpv-print-dpi', startPlan.dpi);
+    await page.selectOption('#gpv-print-text', startPlan.text); await page.selectOption('#gpv-export-mode', startPlan.mode);
+    await tab('annotate');
+    await letGo(); await trimMeasurements(startCount);
+    if (target) await removeLabelByKey(target.key);
+    if ((await page.evaluate(() => window.__viewerDebug.labelRecords().length)) !== startLabels) throw new Error('the step left ' + ((await page.evaluate(() => window.__viewerDebug.labelRecords().length)) - startLabels) + ' labels behind');
+    await clearSelection(); await tab(startTab);
+  }
+});
+await step('Copy measurements writes one TSV row per measurement with both atoms and the value; the CSV has the same rows', async () => {
+  const startCount = (await measuresNow()).length;
+  const startPaste = await page.inputValue('#gpv-data-text');
+  try {
+    const first = await measureNearestContact();
+    /* Another residue and not the first one's contact, so the two labels are not one on the other. */
+    const firstEntry = first.target.key.split('|')[0];
+    const second = await measureNearestContact([first.target.key, [firstEntry, first.row.chain, first.row.resi].join('|')]);
+    await page.evaluate(id => { const item = window.__viewerDebug.measurementRecords().find(entry => entry.id === id); item.text = 'gap, "quoted"'; }, second.record.id);
+    const records = await measuresNow();
+    const tsv = await page.evaluate(() => window.__viewerDebug.measurementsText());
+    const lines = tsv.split('\n').map(line => line.split('\t'));
+    const header = 'type,model_1,chain_1,resi_1,resn_1,atom_1,model_2,chain_2,resi_2,resn_2,atom_2,model_3,chain_3,resi_3,resn_3,atom_3,value,unit,text';
+    if (lines[0].join(',') !== header) throw new Error('the header is ' + lines[0].join(','));
+    if (lines.length !== records.length + 1) throw new Error(lines.length - 1 + ' rows for ' + records.length + ' measurements');
+    for (const [index, record] of records.entries()) {
+      const cells = lines[index + 1];
+      if (cells.length !== 19) throw new Error('row ' + (index + 1) + ' has ' + cells.length + ' cells');
+      const expected = await page.evaluate(id => {
+        const d = window.__viewerDebug; const item = d.measurementRecords().find(entry => entry.id === id);
+        const atom = point => d.entries().find(entry => entry.id === point.entryId).atoms.find(a => Number.isInteger(point.index) && a.index === point.index) || d.entries().find(entry => entry.id === point.entryId).atoms.find(a => (a.chain || '') === point.chain && a.resi === point.resi && a.atom === point.atom);
+        const [a, b] = item.points.map(atom);
+        return { distance: Math.hypot(a.x - b.x, a.y - b.y, a.z - b.z), resn: [a.resn, b.resn] };
+      }, record.id);
+      const [p, q] = record.points;
+      const want = ['distance', null, p.chain, String(p.resi), expected.resn[0], p.atom, null, q.chain, String(q.resi), expected.resn[1], q.atom, '', '', '', '', ''];
+      const mismatch = want.findIndex((value, i) => value !== null && cells[i] !== value);
+      if (mismatch >= 0) throw new Error('row ' + (index + 1) + ' column ' + lines[0][mismatch] + ' reads "' + cells[mismatch] + '", not "' + want[mismatch] + '"');
+      if (!(Math.abs(Number(cells[16]) - expected.distance) <= 0.0005) || cells[17] !== 'Å') throw new Error('row ' + (index + 1) + ' gives ' + cells[16] + ' ' + cells[17] + ', the atoms are ' + expected.distance.toFixed(3) + ' Å apart');
+      if (cells[18] !== (record.text || '')) throw new Error('row ' + (index + 1) + ' has the text "' + cells[18] + '"');
+    }
+    await page.click('#gpv-measurements-copy'); await page.waitForTimeout(300);
+    const said = await statusNow();
+    if (!/measurements? copied as tab-separated text/.test(said) && (await page.inputValue('#gpv-data-text')) !== tsv) throw new Error('Copy measurements neither copied nor filled the paste box: ' + said);
+    const csv = await downloadText('#gpv-measurements-csv');
+    const rows = csv.lines.filter(line => line.length).map(csvCells);
+    if (csv.name !== 'measurements.csv') throw new Error('the CSV is named ' + csv.name);
+    if (rows.length !== lines.length || rows.some((row, index) => row.join('\t') !== lines[index].join('\t'))) throw new Error('the CSV and the copied rows differ:\n' + rows.map(row => row.join('\t')).join('\n') + '\n---\n' + tsv);
+    console.log('       ' + records.length + ' measurements · ' + (said.includes('copied') ? 'copied' : 'paste box') + ' · CSV matches cell for cell');
+  } finally {
+    await letGo(); await trimMeasurements(startCount); await clearSelection();
+    await page.fill('#gpv-data-text', startPaste);
+  }
+});
 await step('the orientation is put back after the canvas steps', async () => {
   await letGo();
   await focusStage(); await page.keyboard.press('Shift+r'); await page.waitForTimeout(500);

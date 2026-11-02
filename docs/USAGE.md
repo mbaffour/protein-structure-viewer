@@ -416,8 +416,31 @@ list** puts `A:HIS87, A:LEU91, …` on the clipboard for a methods section.
 in the chosen colour, and the hits are listed by chain and position. Unknown residues are `X`.
 
 **Measurements.** Choose distance (two atoms) or angle (three atoms), press **Start measuring**, and
-click the atoms in the viewport. Values update as coordinates change — so aligning models updates
-the distances between them. <kbd>Esc</kbd> leaves measurement mode.
+click the atoms in the viewport — or use *Measure to…*, `M`, a contact on the residue card or a click on
+the contact and distance map. Values update as coordinates change — so aligning models updates the
+distances between them. <kbd>Esc</kbd> leaves measurement mode.
+
+A measurement is drawn as a crimson dashed line with its value at the midpoint (at the vertex for an
+angle), and its text is canvas text like a label's. Click it on the view and an editor opens at it: the
+head line names it — `Distance · HIS57 · B NE2 ↔ SER195 · C OG · 3.02 Å` — and the field takes words
+that are written before the value, so the label reads `H-bond · 3.02 Å` (empty the field and it reads the
+value alone again). **Name the atoms** puts `HIS57 · B NE2 ↔ SER195 · C OG` into the field for you;
+<kbd>Enter</kbd> or **Update** keeps it. **Show value** hides the number when the words say enough, the
+colour picker colours the line and the text together, **Dashed** makes the line solid or dashed again, and
+for a distance between two residues the **Atoms** choice joins their Cα atoms or their closest pair of
+heavy atoms — the same record, its text and colour kept, the value and head line following. **Remove**
+deletes it. Drag the text to move it (a thin leader line in the measurement's colour leads back to the
+line once it has moved), or click **Select** in its row and use the arrow keys — 8 px a press, 1 px with
+<kbd>Shift</kbd> — and <kbd>Delete</kbd> to remove it; <kbd>Esc</kbd> lets go. Every change is one undo
+step.
+
+Each measurement has a row in *Measurements*: its text field, the atoms and value it joins, a colour,
+**Dashed**, **Show value**, **Show** (centres the view on it without changing the zoom), **Reset** (puts
+the text back where it started), **Remove**, and the arrow buttons and **Select** a label row has.
+Hovering a row draws that measurement's line thicker on the view (never in an export).
+**Copy measurements** copies every measurement as tab-separated text, and **Download measurements CSV**
+writes the same table — `type`, then `model`, `chain`, `resi`, `resn` and `atom` for each of three points
+(the third empty for a distance), `value`, `unit` and `text` — one row per measurement.
 
 **Figure annotations.** Pick a tool, press **Start drawing**, and click atoms in the main viewer:
 an **arrow** or **line** joins two clicked atoms, a **residue marker** drops a translucent sphere on
@@ -703,7 +726,10 @@ and the methods text carry both numbers and the region. If fewer than three resi
 match between two models, that pair is fitted on everything and the table says so.
 
 **Moving labels.** Every piece of text in the 3D view can be dragged with the mouse: residue labels,
-callout and measurement text, and corner titles. Hover one and the pointer becomes a grab cursor while
+callout and measurement text, and corner titles. A click on any of them without dragging opens the editor
+on it; a measurement's text is moved, nudged, reset and removed exactly as a label's is, keeps its own
+leader line in the measurement's colour, and its place is a model-space offset that travels with the
+scene the same way. Hover one and the pointer becomes a grab cursor while
 the readout names the label; drag it where the figure needs it. The camera stays put during the drag,
 and on a touchscreen a finger drag still rotates the model, so nothing is lost on a tablet. A residue
 label that has moved keeps a thin leader line back to its residue in the label's colour — on screen and
@@ -711,8 +737,8 @@ in every export, the composite and built figures and the shared report — so a 
 is being named. The move is kept as a model-space offset, which means it holds its place against the
 structure as the camera turns rather than sliding across the screen, and it travels with scenes,
 sessions and share links and is undone with ⌘Z. **Reset** in the label's row puts it back on its
-residue; the arrow buttons in a label's or an annotation's row nudge its text 12 px a press for fine
-work, and the arrow keys move the active label (see *Labels* above).
+residue; the arrow buttons in a label's, a measurement's or an annotation's row nudge its text 12 px a
+press for fine work, and the arrow keys move the active label or measurement (see *Labels* above).
 
 **Separating labels that overlap.** One label per model at the same residue of superposed models is a
 pile by construction, so *Compare this position* and *Compare these positions* untangle what they place:
@@ -720,7 +746,9 @@ each label's box is measured at the current framing and the ones that cover each
 the screen, the reference model's label keeping its place. *Make site figure* does the same again for the
 close-up, because the framing decides which labels collide. **Separate labels**, beside *Clear labels*,
 runs the pass over every label on screen whenever you want it — after turning the model, say — and reports
-`3 labels moved apart` or `Labels already clear of each other`. The nudge is an ordinary offset: it keeps
+`3 labels moved apart` or `Labels already clear of each other`. Measurement text takes part as well: a
+measurement's value sitting on a residue label is moved off it like a label (`2 labels and 1 measurement
+moved apart`), and the button is available whenever there are labels or measurements to separate. The nudge is an ordinary offset: it keeps
 its leader line, **Reset** puts the label back, and ⌘Z undoes it. A label you have dragged yourself is
 never moved, only avoided, and no label travels more than six of its own heights, so one can never end up
 off the structure it names.
@@ -731,7 +759,7 @@ print on top of each other. Every panel of an exported figure therefore works it
 for itself, in that panel's own framing and at the size that panel prints its text — the PNG and the SVG
 of a figure agree exactly, each panel of a multi-panel figure gets its own answer, and nothing on screen
 moves: the export is a rendering, not an edit, and a label you have placed by hand is left where you put
-it there too. A panel keeps what you would otherwise have got whenever the new placement would not cover
+it there too. Measurement text is placed in the same pass, so a value never prints on top of a label. A panel keeps what you would otherwise have got whenever the new placement would not cover
 less: a site of a dozen positions is more print-size boxes than a panel can hold however they are
 arranged, and is best split over more panels.
 
@@ -893,7 +921,9 @@ projection for figures that carry one.
 
 **Vector figures.** **Download figure SVG** and **Download comparison SVG** write the same figures with
 the molecule as a raster image and everything drawn over it — residue labels, measurements, arrows,
-callouts, markers, corner titles, panel letters, captions, legend — as SVG elements. Open the file in
+callouts, markers, corner titles, panel letters, captions, legend — as SVG elements. A measurement's
+text, colour, solid or dashed line and the place you moved its text to (with its leader line) are written
+exactly as on screen, in the SVG as in the PNG, PDF and TIFF. Open the file in
 Illustrator, Inkscape, or Affinity to restyle type, recolour arrows, or move a label without
 re-rendering.
 
@@ -939,8 +969,8 @@ it. Up to 20 are kept, listed by name; saving a name that already exists replace
 session file or share link reproduces the figure's presentation as well as its contents.
 
 **Reports.** **Share report** builds a standalone HTML file with the coordinate data embedded —
-including aligned positions if you superposed models, plus labels, measurements, and figure
-annotations. Choose whether it carries the models currently shown or every loaded model; the
+including aligned positions if you superposed models, plus labels, measurements — with their text,
+colour, line style and moved text — and figure annotations. Choose whether it carries the models currently shown or every loaded model; the
 estimated size is shown before you build it. The report opens with no server and lets a reader show
 one to six synchronized panels (it starts with the panels you had open), pick a model per panel, step
 every panel forward and backward or cycle automatically, spin and fit them together, switch the
@@ -963,7 +993,8 @@ into the report header, the caption export, and the scene manifest.
 **Figure legend.** **Write figure legend** drafts a legend from the scene: models shown,
 representation, colour scheme with its bands written out, any low-confidence cut, ligand handling,
 the alignment reference, method and per-model Cα RMSD, whether panels are synchronized, labelled
-residues, highlighted ranges, measurements with their values, annotation text, and your provenance
+residues, highlighted ranges, measurements with the atoms they join, their values and their text
+(`HIS57 · B NE2 ↔ SER195 · C OG 3.02 Å (H-bond)`), annotation text, and your provenance
 notes. The text is copied to the clipboard and appears in an editable field. It is a draft in the
 tool's words; edit it into yours.
 

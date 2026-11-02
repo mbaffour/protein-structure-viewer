@@ -605,11 +605,16 @@
 
   const labelSizes = [[10, 'Small'], [12, 'Normal'], [15, 'Large'], [19, 'Huge']];
 
+  /* Separate labels has something to do whenever there is text it can move: a label or a measurement. */
+  function updateSeparateLabelsButton() {
+    const separate = root.querySelector('#gpv-labels-separate');
+    if (separate) separate.disabled = !labelRecords.length && !measurementRecords.length;
+  }
+
   function renderLabelList() {
     renderSequenceSoon();
     const list = root.querySelector('#gpv-label-list'); list.replaceChildren();
-    const separate = root.querySelector('#gpv-labels-separate');
-    if (separate) separate.disabled = !labelRecords.length;
+    updateSeparateLabelsButton();
     labelRecords.forEach(label => {
       const entry = entryById(label.entryId);
       const row = document.createElement('div'); row.className = 'gpv-entry';
@@ -718,7 +723,7 @@
   function drawOverlays(target, shownIds, dimensions, includeScreenText = true, placement = null) {
     const scale = overlayScale(dimensions);
     drawLabels(target, shownIds, scale, placement);
-    drawMeasurements(target, shownIds, scale);
+    drawMeasurements(target, shownIds, scale, placement);
     drawAnnotations(target, shownIds, dimensions, includeScreenText);
   }
 
@@ -825,19 +830,76 @@
     return value === null ? '—' : value.toFixed(2) + (record.type === 'distance' ? ' Å' : '°');
   }
 
+  /* Where a measurement's text sits before anyone moves it: the vertex of an angle, the middle of a
+     distance. `points` are the resolved atoms; given only the record they are resolved here. */
+  function measurementAnchor(points, record) {
+    const atoms = points || (record ? record.points.map(resolvePoint) : []);
+    if (!atoms.length || atoms.some(point => !point)) return null;
+    return record && record.type === 'angle' ? atoms[1] : midpoint(atoms[0], atoms[1]);
+  }
+
+  /* The words a measurement's label reads: the user's text and the value — "H-bond · 3.02 Å" — the
+     value alone with no text, the text alone with Show value off. Never empty: with no text and the
+     value hidden, the value shows anyway, since a label of nothing would be a box on its own. */
+  function measurementLabelText(record) {
+    const text = String(record.text || '').trim();
+    const value = measurementText(record);
+    if (!text) return value;
+    return record.showValue === false ? text : text + ' · ' + value;
+  }
+
+  /* A colour the user chose, or null: the line then keeps the crimson every measurement has always
+     had, and the label the plain ink of a residue label. */
+  function measurementColor(record) {
+    return record && /^#[0-9a-f]{6}$/i.test(record.color || '') ? record.color : null;
+  }
+
+  /* One point as a reader names it: residue, number and chain, then the atom — "HIS57 · B NE2". */
+  function measurementPointText(reference) {
+    const atom = resolvePoint(reference);
+    return (atom && atom.resn ? atom.resn : 'RES') + reference.resi + (reference.chain ? ' · ' + reference.chain : '') + ' ' + (reference.atom || 'atom');
+  }
+
+  /* The atoms a measurement joins — "HIS57 · B NE2 ↔ SER195 · C OG", "→" between the points of an
+     angle. With more than one model loaded the model is named too, once in front when every point
+     is in the same model, before each point when they are not; `compact` (the figure legend) leaves
+     the model out. */
+  function measurementAtomsText(record, compact = false) {
+    const joiner = record.type === 'angle' ? ' → ' : ' ↔ ';
+    const names = record.points.map(measurementPointText);
+    if (compact || structures.length < 2) return names.join(joiner);
+    const modelName = point => { const entry = entryById(point.entryId); return entry ? displayName(entry) : 'Missing model'; };
+    const models = new Set(record.points.map(point => point.entryId));
+    if (models.size === 1) return modelName(record.points[0]) + ' · ' + names.join(joiner);
+    return record.points.map((point, index) => modelName(point) + ' · ' + names[index]).join(joiner);
+  }
+
   function midpoint(a, b) {
     return { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2, z: (a.z + b.z) / 2 };
   }
 
-  function drawMeasurements(target, shownIds, scale = 1) {
+  /* `placement`, when a figure panel or Separate labels has resolved one, says where the label goes;
+     without one it sits at its own offset from its anchor, as a residue label does. */
+  function drawMeasurements(target, shownIds, scale = 1, placement = null) {
+    /* The ring on the measurement the arrow keys move, and the thicker line under the row the pointer
+       is on, are the screen's alone: exports and comparison panels draw into viewers of their own. */
+    const onScreen = target === viewer;
+    const active = onScreen ? activeMeasurementRecord() : null;
+    const hovered = onScreen ? measurementHover : null;
     measurementRecords.forEach(record => {
       if (!record.points.every(point => shownIds.has(point.entryId))) return;
       const points = record.points.map(resolvePoint);
       if (points.some(point => !point)) return;
-      const line = (start, end) => target.addLine({ start, end, color: '#e11d48', dashed: true, linewidth: 2 });
+      const color = measurementColor(record) || '#e11d48';
+      const linewidth = hovered !== null && hovered === record.id ? 4 : 2;
+      const line = (start, end) => target.addLine({ start, end, color, dashed: record.dashed !== false, linewidth });
       line(points[0], points[1]);
       if (record.type === 'angle') line(points[1], points[2]);
-      target.addLabel(measurementText(record), labelStyle(record.type === 'angle' ? points[1] : midpoint(points[0], points[1]), { scale }));
+      const anchor = measurementAnchor(points, record);
+      const position = (placement && placement.get(record)) || shiftBy(anchor, record.offset);
+      if (leaderLength(anchor, position) > leaderMinimum) target.addLine({ start: anchor, end: position, color, linewidth: Math.max(1, Math.round(scale)) });
+      const style = labelStyle(position, { color: measurementColor(record), scale });
+      target.addLabel(measurementLabelText(record), record === active ? activeLabelStyle(style) : style);
     });
   }
 

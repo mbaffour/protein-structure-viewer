@@ -2,6 +2,41 @@
 
 All notable changes to this project are recorded here.
 
+## 2.52.0
+
+### Added
+
+- **A measurement's text is edited on the canvas, like a label's.** Click a measurement's value on the
+  view and the editor opens at it, headed `Distance · HIS57 · B NE2 ↔ SER195 · C OG · 3.02 Å`. The field
+  takes words written before the value (`H-bond · 3.02 Å`); **Name the atoms** fills it with
+  `HIS57 · B NE2 ↔ SER195 · C OG`, kept with <kbd>Enter</kbd> or **Update**; **Show value** hides the
+  number; a colour picker colours the line and the text together; **Dashed** makes the line solid or
+  dashed; for a distance between two residues **Atoms** re-joins the same record to their Cα atoms or
+  their closest heavy-atom pair, keeping its text, colour and place; **Remove** deletes it. Drag the text
+  to move it (a thin leader line in the measurement's colour leads back once it has moved), or make it
+  the active text and move it with the arrow keys (<kbd>Shift</kbd> for 1 px) and remove it with
+  <kbd>Delete</kbd>; one undo step per change.
+- **A row per measurement in Annotate → Measurements** with the same controls: a text field, the atoms
+  and the value it joins, colour, **Dashed**, **Show value**, **Show** (centres the view on it, keeping
+  the zoom), **Reset**, **Remove**, arrow buttons and **Select**. Hovering a row draws its line thicker
+  on the view, never in an export.
+- **Copy measurements** and **Download measurements CSV**: one row per measurement — the type, each
+  point's model, chain, residue number, residue name and atom (the third empty for a distance), the
+  value, its unit and the measurement's text.
+- **Measurement text, colour and placement reach every export**: PNG, TIFF, PDF and SVG figures (with
+  the leader line), the shared report, the figure legend (`HIS57 · B NE2 ↔ SER195 · C OG 3.02 Å
+  (H-bond)`), scenes, sessions and share links. A scene writes the new fields only when they differ from
+  the defaults.
+- **Separate labels and per-panel placement include measurement text**: a measurement's value lying on
+  a residue label is moved off it on screen (`2 labels and 1 measurement moved apart`) and again at
+  print size in every exported panel; text placed by hand is left where it was put.
+
+### Changed
+
+- The figure legend names a measurement by its atoms — `HIS57 · B NE2 ↔ SER195 · C OG 3.02 Å` — where
+  it wrote `B:57–C:195 3.02 Å`; the sentence changes for every scene, old ones included. Nothing drawn
+  changes: a measurement with none of the new fields looks exactly as it did.
+
 ## 2.51.0
 
 ### Added

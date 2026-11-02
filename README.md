@@ -166,7 +166,8 @@ Type a residue number to go straight to it. Name domains by residue range and co
 definition to every model of an AlphaFold run, and colour by them with a legend that lists them by
 name. Add or edit custom residue labels, or label every residue
 in the current model. Highlight or hide chain/residue
-ranges, and add atom-to-atom distance or three-atom angle measurements. Draw figure annotations —
+ranges, and add atom-to-atom distance or three-atom angle measurements — click a measurement's text to
+name it, colour it, hide its value or move it, and it prints that way in every export. Draw figure annotations —
 arrows, lines, residue markers, text callouts, and corner titles — that follow rotation and alignment
 and appear in every export; nudge any label into place and it stays there as the model turns. Give
 models display names for captions. Undo and redo every one of these changes.

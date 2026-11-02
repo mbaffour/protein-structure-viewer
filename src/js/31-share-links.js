@@ -178,7 +178,12 @@
     }).filter(Boolean);
     measurementRecords = (scene.measurements || []).map(record => {
       const points = (record.points || []).map(point => { const entry = byName.get(point.model); return entry ? { entryId: entry.id, chain: point.chain || '', resi: point.resi, atom: point.atom || '', index: point.index } : null; }).filter(Boolean);
-      return points.length >= 2 ? { id: nextAnnotationId++, type: record.type === 'angle' ? 'angle' : 'distance', points } : null;
+      if (points.length < 2) return null;
+      /* Read as the annotations are: a hex colour, a finite offset, booleans; anything else is the
+         default, which is the field left out. */
+      const offset = record.offset && ['x', 'y', 'z'].every(axis => Number.isFinite(Number(record.offset[axis]))) ? { x: Number(record.offset.x), y: Number(record.offset.y), z: Number(record.offset.z) } : null;
+      const text = typeof record.text === 'string' ? record.text.trim().slice(0, 120) : '';
+      return { id: nextAnnotationId++, type: record.type === 'angle' ? 'angle' : 'distance', points, ...(text ? { text } : {}), ...(record.showValue === false ? { showValue: false } : {}), ...(labelOffsetLength({ offset }) ? { offset } : {}), ...(/^#[0-9a-f]{6}$/i.test(record.color || '') ? { color: record.color } : {}), ...(record.dashed === false ? { dashed: false } : {}) };
     }).filter(Boolean);
     annotationRecords = (scene.annotations || []).map(record => {
       const type = record.type === 'screen' || annotationTools[record.type] ? record.type : null;

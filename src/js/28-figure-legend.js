@@ -70,7 +70,8 @@
     const highlights = selectionRecords.filter(record => record.action === 'highlight' && shownIds.has(record.entryId));
     if (highlights.length) sentences.push('Highlighted residues: ' + highlights.map(record => (record.chain ? 'chain ' + record.chain + ' ' : '') + compactRange(record.residues)).join('; ') + '.');
     const measurements = measurementRecords.filter(record => record.points.every(point => shownIds.has(point.entryId)));
-    if (measurements.length) sentences.push('Measurements: ' + measurements.map(record => record.points.map(point => (point.chain ? point.chain + ':' : '') + point.resi).join('–') + ' ' + measurementText(record)).join('; ') + '.');
+    /* The atoms each joins, its value, and the user's words for it in parentheses. */
+    if (measurements.length) sentences.push('Measurements: ' + measurements.map(record => measurementAtomsText(record, true) + ' ' + measurementText(record) + (record.text ? ' (' + record.text + ')' : '')).join('; ') + '.');
     const annotations = annotationRecords.filter(record => record.text && record.points.every(point => shownIds.has(point.entryId)));
     if (annotations.length) sentences.push('Annotations: ' + annotations.map(record => record.text).join('; ') + '.');
     const plan = exportDimensions();

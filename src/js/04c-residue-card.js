@@ -133,13 +133,13 @@
   }
 
   /* Called by openLabelEditor once the head line is set. A residue's card gets the two lines,
-     Measure to…, the measure choice and Contacts; annotation text, which belongs to no residue, gets
-     none of them. Every opening starts with the contacts list closed and uncomputed. */
+     Measure to…, the measure choice and Contacts; annotation and measurement text, which belong to no
+     one residue, get none of them. Every opening starts with the contacts list closed and uncomputed. */
   function fillResidueCard(host, target, residueLine) {
     resetResidueContacts(true);
     const facts = host.querySelector('#gpv-residue-card-facts');
     const own = ['#gpv-label-editor-measure', '#gpv-label-editor-contacts', '#gpv-label-editor-distances', '#gpv-label-editor-measure-atoms-wrap'].map(selector => host.querySelector(selector));
-    const entry = residueLine && target.kind !== 'annotation' ? entryById(target.entryId) : null;
+    const entry = residueLine && !textWithoutResidue(target) ? entryById(target.entryId) : null;
     if (!entry || !target.atom) { facts.hidden = true; facts.textContent = ''; own.forEach(item => { item.hidden = true; }); return; }
     const chain = target.atom.chain || '';
     const atom = residueAlphaCarbon(entry, chain, target.atom.resi) || target.atom;
@@ -164,6 +164,11 @@
     refreshMeasureToButton();
   }
 
+  /* The kinds of text the editor opens on that are not one residue's: no card, no Measure to…. */
+  function textWithoutResidue(editor) {
+    return editor.kind === 'annotation' || editor.kind === 'measurement';
+  }
+
   /* One mode at a time: a click while measuring or drawing already belongs to that mode, so the
      one-shot cannot be armed beside either. Null when nothing is in the way. */
   function measureToBlocker() {
@@ -186,7 +191,7 @@
 
   function measureToFromCard() {
     const editor = labelEditor;
-    if (!editor || editor.kind === 'annotation') return;
+    if (!editor || textWithoutResidue(editor)) return;
     const blocker = measureToBlocker();
     if (blocker) { updateStatus(blocker); return; }
     const entry = entryById(editor.entryId);
@@ -362,7 +367,7 @@
 
   function downloadResidueDistancesFromCard() {
     const editor = labelEditor;
-    if (!editor || editor.kind === 'annotation' || !editor.atom) return;
+    if (!editor || textWithoutResidue(editor) || !editor.atom) return;
     const entry = entryById(editor.entryId);
     if (!entry || !entry.model) { updateStatus('That residue’s model is no longer loaded'); return; }
     const chain = editor.atom.chain || '';
@@ -483,7 +488,7 @@
   /* The card's residue and its model, or null when the card is not at a residue whose model is loaded. */
   function cardResidue() {
     const editor = labelEditor;
-    if (!editor || editor.kind === 'annotation' || !editor.atom) return null;
+    if (!editor || textWithoutResidue(editor) || !editor.atom) return null;
     const entry = entryById(editor.entryId);
     if (!entry || !entry.model) return null;
     const chain = editor.atom.chain || '';

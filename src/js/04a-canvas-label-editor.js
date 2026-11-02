@@ -7,12 +7,12 @@
      link or report changes shape because of it. */
 
   /* Which piece of text the arrow keys move and Delete removes. Stored by identity — a label's
-     `key`, an annotation's `id` — rather than by object, because addOrEditLabel replaces a record
+     `key`, an annotation's or a measurement's `id` — rather than by object, because addOrEditLabel replaces a record
      with a merged copy and undo rebuilds every array from a clone: a stored reference would go on
      pointing at an object nothing draws any more. */
   let activeText = null;
-  /* { kind: 'new' | 'label' | 'annotation', entryId, atom, key, id, textKind } while the editor is
-     open; null when it is closed. */
+  /* { kind: 'new' | 'label' | 'annotation' | 'measurement', entryId, atom, key, id, textKind } while
+     the editor is open; null when it is closed. */
   let labelEditor = null;
   let labelEditorFrame = 0;
   let labelEditorHost = null;
@@ -32,6 +32,10 @@
       const record = identity.key ? labelRecords.find(label => label.key === identity.key) : labelRecords.find(label => label === identity.record);
       return record ? { kind: 'label', record } : null;
     }
+    if (identity.kind === 'measurement') {
+      const record = measurementRecords.find(item => item.id === identity.id);
+      return record ? { kind: 'measurement', record } : null;
+    }
     const record = annotationRecords.find(item => item.id === identity.id);
     return record ? { kind: record.type === 'screen' ? 'screen' : 'annotation', record } : null;
   }
@@ -47,6 +51,13 @@
   function activeLabelRecord() {
     const resolved = activeCanvasText();
     return resolved && resolved.kind === 'label' ? resolved.record : null;
+  }
+
+  /* The same for drawMeasurements: the measurement whose text the arrow keys move, ringed on the
+     main viewer alone. */
+  function activeMeasurementRecord() {
+    const resolved = activeCanvasText();
+    return resolved && resolved.kind === 'measurement' ? resolved.record : null;
   }
 
   /* A 2 px ring in the interface accent. A plain-text label has no box to ring, so it is given a
@@ -91,11 +102,11 @@
       z: offset.z + (right.z * dxScreen - up.z * dyScreen) * step
     };
     /* Once a hand has been on it the placement is the user's, and Separate labels leaves it alone. */
-    if (item.kind === 'label') delete record.autoPlaced;
+    if (item.kind === 'label' || item.kind === 'measurement') delete record.autoPlaced;
   }
 
   function renderCanvasTextLists(kind) {
-    if (kind === 'label') renderLabelList(); else renderAnnotationList();
+    if (kind === 'label') renderLabelList(); else if (kind === 'measurement') renderMeasurementList(); else renderAnnotationList();
   }
 
   function labelEditorElement() {
@@ -118,7 +129,10 @@
        the distances CSV (04c). */
     const card = residueCardElements();
     actions.append(commit, card.measure, card.atoms, card.contacts, card.distances, remove);
-    host.append(head, card.facts, card.list, input, actions);
+    /* A measurement's own controls (04): Name the atoms, Show value, colour, Dashed and the atoms it
+       joins. Hidden for every other kind of text. */
+    const measure = measurementEditorElement();
+    host.append(head, card.facts, card.list, input, measure, actions);
     /* Enter and Esc are the editor's own. Stopping them here keeps the page's shortcuts from also
        acting on them — Esc would otherwise leave full screen or stop a measurement as well. */
     input.addEventListener('keydown', event => {
@@ -174,6 +188,8 @@
       const entry = entryById(label.entryId);
       const atom = { chain: label.chain, resi: label.resi, resn: label.resn, b: label.b, x: label.x, y: label.y, z: label.z, atom: label.atom };
       openLabelEditor({ kind: 'label', entryId: label.entryId, atom, key: label.key, record: label }, label.text, entry ? describeResidue(entry, atom) : (label.resn || 'RES') + label.resi);
+    } else if (item.kind === 'measurement') {
+      openLabelEditor({ kind: 'measurement', id: item.record.id }, String(item.record.text || ''), measurementEditorHead(item.record));
     } else {
       openLabelEditor({ kind: 'annotation', id: item.record.id, textKind: item.kind }, String(item.record.text || ''), null);
     }
@@ -196,13 +212,17 @@
     /* Annotation text belongs to no one residue, so its editor has no residue line. */
     residue.textContent = residueLine || '';
     residue.hidden = !residueLine;
-    host.setAttribute('aria-label', residueLine ? 'Label for ' + residueLine : 'Edit annotation text');
+    const measuring = target.kind === 'measurement';
+    host.setAttribute('aria-label', measuring ? 'Text for the measurement ' + residueLine : residueLine ? 'Label for ' + residueLine : 'Edit annotation text');
     fillResidueCard(host, target, residueLine);
+    fillMeasurementEditor(host, measuring ? labelEditorRecord() : null);
     const commit = host.querySelector('#gpv-label-editor-commit');
     commit.textContent = target.kind === 'new' ? 'Label' : 'Update';
-    host.querySelector('#gpv-label-editor-remove').hidden = target.kind !== 'label';
+    host.querySelector('#gpv-label-editor-remove').hidden = target.kind !== 'label' && !measuring;
     const input = host.querySelector('#gpv-label-editor-text');
     input.maxLength = target.kind === 'annotation' ? 160 : 120;
+    input.placeholder = measuring ? 'Text before the value, e.g. H-bond' : '';
+    input.setAttribute('aria-label', measuring ? 'Measurement text' : 'Label text');
     input.value = text;
     host.hidden = false;
     positionLabelEditor();
@@ -230,6 +250,7 @@
     const editor = labelEditor; if (!editor) return null;
     if (editor.kind === 'label') return labelRecords.find(label => (editor.key ? label.key === editor.key : label === editor.record)) || null;
     if (editor.kind === 'annotation') return annotationRecords.find(item => item.id === editor.id) || null;
+    if (editor.kind === 'measurement') return measurementRecords.find(item => item.id === editor.id) || null;
     return null;
   }
 
@@ -240,7 +261,7 @@
     const rect = stage.getBoundingClientRect();
     const record = labelEditorRecord();
     let point = null;
-    if (editor.kind === 'annotation') {
+    if (editor.kind === 'annotation' || editor.kind === 'measurement') {
       const item = record && draggableLabels().find(candidate => candidate.record === record);
       if (item && item.screen) return { x: item.screen.x, y: item.screen.y };
       point = item ? item.position : null;
@@ -289,6 +310,8 @@
   function commitLabelEditor() {
     const editor = labelEditor; if (!editor) return;
     const text = labelEditorHost.querySelector('#gpv-label-editor-text').value.trim();
+    /* A measurement's text may be emptied: the label then reads the value alone, as it always did. */
+    if (editor.kind === 'measurement') { commitMeasurementText(text); return; }
     /* An empty commit is a cancel: a label of nothing is never created, and an existing label is
        removed with Remove, not by emptying it. */
     if (!text) { closeLabelEditor(true); return; }
@@ -334,6 +357,7 @@
   }
 
   function removeFromLabelEditor() {
+    if (labelEditor && labelEditor.kind === 'measurement') { removeMeasurementFromEditor(); return; }
     const record = labelEditor && labelEditor.kind === 'label' ? labelEditorRecord() : null;
     if (!record) { closeLabelEditor(true); return; }
     remember('label removal');
@@ -370,6 +394,11 @@
       labelRecords = labelRecords.filter(label => label !== resolved.record);
       renderLabelList(); rebuildOverlays();
       updateStatus('Label removed');
+    } else if (resolved.kind === 'measurement') {
+      remember('measurement removal');
+      measurementRecords = measurementRecords.filter(item => item.id !== resolved.record.id);
+      renderMeasurementList(); rebuildOverlays();
+      updateStatus('Measurement removed');
     } else {
       remember('annotation removal');
       annotationRecords = annotationRecords.filter(item => item.id !== resolved.record.id);

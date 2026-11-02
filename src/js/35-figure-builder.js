@@ -219,9 +219,14 @@
       if (!record.points.every(point => point.entryId === entry.id)) return;
       const points = record.points.map(resolvePoint);
       if (points.some(point => !point)) return;
-      shapes.push({ kind: 'line', start: xyz(points[0]), end: xyz(points[1]), color: '#e11d48', dashed: true });
-      if (record.type === 'angle') shapes.push({ kind: 'line', start: xyz(points[1]), end: xyz(points[2]), color: '#e11d48', dashed: true });
-      shapes.push({ kind: 'label', position: xyz(record.type === 'angle' ? points[1] : midpoint(points[0], points[1])), text: measurementText(record), color: '#111827', size: 1 });
+      const color = measurementColor(record); const dashed = record.dashed !== false;
+      shapes.push({ kind: 'line', start: xyz(points[0]), end: xyz(points[1]), color: color || '#e11d48', dashed });
+      if (record.type === 'angle') shapes.push({ kind: 'line', start: xyz(points[1]), end: xyz(points[2]), color: color || '#e11d48', dashed });
+      const anchor = measurementAnchor(points, record);
+      const position = shiftBy(anchor, record.offset);
+      /* A moved label keeps a thin leader back to what it measures, as on screen. */
+      if (leaderLength(anchor, position) > leaderMinimum) shapes.push({ kind: 'line', start: xyz(anchor), end: xyz(position), color: color || '#e11d48', dashed: false, width: 1 });
+      shapes.push({ kind: 'label', position: xyz(position), text: measurementLabelText(record), color: color || '#111827', size: 1 });
     });
     annotationRecords.forEach(record => {
       if (record.type === 'screen' || !record.points.every(point => point.entryId === entry.id)) return;
@@ -539,7 +544,7 @@ function show(pane, preserveView) {
   (s.shapes || []).forEach(sh => {
     if (sh.kind === 'arrow') pane.viewer.addArrow({ start: sh.start, end: sh.end, radius: sh.radius, radiusRatio: 2.2, mid: 0.72, color: sh.color });
     else if (sh.kind === 'cylinder') pane.viewer.addCylinder({ start: sh.start, end: sh.end, radius: sh.radius, color: sh.color, dashed: !!sh.dashed, fromCap: 1, toCap: 1 });
-    else if (sh.kind === 'line') pane.viewer.addLine({ start: sh.start, end: sh.end, color: sh.color, dashed: !!sh.dashed, linewidth: 2 });
+    else if (sh.kind === 'line') pane.viewer.addLine({ start: sh.start, end: sh.end, color: sh.color, dashed: !!sh.dashed, linewidth: sh.width || 2 });
     else if (sh.kind === 'sphere') pane.viewer.addSphere({ center: sh.center, radius: sh.radius, color: sh.color, alpha: sh.alpha === undefined ? 1 : sh.alpha });
     else if (sh.kind === 'label') pane.viewer.addLabel(sh.text, { position: sh.position, backgroundColor: '#fff', fontColor: sh.color || '#111827', borderColor: sh.color || '#94a3b8', borderThickness: initial.labelStyle === 'plain' ? 0 : 1, showBackground: initial.labelStyle !== 'plain', fontSize: Math.round(13 * (sh.size || 1)), inFront: true, backgroundOpacity: 0.85 });
   });

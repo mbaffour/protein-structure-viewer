@@ -956,7 +956,7 @@ html>body{padding:0}</style>
       <button class="btn" type="button" id="gpv-add-label" disabled>Add or update</button>
       <label class="form-check form-switch"><input class="form-check-input" id="gpv-all-labels" type="checkbox"><span class="form-check-label">Label every residue</span></label>
       <label class="form-label">Label style<select class="form-select" id="gpv-label-style" data-tooltip="Boxed labels read on any background; plain text suits clean figures where the box would hide the model"><option value="boxed">Boxed</option><option value="plain">Plain text</option></select></label>
-      <button class="btn btn-ghost" type="button" id="gpv-labels-separate" disabled data-tooltip="Push apart any labels whose boxes overlap at the current framing — one label per model at the same site lands in a pile — stacking them down the screen with a leader line back to each residue. Labels you have dragged yourself are left where you put them">Separate labels</button>
+      <button class="btn btn-ghost" type="button" id="gpv-labels-separate" disabled data-tooltip="Push apart any labels and measurement text whose boxes overlap at the current framing — one label per model at the same site lands in a pile — stacking them down the screen with a leader line back to each residue or measurement. Text you have dragged yourself is left where you put it">Separate labels</button>
       <button class="btn btn-ghost" type="button" id="gpv-clear-labels">Clear labels</button>
     </div>
     <div class="viz-controls">
@@ -1035,6 +1035,8 @@ html>body{padding:0}</style>
       <label class="form-label">Measurement<select class="form-select" id="gpv-measure-type"><option value="distance">Distance (2 atoms)</option><option value="angle">Angle (3 atoms)</option></select></label>
       <button class="btn" type="button" id="gpv-measure">Start measuring</button>
       <button class="btn btn-ghost" type="button" id="gpv-clear-measurements">Clear measurements</button>
+      <button class="btn btn-ghost" type="button" id="gpv-measurements-copy" disabled data-tooltip="Copy every measurement as tab-separated text: the type, each point's model, chain, residue and atom, the value, its unit and the measurement's text">Copy measurements</button>
+      <button class="btn" type="button" id="gpv-measurements-csv" disabled data-tooltip="The same table as a CSV file: one row per measurement, the third point left empty for a distance">Download measurements CSV</button>
       <span class="text-muted" id="gpv-measure-state">Measurement mode is off.</span>
     </div>
     <div class="gpv-list" id="gpv-measurement-list" aria-label="Measurements"></div>
@@ -1295,7 +1297,8 @@ html>body{padding:0}</style>
           <tr><th><kbd>M</kbd></th><td>Measure to…: the distance from the selected residue to the next residue you click (in the view, the sequence strip or with Go to) — Cα–Cα, or the closest heavy atoms when the residue card's <em>Measure</em> choice says so — added as an ordinary measurement</td></tr>
           <tr><th><kbd>Enter</kbd> / <kbd>Esc</kbd></th><td>In the label editor: add or update the label / close it without changes</td></tr>
           <tr><th><kbd>←</kbd> <kbd>→</kbd> <kbd>↑</kbd> <kbd>↓</kbd></th><td>Move the active label 8 px (<kbd>Shift</kbd>: 1 px). A label becomes active when you click it, label it, or press <strong>Select</strong> in its row</td></tr>
-          <tr><th><kbd>Delete</kbd></th><td>Remove the active label</td></tr>
+          <tr><th>Measurement text</th><td>Click a measurement's text on the view to edit it like a label: type words before the value, <strong>Name the atoms</strong>, show or hide the value, colour it, make the line solid or dashed, join the Cα atoms or the closest atoms, or <strong>Remove</strong> it. Drag it, or nudge it with the arrow keys, to move it; <kbd>Delete</kbd> removes it. Its text, colour and place reach every export — PNG, SVG, PDF, the report, the figure legend and scenes</td></tr>
+          <tr><th><kbd>Delete</kbd></th><td>Remove the active label (or the active measurement)</td></tr>
           <tr><th><kbd>Shift</kbd> + drag</th><td>Draw a box over the model: every residue inside is highlighted, and the popover labels them all (<kbd>Enter</kbd>) or keeps the highlight (<kbd>Esc</kbd>). On a touchscreen, turn on <strong>Drag to select</strong> in Annotate</td></tr>
           <tr><th><kbd>C</kbd></th><td>Start or pause automatic cycling</td></tr>
           <tr><th><kbd>F</kbd></th><td>Fit every panel to what it displays</td></tr>
@@ -1341,6 +1344,7 @@ html>body{padding:0}</style>
         <li><em>Confidence → Colour by MSA</em> reads the alignment inside an AlphaFold 3 archive (or an .a3m you add) and colours matching chains by conservation (Henikoff position-based sequence weights by default, switchable), identity to the query or coverage; the legend, exports and methods text follow.</li>
         <li><em>Publish → Download composite figure</em> stitches the 3D view with the PAE heatmap, the pLDDT profile and the contact map into one lettered figure at print size, each panel rendered at output resolution.</li>
         <li>The <em>Publication checklist</em> at the foot of the Publish tab lists what a journal or reviewer would flag about the current figure — no physical size, low resolution, small text, colour-blind-unsafe colours, missing legend, scale bar in perspective, unsuperposed models, no title — with one-click fixes.</li>
+        <li>A measurement's text is edited like a label: click it on the view to type words before the value (“H-bond · 3.02 Å”), press <strong>Name the atoms</strong> for “HIS57 · B NE2 ↔ SER195 · C OG”, hide the value, colour the line and text, make the line solid, or join the two residues' Cα atoms or closest atoms; drag it or nudge it with the arrow keys to move it. Its row in <em>Annotate → Measurements</em> has the same controls, and <strong>Copy measurements</strong> and <strong>Download measurements CSV</strong> list every measurement with its atoms and value. The text, colour and place reach every export — PNG, SVG, PDF, the report, the figure legend, scenes and share links — and <strong>Separate labels</strong> moves measurement text off the labels it covers, on screen and again at print size.</li>
         <li><em>Compare → Contact and distance map</em> draws every residue pair of two chains (or one chain against itself, or all chains) within a cutoff, closer pairs darker, or with <em>All distances</em> every pair by its Cα–Cα distance; hover reads the pair and its distance, a click draws that distance on the model as a measurement, <em>Highlight interface</em> colours the interface, and the map, the contacts and every distance download as PNG and CSV. <em>Annotate → Label style</em> switches every label between boxed and plain text.</li>
         <li><em>Appearance → Outline</em> draws a silhouette line around every element (thin for most figures, bold for small panels) and <em>Depth cueing</em> fades the far side; both apply to panels and exports. In the composition table, <em>Faded</em> blends a chain into the background to spotlight the others. <em>Publish → Journal preset</em> sets width, resolution, text size and font from a journal's figure guide, and <em>Download one panel per model</em> renders every model from the same camera into one lettered figure.</li>
         <li>The <em>layout</em> button in the header (panel icon) switches between the side-panel workspace, where the 3D view stays pinned while you work in the scrolling tool panel, and the stacked layout. The tool panel sits on the left; the arrows button beside it swaps the two sides. Drag the divider between them to give tables more room; double-click it to reset. Screens narrower than 1100 px always stack.</li>
@@ -1420,6 +1424,12 @@ html>body{padding:0}</style>
   #generic-protein-viewer .gpv-label-editor-residue { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--muted-foreground); }
   #generic-protein-viewer .gpv-label-editor-close { min-height: 24px; padding: 0 8px; }
   #generic-protein-viewer .gpv-label-editor-actions { display: flex; flex-wrap: wrap; gap: 6px; }
+  #generic-protein-viewer .gpv-measure-editor { align-items: center; }
+  #generic-protein-viewer .gpv-measure-editor[hidden], #generic-protein-viewer .gpv-measure-editor [hidden] { display: none; }
+  #generic-protein-viewer .gpv-measure-editor .form-control-color { width: 34px; padding: 2px; }
+  #generic-protein-viewer .gpv-measure-editor-pair { display: inline-flex; align-items: center; gap: 4px; }
+  #generic-protein-viewer .gpv-measure-editor-pair .form-select { width: auto; padding-right: 26px; }
+  #generic-protein-viewer .gpv-edit-tools .gpv-check { white-space: nowrap; }
   /* The residue card's second line (pLDDT · secondary structure · neighbours) wraps rather than clips. */
   #generic-protein-viewer .gpv-residue-card-facts { color: var(--muted-foreground); line-height: 1.35; }
   #generic-protein-viewer .gpv-residue-card-facts[hidden] { display: none; }

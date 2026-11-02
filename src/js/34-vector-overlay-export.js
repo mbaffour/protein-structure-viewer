@@ -97,10 +97,20 @@
       if (!record.points.every(point => shownIds.has(point.entryId))) return;
       const points = record.points.map(resolvePoint); if (points.some(point => !point)) return;
       const screen = points.map(project);
-      parts.push(svgLine(screen[0], screen[1], '#e11d48', 2 * scale, true));
-      if (record.type === 'angle') parts.push(svgLine(screen[1], screen[2], '#e11d48', 2 * scale, true));
-      const at = record.type === 'angle' ? screen[1] : { x: (screen[0].x + screen[1].x) / 2, y: (screen[0].y + screen[1].y) / 2 };
-      parts.push(svgLabel(at, measurementText(record), 12 * scale, ink, palette));
+      /* The record's colour and dash when it has them, the crimson dashed line otherwise; the text and
+         its place exactly as drawMeasurements puts them on this panel's PNG, leader line included. */
+      const color = measurementColor(record) || '#e11d48'; const dashed = record.dashed !== false;
+      parts.push(svgLine(screen[0], screen[1], color, 2 * scale, dashed));
+      if (record.type === 'angle') parts.push(svgLine(screen[1], screen[2], color, 2 * scale, dashed));
+      const anchor = measurementAnchor(points, record);
+      const placed = placement && placement.get(record);
+      const position = placed || shiftBy(anchor, record.offset);
+      if (leaderLength(anchor, position) > leaderMinimum) parts.push(svgLine(project(anchor), project(position), color, Math.max(1, scale), false));
+      /* A label nobody moved keeps the place it has always had in the SVG: halfway between the
+         projected ends, which a perspective camera puts a fraction of a pixel from the projected
+         midpoint. */
+      const at = placed || labelOffsetLength(record) ? project(position) : record.type === 'angle' ? screen[1] : { x: (screen[0].x + screen[1].x) / 2, y: (screen[0].y + screen[1].y) / 2 };
+      parts.push(svgLabel(at, measurementLabelText(record), 12 * scale, measurementColor(record) || ink, palette));
     });
     annotationRecords.forEach(record => {
       if (record.type === 'screen') { if (includeScreenText) parts.push(svgScreenText(record, dimensions, scale, palette)); return; }

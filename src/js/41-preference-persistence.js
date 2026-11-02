@@ -241,8 +241,11 @@
     /* Without a projection there is no way to know which boxes overlap; saying so beats moving
        labels on a guess. */
     if (!result) { announce('Cannot measure the label positions yet — render the view first', 'error'); return; }
-    renderLabelList(); rebuildOverlays();
-    if (result.moved) announce(result.moved + ' label' + (result.moved === 1 ? '' : 's') + ' moved apart');
+    renderLabelList(); renderMeasurementList(); rebuildOverlays();
+    /* "3 labels moved apart" as it has always read; measurement text it moved is counted beside them. */
+    const count = (number, one) => number + ' ' + one + (number === 1 ? '' : 's');
+    const movedLabels = result.movedLabels || 0; const movedMeasurements = result.movedMeasurements || 0;
+    if (result.moved) announce((movedLabels && movedMeasurements ? count(movedLabels, 'label') + ' and ' + count(movedMeasurements, 'measurement') : movedMeasurements ? count(movedMeasurements, 'measurement') : count(movedLabels, 'label')) + ' moved apart');
     else if (result.blocked) announce('The labels still overlapping are ones you placed by hand — drag them, or Reset a row first');
     else announce('Labels already clear of each other');
   });
@@ -267,6 +270,8 @@
   root.querySelector('#gpv-screen-text').addEventListener('keydown', event => { if (event.key === 'Enter') addScreenText(); });
   root.querySelector('#gpv-clear-annotations').addEventListener('click', () => { if (annotationRecords.length) remember('clearing annotations'); annotationRecords = []; annotationDraft = []; renderAnnotationList(); rebuildOverlays(); updateStatus('Annotations cleared'); });
   root.querySelector('#gpv-measure-type').addEventListener('change', () => { measurementDraft = []; if (measurementActive) root.querySelector('#gpv-measure-state').textContent = 'Select ' + (root.querySelector('#gpv-measure-type').value === 'angle' ? 3 : 2) + ' atoms in the viewer.'; });
+  root.querySelector('#gpv-measurements-copy').addEventListener('click', copyMeasurements);
+  root.querySelector('#gpv-measurements-csv').addEventListener('click', downloadMeasurementsCsv);
   root.querySelector('#gpv-clear-measurements').addEventListener('click', () => { if (measurementRecords.length) remember('clearing measurements'); measurementRecords = []; measurementDraft = []; renderMeasurementList(); rebuildOverlays(); updateStatus('Measurements cleared'); });
   root.querySelector('#gpv-side-by-side').addEventListener('change', event => {
     stopCycle();
