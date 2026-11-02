@@ -443,9 +443,22 @@
      dropped when the card closes, saved nowhere. What it makes — measurements and a highlight — are
      ordinary records. */
 
+  /* Whether a contact is covalently joined to this residue, from the closest heavy-atom pair alone:
+     'peptide' when the pair is backbone C and N (either way round) within 1.9 Å, 'disulfide' when
+     both residues are CYS and the pair is SG–SG within 2.3 Å, else null. Geometry rather than
+     numbering, because insertion codes and chain breaks make |Δresi| = 1 unreliable both ways. */
+  function contactBond(ownResn, row) {
+    if (row.closest === null) return null;
+    const pair = row.atomA + '–' + row.atomB;
+    if ((pair === 'C–N' || pair === 'N–C') && row.closest <= 1.9) return 'peptide';
+    if (ownResn === 'CYS' && row.resn === 'CYS' && pair === 'SG–SG' && row.closest <= 2.3) return 'disulfide';
+    return null;
+  }
+
   /* The residue's contacts at `cutoff` (the Annotate panel's Within when left out), nearest first by
-     closest heavy-atom distance: { cutoff, rows: [{ chain, resi, resn, closest, atomA, atomB, ca }],
-     near } — atomA is this residue's atom, atomB the contact's — or nearbyResidues' { error }. */
+     closest heavy-atom distance: { cutoff, rows: [{ chain, resi, resn, closest, atomA, atomB, ca,
+     bond }], near } — atomA is this residue's atom, atomB the contact's, bond is contactBond's — or
+     nearbyResidues' { error }. */
   function residueContactRows(entry, chain, resi, cutoff) {
     const near = nearbyResidues({ entry, mode: 'residue', residue: { chain, resi }, cutoff });
     if (!near) return { error: 'That residue’s model is not loaded' };
@@ -454,11 +467,13 @@
     const rows = near.residues.map(item => {
       const pair = closestHeavyAtomPair(entry, { chain, resi }, entry, item);
       const other = residueAlphaCarbon(entry, item.chain, item.resi);
-      return {
+      const row = {
         chain: item.chain, resi: item.resi, resn: item.resn,
         closest: pair ? pair.distance : null, atomA: pair ? pair.a.atom || '' : '', atomB: pair ? pair.b.atom || '' : '',
         ca: origin && other ? Math.sqrt(squaredDistance(origin, other)) : null
       };
+      row.bond = contactBond(pair ? pair.a.resn || '' : '', row);
+      return row;
     });
     const nearestFirst = value => (value === null ? Infinity : value);
     rows.sort((x, y) => nearestFirst(x.closest) - nearestFirst(y.closest) || compareChains(x.chain, y.chain) || x.resi - y.resi);
@@ -529,14 +544,19 @@
       button.dataset.chain = row.chain; button.dataset.resi = String(row.resi);
       button.dataset.closest = row.closest === null ? '' : row.closest.toFixed(3);
       button.dataset.atoms = row.atomA + '–' + row.atomB;
+      button.dataset.bond = row.bond || '';
       const part = (className, text) => { const span = document.createElement('span'); span.className = className; span.textContent = text; return span; };
+      /* A covalent neighbour stays in the list, in its place, with a quiet tag inside the name cell. */
+      const bondText = row.bond === 'peptide' ? 'peptide bond' : row.bond === 'disulfide' ? 'disulfide' : '';
+      const name = part('gpv-contact-name', contactRowName(row));
+      if (bondText) name.append(part('gpv-contact-bond', bondText));
       button.append(
-        part('gpv-contact-name', contactRowName(row)),
+        name,
         part('gpv-contact-closest', row.closest === null ? '—' : row.closest.toFixed(2) + ' Å'),
         part('gpv-contact-atoms', row.atomA && row.atomB ? row.atomA + '–' + row.atomB : ''),
         part('gpv-contact-ca', row.ca === null ? '' : 'Cα ' + row.ca.toFixed(2) + ' Å')
       );
-      button.title = 'Measure to ' + contactRowName(row) + ' (' + (measureAtoms === 'closest' ? 'closest atoms' : 'Cα–Cα') + ')';
+      button.title = 'Measure to ' + contactRowName(row) + (bondText ? ' (' + bondText + ')' : '') + ' (' + (measureAtoms === 'closest' ? 'closest atoms' : 'Cα–Cα') + ')';
       const point = () => setContactHover({ entryId: found.entryId, chain: row.chain, resi: row.resi });
       button.addEventListener('mouseenter', point);
       button.addEventListener('focus', point);
@@ -594,8 +614,8 @@
   }
 
   function contactsText(found) {
-    const lines = [['residue', 'chain', 'resi', 'resn', 'closest_distance', 'closest_atoms', 'ca_distance'].join('\t')];
-    found.rows.forEach(row => lines.push([contactRowName(row), row.chain, row.resi, row.resn, row.closest === null ? '' : row.closest.toFixed(3), row.atomA + '–' + row.atomB, row.ca === null ? '' : row.ca.toFixed(3)].join('\t')));
+    const lines = [['residue', 'chain', 'resi', 'resn', 'closest_distance', 'closest_atoms', 'bond', 'ca_distance'].join('\t')];
+    found.rows.forEach(row => lines.push([contactRowName(row), row.chain, row.resi, row.resn, row.closest === null ? '' : row.closest.toFixed(3), row.atomA + '–' + row.atomB, row.bond || '', row.ca === null ? '' : row.ca.toFixed(3)].join('\t')));
     return lines.join('\n');
   }
 

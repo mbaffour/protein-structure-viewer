@@ -2538,8 +2538,9 @@ await step('a figure export and the comparison panels never draw the residue mar
    makes. Every step takes back what it made: records, selection, the measure choice, the colour
    scheme. Still in the turned view. */
 const contactRowsNow = () => page.evaluate(() => [...document.querySelectorAll('#gpv-residue-contacts-rows .gpv-residue-contact')].map(button => ({
-  chain: button.dataset.chain, resi: Number(button.dataset.resi), closest: Number(button.dataset.closest), atoms: button.dataset.atoms,
-  name: button.querySelector('.gpv-contact-name').textContent, text: button.textContent
+  chain: button.dataset.chain, resi: Number(button.dataset.resi), closest: Number(button.dataset.closest), atoms: button.dataset.atoms, bond: button.dataset.bond,
+  /* the name cell's own text, before the bond tag it may hold */
+  name: button.querySelector('.gpv-contact-name').firstChild.textContent, text: button.textContent
 })));
 const contactsShown = () => page.locator('#gpv-residue-contacts').isVisible();
 /* The card's measure choice, put back without needing the card open: the select keeps its listener. */
@@ -2606,7 +2607,10 @@ await step('the card lists a residue\'s contacts: the proximity tool\'s residues
       if (!pair) throw new Error(row.name + ' names the atom pair "' + row.atoms + '"');
       const named = await namedAtomDistance(Number(entryId), chain, Number(resi), pair[1], row.chain, row.resi, pair[2]);
       if (!(Math.abs(named - row.closest) <= 0.001)) throw new Error(row.name + ': ' + row.atoms + ' are ' + named + ' Å apart, the row says ' + row.closest);
-      if (!/^\S+\d+ · \S+\d+\.\d\d Å\S+–\S+Cα \d+\.\d\d Å$/.test(row.text)) throw new Error('a row reads "' + row.text + '"');
+      if (!/^\S+\d+ · \S+(?:peptide bond|disulfide)?\d+\.\d\d Å\S+–\S+Cα \d+\.\d\d Å$/.test(row.text)) throw new Error('a row reads "' + row.text + '"');
+      const bonded = (row.atoms === 'C–N' || row.atoms === 'N–C') && row.closest <= 1.9 ? 'peptide' : '';
+      if (row.bond !== bonded && !(row.atoms === 'SG–SG' && row.bond === 'disulfide')) throw new Error(row.name + ' (' + row.atoms + ' ' + row.closest + ' Å) is tagged "' + row.bond + '", not "' + bonded + '"');
+      if (Boolean(row.bond) !== row.text.includes(row.bond === 'disulfide' ? 'disulfide' : 'peptide bond')) throw new Error(row.name + ' is tagged "' + row.bond + '" but reads "' + row.text + '"');
     }
     console.log('       ' + target.text + ' · ' + rows.length + ' contacts within ' + truth.cutoff + ' Å · nearest ' + (rows[0] ? rows[0].name + ' ' + rows[0].closest.toFixed(2) + ' Å ' + rows[0].atoms : '—'));
   } finally { await clearSelection(); }
@@ -2839,7 +2843,7 @@ await step('colour by distance from the selected residue: closest heavy-atom ban
     await tab(startTab);
   }
 });
-await step('on α-chymotrypsin (5CHA), His57 of chain B lists Ser195 · C at NE2–OG 3.02 Å and Asp102 · B at ND1–OD1 2.67 Å', async () => {
+await step('on α-chymotrypsin (5CHA), His57 of chain B lists Ser195 · C at NE2–OG 3.02 Å and Asp102 · B at ND1–OD1 2.67 Å, tags Ala56 and Cys58 as peptide bonds, and Cys58 tags Cys42 as a disulfide', async () => {
   await clearSelection();
   const file = join(here, 'fixtures', 'experimental', '5cha.cif');
   const startCurrent = await page.inputValue('#gpv-current');
@@ -2871,7 +2875,34 @@ await step('on α-chymotrypsin (5CHA), His57 of chain B lists Ser195 · C at NE2
       if (!(Math.abs(row.closest - distance) <= 0.01)) throw new Error(name + ' is listed at ' + row.closest + ' Å, published ' + distance + ' Å');
       if (!row.text.includes(distance.toFixed(2) + ' Å')) throw new Error('the row reads "' + row.text + '"');
     }
+    /* The peptide neighbours are listed in their place (nearest first) and tagged; the triad is not. */
+    const bonds = [['ALA56 · B', 'peptide'], ['CYS58 · B', 'peptide'], ['SER195 · C', ''], ['ASP102 · B', '']];
+    for (const [name, bond] of bonds) {
+      const row = rows.find(item => item.name === name);
+      if (!row) throw new Error('His57\'s contacts do not list ' + name + ': ' + rows.map(item => item.name).join(', '));
+      if (row.bond !== bond) throw new Error(name + ' is tagged "' + row.bond + '", not "' + bond + '"');
+      if (row.text.includes('peptide bond') !== Boolean(bond)) throw new Error(name + ' reads "' + row.text + '"');
+      if (bond && !(/^[CN]–[CN]$/.test(row.atoms) && row.closest <= 1.9)) throw new Error(name + ' is a peptide bond at ' + row.atoms + ' ' + row.closest + ' Å');
+    }
     console.log('       HIS57 · B: ' + expect.map(([name]) => { const row = rows.find(item => item.name === name); return name + ' ' + row.atoms + ' ' + row.closest.toFixed(3) + ' Å'; }).join(' · ') + ' · ' + rows.length + ' contacts');
+    console.log('       peptide bonds: ' + bonds.filter(([, bond]) => bond).map(([name]) => { const row = rows.find(item => item.name === name); return name + ' ' + row.atoms + ' ' + row.closest.toFixed(2) + ' Å'; }).join(' · ') + ' · tagged, not hidden');
+    /* The disulfide: Cys42–Cys58 of chain B (_struct_conn disulf2, SG–SG 2.07 Å), seen from Cys58, whose
+       peptide neighbour His57 is tagged the other way. */
+    await clearSelection();
+    await page.fill('#gpv-goto', 'B:58'); await page.click('#gpv-goto-run'); await page.waitForTimeout(500);
+    const cys = await selectedNow();
+    if (!cys || cys.entryId !== id || cys.chain !== 'B' || cys.resi !== 58) throw new Error('Go to B:58 selected ' + JSON.stringify(cys));
+    await focusStage(); await page.keyboard.press('l'); await page.waitForTimeout(400);
+    if (!(await editorShown())) throw new Error('L did not open the card at Cys58');
+    await page.click('#gpv-label-editor-contacts'); await page.waitForTimeout(400);
+    const cysRows = await contactRowsNow();
+    const bridge = cysRows.find(item => item.name === 'CYS42 · B');
+    if (!bridge) throw new Error('Cys58\'s contacts do not list CYS42 · B: ' + cysRows.map(item => item.name).join(', '));
+    if (bridge.bond !== 'disulfide' || bridge.atoms !== 'SG–SG' || !(bridge.closest <= 2.3) || !bridge.text.includes('disulfide')) throw new Error('CYS42 · B is listed as "' + bridge.text + '" with bond "' + bridge.bond + '"');
+    const his = cysRows.find(item => item.name === 'HIS57 · B');
+    if (!his || his.bond !== 'peptide') throw new Error('from Cys58, His57 is tagged "' + (his ? his.bond : 'missing') + '"');
+    if (cysRows.filter(item => item.bond).length !== 3) throw new Error('Cys58 has ' + cysRows.filter(item => item.bond).map(item => item.name + ' ' + item.bond).join(', ') + ' bonded, not three (two peptide, one disulfide)');
+    console.log('       CYS58 · B: CYS42 · B ' + bridge.atoms + ' ' + bridge.closest.toFixed(2) + ' Å disulfide · ' + cysRows.filter(item => item.bond === 'peptide').map(item => item.name).join(', ') + ' peptide');
   } finally {
     await clearSelection();
     if (id !== null) {

@@ -236,8 +236,10 @@ On model 0, for every standard residue of the contact-map chain, `tests/referenc
 residues of any chain with a heavy atom within the cutoff of one of its heavy atoms (`NeighborSearch`
 over all polymer heavy atoms; water and hetero groups never a neighbour, the residue itself left out —
 the viewer's rule for one residue), and for each one the closest heavy-atom distance, the two atom
-names (this residue's first; on a tie the first pair in atom order) and the Cα–Cα distance (the Cα, else
-P, else the residue's first atom, as the viewer stands in). For the chain's first three residues it also
+names (this residue's first; on a tie the first pair in atom order), the Cα–Cα distance (the Cα, else
+P, else the residue's first atom, as the viewer stands in) and the viewer's bond flag by the same rule
+on that pair (`peptide` for C–N within 1.9 Å, `disulfide` for SG–SG of two cysteines within 2.3 Å, else
+none). For the chain's first three residues it also
 writes the closest heavy-atom distance to every other polymer residue of the model — the values *Colour
 by distance from the selected residue* bands. Coordinates in float64 and values to six decimals.
 `tests/validate.mjs` reads the viewer's contacts list through `__viewerDebug.residueContacts(entryId,
@@ -245,20 +247,21 @@ chain, resi, cutoff)` (the function the residue card's *Contacts* list is built 
 rows through `__viewerDebug.residueDistances(entryId, chain, resi)`, and checks: identical neighbour sets
 for every residue (the count of residues whose sets differ must be 0); every closest distance within
 5 × 10⁻⁵ Å; every Cα–Cα distance within 10⁻³ Å; the same closest atom pair, or a pair the viewer measures
-as exactly as close (a tie broken the other way); every distance row within 5 × 10⁻⁵ Å. Biopython holds
+as exactly as close (a tie broken the other way); the same number of bonded contacts on both sides and
+no contact whose peptide-bond / disulfide flag differs; every distance row within 5 × 10⁻⁵ Å. Biopython holds
 coordinates as float32, which accounts for differences of a few 10⁻⁶ Å. By design, two things would fail
 the check on a run that has them: the viewer's distance rows come from its sequence rows — the polymer
 residues of chains with more than one residue — while the reference lists every polymer residue, so a
 one-residue polymer chain would be missing on the viewer's side; and Biopython names atoms by
 `label_atom_id` where the viewer reads `auth_atom_id`, which AlphaFold 3 writes identically.
 
-| run | chain | cutoff | residues | contacts | sets differ | largest closest-distance difference | largest Cα–Cα difference | pairs differ (ties) | distance rows (3 residues) | largest difference | |
-|---|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|:--:|
-| A — M13 virion tip | K | 6 Å | 73 | 785 | 0 | 2.4 × 10⁻⁶ Å | 2.0 × 10⁻⁶ Å | 0 (0) | 3 × 689 | 3.7 × 10⁻⁶ Å | ✓ |
-| B — MS2 maturation protein–coat | A | 5 Å | 393 | 4 075 | 0 | 5.7 × 10⁻⁶ Å | 4.9 × 10⁻⁶ Å | 0 (0) | 3 × 652 | 2.9 × 10⁻⁶ Å | ✓ |
-| C — phiX174 F–G | A | 5 Å | 427 | 4 294 | 0 | 3.8 × 10⁻⁶ Å | 3.1 × 10⁻⁶ Å | 0 (0) | 3 × 601 | 3.8 × 10⁻⁶ Å | ✓ |
+| run | chain | cutoff | residues | contacts | sets differ | largest closest-distance difference | largest Cα–Cα difference | pairs differ (ties) | bonded (viewer / reference) | distance rows (3 residues) | largest difference | |
+|---|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|:--:|
+| A — M13 virion tip | K | 6 Å | 73 | 785 | 0 | 2.4 × 10⁻⁶ Å | 2.0 × 10⁻⁶ Å | 0 (0) | 144 / 144 | 3 × 689 | 3.7 × 10⁻⁶ Å | ✓ |
+| B — MS2 maturation protein–coat | A | 5 Å | 393 | 4 075 | 0 | 5.7 × 10⁻⁶ Å | 4.9 × 10⁻⁶ Å | 0 (0) | 784 / 784 | 3 × 652 | 2.9 × 10⁻⁶ Å | ✓ |
+| C — phiX174 F–G | A | 5 Å | 427 | 4 294 | 0 | 3.8 × 10⁻⁶ Å | 3.1 × 10⁻⁶ Å | 0 (0) | 852 / 852 | 3 × 601 | 3.8 × 10⁻⁶ Å | ✓ |
 
-Run on 2026-11-01 with viewer 2.51.0 (48 comparisons per run, all within tolerance).
+Run on 2026-11-01 with viewer 2.51.0 (49 comparisons per run, all within tolerance; the bonded column counts peptide-bond and disulfide contacts flagged on both sides, with no contact flagged differently).
 
 ### Against measured structures
 

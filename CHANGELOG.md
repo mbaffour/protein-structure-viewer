@@ -15,8 +15,11 @@ All notable changes to this project are recorded here.
   rows show before the list scrolls. Hovering a row names that residue on the view with a temporary
   label (screen only, never a record); clicking a row measures it and keeps the list open; **Measure
   all** measures every row in one undo step; **Highlight** makes the selection *Highlight nearby
-  residues* makes; **Copy** copies the rows as tab-separated text. The list is computed when opened
-  and forgotten when the card closes; nothing about it is saved.
+  residues* makes; **Copy** copies the rows as tab-separated text. Residues joined to this one by a
+  peptide bond or a disulfide are listed too, in their place, but tagged *peptide bond* / *disulfide*
+  (closest atoms C–N within 1.9 Å, SG–SG of two cysteines within 2.3 Å — geometry, not numbering),
+  and Copy carries a `bond` column. The list is computed when opened and forgotten when the card
+  closes; nothing about it is saved.
 - **Measure the closest atoms, not only Cα.** A small *Measure* select on the card — *Cα–Cα* (the
   default) or *closest atoms*, remembered with the other preferences — governs *Measure to…*, `M`, a
   contact row and *Measure all*. With *closest atoms* the measurement joins the closest heavy-atom
@@ -36,8 +39,9 @@ All notable changes to this project are recorded here.
   with the closest heavy-atom distance, the atom pair and the Cα–Cα distance, and for three residues
   the closest heavy-atom distance to every residue; `tests/validate.mjs` compares the viewer's
   contacts lists and distance rows with them (identical neighbour sets, 5 × 10⁻⁵ Å on closest
-  distances, 10⁻³ Å on Cα–Cα, the same atom pair or an exact tie). See *Residue contacts and distance
-  from a residue* in VALIDATION.md.
+  distances, 10⁻³ Å on Cα–Cα, the same atom pair or an exact tie, and the same peptide-bond /
+  disulfide flag on every contact). See *Residue contacts and distance from a residue* in
+  VALIDATION.md.
 - **Against measured structures**: a new `tests/validate-experimental.mjs` (`npm run
   validate:experimental`, run in CI) checks the viewer's atom-pair distances and contacts against
   every hydrogen bond and salt bridge PDBePISA lists across the interfaces of haemoglobin (2HHB, 44)

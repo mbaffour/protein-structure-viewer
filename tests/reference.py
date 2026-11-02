@@ -99,7 +99,8 @@ print('distance map', [map_a, map_b], len(ids_a), 'x', len(ids_b), '; intra', ma
 # groups never a neighbour, the residue itself left out -- each with its closest heavy-atom distance, the
 # two atom names (this residue's atom first; on a tie the first pair in atom order, outer loop over this
 # residue's atoms, as the viewer searches) and the Calpha-Calpha distance (CA, else P, else the residue's
-# first atom, the viewer's stand-in). Then, for the first three residues of map_a, the closest heavy-atom
+# first atom, the viewer's stand-in) and the viewer's bond flag ('peptide', 'disulfide' or None, by the
+# same rule on the closest pair). Then, for the first three residues of map_a, the closest heavy-atom
 # distance to every other polymer residue of the model -- the values Colour by distance from the selected
 # residue bands. Coordinates in float64 and values to six decimals, since the comparison is at 5e-5 A.
 def residue_heavy(res):
@@ -126,8 +127,14 @@ for res in map_residues:
         other = near[key]; theirs = residue_heavy(other)
         d = np.sqrt(((own_xyz[:, None, :] - np.array([xyz(b) for b in theirs])[None, :, :]) ** 2).sum(-1))
         i, j = np.unravel_index(int(np.argmin(d)), d.shape)  # argmin takes the first minimum in row-major order
-        rows.append([key[0], key[1], other.get_resname(), round(float(d[i, j]), 6), own[i].get_id(), theirs[j].get_id(),
-                     round(float(np.linalg.norm(xyz(stand_in(res)) - xyz(stand_in(other)))), 6)])
+        # The viewer's bond flag, from the closest pair alone: backbone C-N (either way) within 1.9 A is a
+        # peptide bond; SG-SG of two CYS within 2.3 A a disulfide. Geometry, not numbering.
+        pair = (own[i].get_id(), theirs[j].get_id()); closest = float(d[i, j])
+        if pair in (('C', 'N'), ('N', 'C')) and closest <= 1.9: bond = 'peptide'
+        elif res.get_resname() == 'CYS' and other.get_resname() == 'CYS' and pair == ('SG', 'SG') and closest <= 2.3: bond = 'disulfide'
+        else: bond = None
+        rows.append([key[0], key[1], other.get_resname(), round(closest, 6), own[i].get_id(), theirs[j].get_id(),
+                     round(float(np.linalg.norm(xyz(stand_in(res)) - xyz(stand_in(other)))), 6), bond])
     contact_rows.append({'resi': res.id[1], 'resn': res.get_resname(), 'contacts': rows})
 poly_residues = [r for c in model0 for r in c if r.id[0] == ' ']
 poly_index = np.array([k for k, r in enumerate(poly_residues) for a in residue_heavy(r)])

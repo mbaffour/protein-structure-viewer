@@ -146,18 +146,21 @@ if (reference.residue_contacts) {
   if (!viewerContacts) { rows.push({ label, viewer: NaN, reference: rc.residues.length, delta: NaN, ok: false }); failed += 1; }
   else {
     let setDiffers = 0; let compared = 0; let worstClosest = 0; let worstCa = 0; const pairDiffers = [];
+    let bondedViewer = 0; let bondedReference = 0; let bondDiffers = 0;
     rc.residues.forEach((item, index) => {
       const seen = viewerContacts.contacts[index];
       if (!seen) { setDiffers += 1; return; }
       const byKey = new Map(seen.map(row => [row.chain + '|' + row.resi, row]));
       const expected = new Map(item.contacts.map(row => [row[0] + '|' + row[1], row]));
       if (byKey.size !== expected.size || [...expected.keys()].some(key => !byKey.has(key))) setDiffers += 1;
-      expected.forEach(([chain, resi, resn, closest, atomA, atomB, ca], key) => {
+      expected.forEach(([chain, resi, resn, closest, atomA, atomB, ca, bond], key) => {
         const row = byKey.get(key); if (!row) return;
         compared += 1;
         worstClosest = Math.max(worstClosest, Math.abs(row.closest - closest));
         worstCa = Math.max(worstCa, Math.abs(row.ca - ca));
         if (row.atomA !== atomA || row.atomB !== atomB) pairDiffers.push({ resi: item.resi, chain, other: resi, atomA, atomB, closest: row.closest });
+        if (row.bond) bondedViewer += 1; if (bond) bondedReference += 1;
+        if ((row.bond || '') !== (bond || '')) bondDiffers += 1;
       });
     });
     /* a different pair is a tie only if the reference's own pair is as close, measured in the viewer */
@@ -167,6 +170,9 @@ if (reference.residue_contacts) {
     check(label + ' · largest closest heavy-atom difference over ' + compared + ' contacts (Å)', worstClosest, 0, 5e-5);
     check(label + ' · largest Cα–Cα difference over ' + compared + ' contacts (Å)', worstCa, 0, 1e-3);
     check(label + ' · closest atom pairs that differ, ties excepted (' + (pairDiffers.length - notTies) + ' ties)', notTies, 0, 0);
+    /* the peptide-bond / disulfide flag: the same count on both sides, and no contact flagged differently */
+    const bondsAgree = bondDiffers === 0 && bondedViewer === bondedReference;
+    rows.push({ label: label + ' · bonded contacts (viewer / reference)', viewer: bondedViewer, reference: bondedReference, delta: bondDiffers, ok: bondsAgree }); if (!bondsAgree) failed += 1;
     rc.distances.forEach((item, index) => {
       const seen = viewerContacts.distances[index];
       const name = item.resn + item.resi + ' · ' + item.chain;

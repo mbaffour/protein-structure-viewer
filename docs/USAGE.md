@@ -339,8 +339,11 @@ label names that residue on the view — never a record, never exported. Click a
 ordinary measurement (the list stays open); **Measure all** measures every row in one undo step;
 **Highlight** makes exactly the selection *Highlight nearby residues* would make for this residue (one
 record per chain, in the highlight colour, one undo step); **Copy** puts the rows on the clipboard as
-tab-separated text (`residue, chain, resi, resn, closest_distance, closest_atoms, ca_distance`, Å to
-three decimals). The list is worked out when you open it and forgotten when the card closes; nothing
+tab-separated text (`residue, chain, resi, resn, closest_distance, closest_atoms, bond, ca_distance`,
+Å to three decimals). Residues covalently joined to this one are listed too, in their place, but
+tagged *peptide bond* (closest atoms C–N within 1.9 Å) or *disulfide* (SG–SG of two cysteines within
+2.3 Å) — decided by geometry, so insertion codes and chain breaks do not mislead it — and the `bond`
+column says which. The list is worked out when you open it and forgotten when the card closes; nothing
 about it is saved.
 
 **Measure: Cα–Cα or closest atoms.** The small *Measure* select on the card decides what every

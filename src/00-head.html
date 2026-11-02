@@ -1441,6 +1441,8 @@ html>body{padding:0}</style>
   #generic-protein-viewer .gpv-residue-contact:hover, #generic-protein-viewer .gpv-residue-contact:focus-visible { background: color-mix(in srgb, var(--primary) 14%, transparent); outline: none; }
   #generic-protein-viewer .gpv-contact-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   #generic-protein-viewer .gpv-contact-atoms, #generic-protein-viewer .gpv-contact-ca { color: var(--muted-foreground); }
+  /* The tag on a covalently joined contact (peptide bond, disulfide): quiet, inside the name cell. */
+  #generic-protein-viewer .gpv-contact-bond { margin-left: 6px; padding: 0 5px; border: 1px solid var(--border); border-radius: 999px; color: var(--muted-foreground); font-size: 0.75em; white-space: nowrap; }
   #generic-protein-viewer .gpv-residue-contacts-empty { color: var(--muted-foreground); }
   /* Measure to… is armed: the next click on a residue is its second point. */
   #generic-protein-viewer .gpv-stage.is-measuring-to { cursor: crosshair; }
