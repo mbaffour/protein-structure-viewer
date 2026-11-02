@@ -99,7 +99,7 @@ Anything the viewer cannot interpret is skipped and reported in the red notice b
 | --- | --- |
 | <kbd>←</kbd> / <kbd>→</kbd> | Previous / next model (while a label is active they move the label instead) |
 | <kbd>L</kbd> | Open the label editor at the selected residue |
-| <kbd>M</kbd> | *Measure to…*: the Cα–Cα distance from the selected residue to the next residue you click |
+| <kbd>M</kbd> | *Measure to…*: the distance from the selected residue to the next residue you click — Cα–Cα, or the closest heavy atoms when the residue card's *Measure* choice says *closest atoms* |
 | <kbd>Enter</kbd> / <kbd>Esc</kbd> | In the label editor: add or update the label / close it without changes |
 | <kbd>←</kbd> <kbd>→</kbd> <kbd>↑</kbd> <kbd>↓</kbd> | Move the active label 8 px (<kbd>Shift</kbd>: 1 px) |
 | <kbd>Delete</kbd> | Remove the active label |
@@ -210,6 +210,15 @@ Notes on the colour schemes:
   1–2 Å green, 2–4 Å yellow, 4–8 Å orange, 8 Å and above red; residues the alignment did not match
   are grey. The reference model shows its mean deviation across the aligned models. Before an
   alignment everything is grey and the status line says so.
+- **Distance from selected residue** colours every residue of the selected residue's model by the
+  distance of its closest heavy atom to that residue (the `min_heavy_distance` of the card's
+  *Distances CSV*): ≤4 Å dark blue, 4–6 Å blue, 6–10 Å light blue, 10–20 Å pale blue, over 20 Å light
+  grey; the residue itself takes the accent colour, and other models, ligands and water are grey.
+  Click a residue first — with nothing selected everything is grey and the status says *Click a residue
+  first*; selecting another residue recolours at once. The sequence strip follows, the legend names the
+  residue (`Distance from GLU57 · B`), and the methods text gains a sentence defining the bands. Scenes,
+  sessions and share links keep the scheme, but not the selection (they never have), so a restored
+  scene or a saved view is grey until you click the residue again.
 - **Residue charge**, **Hydrophobicity (Kyte–Doolittle)**, **Residue type**, **Amino acid** and
   **Secondary structure** colour by what the residue is rather than by model or confidence. Charge:
   Lys and Arg blue, His light blue (partial), Asp, Glu and nucleotides red, everything else grey.
@@ -303,8 +312,9 @@ no editor open, no active label and no mode on clears the selection and the mark
 opening the card) keeps the residue as the first point and waits for a second: the cursor turns to a
 crosshair and the status says `Click a second residue to measure from GLU57 · B · Esc cancels`. The
 next residue you click — in the view, the sequence strip or the letters, or with *Go to* — finishes it
-as an ordinary distance measurement between the two Cα atoms, drawn, listed, exported, saved and
-undone exactly like one made in measurement mode (one undo step). The status gives the distance and,
+as an ordinary distance measurement between the two Cα atoms (or their closest heavy atoms — see
+*Measure* below), drawn, listed, exported, saved and undone exactly like one made in measurement mode
+(one undo step). The status gives the distance and,
 when the residues come closer than their Cα atoms do, the closest heavy-atom approach as well:
 `GLU57 · B — ARG59 · A: Cα–Cα 9.42 Å · closest atoms 3.1 Å` — so a pair in contact and a pair far
 apart are both one click each. Clicking the same residue again measures nothing and keeps waiting;
@@ -317,6 +327,32 @@ every other residue of its model — `chain, resi, resn, ca_distance, min_heavy_
 distance and the closest approach of any two heavy atoms, both in Å — nearest first, and the status
 names the nearest residue. The residue itself is left out, so the first row is its nearest neighbour.
 For a whole map of distances, see *Contact and distance map* in the Compare tab.
+
+**Contacts.** The neighbour count on the card (`6 residues within 4.5 Å` — a link) or the card's
+**Contacts** button opens the residue's contacts inside the card: one row per residue the proximity
+tool counts — any heavy atom within the *Within (Å)* cutoff of any heavy atom of this residue, water
+and hetero groups never listed, so the list, the count and **Highlight nearby residues** always agree —
+nearest first by closest heavy-atom distance, with the two atoms (this residue's first) and the
+Cα–Cα distance: `ARG59 · B   2.87 Å  NH1–OD1   Cα 9.42 Å`. Every row names its chain, the residue's own
+included. About nine rows show, then the list scrolls. Hover a row (or Tab to it) and a temporary
+label names that residue on the view — never a record, never exported. Click a row to measure it as an
+ordinary measurement (the list stays open); **Measure all** measures every row in one undo step;
+**Highlight** makes exactly the selection *Highlight nearby residues* would make for this residue (one
+record per chain, in the highlight colour, one undo step); **Copy** puts the rows on the clipboard as
+tab-separated text (`residue, chain, resi, resn, closest_distance, closest_atoms, bond, ca_distance`,
+Å to three decimals). Residues covalently joined to this one are listed too, in their place, but
+tagged *peptide bond* (closest atoms C–N within 1.9 Å) or *disulfide* (SG–SG of two cysteines within
+2.3 Å) — decided by geometry, so insertion codes and chain breaks do not mislead it — and the `bond`
+column says which. The list is worked out when you open it and forgotten when the card closes; nothing
+about it is saved.
+
+**Measure: Cα–Cα or closest atoms.** The small *Measure* select on the card decides what every
+residue-to-residue measurement made from the card joins — *Measure to…*, <kbd>M</kbd>, a contact row
+and *Measure all*: the two Cα atoms (the default), or the closest pair of heavy atoms of the two
+residues, so the drawn value is that closest distance and the record lists like any atom-pair
+measurement. The status then names the atoms: `HIS57 · B — SER195 · C: NE2–OG 3.02 Å`. The choice is
+remembered with your other preferences. A click on the *Contact and distance map* always measures
+Cα–Cα, because the map is a Cα map.
 
 The label you have just added, edited or clicked is the *active* label, outlined in the accent colour
 on screen (never in an export). The arrow keys move it 8 px at a time (<kbd>Shift</kbd>: 1 px),
@@ -1145,6 +1181,18 @@ validator loads the same files (or the archive, to exercise the ZIP path), runs 
 identifier mode with model 0 as reference, reads the same quantities through the viewer's debug hook and
 prints a table. Tolerances are 0.01 for pLDDT and 0.001 Å for distances; the residue set must match
 exactly. `VALIDATION.md` at the repository root records the results on three real runs.
+
+Since 2.51.0 the same check also covers every residue's contacts on the contact-map chain (the residue
+card's list: neighbour set, closest heavy-atom distance and atom pair, Cα–Cα distance) and the
+closest heavy-atom distances behind *Distance from selected residue*.
+
+**Reproducibility: against measured structures.** Contacts and distances are also checked against
+numbers this project did not compute. `npm run validate:experimental` (in `tests/`, offline, run in CI)
+loads three deposited crystal structures and compares the viewer with PDBePISA's hydrogen bonds and
+salt bridges across the interfaces of haemoglobin (2HHB) and barnase–barstar (1BRS) — every bonded atom
+pair's distance to 10⁻³ Å, and every bonded residue pair present in the contacts list — and with the
+published catalytic-triad distances of α-chymotrypsin (5CHA). The sources and results are in
+`VALIDATION.md`, section *Against measured structures*.
 
 Not covered by the check: the sequence-aware pairing (a design choice, not a computed quantity —
 inspect its reported chain mapping and identity), the PAE-domain heuristic (it is only checked to run

@@ -1,0 +1,13 @@
+{
+ "note": "Interatomic distances reported in the literature or in teaching material for deposited crystal structures, with the atoms named, so the viewer's contact distances can be checked against numbers somebody else measured. Each value is reproduced from the source as printed; the fixture .cif is the wwPDB mmCIF the source refers to.",
+ "entries": [
+  {
+   "pdb": "5CHA", "file": "5cha.cif", "what": "Bovine alpha-chymotrypsin, 1.67 Å, catalytic triad of molecule 1 (chains B and C)",
+   "source": "J. D. Cronk, Gonzaga University, CHEM 440 'catalytic triad' page (web02.gonzaga.edu/faculty/cronk/CHEM440pub/catalytic-triad.html), figure based on PDB entry 5CHA",
+   "distances": [
+    { "chain_1": "B", "resn_1": "HIS", "resi_1": 57, "atom_1": "NE2", "chain_2": "C", "resn_2": "SER", "resi_2": 195, "atom_2": "OG", "published": 3.02 },
+    { "chain_1": "B", "resn_1": "ASP", "resi_1": 102, "atom_1": "OD1", "chain_2": "B", "resn_2": "HIS", "resi_2": 57, "atom_2": "ND1", "published": 2.67 }
+   ]
+  }
+ ]
+}

@@ -4,7 +4,8 @@ onto model 0, RMSF around the mean Cα position across all superposed models, Rg
 exact maximum Cα–Cα distance, heavy-atom residue contacts within a cutoff of one chain, the
 inter-chain residue contact map (pairs with closest heavy-atom distance) for two chains, the full
 Cα–Cα distance matrix of those two chains and of the first chain against itself, and the
-buried surface area of every contacting chain pair by Shrake-Rupley (Bio.PDB.SASA)."""
+buried surface area of every contacting chain pair by Shrake-Rupley (Bio.PDB.SASA), and for every residue
+of the first contact-map chain its contacts within the cutoff with their closest atom pairs (2.51.0)."""
 import sys, json, glob, re, warnings
 import Bio
 import numpy as np
@@ -92,6 +93,62 @@ out['distance_map'] = {'chains': [map_a, map_b], 'residues_a': ids_a, 'residues_
     'intra': {'chain': map_a, 'residues': ids_a, 'ca': [[round(float(v), 4) for v in row] for row in ca_matrix(xyz_a, xyz_a)]}}
 print('distance map', [map_a, map_b], len(ids_a), 'x', len(ids_b), '; intra', map_a, len(ids_a), 'x', len(ids_a))
 
+# Residue contacts on model 0 (added 2.51.0): for every standard residue of map_a, the polymer residues of
+# any chain with a heavy atom within the cutoff of any of its heavy atoms -- the viewer's rule for one
+# residue (Annotate -> Nearby residues, the residue card's Contacts): hydrogens excluded, water and hetero
+# groups never a neighbour, the residue itself left out -- each with its closest heavy-atom distance, the
+# two atom names (this residue's atom first; on a tie the first pair in atom order, outer loop over this
+# residue's atoms, as the viewer searches) and the Calpha-Calpha distance (CA, else P, else the residue's
+# first atom, the viewer's stand-in) and the viewer's bond flag ('peptide', 'disulfide' or None, by the
+# same rule on the closest pair). Then, for the first three residues of map_a, the closest heavy-atom
+# distance to every other polymer residue of the model -- the values Colour by distance from the selected
+# residue bands. Coordinates in float64 and values to six decimals, since the comparison is at 5e-5 A.
+def residue_heavy(res):
+    return [a for a in res if a.element not in ('H', 'D')]
+def stand_in(res):
+    atoms = list(res)
+    if 'CA' in res and res.id[0] == ' ': return res['CA']
+    return next((a for a in atoms if a.get_id() == 'P'), atoms[0])
+def xyz(atom):
+    return atom.coord.astype(float)
+poly_heavy = [a for a in heavy if a.get_parent().id[0] == ' ']
+ns_poly = NeighborSearch(poly_heavy)
+contact_rows = []
+map_residues = [r for r in model0[map_a] if r.id[0] == ' '] if map_a in model0 else []
+for res in map_residues:
+    own = residue_heavy(res); own_xyz = np.array([xyz(a) for a in own]).reshape(-1, 3)
+    near = {}
+    for a in own:
+        for b in ns_poly.search(a.coord, cutoff):
+            other = b.get_parent()
+            if other is not res: near[(other.get_parent().id, other.id[1])] = other
+    rows = []
+    for key in sorted(near, key=lambda k: (k[0], k[1])):
+        other = near[key]; theirs = residue_heavy(other)
+        d = np.sqrt(((own_xyz[:, None, :] - np.array([xyz(b) for b in theirs])[None, :, :]) ** 2).sum(-1))
+        i, j = np.unravel_index(int(np.argmin(d)), d.shape)  # argmin takes the first minimum in row-major order
+        # The viewer's bond flag, from the closest pair alone: backbone C-N (either way) within 1.9 A is a
+        # peptide bond; SG-SG of two CYS within 2.3 A a disulfide. Geometry, not numbering.
+        pair = (own[i].get_id(), theirs[j].get_id()); closest = float(d[i, j])
+        if pair in (('C', 'N'), ('N', 'C')) and closest <= 1.9: bond = 'peptide'
+        elif res.get_resname() == 'CYS' and other.get_resname() == 'CYS' and pair == ('SG', 'SG') and closest <= 2.3: bond = 'disulfide'
+        else: bond = None
+        rows.append([key[0], key[1], other.get_resname(), round(closest, 6), own[i].get_id(), theirs[j].get_id(),
+                     round(float(np.linalg.norm(xyz(stand_in(res)) - xyz(stand_in(other)))), 6), bond])
+    contact_rows.append({'resi': res.id[1], 'resn': res.get_resname(), 'contacts': rows})
+poly_residues = [r for c in model0 for r in c if r.id[0] == ' ']
+poly_index = np.array([k for k, r in enumerate(poly_residues) for a in residue_heavy(r)])
+poly_xyz = np.array([xyz(a) for r in poly_residues for a in residue_heavy(r)]).reshape(-1, 3)
+distance_rows = []
+for res in map_residues[:3]:
+    own_xyz = np.array([xyz(a) for a in residue_heavy(res)]).reshape(-1, 3)
+    per_atom = np.sqrt(((poly_xyz[None, :, :] - own_xyz[:, None, :]) ** 2).sum(-1).min(0))
+    best = np.full(len(poly_residues), np.inf); np.minimum.at(best, poly_index, per_atom)
+    distance_rows.append({'chain': map_a, 'resi': res.id[1], 'resn': res.get_resname(),
+        'rows': [[r.get_parent().id, r.id[1], r.get_resname(), round(float(best[k]), 6)] for k, r in enumerate(poly_residues) if r is not res and np.isfinite(best[k])]})
+out['residue_contacts'] = {'chain': map_a, 'cutoff': cutoff, 'residues': contact_rows, 'distances': distance_rows}
+print('residue contacts', map_a, len(contact_rows), 'residues,', sum(len(r['contacts']) for r in contact_rows), 'contacts at', cutoff, 'A; distance rows for', [r['resi'] for r in distance_rows])
+
 # Buried surface area of every chain pair in contact, on model 0, with Biopython's Shrake–Rupley
 # (Bio.PDB.SASA) configured to the viewer's parameters: probe 1.4 Å, 92 sphere points, Bondi radii
 # (C 1.70, N 1.55, O 1.52, S 1.80 … — identical to Biopython's defaults for every element present),
@@ -177,4 +234,4 @@ for a3m in sorted(glob.glob(f'{folder}/*unpaired*.a3m')):
     out['msa'].append({'file': os.path.basename(a3m), 'query': query, 'sequences': len(rows), 'depth': depth, 'identity': [round(v, 6) for v in ident], 'conservation': [round(v, 6) for v in cons], 'conservation_unweighted': [round(v, 6) for v in cons_raw]})
 print('msa', [(m['file'][-30:], m['sequences'], len(m['query'])) for m in out['msa']])
 json.dump(out, open(f'{folder}/reference.json', 'w'), indent=1)
-print(json.dumps({k: v for k, v in out.items() if k not in ('contacts', 'distance_map')}, indent=1)); print('contacts', out['contacts']['count'], out['contacts']['residues'][:6]); print('contact map', out['contact_map']['chains'], out['contact_map']['pairs'], 'pairs; chain pairs with contacts:', out['contact_map']['chain_pair_counts'])
+print(json.dumps({k: v for k, v in out.items() if k not in ('contacts', 'distance_map', 'residue_contacts')}, indent=1)); print('contacts', out['contacts']['count'], out['contacts']['residues'][:6]); print('contact map', out['contact_map']['chains'], out['contact_map']['pairs'], 'pairs; chain pairs with contacts:', out['contact_map']['chain_pair_counts'])

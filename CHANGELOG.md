@@ -2,6 +2,55 @@
 
 All notable changes to this project are recorded here.
 
+## 2.51.0
+
+### Added
+
+- **A residue's contacts, on its card.** The card's neighbour count (`6 residues within 4.5 Å`) is now
+  a link, and a **Contacts** button sits beside *Measure to…*; either opens the residue's contacts
+  inside the card — exactly the residues the count and *Highlight nearby residues* use (any heavy atom
+  within the Annotate cutoff; water and hetero groups never listed) — nearest first by closest
+  heavy-atom distance, each row giving the residue and chain, that distance, the two atoms (this
+  residue's first) and the Cα–Cα distance: `ARG59 · B   2.87 Å  NH1–OD1   Cα 9.42 Å`. About nine
+  rows show before the list scrolls. Hovering a row names that residue on the view with a temporary
+  label (screen only, never a record); clicking a row measures it and keeps the list open; **Measure
+  all** measures every row in one undo step; **Highlight** makes the selection *Highlight nearby
+  residues* makes; **Copy** copies the rows as tab-separated text. Residues joined to this one by a
+  peptide bond or a disulfide are listed too, in their place, but tagged *peptide bond* / *disulfide*
+  (closest atoms C–N within 1.9 Å, SG–SG of two cysteines within 2.3 Å — geometry, not numbering),
+  and Copy carries a `bond` column. The list is computed when opened and forgotten when the card
+  closes; nothing about it is saved.
+- **Measure the closest atoms, not only Cα.** A small *Measure* select on the card — *Cα–Cα* (the
+  default) or *closest atoms*, remembered with the other preferences — governs *Measure to…*, `M`, a
+  contact row and *Measure all*. With *closest atoms* the measurement joins the closest heavy-atom
+  pair of the two residues, an ordinary two-atom distance record, and the status names the atoms:
+  `HIS57 · B — SER195 · C: NE2–OG 3.02 Å`. A click on the contact and distance map stays Cα–Cα.
+- **Colour by distance from the selected residue** (*Appearance → Color scheme*): every residue of
+  the selected residue's model by the distance of its closest heavy atom to that residue, ≤4 Å
+  `#1e3a8a`, 4–6 Å `#2563eb`, 6–10 Å `#60a5fa`, 10–20 Å `#bfdbfe`, >20 Å `#e5e7eb`, the residue itself
+  in the accent colour, other models grey. Selecting another residue recolours; with nothing selected
+  the status says *Click a residue first*. The sequence strip follows, the legend names the residue,
+  the figure legend and methods text describe the bands, and scenes, sessions and share links carry
+  the scheme (not the selection).
+
+### Validation
+
+- `tests/reference.py` writes, for every residue of the contact-map chain on model 0, its contacts
+  with the closest heavy-atom distance, the atom pair and the Cα–Cα distance, and for three residues
+  the closest heavy-atom distance to every residue; `tests/validate.mjs` compares the viewer's
+  contacts lists and distance rows with them (identical neighbour sets, 5 × 10⁻⁵ Å on closest
+  distances, 10⁻³ Å on Cα–Cα, the same atom pair or an exact tie, and the same peptide-bond /
+  disulfide flag on every contact). See *Residue contacts and distance from a residue* in
+  VALIDATION.md.
+- **Against measured structures**: a new `tests/validate-experimental.mjs` (`npm run
+  validate:experimental`, run in CI) checks the viewer's atom-pair distances and contacts against
+  every hydrogen bond and salt bridge PDBePISA lists across the interfaces of haemoglobin (2HHB, 44)
+  and barnase–barstar (1BRS, 77) — distance within 10⁻³ Å, and the bonded pair present in the
+  contacts list no farther apart than the bond — and against the published catalytic-triad distances
+  of α-chymotrypsin (5CHA): His57 NE2 – Ser195 OG 3.02 Å, Asp102 OD1 – His57 ND1 2.67 Å, each the
+  closest pair of its two residues. The fixtures and their sources are in
+  `tests/fixtures/experimental/`.
+
 ## 2.50.0
 
 ### Added

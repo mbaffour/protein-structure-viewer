@@ -131,7 +131,7 @@
     const settings = scene.settings || {};
     if (['overlay', 'single'].includes(settings.viewMode)) root.querySelector('#gpv-view-mode').value = settings.viewMode;
     if (['cartoon', 'stick', 'sphere', 'line'].includes(settings.representation)) root.querySelector('#gpv-style').value = settings.representation;
-    if (['structure', 'chain', 'entity', 'plddt', 'deviation', 'agreement', 'domain', 'annotated', 'data', 'charge', 'hydrophobicity', 'restype', 'amino', 'ss', 'spectrum', 'element'].includes(settings.colorMode)) root.querySelector('#gpv-color-mode').value = settings.colorMode;
+    if (['structure', 'chain', 'entity', 'plddt', 'deviation', 'fromresidue', 'agreement', 'domain', 'annotated', 'data', 'charge', 'hydrophobicity', 'restype', 'amino', 'ss', 'spectrum', 'element'].includes(settings.colorMode)) root.querySelector('#gpv-color-mode').value = settings.colorMode;
     if (['loaded', 'ranking', 'plddt'].includes(settings.modelOrder)) root.querySelector('#gpv-order').value = settings.modelOrder;
     if (['sequence', 'identifier'].includes(settings.alignmentMode)) root.querySelector('#gpv-alignment-mode').value = settings.alignmentMode;
     if (['perspective', 'orthographic'].includes(settings.projection)) root.querySelector('#gpv-projection').value = settings.projection;
@@ -443,7 +443,7 @@
     const active = byName.get(state.activeModel); if (active) activeId = active.id;
     if (['overlay', 'single'].includes(state.viewMode)) root.querySelector('#gpv-view-mode').value = state.viewMode;
     if (['cartoon', 'stick', 'sphere', 'line'].includes(state.representation)) root.querySelector('#gpv-style').value = state.representation;
-    if (['structure', 'chain', 'entity', 'plddt', 'deviation', 'agreement', 'domain', 'annotated', 'data', 'charge', 'hydrophobicity', 'restype', 'amino', 'ss', 'spectrum', 'element'].includes(state.colorMode)) root.querySelector('#gpv-color-mode').value = state.colorMode;
+    if (['structure', 'chain', 'entity', 'plddt', 'deviation', 'fromresidue', 'agreement', 'domain', 'annotated', 'data', 'charge', 'hydrophobicity', 'restype', 'amino', 'ss', 'spectrum', 'element'].includes(state.colorMode)) root.querySelector('#gpv-color-mode').value = state.colorMode;
     if (['perspective', 'orthographic'].includes(state.projection)) root.querySelector('#gpv-projection').value = state.projection;
     if (['transparent', 'white', 'dark', 'custom'].includes(state.background)) root.querySelector('#gpv-background').value = state.background;
     if (/^#[0-9a-f]{6}$/i.test(state.backgroundColor || '')) root.querySelector('#gpv-background-color').value = state.backgroundColor;
@@ -804,6 +804,7 @@
     }
     if (mode === 'agreement') return { title: 'Cα RMSF', items: [...agreementBands.map(([, color, label]) => [color, label]), ['#9ca3af', 'single', 'In one model only']] };
     if (mode === 'deviation') return { title: 'Cα deviation', items: [...deviationBands.map(([, color, label]) => [color, label]), ['#9ca3af', 'unmatched']] };
+    if (mode === 'fromresidue') return distanceColourLegend();
     if (mode === 'plddt') return { title: 'pLDDT', items: [['#ff7d45', '<50', 'Very low <50'], ['#ffdb13', '50–70', 'Low 50–70'], ['#65cbf3', '70–90', 'Confident 70–90'], ['#0053d6', '≥90', 'Very high ≥90']] };
     const shown = displayedEntries().filter(entry => entry.model);
     const panelEntries = root.querySelector('#gpv-side-by-side').checked ? comparePanels.map(panel => entryById(panel.entryId)).filter(entry => entry && entry.model) : [];

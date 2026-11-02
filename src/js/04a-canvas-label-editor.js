@@ -114,10 +114,11 @@
     const actions = document.createElement('div'); actions.className = 'gpv-label-editor-actions';
     const commit = document.createElement('button'); commit.type = 'button'; commit.className = 'btn btn-primary'; commit.id = 'gpv-label-editor-commit';
     const remove = document.createElement('button'); remove.type = 'button'; remove.className = 'btn btn-ghost'; remove.id = 'gpv-label-editor-remove'; remove.textContent = 'Remove';
-    /* The residue card's facts line, Measure to… and its distances CSV (04c). */
+    /* The residue card's facts line, its contacts list, Measure to…, the measure choice, Contacts and
+       the distances CSV (04c). */
     const card = residueCardElements();
-    actions.append(commit, card.measure, card.distances, remove);
-    host.append(head, card.facts, input, actions);
+    actions.append(commit, card.measure, card.atoms, card.contacts, card.distances, remove);
+    host.append(head, card.facts, card.list, input, actions);
     /* Enter and Esc are the editor's own. Stopping them here keeps the page's shortcuts from also
        acting on them — Esc would otherwise leave full screen or stop a measurement as well. */
     input.addEventListener('keydown', event => {
@@ -277,6 +278,8 @@
     const hadFocus = isInLabelEditor(document.activeElement);
     labelEditor = null;
     if (labelEditorFrame) { cancelAnimationFrame(labelEditorFrame); labelEditorFrame = 0; }
+    /* The contacts list closes with the card, and its hover label with it (04c). */
+    resetResidueContacts(true);
     if (host) host.hidden = true;
     /* Focus goes back to the stage so the arrow keys and Delete reach the label just edited — and so
        focus is never left on an element that has just been hidden. */

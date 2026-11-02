@@ -25,6 +25,11 @@ run on 2026-09-27 with viewer 2.48.0.
 - the full Cα–Cα distance matrix of the same two chains on model 0, and of the first chain against
   itself, from the `CA` atom of every standard residue (numpy; the *All distances* view of the Compare
   tab's *Contact and distance map*, added 2.50.0);
+- for every residue of that first chain on model 0, its contacts — the polymer residues of any chain
+  with a heavy atom within the cutoff of one of its heavy atoms, the residue itself excluded — each
+  with the closest heavy-atom distance, the two atom names and the Cα–Cα distance, and for its first
+  three residues the closest heavy-atom distance to every residue of the model (the residue card's
+  *Contacts* and *Distance from selected residue*, added 2.51.0);
 - the buried surface area of every chain pair in contact on model 0, with `Bio.PDB.SASA.ShrakeRupley`
   set to the viewer's parameters — probe radius 1.4 Å, 92 sphere points per atom, Bondi radii (C 1.70,
   N 1.55, O 1.52, S 1.80 Å; Biopython's defaults are identical for every element these runs contain),
@@ -225,6 +230,76 @@ reference values.
 | B — MS2 maturation protein–coat | A–B | 393 × 130 = 51 090 | 5.3 × 10⁻⁵ Å | A–A | 393 × 393 = 154 449 | 5.4 × 10⁻⁵ Å | ✓ |
 | C — phiX174 F–G | A–B | 427 × 175 = 74 725 | 5.4 × 10⁻⁵ Å | A–A | 427 × 427 = 182 329 | 5.2 × 10⁻⁵ Å | ✓ |
 
+## Residue contacts and distance from a residue (added 2.51.0)
+
+On model 0, for every standard residue of the contact-map chain, `tests/reference.py` lists the polymer
+residues of any chain with a heavy atom within the cutoff of one of its heavy atoms (`NeighborSearch`
+over all polymer heavy atoms; water and hetero groups never a neighbour, the residue itself left out —
+the viewer's rule for one residue), and for each one the closest heavy-atom distance, the two atom
+names (this residue's first; on a tie the first pair in atom order), the Cα–Cα distance (the Cα, else
+P, else the residue's first atom, as the viewer stands in) and the viewer's bond flag by the same rule
+on that pair (`peptide` for C–N within 1.9 Å, `disulfide` for SG–SG of two cysteines within 2.3 Å, else
+none). For the chain's first three residues it also
+writes the closest heavy-atom distance to every other polymer residue of the model — the values *Colour
+by distance from the selected residue* bands. Coordinates in float64 and values to six decimals.
+`tests/validate.mjs` reads the viewer's contacts list through `__viewerDebug.residueContacts(entryId,
+chain, resi, cutoff)` (the function the residue card's *Contacts* list is built from) and the distance
+rows through `__viewerDebug.residueDistances(entryId, chain, resi)`, and checks: identical neighbour sets
+for every residue (the count of residues whose sets differ must be 0); every closest distance within
+5 × 10⁻⁵ Å; every Cα–Cα distance within 10⁻³ Å; the same closest atom pair, or a pair the viewer measures
+as exactly as close (a tie broken the other way); the same number of bonded contacts on both sides and
+no contact whose peptide-bond / disulfide flag differs; every distance row within 5 × 10⁻⁵ Å. Biopython holds
+coordinates as float32, which accounts for differences of a few 10⁻⁶ Å. By design, two things would fail
+the check on a run that has them: the viewer's distance rows come from its sequence rows — the polymer
+residues of chains with more than one residue — while the reference lists every polymer residue, so a
+one-residue polymer chain would be missing on the viewer's side; and Biopython names atoms by
+`label_atom_id` where the viewer reads `auth_atom_id`, which AlphaFold 3 writes identically.
+
+| run | chain | cutoff | residues | contacts | sets differ | largest closest-distance difference | largest Cα–Cα difference | pairs differ (ties) | bonded (viewer / reference) | distance rows (3 residues) | largest difference | |
+|---|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|:--:|
+| A — M13 virion tip | K | 6 Å | 73 | 785 | 0 | 2.4 × 10⁻⁶ Å | 2.0 × 10⁻⁶ Å | 0 (0) | 144 / 144 | 3 × 689 | 3.7 × 10⁻⁶ Å | ✓ |
+| B — MS2 maturation protein–coat | A | 5 Å | 393 | 4 075 | 0 | 5.7 × 10⁻⁶ Å | 4.9 × 10⁻⁶ Å | 0 (0) | 784 / 784 | 3 × 652 | 2.9 × 10⁻⁶ Å | ✓ |
+| C — phiX174 F–G | A | 5 Å | 427 | 4 294 | 0 | 3.8 × 10⁻⁶ Å | 3.1 × 10⁻⁶ Å | 0 (0) | 852 / 852 | 3 × 601 | 3.8 × 10⁻⁶ Å | ✓ |
+
+Run on 2026-11-01 with viewer 2.51.0 (49 comparisons per run, all within tolerance; the bonded column counts peptide-bond and disulfide contacts flagged on both sides, with no contact flagged differently).
+
+### Against measured structures
+
+The checks above compare the viewer with a second implementation of the same definitions. This one
+compares it with numbers measured by others on deposited crystal structures, so a shared mistake in
+the definitions would show. `tests/validate-experimental.mjs` (`npm run validate:experimental` in
+`tests/`; offline; run in CI after the regression suite) loads the wwPDB mmCIF files in
+`tests/fixtures/experimental/` — their sources and citations are in that folder's README — and checks:
+
+- **PDBePISA interface bonds** (Krissinel & Henrick 2007). Every hydrogen bond and salt bridge PISA
+  lists across the asymmetric-unit interfaces of human deoxyhaemoglobin (2HHB; Fermi, Perutz, Shaanan &
+  Fourme 1984; 44 bonds, three of them between a haem and a histidine or lysine) and of barnase–barstar
+  (1BRS; Buckle, Schreiber & Fersht 1994; 77 bonds). For each: the viewer's distance between the two
+  named atoms (`__viewerDebug.atomPairDistance`, the first alternate location where there are several)
+  must equal PISA's within 10⁻³ Å; and the contacts list of the first residue at 4.5 Å must name the
+  second residue with a closest heavy-atom distance no greater than the bond's — every bond is under
+  4 Å, so every bonded pair is a contact.
+- **A published catalytic triad.** α-Chymotrypsin at 1.67 Å (5CHA; Blevins & Tulinsky 1985),
+  molecule 1: His57 NE2 – Ser195 OG 3.02 Å and Asp102 OD1 – His57 ND1 2.67 Å as printed on J. D.
+  Cronk's catalytic-triad page (Gonzaga University, CHEM 440), which is drawn from this entry. The
+  viewer's distance must match within 0.01 Å (the values are printed to two decimals), and the contacts
+  list of the first residue must give exactly that atom pair as the closest pair of the two residues.
+
+| structure | check | viewer | reference | largest difference | |
+|---|---|---:|---:|---:|:--:|
+| 2HHB | 44 PISA bonds · atom-pair distance | 44 within 10⁻³ Å | 44 | 8.2 × 10⁻⁴ Å | ✓ |
+| 2HHB | 44 PISA bonds · bonded pairs listed as contacts | 44 | 44 | closest atoms never longer than the bond | ✓ |
+| 1BRS | 77 PISA bonds · atom-pair distance | 77 within 10⁻³ Å | 77 | 4.9 × 10⁻⁵ Å | ✓ |
+| 1BRS | 77 PISA bonds · bonded pairs listed as contacts | 77 | 77 | closest atoms never longer than the bond | ✓ |
+| 5CHA | His57 NE2 – Ser195 OG (published 3.02 Å) · closest pair | 3.0205 Å, NE2–OG | 3.02 Å | 5.3 × 10⁻⁴ Å | ✓ |
+| 5CHA | Asp102 OD1 – His57 ND1 (published 2.67 Å) · closest pair | 2.6738 Å, OD1–ND1 | 2.67 Å | 3.8 × 10⁻³ Å | ✓ |
+
+Run on 2026-11-01 with viewer 2.51.0 (8 checks, all pass). PISA's distances for 2HHB differ from the
+deposited coordinates by up to 8 × 10⁻⁴ Å — PISA works from the three-decimal PDB-format coordinates,
+and 2HHB is a 1984 entry — so the "no longer than the bond" check allows the same 10⁻³ Å; for 1BRS the
+agreement is 5 × 10⁻⁵ Å. The published triad values are printed to two decimals; the viewer reads
+3.021 and 2.674 Å from the coordinates, as Biopython does.
+
 ## MSA statistics (added 2.21.0; Henikoff-weighted conservation added 2.24.0)
 
 For every unpaired alignment in the archive, the viewer's per-residue values on the first chain whose
@@ -405,6 +480,7 @@ mkdir run && unzip -d run fold_x.zip -x "templates/*" "msas/*paired*"   # keep t
 python3 reference.py run K 6                    # chain K, 6 Å; needs biopython and numpy
 python3 reference.py run K 6 K F                # optionally name the two chains for the contact map and BSA
 node validate.mjs run                           # or: node validate.mjs run fold_x.zip
+npm run validate:experimental                   # PISA bonds and the 5CHA triad; needs nothing but the suite's setup
 ```
 
 The validator prints the table above for your run, writes `run/validation.json`, and exits non-zero on

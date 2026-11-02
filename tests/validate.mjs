@@ -7,7 +7,9 @@
    Compared: mean Cα pLDDT per model, Kabsch RMSD of every model onto model 0 (Cα paired by chain and
    residue id), per-residue Cα RMSF across the superposed models, radius of gyration and exact Cα extent,
    the residue set within <cutoff> Å of <chain>, the inter-chain contact map and the full Cα–Cα distance
-   matrix of the same chain pair and of its first chain against itself, and the
+   matrix of the same chain pair and of its first chain against itself, every residue's contacts on that
+   first chain with their closest atom pairs and the distance from three of its residues to every residue
+   (2.51.0), and the
    buried surface area of the chain interfaces (Shrake–Rupley, against Bio.PDB.SASA). Exits non-zero when any value disagrees beyond
    the tolerances below. Requires the suite's node_modules and vendor/ (run npm test once). */
 import { chromium } from 'playwright';
@@ -123,6 +125,66 @@ if (reference.distance_map) {
   };
   await compareMatrix('distance map ' + dm.chains.join('–'), dm.chains[0], dm.chains[1], dm.residues_a, dm.residues_b, dm.ca);
   await compareMatrix('distance map ' + dm.intra.chain + '–' + dm.intra.chain + ' (intra-chain)', dm.intra.chain, dm.intra.chain, dm.intra.residues, dm.intra.residues, dm.intra.ca);
+}
+
+/* residue contacts and distance from a residue on model 0 (added 2.51.0): for every residue of the
+   contact-map chain, the residue card's contacts list (__viewerDebug.residueContacts — the proximity
+   rule for one residue, with the closest heavy-atom pair and the Cα–Cα distance of each contact)
+   against Biopython's; and for the first three residues, the closest heavy-atom distance to every
+   residue of the model (__viewerDebug.residueDistances — what Colour by distance from the selected
+   residue bands). The neighbour sets must be identical; a closest atom pair may differ from the
+   reference's only when the two pairs are equally far apart (a tie broken differently), which is
+   checked by measuring the reference's pair in the viewer. */
+if (reference.residue_contacts) {
+  const rc = reference.residue_contacts;
+  const viewerContacts = await page.evaluate(([chain, cutoff, contactResidues, distanceResidues]) => {
+    const d = window.__viewerDebug; const entry = d.entries().find(item => /_model_0\./.test(item.name));
+    if (!entry) return null;
+    return { id: entry.id, contacts: contactResidues.map(resi => d.residueContacts(entry.id, chain, resi, cutoff)), distances: distanceResidues.map(resi => d.residueDistances(entry.id, chain, resi)) };
+  }, [rc.chain, rc.cutoff, rc.residues.map(item => item.resi), rc.distances.map(item => item.resi)]);
+  const label = 'residue contacts of chain ' + rc.chain + ' within ' + rc.cutoff + ' Å';
+  if (!viewerContacts) { rows.push({ label, viewer: NaN, reference: rc.residues.length, delta: NaN, ok: false }); failed += 1; }
+  else {
+    let setDiffers = 0; let compared = 0; let worstClosest = 0; let worstCa = 0; const pairDiffers = [];
+    let bondedViewer = 0; let bondedReference = 0; let bondDiffers = 0;
+    rc.residues.forEach((item, index) => {
+      const seen = viewerContacts.contacts[index];
+      if (!seen) { setDiffers += 1; return; }
+      const byKey = new Map(seen.map(row => [row.chain + '|' + row.resi, row]));
+      const expected = new Map(item.contacts.map(row => [row[0] + '|' + row[1], row]));
+      if (byKey.size !== expected.size || [...expected.keys()].some(key => !byKey.has(key))) setDiffers += 1;
+      expected.forEach(([chain, resi, resn, closest, atomA, atomB, ca, bond], key) => {
+        const row = byKey.get(key); if (!row) return;
+        compared += 1;
+        worstClosest = Math.max(worstClosest, Math.abs(row.closest - closest));
+        worstCa = Math.max(worstCa, Math.abs(row.ca - ca));
+        if (row.atomA !== atomA || row.atomB !== atomB) pairDiffers.push({ resi: item.resi, chain, other: resi, atomA, atomB, closest: row.closest });
+        if (row.bond) bondedViewer += 1; if (bond) bondedReference += 1;
+        if ((row.bond || '') !== (bond || '')) bondDiffers += 1;
+      });
+    });
+    /* a different pair is a tie only if the reference's own pair is as close, measured in the viewer */
+    const ties = await page.evaluate(([id, chain, pairs]) => pairs.map(pair => window.__viewerDebug.atomPairDistance(id, chain, pair.resi, pair.atomA, pair.chain, pair.other, pair.atomB)), [viewerContacts.id, rc.chain, pairDiffers]);
+    const notTies = pairDiffers.filter((pair, index) => !(Number.isFinite(ties[index]) && Math.abs(ties[index] - pair.closest) <= 5e-5)).length;
+    check(label + ' · residues whose neighbour set differs (of ' + rc.residues.length + ')', setDiffers, 0, 0);
+    check(label + ' · largest closest heavy-atom difference over ' + compared + ' contacts (Å)', worstClosest, 0, 5e-5);
+    check(label + ' · largest Cα–Cα difference over ' + compared + ' contacts (Å)', worstCa, 0, 1e-3);
+    check(label + ' · closest atom pairs that differ, ties excepted (' + (pairDiffers.length - notTies) + ' ties)', notTies, 0, 0);
+    /* the peptide-bond / disulfide flag: the same count on both sides, and no contact flagged differently */
+    const bondsAgree = bondDiffers === 0 && bondedViewer === bondedReference;
+    rows.push({ label: label + ' · bonded contacts (viewer / reference)', viewer: bondedViewer, reference: bondedReference, delta: bondDiffers, ok: bondsAgree }); if (!bondsAgree) failed += 1;
+    rc.distances.forEach((item, index) => {
+      const seen = viewerContacts.distances[index];
+      const name = item.resn + item.resi + ' · ' + item.chain;
+      if (!seen) { rows.push({ label: 'distance from ' + name + ' to every residue', viewer: NaN, reference: item.rows.length, delta: NaN, ok: false }); failed += 1; return; }
+      const byKey = new Map(seen.map(row => [row.chain + '|' + row.resi, row.heavy]));
+      let missing = 0; let worst = 0;
+      item.rows.forEach(([chain, resi, , value]) => { const got = byKey.get(chain + '|' + resi); if (got === undefined || got === null) missing += 1; else worst = Math.max(worst, Math.abs(got - value)); });
+      const sameSet = missing === 0 && byKey.size === item.rows.length;
+      rows.push({ label: 'distance from ' + name + ' · residues coloured (viewer / reference)', viewer: byKey.size, reference: item.rows.length, delta: sameSet ? 0 : NaN, ok: sameSet }); if (!sameSet) failed += 1;
+      check('distance from ' + name + ' · largest closest heavy-atom difference over ' + (item.rows.length - missing) + ' residues (Å)', worst, 0, 5e-5);
+    });
+  }
 }
 
 /* buried surface area of the chain interfaces on model 0 (Confidence tab → Interfaces).

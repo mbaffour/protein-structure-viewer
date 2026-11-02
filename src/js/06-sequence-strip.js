@@ -48,6 +48,7 @@
     if (mode === 'chain') return chainColor(atom.chain);
     if (mode === 'entity') return entityColor(entry, atom);
     if (mode === 'deviation') return deviationColor(entry, atom);
+    if (mode === 'fromresidue') return distanceFromResidueColor(entry, atom);
     if (mode === 'agreement') return agreementColor(entry, atom);
     if (mode === 'domain') return domainColor(entry, atom);
     if (mode === 'annotated') return annotatedColor(entry, atom);
@@ -215,7 +216,7 @@
     const multi = entries.length > 1;
     const total = planned.reduce((sum, item) => sum + item.row.residues.length, 0);
     const mode = root.querySelector('#gpv-color-mode').value;
-    const colourNote = mode === 'chain' ? ' · coloured by chain' : mode === 'entity' ? ' · coloured by entity' : mode === 'deviation' ? ' · coloured by Cα deviation' : mode === 'agreement' ? ' · coloured by model agreement (Cα RMSF)' : mode === 'domain' ? ' · coloured by PAE domains' : mode === 'annotated' ? ' · coloured by annotated domains' : mode === 'data' ? ' · coloured by ' + (residueData ? residueData.name : 'per-residue data') : residueModes.includes(mode) ? ' · coloured by ' + ({ charge: 'residue charge', hydrophobicity: 'hydrophobicity', restype: 'residue type', amino: 'amino acid', ss: 'secondary structure' })[mode] : entries.some(entry => entry.scores.length) ? ' · coloured by pLDDT' : '';
+    const colourNote = mode === 'chain' ? ' · coloured by chain' : mode === 'entity' ? ' · coloured by entity' : mode === 'deviation' ? ' · coloured by Cα deviation' : mode === 'fromresidue' ? distanceColourStripNote() : mode === 'agreement' ? ' · coloured by model agreement (Cα RMSF)' : mode === 'domain' ? ' · coloured by PAE domains' : mode === 'annotated' ? ' · coloured by annotated domains' : mode === 'data' ? ' · coloured by ' + (residueData ? residueData.name : 'per-residue data') : residueModes.includes(mode) ? ' · coloured by ' + ({ charge: 'residue charge', hydrophobicity: 'hydrophobicity', restype: 'residue type', amino: 'amino acid', ss: 'secondary structure' })[mode] : entries.some(entry => entry.scores.length) ? ' · coloured by pLDDT' : '';
     const chainNote = planned.length > shown.length ? ' · first ' + shown.length + ' of ' + planned.length + ' rows' : '';
     const cut = hideBelow();
     const cutNote = cut && entries.some(entry => entry.scores.length) ? ' · pLDDT below ' + cut + ' hidden' : '';
@@ -250,7 +251,9 @@
   function renderSequenceLetters(shown, multi) {
     const details = root.querySelector('#gpv-sequence-text'); const host = root.querySelector('#gpv-sequence-letters');
     if (!details.open) { host.replaceChildren(); host.dataset.key = ''; return; }
-    const key = shown.map(item => item.entry.id + ':' + item.row.chain).join(',') + '|' + root.querySelector('#gpv-color-mode').value + '|' + hideBelow() + '|' + alignmentResults.length;
+    /* Distance colouring changes with the selected residue, so the letters are redrawn when it does. */
+    const mode = root.querySelector('#gpv-color-mode').value;
+    const key = shown.map(item => item.entry.id + ':' + item.row.chain).join(',') + '|' + mode + '|' + hideBelow() + '|' + alignmentResults.length + (mode === 'fromresidue' ? '|' + distanceColourKey() : '');
     if (host.dataset.key === key) return;
     host.dataset.key = key; host.replaceChildren();
     shown.forEach(({ entry, row }) => {
