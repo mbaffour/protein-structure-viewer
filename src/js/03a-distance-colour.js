@@ -2,14 +2,17 @@
      "How far is everything from this residue?" answered on the structure itself: every residue of
      the selected residue's model is coloured by the distance of its closest heavy atom to the
      selected residue — the min_heavy_distance of the residue card's Distances CSV, from the same
-     function (residueDistanceRows, 04c) — in five fixed bands, the residue itself in the accent
-     colour. Other models, and every model while nothing is selected, are grey. The mode is a value
+     function (residueDistanceRows, 04c) — in five fixed bands, the residue itself in orange. Other models, and every model while nothing is selected, are grey. The mode is a value
      of #gpv-color-mode like any other, so scenes, sessions and share links carry it; the selection
      is not saved with them, as it never has been, so a restored scene is grey until a residue is
-     clicked. Fixed bands rather than a scale fitted to the model, so two figures read alike. */
+     clicked. Fixed bands rather than a scale fitted to the model, so two figures read alike. The
+     residue's orange is the Annotate highlight's, off the blue ramp and the same in either interface
+     theme, so the residue stands out and a figure does not depend on the theme it was exported from;
+     the far band is a grey dark enough to read on white paper. */
 
-  const distanceFromResidueBands = [[4, '#1e3a8a', '≤4 Å'], [6, '#2563eb', '4–6 Å'], [10, '#60a5fa', '6–10 Å'], [20, '#bfdbfe', '10–20 Å'], [Infinity, '#e5e7eb', '>20 Å']];
+  const distanceFromResidueBands = [[4, '#1e3a8a', '≤4 Å'], [6, '#2563eb', '4–6 Å'], [10, '#60a5fa', '6–10 Å'], [20, '#bfdbfe', '10–20 Å'], [Infinity, '#d1d5db', '>20 Å']];
   const distanceFromResidueGrey = '#9ca3af';
+  const distanceFromResidueSelf = '#f97316';
   /* { key, atoms, values } for the last residue coloured from: chain|resi → closest heavy-atom
      distance. One residue against a model is a single pass over its atoms, but colouring asks once
      per atom per viewer, panel and export, so the pass is made once per residue. */
@@ -51,18 +54,17 @@
     return distanceFromResidueBands.find(([limit]) => value <= limit)[1];
   }
 
-  /* The colour function for one model, with the residue's distances and the accent resolved once
-     rather than per atom. Hetero groups and water have no distance of their own here — the rows are
+  /* The colour function for one model, with the residue's distances resolved once rather than per
+     atom. Hetero groups and water have no distance of their own here — the rows are
      the polymer residues — so they are grey, unless they are the selected residue itself. */
   function distanceFromResidueColorFunc(entry) {
     distanceColourDrawn = distanceColourKey();
     const picked = selectedResidue;
     if (!picked || picked.entryId !== entry.id) return () => distanceFromResidueGrey;
-    const accent = themeColor('--primary', '#339cff');
     const values = distanceFromResidueValues(entry, picked.chain || '', picked.resi);
     return atom => {
       const chain = atom.chain || '';
-      if (chain === (picked.chain || '') && atom.resi === picked.resi) return accent;
+      if (chain === (picked.chain || '') && atom.resi === picked.resi) return distanceFromResidueSelf;
       if (!values || atom.hetflag) return distanceFromResidueGrey;
       const value = values.get(chain + '|' + atom.resi);
       return value === undefined || value === null ? distanceFromResidueGrey : distanceFromResidueBand(value);
@@ -93,7 +95,7 @@
   function distanceColourLegend() {
     const target = distanceColourTarget();
     if (!target) return { title: 'Distance from a residue', items: [[distanceFromResidueGrey, 'none', 'No residue selected — click a residue first']] };
-    return { title: 'Distance from ' + target.short, items: [...distanceFromResidueBands.map(([, color, label]) => [color, label]), [themeColor('--primary', '#339cff'), target.short, target.short + ' (selected)']] };
+    return { title: 'Distance from ' + target.short, items: [...distanceFromResidueBands.map(([, color, label]) => [color, label]), [distanceFromResidueSelf, target.short, target.short + ' (selected)']] };
   }
 
   function distanceColourStripNote() {
@@ -106,7 +108,7 @@
     const target = distanceColourTarget();
     if (!target) return 'shown in grey (distance colouring is selected but no residue is)';
     const others = displayedEntries().some(entry => entry.model && entry.id !== target.entry.id);
-    return 'coloured by the distance of each residue’s closest heavy atom to ' + target.long + ' (≤4 Å dark blue, 4–6 Å blue, 6–10 Å light blue, 10–20 Å pale blue, >20 Å light grey; ' + target.short + ' itself in the accent colour' + (others ? '; other models grey' : '') + ')';
+    return 'coloured by the distance of each residue’s closest heavy atom to ' + target.long + ' (≤4 Å dark blue, 4–6 Å blue, 6–10 Å light blue, 10–20 Å pale blue, >20 Å light grey; ' + target.short + ' itself in orange' + (others ? '; other models grey' : '') + ')';
   }
 
   /* The methods sentence (28): the definition behind the colours, so the figure can be reproduced. */

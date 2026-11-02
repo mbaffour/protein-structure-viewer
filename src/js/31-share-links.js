@@ -160,12 +160,22 @@
     const active = byName.get(settings.activeModel);
     if (active) activeId = active.id;
     const reference = byName.get(settings.referenceModel);
+    /* Scenes are untrusted input: an insertion code is one letter or digit, or none. */
+    const sceneInsertionCode = record => { const code = record && typeof record.icode === 'string' ? record.icode.trim() : ''; return /^[A-Za-z0-9]$/.test(code) ? code : ''; };
+    const scenePoint = point => {
+      const entry = byName.get(point.model); if (!entry) return null;
+      const icode = sceneInsertionCode(point);
+      return { entryId: entry.id, chain: point.chain || '', resi: point.resi, ...(icode ? { icode } : {}), atom: point.atom || '', index: point.index };
+    };
     labelRecords = (scene.labels || []).map(label => {
       const entry = byName.get(label.model);
       if (!entry) return null;
-      const atom = entry.atoms.find(item => (item.chain || '') === (label.chain || '') && item.resi === label.resi && (item.atom === label.atom || item.atom === 'CA'));
+      /* A scene names an insertion code only for a residue that has one (2.52.0); without the field
+         the residue is the one with no code, as every older scene meant. */
+      const icode = sceneInsertionCode(label);
+      const atom = entry.atoms.find(item => sameResidue(item, label.chain, label.resi, icode) && (item.atom === label.atom || item.atom === 'CA'));
       if (!atom) return null;
-      return { entryId: entry.id, chain: label.chain || '', resi: label.resi, atom: label.atom || 'CA', resn: atom.resn, x: atom.x, y: atom.y, z: atom.z, key: residueKey(entry.id, label.chain, label.resi), ...(label.kind === 'domain' || label.kind === 'position' ? { kind: label.kind } : {}), ...(label.offset && Number.isFinite(Number(label.offset.x)) ? { offset: { x: Number(label.offset.x), y: Number(label.offset.y), z: Number(label.offset.z) } } : {}), text: label.text, color: /^#[0-9a-f]{6}$/i.test(label.color || '') ? label.color : undefined, size: labelSizes.some(([value]) => value === Number(label.size)) ? Number(label.size) : undefined };
+      return { entryId: entry.id, chain: label.chain || '', resi: label.resi, icode, atom: label.atom || 'CA', resn: atom.resn, x: atom.x, y: atom.y, z: atom.z, key: residueKey(entry.id, label.chain, label.resi, icode), ...(label.kind === 'domain' || label.kind === 'position' ? { kind: label.kind } : {}), ...(label.offset && Number.isFinite(Number(label.offset.x)) ? { offset: { x: Number(label.offset.x), y: Number(label.offset.y), z: Number(label.offset.z) } } : {}), text: label.text, color: /^#[0-9a-f]{6}$/i.test(label.color || '') ? label.color : undefined, size: labelSizes.some(([value]) => value === Number(label.size)) ? Number(label.size) : undefined };
     }).filter(Boolean);
     spotlightResidues = (Array.isArray(scene.positions) ? scene.positions : []).slice(0, 200)
       .map(record => ({ chain: String(record && record.chain || '').slice(0, 4), resi: Number(record && record.resi) }))
@@ -177,7 +187,7 @@
       return { id: nextAnnotationId++, entryId: entry.id, chain: record.chain || '', residues: (record.residues || []).map(Number).filter(Number.isFinite), action: record.action === 'hide' ? 'hide' : 'highlight', color: /^#[0-9a-f]{6}$/i.test(record.color || '') ? record.color : '#f97316' };
     }).filter(Boolean);
     measurementRecords = (scene.measurements || []).map(record => {
-      const points = (record.points || []).map(point => { const entry = byName.get(point.model); return entry ? { entryId: entry.id, chain: point.chain || '', resi: point.resi, atom: point.atom || '', index: point.index } : null; }).filter(Boolean);
+      const points = (record.points || []).map(scenePoint).filter(Boolean);
       if (points.length < 2) return null;
       /* Read as the annotations are: a hex colour, a finite offset, booleans; anything else is the
          default, which is the field left out. */
@@ -188,7 +198,7 @@
     annotationRecords = (scene.annotations || []).map(record => {
       const type = record.type === 'screen' || annotationTools[record.type] ? record.type : null;
       if (!type) return null;
-      const points = (record.points || []).map(point => { const entry = byName.get(point.model); return entry ? { entryId: entry.id, chain: point.chain || '', resi: point.resi, atom: point.atom || '', index: point.index } : null; }).filter(Boolean);
+      const points = (record.points || []).map(scenePoint).filter(Boolean);
       if (type !== 'screen' && points.length < annotationTools[type].points) return null;
       const offset = record.offset && ['x', 'y', 'z'].every(axis => Number.isFinite(Number(record.offset[axis]))) ? { x: Number(record.offset.x), y: Number(record.offset.y), z: Number(record.offset.z) } : { x: 0, y: 0, z: 0 };
       return { id: nextAnnotationId++, type, points, text: String(record.text || ''), color: /^#[0-9a-f]{6}$/i.test(record.color || '') ? record.color : '#f97316', size: Math.min(3, Math.max(0.5, Number(record.size) || 1)), dashed: record.dashed === true, corner: screenCorners.includes(record.corner) ? record.corner : 'top-left', offset, distance: Number.isFinite(Number(record.distance)) ? Number(record.distance) : null, dx: Number(record.dx) || 0, dy: Number(record.dy) || 0 };
@@ -270,6 +280,7 @@
     let deferredPae = 0;
     let importedArchive = false;
     const failures = [];
+    const alignments = [];
     for (let fileIndex = 0; fileIndex < files.length; fileIndex += 1) {
       const file = files[fileIndex];
       const extension = file.name.split('.').pop().toLowerCase();
@@ -335,8 +346,11 @@
           addStructure(uniqueModelName(file.name, 'Individual files'), await file.text(), extension === 'pdb' ? 'pdb' : 'cif', file.name, 'Individual files');
           loaded += 1;
         } else if (extension === 'a3m') {
-          msaAssets.push({ collection: 'Individual files', name: file.name, text: await file.text() });
-          loaded += 0;
+          /* An alignment dropped on its own belongs to no archive, so it is offered to every model —
+             fetched, opened from a zip or from single files — and paintByMsa matches its query
+             sequence to the chains. */
+          msaAssets.push({ collection: 'Individual files', loose: true, name: file.name, text: await file.text() });
+          alignments.push(file.name);
         } else if (['json', 'csv'].includes(extension)) {
           if (!registerMetadata(file.name, extension === 'json' ? new Uint8Array(await file.arrayBuffer()) : await file.text())) skipped += 1;
         } else if (extension === 'npz') {
@@ -362,9 +376,16 @@
     root.querySelector('#gpv-import-state').hidden = true;
     if (pendingScene && structures.length) await applyScene(pendingScene);
     else {
-      const note = loaded ? 'Loaded ' + loaded + ' model' + (loaded === 1 ? '' : 's') + ' from ' + files.length + ' source' + (files.length === 1 ? '' : 's') : pendingScene ? 'Scene loaded; now add its matching structure files' : confidenceAssets.length ? 'Confidence data loaded; add matching structures' : 'No supported structures found';
+      const added = alignments.length ? 'Alignment added: ' + clipText(alignments.join(', '), 80) : '';
+      const note = loaded ? 'Loaded ' + loaded + ' model' + (loaded === 1 ? '' : 's') + ' from ' + files.length + ' source' + (files.length === 1 ? '' : 's') + (added ? ' · ' + added : '') : added || (pendingScene ? 'Scene loaded; now add its matching structure files' : confidenceAssets.length ? 'Confidence data loaded; add matching structures' : 'No supported structures found');
       updateStatus(note + (confidenceAssets.length ? ' · confidence attached' : '') + (deferredPae ? ' · skipped ' + deferredPae + ' large PAE files for performance' : '') + (skipped ? ' · ' + skipped + ' skipped' : ''));
     }
+    if (alignments.length) renderMsaState();
+    /* New work replaces the stored session within seconds, so its banner has nothing left to offer —
+       and Restore would put the old scene's labels and settings over the ones just loaded. */
+    if (loaded) dismissSessionBanner();
+    /* The motion was stopped while the files were read; the Motion select still names it. */
+    if (structures.length) applyMotion(false);
     showImportErrors(failures);
     doneBusy();
     if (loaded) toast('Loaded ' + loaded + ' model' + (loaded === 1 ? '' : 's') + (skipped ? ' · ' + skipped + ' skipped' : ''));
@@ -390,13 +411,14 @@
     tick();
   }
 
-  function applyMotion() {
+  /* announceIt is false when an import resumes the chosen motion: its own status line stays. */
+  function applyMotion(announceIt = true) {
     stopMotion();
     const motion = root.querySelector('#gpv-motion').value;
     const speed = Number(root.querySelector('#gpv-speed').value);
     if (motion === 'spin') viewer.spin('y', 0.7 * speed);
     if (motion === 'rock') startRock();
-    updateStatus(motion === 'off' ? 'Ready' : root.querySelector('#gpv-motion').selectedOptions[0].text);
+    if (announceIt !== false) updateStatus(motion === 'off' ? 'Ready' : root.querySelector('#gpv-motion').selectedOptions[0].text);
   }
 
   function toggleSpin() {
@@ -472,10 +494,10 @@
   function renderSavedViews(rebuildFigure = true) {
     if (rebuildFigure) renderFigureBuilder();
     const list = root.querySelector('#gpv-saved-views'); list.replaceChildren();
-    savedViews.forEach((view, index) => {
+    savedViews.forEach(view => {
       const row = document.createElement('div'); row.className = 'gpv-entry';
       const textValue = document.createElement('span'); textValue.className = 'gpv-entry-name';
-      textValue.textContent = String.fromCharCode(65 + index) + ' · ' + view.name + (view.caption ? ' — ' + view.caption : '');
+      textValue.textContent = panelLetter(view) + ' · ' + view.name + (view.caption ? ' — ' + view.caption : '');
       const load = document.createElement('button'); load.className = 'btn'; load.type = 'button'; load.textContent = 'Load'; load.addEventListener('click', () => { applyViewState(view); updateStatus('Loaded view ' + view.name); });
       const remove = document.createElement('button'); remove.className = 'btn btn-ghost'; remove.type = 'button'; remove.textContent = 'Remove'; remove.addEventListener('click', () => { remember('remove view'); savedViews = savedViews.filter(item => item.id !== view.id); renderSavedViews(); updateStatus('Saved view removed'); });
       row.append(textValue, load, remove); list.append(row);
@@ -752,8 +774,12 @@
       th.append(fallback); tr.append(th);
       const td = document.createElement('td'); const input = document.createElement('input'); input.className = 'form-control'; input.type = 'text'; input.maxLength = figureLabelLimit;
       input.dataset.gpvLabelKey = key; input.placeholder = fallback; input.value = figureLabels[key] || ''; input.setAttribute('aria-label', 'Label for ' + fallback);
-      input.addEventListener('input', () => { const text = input.value.trim().slice(0, figureLabelLimit); if (text) figureLabels[key] = text; else delete figureLabels[key]; applyFigureLabels(false); });
-      input.addEventListener('change', () => { remember('figure labels'); setTimeout(renderFigureLabels, 0); });
+      /* The legend follows each keystroke, so the undo step is taken before the first one — taken on
+         change it would hold the new name, and undo would bring back what is already there. */
+      let remembered = false;
+      input.addEventListener('focus', () => { remembered = false; });
+      input.addEventListener('input', () => { if (!remembered) { remember('figure labels'); remembered = true; } const text = input.value.trim().slice(0, figureLabelLimit); if (text) figureLabels[key] = text; else delete figureLabels[key]; applyFigureLabels(false); });
+      input.addEventListener('change', () => { setTimeout(renderFigureLabels, 0); });
       td.append(input); tr.append(td); body.append(tr);
     };
     row(mode + '|title', legend.defaults.title, null);

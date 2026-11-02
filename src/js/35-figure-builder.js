@@ -4,6 +4,16 @@
      ratio and are sized so the whole figure is the chosen output width. Panel letters and
      captions go in a strip under each cell; legend and scale bar sit inside the cell. */
   function figurePanelsSelected() { return savedViews.filter(view => view.inFigure !== false); }
+  /* A view's letter in the built figure — the ticked views in order, A, B, C… — or a dash when it is
+     not in the figure. One lettering for the saved-views list, the builder and both captions files,
+     so the list never says D for the panel the figure prints as A. */
+  function panelLetter(view) {
+    const index = figurePanelsSelected().indexOf(view);
+    return index < 0 ? '—' : String.fromCharCode(65 + index);
+  }
+  function panelCaptionLines() {
+    return figurePanelsSelected().map(view => panelLetter(view) + '. ' + view.name + (view.caption ? ': ' + view.caption : ''));
+  }
   function builderOptions() {
     const columns = root.querySelector('#gpv-panel-columns').value;
     return { columns, captions: root.querySelector('#gpv-builder-captions').value, letters: root.querySelector('#gpv-builder-letters').checked, legends: root.querySelector('#gpv-builder-legends').checked, architecture: root.querySelector('#gpv-builder-architecture').checked };
@@ -47,15 +57,14 @@
   function renderFigureBuilder() {
     const body = root.querySelector('#gpv-builder-rows'); if (!body) return;
     body.replaceChildren();
-    let letter = 0;
     savedViews.forEach((view, index) => {
       const included = view.inFigure !== false;
       const tr = document.createElement('tr');
       const inCell = document.createElement('td'); const tick = document.createElement('input'); tick.type = 'checkbox'; tick.className = 'form-check-input'; tick.checked = included; tick.setAttribute('aria-label', 'Include ' + view.name + ' in the figure');
-      tick.addEventListener('change', () => { remember('figure panels'); view.inFigure = tick.checked; renderFigureBuilder(); });
+      tick.addEventListener('change', () => { remember('figure panels'); view.inFigure = tick.checked; renderSavedViews(); });
       /* The theme draws checkboxes only inside a .form-check label; a bare input is invisible. */
       const tickLabel = document.createElement('label'); tickLabel.className = 'form-check'; tickLabel.append(tick); inCell.append(tickLabel); tr.append(inCell);
-      const letterCell = document.createElement('td'); letterCell.className = 'gpv-builder-letter'; letterCell.textContent = included ? String.fromCharCode(65 + letter) : '—'; if (included) letter += 1; tr.append(letterCell);
+      const letterCell = document.createElement('td'); letterCell.className = 'gpv-builder-letter'; letterCell.textContent = panelLetter(view); tr.append(letterCell);
       const nameCell = document.createElement('th'); nameCell.scope = 'row'; nameCell.textContent = view.name; tr.append(nameCell);
       const captionCell = document.createElement('td'); const caption = document.createElement('input'); caption.type = 'text'; caption.className = 'form-control'; caption.value = view.caption || ''; caption.placeholder = 'Panel caption'; caption.maxLength = 200; caption.setAttribute('aria-label', 'Caption for ' + view.name);
       caption.addEventListener('input', () => { view.caption = caption.value.trim().slice(0, 200); renderSavedViews(false); });
@@ -135,7 +144,7 @@
 
   function downloadCaptions() {
     const provenance = provenanceValues();
-    const lines = [provenance.title || 'Protein structure figure', provenance.source, provenance.method, '', ...savedViews.map((view, index) => String.fromCharCode(65 + index) + '. ' + view.name + (view.caption ? ': ' + view.caption : '')), '', provenance.notes].filter((line, index, array) => line || array[index - 1]);
+    const lines = [provenance.title || 'Protein structure figure', provenance.source, provenance.method, '', ...panelCaptionLines(), '', provenance.notes].filter((line, index, array) => line || array[index - 1]);
     downloadBlob(lines.join('\n'), 'text/plain', 'protein-figure-captions.txt'); updateStatus('Figure captions downloaded');
   }
 

@@ -97,7 +97,7 @@ Anything the viewer cannot interpret is skipped and reported in the red notice b
 
 | Key | Action |
 | --- | --- |
-| <kbd>←</kbd> / <kbd>→</kbd> | Previous / next model (while a label is active they move the label instead) |
+| <kbd>←</kbd> / <kbd>→</kbd> | Previous / next model, shown one at a time (while a label is active they move the label instead) |
 | <kbd>L</kbd> | Open the label editor at the selected residue |
 | <kbd>M</kbd> | *Measure to…*: the distance from the selected residue to the next residue you click — Cα–Cα, or the closest heavy atoms when the residue card's *Measure* choice says *closest atoms* |
 | <kbd>Enter</kbd> / <kbd>Esc</kbd> | In the label editor: add or update the label / close it without changes |
@@ -115,7 +115,12 @@ Anything the viewer cannot interpret is skipped and reported in the red notice b
 | <kbd>?</kbd> | Open in-app help |
 | <kbd>Esc</kbd> | Cancel an armed *Measure to…*; close the label editor or let go of the active label; otherwise close help, leave *Drag to select*, leave full screen, or stop measuring or drawing; with none of those, clear the selected residue and its marker |
 
-Shortcuts are suppressed while you are typing in a field.
+Shortcuts are suppressed while you are typing in a text field or a select, and while the help dialog is
+open: there <kbd>Esc</kbd> only cancels the edit or closes help, and leaves full screen, *Drag to
+select*, measuring and drawing as they were. A switch, checkbox or colour well does not hold them back
+— after a click on one, <kbd>?</kbd> still opens help — and keys a control uses itself stay with it:
+the arrows of a slider, a tab button, the panel divider, the residue card and the box popover never
+also step to another model.
 
 ## Orientation
 
@@ -128,13 +133,25 @@ panel of the same model that line up exactly.
 ## Models tab
 
 - **Source** filters to one loaded archive. **Find models** filters by name or stoichiometry.
-- **View mode** switches between overlaying every shown model and displaying one at a time.
+- **View mode** switches between overlaying every shown model and displaying one at a time. A
+  structure fetched by ID joins the view in whichever mode it is in.
 - **Model order** sorts by load order, ranking score, or mean pLDDT. Models without the chosen score
   sort last.
 - **Cycle models** steps through the currently filtered, visible models at the chosen interval.
-  Navigation and cycling both switch the view to one-at-a-time mode.
+  Navigation (*Current model*, ← →, Previous/Next) and cycling switch the view to one at a time; the
+  status line says so when it leaves an overlay, and the mode is remembered like a choice made in
+  *View mode*.
 - Each row has its own visibility switch, mean pLDDT readout, colour picker, and remove button.
   Changing a row's colour switches the colour scheme to *Per structure* so the change is visible.
+  **Remove** takes the model's labels, selections, measurements and annotations with it, closes the
+  residue card and clears the selected residue if they were on that model, drops the alignment and
+  comparison it was part of, and says *Removed …*; with no model left, *Drag to select*, measuring and
+  drawing turn off.
+- **Clear all** removes every model and everything made on them. It cannot be undone, so it asks
+  first whenever there are two or more models, or any label, selection, measurement, annotation,
+  domain or saved view; one bare model clears at once. Analyses go with the models (ligand sites,
+  model agreement, the RMSD matrix, a loose alignment, renamed legend entries), and the next models
+  never inherit them; custom chain colours stay, as a preference.
 - Long lists are paged: **Show more** adds another 60 rows.
 
 **Display names.** **Rename** on a model row sets the name that badges, captions, the confidence
@@ -213,7 +230,9 @@ Notes on the colour schemes:
 - **Distance from selected residue** colours every residue of the selected residue's model by the
   distance of its closest heavy atom to that residue (the `min_heavy_distance` of the card's
   *Distances CSV*): ≤4 Å dark blue, 4–6 Å blue, 6–10 Å light blue, 10–20 Å pale blue, over 20 Å light
-  grey; the residue itself takes the accent colour, and other models, ligands and water are grey.
+  grey (`#d1d5db`, dark enough to read on white paper); the residue itself is orange (`#f97316`, the
+  Annotate highlight colour, the same in either interface theme so an export does not depend on it),
+  and other models, ligands and water are grey.
   Click a residue first — with nothing selected everything is grey and the status says *Click a residue
   first*; selecting another residue recolours at once. The sequence strip follows, the legend names the
   residue (`Distance from GLU57 · B`), and the methods text gains a sentence defining the bands. Scenes,
@@ -252,7 +271,12 @@ the nearest atom within a few pixels, so a click on a cartoon ribbon lands on th
 Hovering shows the nearest residue in the status bar without clicking.
 
 **Go to.** Type a residue in the *Go to* field — `B:45`, `45B`, or plain `45` for any chain — and
-press **Go** or <kbd>Enter</kbd>. The residue is selected as if clicked (the label field fills in, and
+press **Go** or <kbd>Enter</kbd>. An insertion code follows the number: `H:100A`, or `100A` when the
+model has a residue 100A and no chain A (otherwise `100A` still means chain A); a plain `100` is the
+residue without one. A chain is matched as typed, ignoring case only when no chain has exactly that
+name. Residues told apart only by an insertion code — 100, 100A, 100B in Kabat-numbered antibodies —
+are separate cells in the sequence strip and keep their own labels, card and marker; a scene, session
+or share link records the code (`"icode": "A"`) only where there is one. The residue is selected as if clicked (the label field fills in, and
 a drawing or measurement in progress takes it as a point), the camera zooms to it, and the strip
 marks it.
 
@@ -278,7 +302,8 @@ tab writes the same sequences to a file.
 
 **Undo and redo.** <kbd>Ctrl</kbd>/<kbd>⌘</kbd>+<kbd>Z</kbd> undoes the last change to labels,
 selections, measurements, or figure annotations — additions, removals, text or colour edits, nudges,
-and clears — and <kbd>Shift</kbd> with it redoes. The Undo and Redo buttons beside the residue
+and clears — as well as a model's fade, *Emphasise*, *Use medoid*, a renamed legend entry and *Colour
+by MSA*, and <kbd>Shift</kbd> with it redoes. The Undo and Redo buttons beside the residue
 readout do the same. Sixty steps are kept. Loading a scene or *Clear all* starts a fresh history.
 
 **Labels.** Click a residue in the viewer — or pick one in the sequence strip or the sequence
@@ -299,14 +324,19 @@ and appears only for a model with confidence scores; the secondary structure (α
 loop) is the one 3Dmol assigned to the Cα, and is left out for a model whose file gave it none; the
 neighbour count is the proximity tool's own count for that residue (see *Nearby residues* below) —
 residues with any heavy atom within its *Within (Å)* cutoff, 4.5 Å unless you change it — so the card
-and **Highlight nearby residues** always agree. Nothing on the card is saved.
+and **Highlight nearby residues** always agree; changing the cutoff recounts an open card and its
+contacts list. Nothing on the card is saved. The card never runs past the bottom of the view: when it
+is taller than the view (a phone, five or six panels), it scrolls. It closes when its residue is no
+longer drawn — its model or chain hidden, or cut by *Low confidence*.
 
 **The residue marker.** While a residue is selected and its model is shown, a small marker on the
 view names it — `GLU57 · B · pLDDT 94.8` — in a smaller type with an accent-coloured border, so it is
 not mistaken for a label. It is screen-only: exports, comparison panels, figures, videos and the
 report never draw it, and a residue that already carries a label gets no marker. <kbd>Esc</kbd> with
 no editor open, no active label and no mode on clears the selection and the marker, and so does
-*Clear all*; while the residue's model is not the one shown, the marker is simply not drawn.
+*Clear all* or removing its model; while the residue's model is not the one shown, the marker is
+simply not drawn. A spin video hides the marker while it records but keeps the residue selected, so
+a video coloured by distance from it stays coloured.
 
 **Measure to….** The card's **Measure to…** button (or <kbd>M</kbd> for the selected residue, without
 opening the card) keeps the residue as the first point and waits for a second: the cursor turns to a
@@ -339,7 +369,9 @@ label names that residue on the view — never a record, never exported. Click a
 ordinary measurement (the list stays open); **Measure all** measures every row in one undo step;
 **Highlight** makes exactly the selection *Highlight nearby residues* would make for this residue (one
 record per chain, in the highlight colour, one undo step); **Copy** puts the rows on the clipboard as
-tab-separated text (`residue, chain, resi, resn, closest_distance, closest_atoms, bond, ca_distance`,
+tab-separated text (where the browser refuses the clipboard, here and for *Copy measurements* and *Copy
+residue list*, the text appears selected in a read-only box under the view, ready for
+<kbd>Ctrl</kbd>/<kbd>⌘</kbd>+<kbd>C</kbd>, and **Done** closes it) (`residue, chain, resi, resn, closest_distance, closest_atoms, bond, ca_distance`,
 Å to three decimals). Residues covalently joined to this one are listed too, in their place, but
 tagged *peptide bond* (closest atoms C–N within 1.9 Å) or *disulfide* (SG–SG of two cysteines within
 2.3 Å) — decided by geometry, so insertion codes and chain breaks do not mislead it — and the `bond`
@@ -361,7 +393,8 @@ models again. Each row of the label list also has ← → ↑ ↓ buttons that m
 and **Select**, which makes it the active label. On a touchscreen, tap a residue to label it and tap
 a label to edit it; use the row arrows to move it, since a finger drag turns the model.
 
-*Label every residue* annotates all Cα atoms of the current model — useful for small structures,
+*Label every residue* labels every residue of the current model at its Cα (a nucleotide at its P);
+ligands and ions — a calcium ion's atom is also called CA — are left out. Useful for small structures,
 unreadable for large ones.
 
 **Selections.** Pick a model, optionally a chain, and a residue range (`20-45`, or `20,24,31`, or a
@@ -518,7 +551,10 @@ views and scene manifests, and the shared report opens with the same panels.
 At the foot of the Compare tab (called *Interface contact map* before 2.50.0). Choose two chains of
 the current model, a **cutoff** (default 4.5 Å) and whether **any heavy atom** or **Cα only** counts,
 then **Compute map**. The first chain runs down the side, the second along the top; faint lines mark
-every 10, 25, 50 or 100 residues depending on chain length.
+every 10, 25, 50 or 100 residues depending on chain length. Changing the chains, the cutoff or the
+atoms afterwards dims the map and its state line reads *Settings changed · Compute map to update*: the
+map, its CSVs and its composite panel still describe the settings they were computed with until you
+compute again.
 
 - **Which chains.** Two different chains give the interface map. The **same chain twice** gives the
   familiar square residue–residue map of one chain, symmetric about an empty diagonal (a residue is
@@ -629,7 +665,8 @@ confident interface can still be wrong, and a true one can be predicted poorly.
 
 AlphaFold 3 archives include, under `msas/`, the unpaired multiple sequence alignment for each
 entity as an `.a3m` file. The viewer keeps these when the archive is opened (an `.a3m` can also be
-added on its own with *Add structures*), and **Colour by MSA** maps the alignment's per-column
+added on its own with *Add structures*, and then serves every model — fetched, unzipped or opened as
+a file — with the import line saying *Alignment added*), and **Colour by MSA** maps the alignment's per-column
 statistic onto every chain whose sequence matches the alignment's query. Three statistics:
 **conservation**, 1 − H/log₂20 where H is the Shannon entropy of the amino-acid distribution at the
 column with gaps and X excluded (1 = one residue everywhere, 0 = uniform). By default the entropy uses
@@ -689,6 +726,8 @@ and the settings; **Download matrix PNG** and **SVG** draw the heat map at the o
 the values in the cells and a colour bar, and the same panel can be ticked into the composite figure.
 The **Mean** column gives each model's mean RMSD to the others and ★ marks the **medoid**, the
 model closest to all the rest — usually the one to show, and not necessarily the top-ranked one.
+Hiding, showing, adding, removing or renaming a model drops the matrix, which would otherwise go on
+naming models the view no longer shows; compute it again for the new set.
 **Use medoid as reference** sets it as the alignment reference, superposes every shown model onto it,
 and draws it solid with the others faded, in one press. The methods text gains a sentence stating
 how the pairs were superposed, the range of values and which model is the medoid. Recompute after
@@ -932,7 +971,8 @@ this; Safari does not, and the viewer will say so.
 
 **All views as a ZIP.** **Download all views (ZIP)** renders each saved view as a publication PNG
 at the current output settings — print size, resolution, text size, legend, scale bar — named
-`01-A-<view>.png` onward, together with `captions.txt` (title, captions, notes and the generated
+`01-A-<view>.png` onward (the letter is the view's panel letter in the figure; a view left out of the
+figure has none), together with `captions.txt` (title, captions, notes and the generated
 figure legend). Large view sets take a while; the button counts progress.
 
 **Saved views.** Save the current camera, model selection, colours, representation, and background
@@ -941,7 +981,8 @@ be exported as caption text, and be followed as a guided tour inside the shared 
 
 **Figure builder.** Saved views are the panels. The table under *Figure builder* lists every saved
 view with an include switch, its panel letter, an editable caption and move up/down buttons; the
-letters follow the order of the included views. Choose **Panel columns** (Auto picks a near-square
+letters follow the order of the included views, and the saved-views list, *Download captions* and the
+views ZIP use the same letters (a view left out of the figure shows —). Choose **Panel columns** (Auto picks a near-square
 grid, or 1 to 4), the **Captions** style (name and caption, name only, caption only, none), and
 whether each panel carries its **legend and scale bar**. **Download figure PNG** renders every
 ticked view from its own camera, colour scheme, model selection and background at the same text
@@ -1071,7 +1112,8 @@ doi:10.1093/bioinformatics/btu829. *Help → How to cite* in the viewer has both
 A moment after every change, the open models (coordinates and confidence data), annotations,
 domains, per-residue data, views and settings are saved in the browser's IndexedDB. Reopening the
 page shows *Restore your last session?* with the model count and time; **Restore** rebuilds it,
-**Not now** leaves it for later, **Forget it** deletes it. Sessions above 80 MB of coordinates are
+**Not now** leaves it for later — it is offered again on the next visit — and **Forget it** deletes
+it. Opening or fetching other work takes the banner down, since the autosave then holds the new work. Sessions above 80 MB of coordinates are
 not autosaved (the viewer says so once). The copy lives only in that browser profile; scene JSON,
 reports and share links remain the deliberate ways to keep or hand over work.
 

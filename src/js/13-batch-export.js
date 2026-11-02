@@ -15,10 +15,11 @@
         applyViewState(savedViews[index], { panels: false });
         const uri = await withLegend(await renderPublicationImage(null, plan), plan);
         applyViewState(restore, { panels: false });
-        zip.file(String(index + 1).padStart(2, '0') + '-' + String.fromCharCode(65 + index) + '-' + String(savedViews[index].name || 'view').replace(/[^\w.-]+/g, '_') + '.png', await pngWithDpi(uri, plan.dpi));
+        const letter = panelLetter(savedViews[index]);
+        zip.file(String(index + 1).padStart(2, '0') + '-' + (letter === '—' ? '' : letter + '-') + String(savedViews[index].name || 'view').replace(/[^\w.-]+/g, '_') + '.png', await pngWithDpi(uri, plan.dpi));
       }
       const provenance = provenanceValues();
-      zip.file('captions.txt', [provenance.title || 'Protein structure figure', provenance.source, provenance.method, '', ...savedViews.map((view, index) => String.fromCharCode(65 + index) + '. ' + view.name + (view.caption ? ': ' + view.caption : '')), '', provenance.notes, '', figureLegendText()].filter((line, index, array) => line || array[index - 1]).join('\n'));
+      zip.file('captions.txt', [provenance.title || 'Protein structure figure', provenance.source, provenance.method, '', ...panelCaptionLines(), '', provenance.notes, '', figureLegendText()].filter((line, index, array) => line || array[index - 1]).join('\n'));
       const blob = await zip.generateAsync({ type: 'blob' });
       downloadBlob(blob, 'application/zip', exportFileName('protein-views', plan, 'zip'));
       announce(savedViews.length + ' view' + (savedViews.length === 1 ? '' : 's') + ' exported · ' + formatBytes(blob.size) + (plan.dpi ? ' · ' + plan.dpi + ' dpi' : ''));

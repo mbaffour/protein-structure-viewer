@@ -2,7 +2,7 @@
 
   const persistedControls = [
     '#gpv-style', '#gpv-color-mode', '#gpv-projection', '#gpv-outline', '#gpv-label-style', '#gpv-background', '#gpv-background-color', '#gpv-hetero',
-    '#gpv-export-mode', '#gpv-print-width', '#gpv-print-aspect', '#gpv-print-dpi', '#gpv-print-text', '#gpv-figure-font', '#gpv-scale-bar', '#gpv-legend-position', '#gpv-image-format',
+    '#gpv-export-mode', '#gpv-print-width', '#gpv-print-custom', '#gpv-print-aspect', '#gpv-print-dpi', '#gpv-print-text', '#gpv-figure-font', '#gpv-scale-bar', '#gpv-legend-position', '#gpv-image-format',
     '#gpv-view-mode', '#gpv-order', '#gpv-alignment-mode', '#gpv-fit-scope', '#gpv-position-cutoff', '#gpv-export-size', '#gpv-export-scale',
     '#gpv-panel-columns', '#gpv-video-length', '#gpv-cycle-speed', '#gpv-speed', '#gpv-report-scope',
     '#gpv-position-figure-deviation', '#gpv-ipsae-pae', '#gpv-ipsae-dist'
@@ -149,10 +149,29 @@
     root.querySelector('#gpv-speed-value').textContent = Number(event.target.value).toFixed(2).replace(/0$/, '') + '×';
     applyMotion();
   });
+  /* Results computed from the models Clear all removes. Model ids are never reused (nextStructureId
+     keeps counting), so none of them could attach to a new model, but their tables, buttons and the
+     sentences the legend and methods text build from them would stay. Renamed legend entries name
+     things that are gone too; chain colours are a preference and stay. */
+  const motifIdleText = root.querySelector('#gpv-motif-state').textContent;
+  function resetAnalyses() {
+    siteResults = null; renderLigandSites(null);
+    ensembleSpread = null;
+    rmsdMatrix = null; renderRmsdMatrix();
+    msaAssets = []; renderMsaState();
+    nearbyResult = null; root.querySelector('#gpv-near-copy').disabled = true;
+    root.querySelector('#gpv-motif-state').textContent = motifIdleText;
+    setFigureLabels({}); renderFigureLabels();
+  }
   root.querySelector('#gpv-clear').addEventListener('click', () => {
-    if (structures.length > 1 && !confirm('Remove all ' + structures.length + ' models, plus any labels, selections, measurements, and saved views?')) return;
+    /* Clear all cannot be undone, so it asks whenever there is anything to lose beyond a single
+       model: work on it, saved views, or more models. */
+    const work = labelRecords.length + selectionRecords.length + measurementRecords.length + annotationRecords.length + domainRecords.length + savedViews.length;
+    if ((structures.length > 1 || work) && !confirm('Remove ' + (structures.length === 1 ? 'the model' : 'all ' + structures.length + ' models') + ' and everything made on ' + (structures.length === 1 ? 'it' : 'them') + ' — labels, selections, measurements, annotations, domains and saved views? This cannot be undone.')) return;
     stopCycle();
     stopMotion();
+    /* Nothing is left to turn; the Motion select says so, and S starts it again from off. */
+    root.querySelector('#gpv-motion').value = 'off';
     dismissCanvasText();
     cancelMeasureTo(false);
     setBoxSelectMode(false);
@@ -203,8 +222,8 @@
     root.querySelector('#gpv-pae-detail').textContent = 'Move over the heatmap to inspect a residue pair.';
     root.querySelector('#gpv-fetch-id').value = '';
     listLimit = listPageSize;
-    nextStructureId = 1;
     nextAnnotationId = 1;
+    resetAnalyses();
     renderAlignmentResults();
     renderSelectionList();
     renderMeasurementList();
@@ -382,8 +401,16 @@
     /* event.target is not always an Element (it can be the document), and a
        shortcut must never swallow a character someone is typing — including the
        "?" that opens help. */
-    const typing = target instanceof Element && (target.matches('input, select, textarea, [contenteditable]') || Boolean(target.closest('dialog[open]')));
-    if (typing && event.key !== 'Escape') return;
+    const typing = target instanceof Element && (target.matches('input:not([type=checkbox]):not([type=radio]):not([type=range]):not([type=color]):not([type=button]):not([type=file]), select, textarea, [contenteditable]') || Boolean(target.closest('dialog[open]')));
+    /* A field or the help dialog owns every key it gets, Esc included: Esc there cancels a rename or
+       closes the dialog, and must not also leave full screen, Drag to select, drawing or measuring.
+       A switch, slider or colour well is not typing, so the shortcuts still work after a click on one. */
+    if (typing) return;
+    /* A key another control has already used — a tab button's or the divider's arrows — is not also a
+       shortcut; nor is an arrow, Delete or Backspace on a slider, a radio button, or inside the residue
+       card or the box popover, where it would step to another model or move the active label. */
+    if (event.defaultPrevented) return;
+    if (target instanceof Element && /^(Arrow|Delete$|Backspace$)/.test(event.key) && target.closest('input[type=range], input[type=radio], #gpv-label-editor, #gpv-box-popover')) return;
     if ((event.ctrlKey || event.metaKey) && !event.altKey && event.key.toLowerCase() === 'z') { event.preventDefault(); if (event.shiftKey) redo(); else undo(); return; }
     if (event.ctrlKey || event.metaKey || event.altKey) return;
     /* The label editor, the active label's arrows and Delete, and L come first: while a label is

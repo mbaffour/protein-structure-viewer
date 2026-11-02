@@ -7,8 +7,15 @@
      say whether an action added a step; this count can (read by the regression suite). */
   let rememberedSteps = 0;
 
+  /* Besides the records: each model's fade (Fade, Emphasise and Use medoid are undo steps), the
+     legend's renamed entries, and the per-residue data with the colour scheme it was painted in (MSA
+     colouring is one). The data and the neighbourhood table are replaced whole, never edited, so they
+     are kept by reference rather than copied on every step. */
   function snapshotRecords() {
-    return structuredClone({ labels: labelRecords, selections: selectionRecords, measurements: measurementRecords, annotations: annotationRecords, domains: domainRecords, positions: spotlightResidues, views: savedViews });
+    return {
+      ...structuredClone({ labels: labelRecords, selections: selectionRecords, measurements: measurementRecords, annotations: annotationRecords, domains: domainRecords, positions: spotlightResidues, views: savedViews, faded: structures.map(entry => ({ id: entry.id, faded: entry.faded })), figureLabels }),
+      residueData, colorMode: root.querySelector('#gpv-color-mode').value, positionEffect
+    };
   }
 
   function renderHistoryButtons() {
@@ -46,7 +53,17 @@
     /* Saved views are records too: Make site figure adds two or three of them in one press, and undo
        has to take them back with the rest of the state that press changed. */
     if (Array.isArray(state.views)) savedViews = state.views;
-    renderLabelList(); renderSelectionList(); renderMeasurementList(); renderAnnotationList(); renderDomainList(); renderPositionState(); renderSavedViews();
+    (state.faded || []).forEach(item => { const entry = entryById(item.id); if (entry) entry.faded = item.faded; });
+    if (state.figureLabels) { setFigureLabels(state.figureLabels); applyFigureLabels(); }
+    /* The colour scheme is not itself an undo step; it goes back only with the data it showed. */
+    if ('residueData' in state && state.residueData !== residueData) {
+      residueData = state.residueData; renderDataState();
+      const mode = root.querySelector('#gpv-color-mode');
+      if (mode.value !== state.colorMode) mode.value = state.colorMode;
+    }
+    /* The neighbourhood table belongs to the compared positions it was measured around. */
+    positionEffect = spotlightResidues.length ? state.positionEffect || null : null; renderPositionEffect();
+    renderLabelList(); renderSelectionList(); renderMeasurementList(); renderAnnotationList(); renderDomainList(); renderPositionState(); renderSavedViews(); renderList(); renderSequenceSoon();
     applyStyle();
   }
 

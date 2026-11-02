@@ -162,7 +162,7 @@
   }
 
   function labelEditorDefaultText(atom) {
-    return (atom.resn || 'RES') + atom.resi + (atom.chain ? ' · ' + atom.chain : '');
+    return (atom.resn || 'RES') + residueNumber(atom) + (atom.chain ? ' · ' + atom.chain : '');
   }
 
   function locationText(chain, resi) {
@@ -171,7 +171,7 @@
 
   /* A residue picked in the viewer or the strip: a new label, or the one already on it. */
   function openLabelEditorForResidue(entry, atom) {
-    const key = residueKey(entry.id, atom.chain, atom.resi);
+    const key = residueKey(entry.id, atom.chain, atom.resi, insertionCodeOf(atom));
     const existing = labelRecords.find(label => label.key === key);
     if (existing) { openLabelEditor({ kind: 'label', entryId: entry.id, atom, key }, existing.text, describeResidue(entry, atom)); setActiveText('label', existing); return; }
     /* selectResidue has just filled the panel's field; that is the suggestion, so the panel and the
@@ -186,7 +186,7 @@
     if (item.kind === 'label') {
       const label = item.record;
       const entry = entryById(label.entryId);
-      const atom = { chain: label.chain, resi: label.resi, resn: label.resn, b: label.b, x: label.x, y: label.y, z: label.z, atom: label.atom };
+      const atom = { chain: label.chain, resi: label.resi, icode: insertionCodeOf(label), resn: label.resn, b: label.b, x: label.x, y: label.y, z: label.z, atom: label.atom };
       openLabelEditor({ kind: 'label', entryId: label.entryId, atom, key: label.key, record: label }, label.text, entry ? describeResidue(entry, atom) : (label.resn || 'RES') + label.resi);
     } else if (item.kind === 'measurement') {
       openLabelEditor({ kind: 'measurement', id: item.record.id }, String(item.record.text || ''), measurementEditorHead(item.record));
@@ -241,9 +241,22 @@
     if (!labelEditor) return;
     /* The text it was editing may have been removed from its row, cleared or undone. */
     if (labelEditor.kind !== 'new' && !labelEditorRecord()) { closeLabelEditor(false); return; }
+    /* A residue whose model or chain has just been hidden, or that Low confidence now cuts, is no
+       longer on screen; the card would be following nothing. */
+    if (!labelEditorResidueShown()) { closeLabelEditor(false); return; }
     positionLabelEditor();
     refreshMeasureToButton();
     labelEditorFrame = requestAnimationFrame(followLabelEditor);
+  }
+
+  function labelEditorResidueShown() {
+    const editor = labelEditor;
+    if (!editor || (editor.kind !== 'new' && editor.kind !== 'label')) return true;
+    const entry = entryById(editor.entryId);
+    if (!entry || !displayedEntries().includes(entry)) return false;
+    if ((entry.hiddenChains || []).includes(editor.atom.chain || '')) return false;
+    const threshold = entry.scores.length ? hideBelow() : 0;
+    return !(threshold && Number.isFinite(Number(editor.atom.b)) && Number(editor.atom.b) < threshold);
   }
 
   function labelEditorRecord() {
@@ -268,7 +281,7 @@
     } else if (editor.kind === 'label' && record) point = labelPosition(record);
     /* A new label is anchored where it will be drawn — labelAnchor, the residue's Cα as a rule —
        not at whichever atom of the residue the click happened to land nearest. */
-    else point = labelAnchor({ entryId: editor.entryId, chain: editor.atom.chain || '', resi: editor.atom.resi, atom: editor.atom.atom || '', x: editor.atom.x, y: editor.atom.y, z: editor.atom.z });
+    else point = labelAnchor({ entryId: editor.entryId, chain: editor.atom.chain || '', resi: editor.atom.resi, icode: insertionCodeOf(editor.atom), atom: editor.atom.atom || '', x: editor.atom.x, y: editor.atom.y, z: editor.atom.z });
     if (!point || !Number.isFinite(point.x)) return null;
     const screen = viewer.modelToScreen(point);
     if (!screen || !Number.isFinite(screen.x) || !Number.isFinite(screen.y)) return null;
@@ -321,7 +334,7 @@
       /* The panel's own path, so a label added here is the label the panel would have added: one
          record, one undo step. If something else was selected meanwhile, re-select this residue
          first so the panel names what is being labelled. */
-      const selected = selectedResidue && residueKey(selectedResidue.entryId, selectedResidue.chain, selectedResidue.resi);
+      const selected = selectedResidue && residueKey(selectedResidue.entryId, selectedResidue.chain, selectedResidue.resi, selectedResidue.icode);
       if (selected !== editor.key) selectResidue(entry, editor.atom);
       root.querySelector('#gpv-label-text').value = text;
       addOrEditLabel();

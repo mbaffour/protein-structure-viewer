@@ -360,9 +360,9 @@
   function addComparedPosition(spot, found) {
     if (!spotlightResidues.some(item => item.chain === spot.chain && item.resi === spot.resi)) spotlightResidues.push({ chain: spot.chain, resi: spot.resi });
     found.forEach(({ entry, atom }) => {
-      const key = residueKey(entry.id, atom.chain || '', atom.resi);
+      const key = residueKey(entry.id, atom.chain || '', atom.resi, insertionCodeOf(atom));
       const record = {
-        entryId: entry.id, chain: atom.chain || '', resi: atom.resi, resn: atom.resn || 'RES', atom: 'CA',
+        entryId: entry.id, chain: atom.chain || '', resi: atom.resi, icode: insertionCodeOf(atom), resn: atom.resn || 'RES', atom: 'CA',
         x: atom.x, y: atom.y, z: atom.z, key,
         text: positionResidueName(atom.resn) + atom.resi, color: entry.color, size: 15, kind: 'position'
       };

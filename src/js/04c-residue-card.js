@@ -26,6 +26,9 @@
   /* The residue a contacts row is pointing at while the pointer or focus is on it:
      { entryId, chain, resi }, drawn as a temporary label on the main view only. */
   let contactHover = null;
+  /* True while a spin video records the stage canvas (30): the marker would be in every frame, but
+     the residue stays selected — colour by distance from it is what such a video is often for. */
+  let markerHiddenForVideo = false;
 
   function storedMeasureAtoms() {
     const stored = readJson(preferenceKey, null);
@@ -34,11 +37,14 @@
 
   /* The atom that stands for a residue — the Cα, else a nucleotide's P, else the residue's first
      atom — so the card, the marker and a measurement read the same atom whichever atom of the
-     residue the click happened to land nearest. */
-  function residueAlphaCarbon(entry, chain, resi) {
+     residue the click happened to land nearest. With an insertion code ('' for none) it is that
+     residue's atom — 100A's, not 100's; with null, as the contacts rows call it, any residue numbered
+     resi. */
+  function residueAlphaCarbon(entry, chain, resi, icode = null) {
     let found = null;
     for (const atom of entry.atoms) {
       if ((atom.chain || '') !== (chain || '') || atom.resi !== resi) continue;
+      if (icode !== null && insertionCodeOf(atom) !== icode) continue;
       if (atom.atom === 'CA' && !atom.hetflag) return atom;
       if (!found || (atom.atom === 'P' && found.atom !== 'P')) found = atom;
     }
@@ -142,9 +148,9 @@
     const entry = residueLine && !textWithoutResidue(target) ? entryById(target.entryId) : null;
     if (!entry || !target.atom) { facts.hidden = true; facts.textContent = ''; own.forEach(item => { item.hidden = true; }); return; }
     const chain = target.atom.chain || '';
-    const atom = residueAlphaCarbon(entry, chain, target.atom.resi) || target.atom;
+    const atom = residueAlphaCarbon(entry, chain, target.atom.resi, insertionCodeOf(target.atom)) || target.atom;
     /* The model is named only when there is more than one to tell apart. */
-    host.querySelector('.gpv-label-editor-residue').textContent = (atom.resn || 'RES') + atom.resi + (chain ? ' · chain ' + chain : '') + (structures.length > 1 ? ' · ' + displayName(entry) : '');
+    host.querySelector('.gpv-label-editor-residue').textContent = (atom.resn || 'RES') + residueNumber(atom) + (chain ? ' · chain ' + chain : '') + (structures.length > 1 ? ' · ' + displayName(entry) : '');
     const { parts, nearText } = residueCardFacts(entry, atom);
     /* The line reads exactly as before — the count is a link only in how it behaves. */
     facts.replaceChildren();
@@ -213,9 +219,9 @@
 
   function armMeasureTo(entry, atom) {
     const chain = atom.chain || '';
-    const first = residueAlphaCarbon(entry, chain, atom.resi);
+    const first = residueAlphaCarbon(entry, chain, atom.resi, insertionCodeOf(atom));
     if (!first) { updateStatus('No atoms of that residue are loaded to measure from'); return; }
-    measureFrom = { entryId: entry.id, chain, resi: atom.resi, name: labelEditorDefaultText(first) };
+    measureFrom = { entryId: entry.id, chain, resi: atom.resi, icode: insertionCodeOf(atom), name: labelEditorDefaultText(first) };
     root.querySelector('#gpv-stage').classList.add('is-measuring-to');
     updateStatus('Click a second residue to measure from ' + measureFrom.name + ' · Esc cancels');
   }
@@ -284,13 +290,13 @@
     const chain = atom.chain || '';
     /* A slip onto the same residue measures nothing and keeps the arm, so the next click can still
        land on the residue that was meant. */
-    if (from.entryId === entry.id && from.chain === chain && from.resi === atom.resi) {
+    if (from.entryId === entry.id && from.chain === chain && from.resi === atom.resi && (from.icode || '') === insertionCodeOf(atom)) {
       updateStatus('That is ' + from.name + ' itself — nothing measured · click a different residue, or Esc to cancel');
       return;
     }
     cancelMeasureTo(false);
     const fromEntry = entryById(from.entryId);
-    const made = fromEntry && measureResiduePair(fromEntry, from, entry, { chain, resi: atom.resi }, measureAtoms);
+    const made = fromEntry && measureResiduePair(fromEntry, from, entry, { chain, resi: atom.resi, icode: insertionCodeOf(atom) }, measureAtoms);
     if (!made) { updateStatus('The first residue’s model is no longer loaded · nothing measured'); return; }
     updateStatus(from.name + ' — ' + made.summary);
   }
@@ -315,8 +321,11 @@
      or adding it — so Measure all can add a whole list under one step. */
   function residuePairMeasurement(entryA, residueA, entryB, residueB, atoms = 'ca') {
     const chainA = residueA.chain || ''; const chainB = residueB.chain || '';
-    const alphaA = residueAlphaCarbon(entryA, chainA, residueA.resi);
-    const alphaB = residueAlphaCarbon(entryB, chainB, residueB.resi);
+    /* A residue that says its insertion code (the selected residue, the card's) is that residue; a
+       contacts row, which does not, is any residue of that number. */
+    const codeOf = residue => ('icode' in residue ? insertionCodeOf(residue) : null);
+    const alphaA = residueAlphaCarbon(entryA, chainA, residueA.resi, codeOf(residueA));
+    const alphaB = residueAlphaCarbon(entryB, chainB, residueB.resi, codeOf(residueB));
     if (!alphaA || !alphaB) return null;
     const nearest = closestHeavyAtomPair(entryA, { chain: chainA, resi: residueA.resi }, entryB, { chain: chainB, resi: residueB.resi });
     const closest = nearest ? nearest.distance : null;
@@ -388,12 +397,12 @@
      model or chain is not shown, or when the residue carries a label, which already says what it is. */
   function residueMarkerSpec(shownIds) {
     const picked = selectedResidue;
-    if (!picked || !shownIds.has(picked.entryId)) return null;
+    if (!picked || markerHiddenForVideo || !shownIds.has(picked.entryId)) return null;
     const entry = entryById(picked.entryId);
     if (!entry || !entry.model || (entry.hiddenChains || []).includes(picked.chain)) return null;
-    const key = residueKey(picked.entryId, picked.chain, picked.resi);
+    const key = residueKey(picked.entryId, picked.chain, picked.resi, picked.icode);
     if (labelRecords.some(label => label.key === key)) return null;
-    const atom = residueAlphaCarbon(entry, picked.chain, picked.resi) || picked;
+    const atom = residueAlphaCarbon(entry, picked.chain, picked.resi, insertionCodeOf(picked)) || picked;
     const confidence = entry.scores.length && Number.isFinite(Number(atom.b)) ? ' · pLDDT ' + Number(atom.b).toFixed(1) : '';
     return { text: labelEditorDefaultText(atom) + confidence, style: residueMarkerStyle(atom) };
   }
@@ -424,8 +433,8 @@
     return spec ? spec.text : null;
   }
 
-  /* Esc with nothing else to close, Clear all, and recording a video leave no residue selected — and
-     so no marker. The panel's readout goes back to what a fresh page says. */
+  /* Esc with nothing else to close, Clear all, and removing the residue's model leave no residue
+     selected — and so no marker. The panel's readout goes back to what a fresh page says. */
   function clearSelectedResidue(shouldRender = true) {
     cancelMeasureTo(false);
     if (!selectedResidue) return false;
@@ -492,9 +501,19 @@
     const entry = entryById(editor.entryId);
     if (!entry || !entry.model) return null;
     const chain = editor.atom.chain || '';
-    const atom = residueAlphaCarbon(entry, chain, editor.atom.resi) || editor.atom;
-    return { entry, chain, resi: editor.atom.resi, name: labelEditorDefaultText(atom) };
+    const atom = residueAlphaCarbon(entry, chain, editor.atom.resi, insertionCodeOf(editor.atom)) || editor.atom;
+    return { entry, chain, resi: editor.atom.resi, icode: insertionCodeOf(editor.atom), name: labelEditorDefaultText(atom) };
   }
+
+  /* The card's count and its contacts list use Annotate → Within (Å). A new cutoff is a new answer,
+     so an open card works both out again rather than keep the old count. */
+  root.querySelector('#gpv-near-cutoff').addEventListener('change', () => {
+    const editor = labelEditor; const host = labelEditorHost;
+    if (!editor || !host || host.hidden || textWithoutResidue(editor)) return;
+    const open = contactsPanelOpen();
+    fillResidueCard(host, editor, host.querySelector('.gpv-label-editor-residue').textContent);
+    if (open) openResidueContacts(); else positionLabelEditor();
+  });
 
   function contactsPanelOpen() {
     const panel = labelEditorHost && labelEditorHost.querySelector('#gpv-residue-contacts');
@@ -628,8 +647,7 @@
     const live = liveContacts(); if (!live || !live.found.rows || !live.found.rows.length) return;
     const text = contactsText(live.found);
     const what = plural(live.found.rows.length, 'contact') + ' of ' + live.picked.name;
-    try { await navigator.clipboard.writeText(text); announce(what + ' copied as tab-separated text'); }
-    catch (error) { root.querySelector('#gpv-data-text').value = text; announce('Clipboard unavailable — the ' + what + ' are in the paste box of Per-residue data'); }
+    await copyTextOrShow(text, what + ' copied as tab-separated text', what);
   }
 
   function setMeasureAtoms(value) {

@@ -58,8 +58,13 @@
     return true;
   }
 
+  /* An empty page has nothing of its own to save; it only replaces the stored session once it has
+     held models of its own. Otherwise the boot-time save would delete the session the restore banner
+     is offering, and Not now would be Forget it. */
+  let sessionHadModels = false;
   async function saveSession() {
-    if (!structures.length) { await sessionStore('readwrite', store => store.delete('current')); return; }
+    if (!structures.length) { if (sessionHadModels) await sessionStore('readwrite', store => store.delete('current')); return; }
+    sessionHadModels = true;
     const total = structures.reduce((sum, entry) => sum + (entry.text ? entry.text.length : 0), 0);
     if (total > 80 * 1024 * 1024) { if (!sessionWarned) { sessionWarned = true; toast('Session too large to autosave (over 80 MB of coordinates) — use Save session file to keep your work.'); } return; }
     const snapshot = {
@@ -79,6 +84,9 @@
     root.querySelector('#gpv-session-yes').onclick = () => { banner.hidden = true; restoreSession(saved).catch(error => announce('Could not restore the session: ' + error.message, 'error')); };
     root.querySelector('#gpv-session-no').onclick = () => { banner.hidden = true; };
     root.querySelector('#gpv-session-forget').onclick = () => { banner.hidden = true; sessionStore('readwrite', store => store.delete('current')).then(() => updateStatus('Saved session discarded')).catch(() => {}); };
+  }
+  function dismissSessionBanner() {
+    root.querySelector('#gpv-session-banner').hidden = true;
   }
   async function restoreSession(saved) {
     const done = setBusy('Restoring session…');

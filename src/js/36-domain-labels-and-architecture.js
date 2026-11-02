@@ -32,8 +32,8 @@
       const centre = { x: mean(cas.map(atom => atom.x)), y: mean(cas.map(atom => atom.y)), z: mean(cas.map(atom => atom.z)) };
       let best = cas[0]; let bestDistance = Infinity;
       cas.forEach(atom => { const d = (atom.x - centre.x) ** 2 + (atom.y - centre.y) ** 2 + (atom.z - centre.z) ** 2; if (d < bestDistance) { bestDistance = d; best = atom; } });
-      const key = residueKey(entry.id, best.chain || '', best.resi);
-      const record = { entryId: entry.id, chain: best.chain || '', resi: best.resi, resn: best.resn || 'RES', atom: 'CA', x: best.x, y: best.y, z: best.z, key, text: item.name, color: item.color, size: 15, kind: 'domain' };
+      const key = residueKey(entry.id, best.chain || '', best.resi, insertionCodeOf(best));
+      const record = { entryId: entry.id, chain: best.chain || '', resi: best.resi, icode: insertionCodeOf(best), resn: best.resn || 'RES', atom: 'CA', x: best.x, y: best.y, z: best.z, key, text: item.name, color: item.color, size: 15, kind: 'domain' };
       const index = labelRecords.findIndex(label => label.key === key);
       if (index >= 0) labelRecords[index] = { ...labelRecords[index], ...record }; else labelRecords.push(record);
       added += 1;

@@ -102,7 +102,7 @@
   root.querySelector('#gpv-motif').addEventListener('keydown', event => { if (event.key === 'Enter') { event.preventDefault(); highlightMotif(); } });
   root.querySelector('#gpv-near-target').addEventListener('change', () => { root.querySelector('#gpv-near-chain').closest('label').hidden = root.querySelector('#gpv-near-target').value !== 'chain'; });
   root.querySelector('#gpv-near-chain').closest('label').hidden = true;
-  root.querySelector('#gpv-near-copy').addEventListener('click', async () => { const text = nearbyListText(); if (!text) return; try { await navigator.clipboard.writeText(text); announce('Residue list copied · ' + nearbyResult.residues.length + ' residues'); } catch (error) { root.querySelector('#gpv-data-text').value = text; announce('Clipboard unavailable — the list is in the paste box below'); } });
+  root.querySelector('#gpv-near-copy').addEventListener('click', async () => { const text = nearbyListText(); if (!text) return; await copyTextOrShow(text, 'Residue list copied · ' + nearbyResult.residues.length + ' residues', 'residues'); });
   root.querySelector('#gpv-data-apply').addEventListener('click', loadPastedData);
   root.querySelector('#gpv-data-file').addEventListener('change', async event => { const file = event.target.files[0]; if (!file) return; const table = parseResidueTable(await file.text()); if (!table) { announce('Could not read a residue column and a numeric value column from ' + file.name, 'error'); return; } setResidueData(table, fileStem(file.name)); event.target.value = ''; });
   root.querySelector('#gpv-data-paint').addEventListener('click', () => { const select = root.querySelector('#gpv-color-mode'); select.value = 'data'; select.dispatchEvent(new Event('change', { bubbles: true })); });

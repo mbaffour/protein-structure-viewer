@@ -625,6 +625,16 @@
     }
     return best;
   }
+  /* The matrix names the models it was computed over. Once a model is hidden, shown, added or
+     renamed it no longer describes the view, and the legend, methods text and composite would go on
+     quoting it, so it is dropped (updateStatus runs after every such change). */
+  function dropStaleRmsdMatrix() {
+    if (!rmsdMatrix) return;
+    const names = structures.filter(entry => entry.visible && entry.model).map(displayName);
+    if (names.join('\n') === rmsdMatrix.names.join('\n')) return;
+    rmsdMatrix = null; renderRmsdMatrix();
+    if (typeof renderCompositeControls === 'function') renderCompositeControls();
+  }
   function computeRmsdMatrix() {
     if (typeof numeric === 'undefined' || typeof numeric.svd !== 'function') { announce('The matrix needs the numeric.js library, which did not load. Reload the page and try again.', 'error'); return; }
     const shown = displayedEntries().filter(entry => entry.model);
@@ -795,9 +805,11 @@
     }
     if (restoreMotion !== null) return;
     /* The video records the stage canvas itself, so the on-screen ring around the active label
-       would be in every frame of it — and so would the selected residue's marker. */
-    clearSelectedResidue();
-    clearActiveText();
+       would be in every frame of it — and so would the selected residue's marker. The marker is
+       hidden rather than the residue deselected, which would turn distance colouring grey. */
+    cancelMeasureTo(false);
+    clearActiveText(false);
+    markerHiddenForVideo = true; rebuildOverlays();
     const button = root.querySelector('#gpv-video');
     const duration = Number(root.querySelector('#gpv-video-length').value) || 5;
     const stream = canvas.captureStream(30);
@@ -807,6 +819,7 @@
     recorder.ondataavailable = event => { if (event.data.size) chunks.push(event.data); };
     recorder.onstop = () => {
       viewer.spin(false);
+      markerHiddenForVideo = false; rebuildOverlays();
       stream.getTracks().forEach(track => track.stop());
       const url = URL.createObjectURL(new Blob(chunks, { type: 'video/webm' }));
       const link = document.createElement('a');
@@ -956,9 +969,12 @@
   function sceneOverlays(keep = () => true) {
     const kept = record => keep(record.entryId);
     const keptPoints = record => record.points.every(point => keep(point.entryId));
-    const point = item => ({ model: nameOf(item.entryId), chain: item.chain, resi: item.resi, atom: item.atom, index: item.index });
+    /* A residue's insertion code is written only when it has one, so scenes without insertion codes
+       read exactly as before and older viewers ignore the field. */
+    const icodeOf = item => { const icode = insertionCodeOf(item); return icode ? { icode } : {}; };
+    const point = item => ({ model: nameOf(item.entryId), chain: item.chain, resi: item.resi, ...icodeOf(item), atom: item.atom, index: item.index });
     return {
-      labels: labelRecords.filter(kept).map(label => ({ model: nameOf(label.entryId), chain: label.chain, resi: label.resi, atom: label.atom, text: label.text, color: label.color, size: label.size, ...(label.kind === 'domain' || label.kind === 'position' ? { kind: label.kind } : {}), ...(labelOffsetLength(label) ? { offset: label.offset } : {}) })),
+      labels: labelRecords.filter(kept).map(label => ({ model: nameOf(label.entryId), chain: label.chain, resi: label.resi, ...icodeOf(label), atom: label.atom, text: label.text, color: label.color, size: label.size, ...(label.kind === 'domain' || label.kind === 'position' ? { kind: label.kind } : {}), ...(labelOffsetLength(label) ? { offset: label.offset } : {}) })),
       selections: selectionRecords.filter(kept).map(record => ({ model: nameOf(record.entryId), chain: record.chain, residues: record.residues, action: record.action, color: record.color })),
       /* A measurement's text, value switch, offset, colour and dash only when they differ from the
          defaults, so a scene with none of them reads exactly as it did before they existed. */

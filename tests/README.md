@@ -197,7 +197,8 @@ Phone checks emulate viewport dimensions, not a physical phone or its GPU.
   undo takes back, and Highlight adds one highlight record per chain covering exactly the listed residues in one undo
   step; with *closest atoms* chosen `M` measures the closest heavy-atom pair to the next residue tapped, the status
   reading `first — second: ATOM–ATOM d.dd Å`; Distance from selected residue paints a residue within 4 Å `#1e3a8a`
-  and one beyond 20 Å `#e5e7eb` and the residue itself in the accent colour, the strip's pixels agree, the legend,
+  and one beyond 20 Å `#d1d5db` and the residue itself `#f97316`, the same in the dark interface theme, a
+  spin video recorded meanwhile keeps the residue selected and hides only the marker, the strip's pixels agree, the legend,
   strip title and methods text name the residue, another selection recolours, nothing selected is grey and the mode
   announces *Click a residue first*, and a saved and reloaded scene keeps the mode; and on
   `fixtures/experimental/5cha.cif` His57 of chain B lists `SER195 · C` at NE2–OG 3.02 Å and `ASP102 · B` at ND1–OD1
@@ -323,6 +324,22 @@ Phone checks emulate viewport dimensions, not a physical phone or its GPU.
   drawn in its model colour under pLDDT colouring.
 
 The two emphasised checks are regressions against bugs that shipped in 2.0.
+
+- UX fixes (2.52.0), most on a page of their own (`freshViewer`, a new browser context with its own storage)
+  because they clear, remove or reload: *Not now* keeps the autosave for the next visit and *Forget it*
+  discards it; loading other work takes the restore banner down; Remove takes the card, the selected
+  residue, its labels and the modes with the model; Clear all asks before discarding one labelled model,
+  not for one bare model, clears the RMSD matrix and model agreement, and model ids keep counting; a
+  Nature 89 mm width survives a reload; ← → on a tab button, the divider or a slider leave the model alone;
+  Esc in help keeps full screen and in a rename keeps drawing; `?` works after a click on a switch; undo
+  restores Emphasise, a renamed legend title, MSA colouring and a compared position's neighbourhood table;
+  an RNA chain is box-selected and labelled through its P atoms and a calcium ion is not labelled;
+  residues 100, 100A and 100B are separate in the strip, Go to (`100A`, `H:100B`), a label's key and
+  anchor, the card's pLDDT and a scene; a loose `.a3m` colours a fetched model; the card closes over a
+  hidden model or chain, recounts on a new cutoff, and fits a phone's 380 px view; a contact map is marked
+  out of date when its settings change and a hidden model drops the RMSD matrix; the saved-views list and
+  captions use the figure's letters; a refused clipboard fills its own box, not the paste box; a fetch
+  keeps an overlay, and → from an overlay says it shows one model and saves the mode.
 
 ## Recovering from a failed step
 

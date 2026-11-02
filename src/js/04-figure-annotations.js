@@ -404,12 +404,12 @@
     const entryA = entryById(first.entryId); const entryB = entryById(second.entryId);
     if (!entryA || !entryB || !entryA.model || !entryB.model) return null;
     if (first.entryId === second.entryId && (first.chain || '') === (second.chain || '') && first.resi === second.resi) return null;
-    const residueA = { chain: first.chain || '', resi: first.resi }; const residueB = { chain: second.chain || '', resi: second.resi };
+    const residueA = { chain: first.chain || '', resi: first.resi, icode: insertionCodeOf(first) }; const residueB = { chain: second.chain || '', resi: second.resi, icode: insertionCodeOf(second) };
     const atomA = resolvePoint(first); const atomB = resolvePoint(second);
     const nearest = closestHeavyAtomPair(entryA, residueA, entryB, residueB);
     let state = 'measured';
     if (nearest && atomA === nearest.a && atomB === nearest.b) state = 'closest';
-    else if (atomA && atomB && atomA === residueAlphaCarbon(entryA, residueA.chain, residueA.resi) && atomB === residueAlphaCarbon(entryB, residueB.chain, residueB.resi) && atomA.atom === 'CA' && atomB.atom === 'CA') state = 'ca';
+    else if (atomA && atomB && atomA === residueAlphaCarbon(entryA, residueA.chain, residueA.resi, residueA.icode) && atomB === residueAlphaCarbon(entryB, residueB.chain, residueB.resi, residueB.icode) && atomA.atom === 'CA' && atomB.atom === 'CA') state = 'ca';
     return { entryA, entryB, residueA, residueB, nearest, state };
   }
 
@@ -420,7 +420,7 @@
     if (!pair || pair.state === choice) return;
     let first = null; let second = null;
     if (choice === 'closest' && pair.nearest) { first = pair.nearest.a; second = pair.nearest.b; }
-    if (choice === 'ca') { first = residueAlphaCarbon(pair.entryA, pair.residueA.chain, pair.residueA.resi); second = residueAlphaCarbon(pair.entryB, pair.residueB.chain, pair.residueB.resi); }
+    if (choice === 'ca') { first = residueAlphaCarbon(pair.entryA, pair.residueA.chain, pair.residueA.resi, pair.residueA.icode); second = residueAlphaCarbon(pair.entryB, pair.residueB.chain, pair.residueB.resi, pair.residueB.icode); }
     if (!first || !second) { updateStatus('Those atoms are not loaded'); return; }
     remember('measurement atoms');
     record.points = [atomReference(pair.entryA, first), atomReference(pair.entryB, second)];
@@ -502,8 +502,7 @@
     if (!measurementRecords.length) return;
     const text = measurementsText();
     const what = plural(measurementRecords.length, 'measurement');
-    try { await navigator.clipboard.writeText(text); announce(what + ' copied as tab-separated text'); }
-    catch (error) { root.querySelector('#gpv-data-text').value = text; announce('Clipboard unavailable — the ' + what + ' are in the paste box of Per-residue data'); }
+    await copyTextOrShow(text, what + ' copied as tab-separated text', what);
   }
 
   function downloadMeasurementsCsv() {
@@ -920,8 +919,8 @@
         if (overLabel) { readout.textContent = 'Drag to move · click to edit “' + clipText(String(overLabel.text || ''), 40) + '”'; return; }
         const hit = pickAtomAt(hoverAt.x, hoverAt.y, true);
         readout.textContent = hit ? describeResidue(hit.entry, hit.atom) + (displayedEntries().length > 1 ? ' · ' + displayName(hit.entry) : '') : '';
-        const next = hit ? { entryId: hit.entry.id, chain: hit.atom.chain || '', resi: hit.atom.resi } : null;
-        const changed = next ? !sequenceHover || sequenceHover.entryId !== next.entryId || sequenceHover.chain !== next.chain || sequenceHover.resi !== next.resi : Boolean(sequenceHover);
+        const next = hit ? { entryId: hit.entry.id, chain: hit.atom.chain || '', resi: hit.atom.resi, icode: insertionCodeOf(hit.atom) } : null;
+        const changed = next ? !sequenceHover || sequenceHover.entryId !== next.entryId || sequenceHover.chain !== next.chain || sequenceHover.resi !== next.resi || (sequenceHover.icode || '') !== next.icode : Boolean(sequenceHover);
         if (changed) { sequenceHover = next; renderSequenceSoon(); }
       });
     });

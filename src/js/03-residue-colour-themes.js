@@ -205,6 +205,7 @@
     root.querySelector('#gpv-motif-run').disabled = structures.length === 0;
     root.querySelector('#gpv-data-apply').disabled = structures.length === 0;
     scheduleSessionSave();
+    dropStaleRmsdMatrix();
     root.querySelector('#gpv-captions').disabled = savedViews.length === 0;
     ['#gpv-domain-labels', '#gpv-pae-domain-labels', '#gpv-architecture-png', '#gpv-architecture-svg'].forEach(selector => { root.querySelector(selector).disabled = structures.length === 0; });
     updateReportEstimate();
@@ -415,24 +416,47 @@
       remove.className = 'btn btn-ghost';
       remove.type = 'button';
       remove.textContent = 'Remove';
-      remove.addEventListener('click', () => {
-        if (entry.model) viewer.removeModel(entry.model);
-        structures = structures.filter(item => item !== entry);
-        labelRecords = labelRecords.filter(label => label.entryId !== entry.id);
-        renderLabelList();
-        selectionRecords = selectionRecords.filter(selection => selection.entryId !== entry.id);
-        measurementRecords = measurementRecords.filter(measurement => measurement.points.every(point => point.entryId !== entry.id));
-        alignmentResults = [];
-        renderAlignmentResults();
-        renderSelectionList();
-        renderMeasurementList();
-        renderList();
-        applyStyle();
-      });
+      remove.addEventListener('click', () => removeModelEntry(entry));
 
       row.append(visibleLabel, copy, score, color, fadeLabel, focus, rename, remove);
       list.append(row);
     });
+  }
+
+  /* Everything that names the model goes with it: its records, the card and the selected residue
+     if they were its, the comparison that included it, and the modes when nothing is left to draw
+     on. Otherwise Add or update would label a "Missing model", and the card would follow a residue
+     that is no longer drawn. */
+  function removeModelEntry(entry) {
+    dismissCanvasText();
+    if (selectedResidue && selectedResidue.entryId === entry.id) clearSelectedResidue(false);
+    if (entry.model) viewer.removeModel(entry.model);
+    structures = structures.filter(item => item !== entry);
+    if (activeId === entry.id) activeId = structures[0] ? structures[0].id : null;
+    const keeps = point => point.entryId !== entry.id;
+    labelRecords = labelRecords.filter(keeps);
+    selectionRecords = selectionRecords.filter(keeps);
+    measurementRecords = measurementRecords.filter(measurement => measurement.points.every(keeps));
+    annotationRecords = annotationRecords.filter(record => record.points.every(keeps));
+    /* The deviations, the agreement and the position comparison were all made with this model. The
+       others stay where the superposition put them; Restore coordinates still takes them back. */
+    alignmentResults = [];
+    structures.forEach(item => { item.deviations = null; item.alignedPairs = null; });
+    ensembleSpread = null;
+    spotlightResidues = []; positionEffect = null; renderPositionEffect(); renderPositionState();
+    if (siteResults && siteResults.entryId === entry.id) siteResults = null;
+    if (nearbyResult && nearbyResult.entry === entry) { nearbyResult = null; root.querySelector('#gpv-near-copy').disabled = true; }
+    if (rmsdMatrix) { rmsdMatrix = null; renderRmsdMatrix(); }
+    if (!structures.length) {
+      setBoxSelectMode(false);
+      if (annotationActive) toggleAnnotating(false);
+      if (measurementActive) toggleMeasurement();
+    }
+    renderAlignmentResults();
+    renderLabelList(); renderSelectionList(); renderMeasurementList(); renderAnnotationList();
+    renderList();
+    applyStyle();
+    announce('Removed ' + displayName(entry));
   }
 
   function addStructure(name, text, format, sourcePath = name, collection = 'Individual files', lazy = false) {
@@ -484,7 +508,10 @@
     return filteredStructures().filter(entry => entry.visible);
   }
 
-  function selectModel(entry, fit = true) {
+  /* Picking a model — Current model, ← →, Previous/Next, cycling — shows it on its own, and says so
+     when that leaves an overlay; the mode is a preference, so the change is saved like a choice made
+     in the select. keepMode is for a model that arrives (a fetch): it joins the view as it is. */
+  function selectModel(entry, fit = true, keepMode = false) {
     if (!entry) return;
     /* The editor and the active label belong to what was on screen; another model is something else.
        The selected residue stays selected — the panel names its model — and its marker is simply not
@@ -496,14 +523,16 @@
     }
     activeId = entry.id;
     root.querySelector('#gpv-current').value = String(entry.id);
-    root.querySelector('#gpv-view-mode').value = 'single';
+    const mode = root.querySelector('#gpv-view-mode');
+    const leftOverlay = !keepMode && mode.value !== 'single';
+    if (leftOverlay) { mode.value = 'single'; savePreferences(); }
     applyStyle();
     root.querySelectorAll('#gpv-list [data-entry-id]').forEach(row => row.classList.toggle('is-active', Number(row.dataset.entryId) === entry.id));
     const activeRow = root.querySelector('#gpv-list [data-entry-id="' + entry.id + '"] .gpv-entry-score');
     const average = mean(entry.scores);
     if (activeRow) activeRow.textContent = average === null ? 'pLDDT —' : average.toFixed(1);
     if (fit && entry.model) { viewer.zoomTo({ model: entry.model.getID() }); viewer.render(); }
-    updateStatus('Showing ' + displayName(entry));
+    updateStatus('Showing ' + displayName(entry) + (leftOverlay ? ' · one model at a time (View mode)' : ''));
   }
 
   function selectRelative(delta, fit = true) {
@@ -517,7 +546,6 @@
   function toggleCycle() {
     if (cycleTimer) { stopCycle(); return; }
     if (!cycleEntries().length) return;
-    root.querySelector('#gpv-view-mode').value = 'single';
     const delay = Math.max(500, Number(root.querySelector('#gpv-cycle-speed').value) * 1000);
     cycleTimer = setInterval(() => selectRelative(1, false), delay);
     const button = root.querySelector('#gpv-cycle');
@@ -531,14 +559,33 @@
     selectModel(candidates.includes(active) ? active : candidates[0], false);
   }
 
-  function residueKey(entryId, chain, resi) {
-    return [entryId, chain || '', resi].join('|');
+  /* An insertion code tells residues 100, 100A and 100B apart (antibody and Kabat numbering). 3Dmol
+     reads a blank as ' ' from a PDB file and as '?' or '.' from mmCIF; all three mean none. Records
+     (a label, the selected residue, a measurement point) carry it as `icode`, read the same way. */
+  function insertionCodeOf(atom) {
+    const code = String((atom && atom.icode) ?? '').trim();
+    return code === '?' || code === '.' ? '' : code;
+  }
+
+  /* The residue number as the file writes it: 100, or 100A. */
+  function residueNumber(atom) {
+    return String(atom.resi) + insertionCodeOf(atom);
+  }
+
+  function sameResidue(atom, chain, resi, icode = '') {
+    return (atom.chain || '') === (chain || '') && atom.resi === resi && insertionCodeOf(atom) === (icode || '');
+  }
+
+  /* The key is entry|chain|resi as it always was; an insertion code adds a fourth part, so keys,
+     scenes and share links written before 2.52.0 still match their residues. */
+  function residueKey(entryId, chain, resi, icode = '') {
+    return [entryId, chain || '', resi].join('|') + (icode ? '|' + icode : '');
   }
 
   function residueText(entry, atom) {
     const chain = atom.chain ? ' chain ' + atom.chain : '';
     const confidence = entry.scores.length && Number.isFinite(Number(atom.b)) ? ' · pLDDT ' + Number(atom.b).toFixed(1) : '';
-    return entry.name + ' · ' + (atom.resn || 'Residue') + ' ' + atom.resi + chain + ' · atom ' + (atom.atom || '—') + confidence;
+    return entry.name + ' · ' + (atom.resn || 'Residue') + ' ' + residueNumber(atom) + chain + ' · atom ' + (atom.atom || '—') + confidence;
   }
 
   function selectResidue(entry, atom) {
@@ -546,6 +593,7 @@
       entryId: entry.id,
       chain: atom.chain || '',
       resi: atom.resi,
+      icode: insertionCodeOf(atom),
       resn: atom.resn || 'RES',
       atom: atom.atom || '',
       x: atom.x,
@@ -554,9 +602,9 @@
       b: atom.b
     };
     root.querySelector('#gpv-residue').textContent = residueText(entry, atom);
-    const key = residueKey(entry.id, atom.chain, atom.resi);
+    const key = residueKey(entry.id, atom.chain, atom.resi, insertionCodeOf(atom));
     const saved = labelRecords.find(label => label.key === key);
-    root.querySelector('#gpv-label-text').value = saved ? saved.text : (atom.resn || 'RES') + atom.resi + (atom.chain ? ' · ' + atom.chain : '');
+    root.querySelector('#gpv-label-text').value = saved ? saved.text : (atom.resn || 'RES') + residueNumber(atom) + (atom.chain ? ' · ' + atom.chain : '');
     root.querySelector('#gpv-add-label').disabled = false;
     updatePositionCompare();
     /* Colour by distance from the selected residue (03a) follows the selection. */
@@ -566,10 +614,10 @@
   }
 
   function addOrEditLabel() {
-    if (!selectedResidue) return;
+    if (!selectedResidue || !entryById(selectedResidue.entryId)) return;
     const text = root.querySelector('#gpv-label-text').value.trim();
     if (!text) return;
-    const key = residueKey(selectedResidue.entryId, selectedResidue.chain, selectedResidue.resi);
+    const key = residueKey(selectedResidue.entryId, selectedResidue.chain, selectedResidue.resi, selectedResidue.icode);
     remember('label change');
     const record = { ...selectedResidue, key, text };
     const index = labelRecords.findIndex(label => label.key === key);
@@ -620,11 +668,11 @@
       const row = document.createElement('div'); row.className = 'gpv-entry';
       const copy = document.createElement('span'); copy.className = 'gpv-edit-copy';
       const text = document.createElement('input'); text.className = 'form-control'; text.type = 'text'; text.value = label.text; text.maxLength = 120;
-      text.setAttribute('aria-label', 'Label text for ' + (label.resn || 'residue') + ' ' + label.resi);
+      text.setAttribute('aria-label', 'Label text for ' + (label.resn || 'residue') + ' ' + residueNumber(label));
       text.addEventListener('change', () => { const value = text.value.trim(); if (!value) { text.value = label.text; return; } remember('label text'); label.text = value; rebuildOverlays(); updateStatus('Label updated'); });
       text.addEventListener('keydown', event => { if (event.key === 'Enter') { event.preventDefault(); text.blur(); } });
       const where = document.createElement('span'); where.className = 'gpv-entry-source text-small';
-      where.textContent = (entry ? displayName(entry) : 'Missing model') + ' · ' + (label.resn || 'RES') + ' ' + label.resi + (label.chain ? ' · chain ' + label.chain : '');
+      where.textContent = (entry ? displayName(entry) : 'Missing model') + ' · ' + (label.resn || 'RES') + ' ' + residueNumber(label) + (label.chain ? ' · chain ' + label.chain : '');
       copy.append(text, where);
       const tools = document.createElement('span'); tools.className = 'gpv-edit-tools';
       const size = document.createElement('select'); size.className = 'form-select'; size.setAttribute('aria-label', 'Label size');
@@ -674,7 +722,7 @@
      and a thin leader line is drawn back to the residue once it has moved a clear distance. */
   function labelAnchor(label, byId = entriesById()) {
     const entry = byId.get(label.entryId);
-    const atom = entry && entry.atoms.find(item => (item.chain || '') === label.chain && item.resi === label.resi && (item.atom === 'CA' || item.atom === label.atom));
+    const atom = entry && entry.atoms.find(item => sameResidue(item, label.chain, label.resi, insertionCodeOf(label)) && (item.atom === 'CA' || item.atom === label.atom));
     return atom ? { x: atom.x, y: atom.y, z: atom.z } : { x: label.x, y: label.y, z: label.z };
   }
   function labelOffsetLength(label) {
@@ -709,8 +757,10 @@
     if (root.querySelector('#gpv-all-labels').checked) {
       const entry = activeEntry();
       if (entry && shownIds.has(entry.id)) {
-        entry.atoms.filter(atom => atom.atom === 'CA').forEach(atom => {
-          const text = (atom.resn || 'RES') + atom.resi + (atom.chain ? ' · ' + atom.chain : '');
+        /* One per polymer residue — Cα, else P — so nucleotides are labelled and a calcium ion,
+           whose atom is also called CA, is not. */
+        residueRows(entry).flatMap(row => row.residues).forEach(atom => {
+          const text = (atom.resn || 'RES') + residueNumber(atom) + (atom.chain ? ' · ' + atom.chain : '');
           target.addLabel(text, labelStyle({ x: atom.x, y: atom.y, z: atom.z }, { scale }));
         });
       }
@@ -799,19 +849,20 @@
   }
 
   function atomReference(entry, atom) {
-    return { entryId: entry.id, chain: atom.chain || '', resi: atom.resi, atom: atom.atom || '', index: Number.isInteger(atom.index) ? atom.index : null };
+    const icode = insertionCodeOf(atom);
+    return { entryId: entry.id, chain: atom.chain || '', resi: atom.resi, ...(icode ? { icode } : {}), atom: atom.atom || '', index: Number.isInteger(atom.index) ? atom.index : null };
   }
 
   function resolvePoint(reference) {
     const entry = structures.find(item => item.id === reference.entryId);
     if (!entry) return null;
     return entry.atoms.find(atom => Number.isInteger(reference.index) && atom.index === reference.index)
-      || entry.atoms.find(atom => (atom.chain || '') === reference.chain && atom.resi === reference.resi && (atom.atom || '') === reference.atom) || null;
+      || entry.atoms.find(atom => sameResidue(atom, reference.chain, reference.resi, insertionCodeOf(reference)) && (atom.atom || '') === reference.atom) || null;
   }
 
   function pointName(reference) {
     const entry = structures.find(item => item.id === reference.entryId);
-    return (entry ? displayName(entry) : 'Missing model') + ' · ' + (reference.chain || '—') + ':' + reference.resi + ' ' + (reference.atom || 'atom');
+    return (entry ? displayName(entry) : 'Missing model') + ' · ' + (reference.chain || '—') + ':' + residueNumber(reference) + ' ' + (reference.atom || 'atom');
   }
 
   function measurementValue(record) {

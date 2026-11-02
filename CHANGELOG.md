@@ -36,6 +36,77 @@ All notable changes to this project are recorded here.
 - The figure legend names a measurement by its atoms — `HIS57 · B NE2 ↔ SER195 · C OG 3.02 Å` — where
   it wrote `B:57–C:195 3.02 Å`; the sentence changes for every scene, old ones included. Nothing drawn
   changes: a measurement with none of the new fields looks exactly as it did.
+- **Colour by distance from the selected residue**: the residue itself is now orange (`#f97316`, the
+  Annotate highlight colour) in either interface theme, where it took the theme's accent blue — close
+  to the 4–6 Å and 6–10 Å bands, and different in a figure exported from a dark interface. The band
+  beyond 20 Å is `#d1d5db` instead of `#e5e7eb`, which all but vanished on white paper. The legend,
+  figure legend and methods text say so.
+
+### Fixed
+
+- **Not now kept nothing.** Every page load saved the empty page about 1.5 s in, which deleted the
+  autosaved session the banner was offering, so *Not now* behaved as *Forget it* and the next visit
+  offered nothing. An empty page now never replaces a stored session; only a page that has held models
+  (or *Forget it*) does. Opening or fetching other work also takes the banner down, so a later
+  *Restore* can no longer pour the old scene's labels and settings over the new work.
+- **Arrow keys on a tab button, the panel divider or the residue card also changed the model**, switched
+  the view to one at a time and closed the card. A key a control has already used is no longer also a
+  shortcut, and the arrows, Delete and Backspace inside the card and the box popover stay theirs.
+- **Esc in the help dialog or a text field also left full screen, Drag to select, drawing or
+  measuring** — closing help left full screen, cancelling a rename stopped drawing. Esc there now only
+  closes help or cancels the edit. And the shortcuts no longer stop after a click on a switch, checkbox,
+  slider or colour well (only text fields and selects count as typing; a slider keeps its own arrows).
+- **Removing a model left its residue selected and its card open**: *Add or update* then added a
+  "Missing model" label, its annotations stayed listed, deviation colours kept painting, and with the
+  last model gone drawing or Drag to select stayed on. Remove now takes the card, the selection, its
+  annotations, the deviations, the comparison and the RMSD matrix with the model, turns the modes off
+  when nothing is left, and says *Removed …*.
+- **Clear all**: it discarded a single model's labels, views and figure without asking — it now asks
+  whenever there is work to lose (one bare model still clears at once). Ligand sites, model agreement
+  (and its enabled RMSF buttons), the RMSD matrix, a loose `.a3m`, renamed legend entries, the motif
+  line and *Copy residue list* outlived it, and because model ids restarted at 1 the old results
+  attached to the next models loaded; ids now keep counting and those results are cleared. The Motion
+  select goes back to off with nothing left to turn.
+- **Undo steps that undid nothing**: undoing a fade, *Emphasise*, *Use medoid*, *Colour by MSA* or a
+  renamed legend entry said "Undid …" and changed nothing, using up the step. They now come back; the
+  legend rename is remembered before the first keystroke, not after the last. Undoing *Compare this
+  position* now takes its neighbourhood table, its buttons and its figure-legend sentence with it, and
+  redo brings them back.
+- **A journal width that is not a listed width** (Nature's 89 mm, Science's 55 mm …) printed at 120 mm
+  after a reload: *Custom width* is now remembered with the other export preferences.
+- **Insertion codes**: residues 100, 100A and 100B were one cell in the sequence strip, a label on 100A
+  sat on 100's Cα and shared its key, the card for 100A read 100's pLDDT, and Go to read `100A` as chain
+  A. Each is now its own residue in the strip, labels, the card, the marker and Measure to…; Go to
+  takes `H:100A`, and `100A` where the model has that residue and no chain A; scenes, sessions and share
+  links record `"icode"` only for a residue that has one, so older scenes load as before. Go to also
+  matches a chain's case exactly when both `a` and `A` exist.
+- **An `.a3m` dropped on its own only served models opened as individual files**: with a fetched or
+  unzipped model *Colour by MSA* stayed disabled and the import said "No supported structures found". It
+  now serves every model, and the import says *Alignment added*.
+- **A spin video recorded under distance colouring was grey**, because recording deselected the residue.
+  It now hides only the marker while it records and keeps the selection.
+- **Motion said Spin but nothing spun** after loading files: the chosen motion now resumes once they are
+  in.
+- **The residue card with its contacts open ran past the bottom of a short view** (a phone, five or six
+  panels), cutting off its field and buttons; it now fits and scrolls. It also closes when its model or
+  chain is hidden or its residue is cut by *Low confidence*, instead of following a residue no longer
+  drawn.
+- **RNA and DNA could not be box-selected or labelled per residue, and calcium ions were labelled**:
+  Drag to select and *Label every residue* looked for atoms named CA. Both now use one atom per polymer
+  residue, the Cα or a nucleotide's P.
+- **Panel letters disagreed**: the saved-views list, *Download captions* and the views ZIP lettered every
+  view in order, while the figure lettered only the ticked ones — after *Make site figure* the list said D
+  for the panel printed as A. All of them now use the figure's letters (a view left out shows —).
+- **A refused clipboard overwrote the Per-residue data paste box** (Copy in the card's contacts, *Copy
+  measurements*, *Copy residue list*). The text now goes to a read-only box of its own under the view,
+  selected for Ctrl/⌘+C.
+- **Results that no longer matched their settings**: a contact map whose chains, cutoff or atoms change
+  is dimmed and says *Settings changed · Compute map to update*; an open card recounts its neighbours and
+  its contacts list when *Within (Å)* changes; the pairwise RMSD matrix is dropped when a model is hidden,
+  shown, added or renamed.
+- **Stepping to a model from an overlay switched to one at a time without a word**, and a fetched
+  structure did the same. A fetch now keeps the View mode; Current model, ← →, Previous/Next and cycling
+  still show one model, but say so in the status line, and the mode is saved as a preference.
 
 ## 2.51.0
 

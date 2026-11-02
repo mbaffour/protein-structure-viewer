@@ -26,6 +26,19 @@
     root.querySelector('#gpv-contact-distances').disabled = !hasMap;
   }
 
+  /* The map, its CSVs and its composite panel answer the settings they were computed with. Once the
+     cutoff, the atoms or a chain changes the map is dimmed and says so, rather than pass for the
+     answer to the new settings. */
+  function markContactMapStale() {
+    if (!contactResult) return;
+    const wrap = root.querySelector('#gpv-contact-wrap');
+    if (wrap.classList.contains('is-stale')) return;
+    wrap.classList.add('is-stale');
+    const state = root.querySelector('#gpv-contact-state');
+    state.textContent = 'Settings changed · Compute map to update · shown: ' + state.textContent;
+  }
+  ['#gpv-contact-cutoff', '#gpv-contact-atoms', '#gpv-contact-a', '#gpv-contact-b'].forEach(selector => root.querySelector(selector).addEventListener('change', markContactMapStale));
+
   function contactChainOptions(entry) {
     const first = root.querySelector('#gpv-contact-a'); const second = root.querySelector('#gpv-contact-b');
     const rows = entry && entry.model ? residueRows(entry) : [];
@@ -147,6 +160,7 @@
       + (caForced ? ' · Cα only: over ' + contactHeavyLimit.toLocaleString('en-US') + ' residues on an axis the heavy-atom search would be too slow' : '');
     setContactButtons();
     root.querySelector('#gpv-contact-wrap').hidden = false;
+    root.querySelector('#gpv-contact-wrap').classList.remove('is-stale');
     root.querySelector('#gpv-contact-readout').textContent = 'Hover a cell to read the pair and its Cα–Cα distance · click a cell to measure that distance on the model';
     updateStatus('Contact map: ' + pairs.size + ' residue pairs ' + (symmetric ? 'within ' + contactAxisName(chainA) : 'between ' + contactAxisName(chainA) + ' and ' + contactAxisName(chainB)) + ' within ' + cutoff + ' Å' + (caForced ? ' (Cα only above ' + contactHeavyLimit + ' residues)' : ''));
   }

@@ -59,7 +59,7 @@
 
   function msaAssetsFor(entry) {
     if (!entry) return [];
-    return msaAssets.filter(asset => asset.collection === entry.collection);
+    return msaAssets.filter(asset => asset.loose || asset.collection === entry.collection);
   }
 
   function renderMsaState() {

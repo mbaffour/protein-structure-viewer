@@ -879,6 +879,7 @@ html>body{padding:0}</style>
     <span id="gpv-state" aria-live="polite">Ready</span>
     <span id="gpv-hover" class="gpv-hover" aria-hidden="true"></span>
   </div>
+  <div class="gpv-copy-fallback" id="gpv-copy-fallback" hidden><label class="form-label text-small"><span>The clipboard was not available — the text is selected here; press Ctrl/⌘+C</span><textarea class="form-control" id="gpv-copy-fallback-text" rows="3" readonly></textarea></label><button class="btn btn-ghost" type="button" id="gpv-copy-fallback-close">Done</button></div>
   <div class="gpv-sequence" id="gpv-sequence" hidden>
     <div class="gpv-sequence-head text-small">
       <strong id="gpv-sequence-title">Sequence</strong>
@@ -1418,7 +1419,9 @@ html>body{padding:0}</style>
   #generic-protein-viewer .gpv-nudge .btn { padding: 2px 8px; }
   #generic-protein-viewer .gpv-nudge .form-control { width: 64px; flex: 0 0 auto; padding: 2px 6px; }
   /* The on-canvas label editor: a popover inside the stage, placed by script next to its residue. */
-  #generic-protein-viewer .gpv-label-editor { position: absolute; z-index: 5; display: grid; gap: 6px; width: 240px; max-width: calc(100% - 8px); padding: 8px; border: 1px solid var(--border); border-radius: var(--radius-md); color: var(--popover-foreground); background: var(--popover); box-shadow: 0 6px 20px -8px rgb(0 0 0 / 35%); cursor: auto; }
+  #generic-protein-viewer .gpv-label-editor { position: absolute; z-index: 5; display: grid; gap: 6px; width: 240px; max-width: calc(100% - 8px); max-height: calc(100% - 8px); overflow: auto; overscroll-behavior: contain; padding: 8px; border: 1px solid var(--border); border-radius: var(--radius-md); color: var(--popover-foreground); background: var(--popover); box-shadow: 0 6px 20px -8px rgb(0 0 0 / 35%); cursor: auto; }
+  #generic-protein-viewer #gpv-contact-wrap.is-stale canvas { opacity: 0.4; }
+  #generic-protein-viewer .gpv-copy-fallback { display: flex; align-items: flex-end; gap: 8px; margin-top: 6px; } #generic-protein-viewer .gpv-copy-fallback[hidden] { display: none; } #generic-protein-viewer .gpv-copy-fallback .form-label { flex: 1 1 auto; margin: 0; }
   #generic-protein-viewer .gpv-label-editor[hidden], #generic-protein-viewer .gpv-label-editor .btn[hidden] { display: none; }
   #generic-protein-viewer .gpv-label-editor-head { display: flex; align-items: center; gap: 6px; min-width: 0; }
   #generic-protein-viewer .gpv-label-editor-residue { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--muted-foreground); }
@@ -2913,6 +2916,7 @@ html>body{padding:0}</style>
     root.querySelector('#gpv-motif-run').disabled = structures.length === 0;
     root.querySelector('#gpv-data-apply').disabled = structures.length === 0;
     scheduleSessionSave();
+    dropStaleRmsdMatrix();
     root.querySelector('#gpv-captions').disabled = savedViews.length === 0;
     ['#gpv-domain-labels', '#gpv-pae-domain-labels', '#gpv-architecture-png', '#gpv-architecture-svg'].forEach(selector => { root.querySelector(selector).disabled = structures.length === 0; });
     updateReportEstimate();
@@ -3123,24 +3127,47 @@ html>body{padding:0}</style>
       remove.className = 'btn btn-ghost';
       remove.type = 'button';
       remove.textContent = 'Remove';
-      remove.addEventListener('click', () => {
-        if (entry.model) viewer.removeModel(entry.model);
-        structures = structures.filter(item => item !== entry);
-        labelRecords = labelRecords.filter(label => label.entryId !== entry.id);
-        renderLabelList();
-        selectionRecords = selectionRecords.filter(selection => selection.entryId !== entry.id);
-        measurementRecords = measurementRecords.filter(measurement => measurement.points.every(point => point.entryId !== entry.id));
-        alignmentResults = [];
-        renderAlignmentResults();
-        renderSelectionList();
-        renderMeasurementList();
-        renderList();
-        applyStyle();
-      });
+      remove.addEventListener('click', () => removeModelEntry(entry));
 
       row.append(visibleLabel, copy, score, color, fadeLabel, focus, rename, remove);
       list.append(row);
     });
+  }
+
+  /* Everything that names the model goes with it: its records, the card and the selected residue
+     if they were its, the comparison that included it, and the modes when nothing is left to draw
+     on. Otherwise Add or update would label a "Missing model", and the card would follow a residue
+     that is no longer drawn. */
+  function removeModelEntry(entry) {
+    dismissCanvasText();
+    if (selectedResidue && selectedResidue.entryId === entry.id) clearSelectedResidue(false);
+    if (entry.model) viewer.removeModel(entry.model);
+    structures = structures.filter(item => item !== entry);
+    if (activeId === entry.id) activeId = structures[0] ? structures[0].id : null;
+    const keeps = point => point.entryId !== entry.id;
+    labelRecords = labelRecords.filter(keeps);
+    selectionRecords = selectionRecords.filter(keeps);
+    measurementRecords = measurementRecords.filter(measurement => measurement.points.every(keeps));
+    annotationRecords = annotationRecords.filter(record => record.points.every(keeps));
+    /* The deviations, the agreement and the position comparison were all made with this model. The
+       others stay where the superposition put them; Restore coordinates still takes them back. */
+    alignmentResults = [];
+    structures.forEach(item => { item.deviations = null; item.alignedPairs = null; });
+    ensembleSpread = null;
+    spotlightResidues = []; positionEffect = null; renderPositionEffect(); renderPositionState();
+    if (siteResults && siteResults.entryId === entry.id) siteResults = null;
+    if (nearbyResult && nearbyResult.entry === entry) { nearbyResult = null; root.querySelector('#gpv-near-copy').disabled = true; }
+    if (rmsdMatrix) { rmsdMatrix = null; renderRmsdMatrix(); }
+    if (!structures.length) {
+      setBoxSelectMode(false);
+      if (annotationActive) toggleAnnotating(false);
+      if (measurementActive) toggleMeasurement();
+    }
+    renderAlignmentResults();
+    renderLabelList(); renderSelectionList(); renderMeasurementList(); renderAnnotationList();
+    renderList();
+    applyStyle();
+    announce('Removed ' + displayName(entry));
   }
 
   function addStructure(name, text, format, sourcePath = name, collection = 'Individual files', lazy = false) {
@@ -3192,7 +3219,10 @@ html>body{padding:0}</style>
     return filteredStructures().filter(entry => entry.visible);
   }
 
-  function selectModel(entry, fit = true) {
+  /* Picking a model — Current model, ← →, Previous/Next, cycling — shows it on its own, and says so
+     when that leaves an overlay; the mode is a preference, so the change is saved like a choice made
+     in the select. keepMode is for a model that arrives (a fetch): it joins the view as it is. */
+  function selectModel(entry, fit = true, keepMode = false) {
     if (!entry) return;
     /* The editor and the active label belong to what was on screen; another model is something else.
        The selected residue stays selected — the panel names its model — and its marker is simply not
@@ -3204,14 +3234,16 @@ html>body{padding:0}</style>
     }
     activeId = entry.id;
     root.querySelector('#gpv-current').value = String(entry.id);
-    root.querySelector('#gpv-view-mode').value = 'single';
+    const mode = root.querySelector('#gpv-view-mode');
+    const leftOverlay = !keepMode && mode.value !== 'single';
+    if (leftOverlay) { mode.value = 'single'; savePreferences(); }
     applyStyle();
     root.querySelectorAll('#gpv-list [data-entry-id]').forEach(row => row.classList.toggle('is-active', Number(row.dataset.entryId) === entry.id));
     const activeRow = root.querySelector('#gpv-list [data-entry-id="' + entry.id + '"] .gpv-entry-score');
     const average = mean(entry.scores);
     if (activeRow) activeRow.textContent = average === null ? 'pLDDT —' : average.toFixed(1);
     if (fit && entry.model) { viewer.zoomTo({ model: entry.model.getID() }); viewer.render(); }
-    updateStatus('Showing ' + displayName(entry));
+    updateStatus('Showing ' + displayName(entry) + (leftOverlay ? ' · one model at a time (View mode)' : ''));
   }
 
   function selectRelative(delta, fit = true) {
@@ -3225,7 +3257,6 @@ html>body{padding:0}</style>
   function toggleCycle() {
     if (cycleTimer) { stopCycle(); return; }
     if (!cycleEntries().length) return;
-    root.querySelector('#gpv-view-mode').value = 'single';
     const delay = Math.max(500, Number(root.querySelector('#gpv-cycle-speed').value) * 1000);
     cycleTimer = setInterval(() => selectRelative(1, false), delay);
     const button = root.querySelector('#gpv-cycle');
@@ -3239,14 +3270,33 @@ html>body{padding:0}</style>
     selectModel(candidates.includes(active) ? active : candidates[0], false);
   }
 
-  function residueKey(entryId, chain, resi) {
-    return [entryId, chain || '', resi].join('|');
+  /* An insertion code tells residues 100, 100A and 100B apart (antibody and Kabat numbering). 3Dmol
+     reads a blank as ' ' from a PDB file and as '?' or '.' from mmCIF; all three mean none. Records
+     (a label, the selected residue, a measurement point) carry it as `icode`, read the same way. */
+  function insertionCodeOf(atom) {
+    const code = String((atom && atom.icode) ?? '').trim();
+    return code === '?' || code === '.' ? '' : code;
+  }
+
+  /* The residue number as the file writes it: 100, or 100A. */
+  function residueNumber(atom) {
+    return String(atom.resi) + insertionCodeOf(atom);
+  }
+
+  function sameResidue(atom, chain, resi, icode = '') {
+    return (atom.chain || '') === (chain || '') && atom.resi === resi && insertionCodeOf(atom) === (icode || '');
+  }
+
+  /* The key is entry|chain|resi as it always was; an insertion code adds a fourth part, so keys,
+     scenes and share links written before 2.52.0 still match their residues. */
+  function residueKey(entryId, chain, resi, icode = '') {
+    return [entryId, chain || '', resi].join('|') + (icode ? '|' + icode : '');
   }
 
   function residueText(entry, atom) {
     const chain = atom.chain ? ' chain ' + atom.chain : '';
     const confidence = entry.scores.length && Number.isFinite(Number(atom.b)) ? ' · pLDDT ' + Number(atom.b).toFixed(1) : '';
-    return entry.name + ' · ' + (atom.resn || 'Residue') + ' ' + atom.resi + chain + ' · atom ' + (atom.atom || '—') + confidence;
+    return entry.name + ' · ' + (atom.resn || 'Residue') + ' ' + residueNumber(atom) + chain + ' · atom ' + (atom.atom || '—') + confidence;
   }
 
   function selectResidue(entry, atom) {
@@ -3254,6 +3304,7 @@ html>body{padding:0}</style>
       entryId: entry.id,
       chain: atom.chain || '',
       resi: atom.resi,
+      icode: insertionCodeOf(atom),
       resn: atom.resn || 'RES',
       atom: atom.atom || '',
       x: atom.x,
@@ -3262,9 +3313,9 @@ html>body{padding:0}</style>
       b: atom.b
     };
     root.querySelector('#gpv-residue').textContent = residueText(entry, atom);
-    const key = residueKey(entry.id, atom.chain, atom.resi);
+    const key = residueKey(entry.id, atom.chain, atom.resi, insertionCodeOf(atom));
     const saved = labelRecords.find(label => label.key === key);
-    root.querySelector('#gpv-label-text').value = saved ? saved.text : (atom.resn || 'RES') + atom.resi + (atom.chain ? ' · ' + atom.chain : '');
+    root.querySelector('#gpv-label-text').value = saved ? saved.text : (atom.resn || 'RES') + residueNumber(atom) + (atom.chain ? ' · ' + atom.chain : '');
     root.querySelector('#gpv-add-label').disabled = false;
     updatePositionCompare();
     /* Colour by distance from the selected residue (03a) follows the selection. */
@@ -3274,10 +3325,10 @@ html>body{padding:0}</style>
   }
 
   function addOrEditLabel() {
-    if (!selectedResidue) return;
+    if (!selectedResidue || !entryById(selectedResidue.entryId)) return;
     const text = root.querySelector('#gpv-label-text').value.trim();
     if (!text) return;
-    const key = residueKey(selectedResidue.entryId, selectedResidue.chain, selectedResidue.resi);
+    const key = residueKey(selectedResidue.entryId, selectedResidue.chain, selectedResidue.resi, selectedResidue.icode);
     remember('label change');
     const record = { ...selectedResidue, key, text };
     const index = labelRecords.findIndex(label => label.key === key);
@@ -3328,11 +3379,11 @@ html>body{padding:0}</style>
       const row = document.createElement('div'); row.className = 'gpv-entry';
       const copy = document.createElement('span'); copy.className = 'gpv-edit-copy';
       const text = document.createElement('input'); text.className = 'form-control'; text.type = 'text'; text.value = label.text; text.maxLength = 120;
-      text.setAttribute('aria-label', 'Label text for ' + (label.resn || 'residue') + ' ' + label.resi);
+      text.setAttribute('aria-label', 'Label text for ' + (label.resn || 'residue') + ' ' + residueNumber(label));
       text.addEventListener('change', () => { const value = text.value.trim(); if (!value) { text.value = label.text; return; } remember('label text'); label.text = value; rebuildOverlays(); updateStatus('Label updated'); });
       text.addEventListener('keydown', event => { if (event.key === 'Enter') { event.preventDefault(); text.blur(); } });
       const where = document.createElement('span'); where.className = 'gpv-entry-source text-small';
-      where.textContent = (entry ? displayName(entry) : 'Missing model') + ' · ' + (label.resn || 'RES') + ' ' + label.resi + (label.chain ? ' · chain ' + label.chain : '');
+      where.textContent = (entry ? displayName(entry) : 'Missing model') + ' · ' + (label.resn || 'RES') + ' ' + residueNumber(label) + (label.chain ? ' · chain ' + label.chain : '');
       copy.append(text, where);
       const tools = document.createElement('span'); tools.className = 'gpv-edit-tools';
       const size = document.createElement('select'); size.className = 'form-select'; size.setAttribute('aria-label', 'Label size');
@@ -3382,7 +3433,7 @@ html>body{padding:0}</style>
      and a thin leader line is drawn back to the residue once it has moved a clear distance. */
   function labelAnchor(label, byId = entriesById()) {
     const entry = byId.get(label.entryId);
-    const atom = entry && entry.atoms.find(item => (item.chain || '') === label.chain && item.resi === label.resi && (item.atom === 'CA' || item.atom === label.atom));
+    const atom = entry && entry.atoms.find(item => sameResidue(item, label.chain, label.resi, insertionCodeOf(label)) && (item.atom === 'CA' || item.atom === label.atom));
     return atom ? { x: atom.x, y: atom.y, z: atom.z } : { x: label.x, y: label.y, z: label.z };
   }
   function labelOffsetLength(label) {
@@ -3417,8 +3468,10 @@ html>body{padding:0}</style>
     if (root.querySelector('#gpv-all-labels').checked) {
       const entry = activeEntry();
       if (entry && shownIds.has(entry.id)) {
-        entry.atoms.filter(atom => atom.atom === 'CA').forEach(atom => {
-          const text = (atom.resn || 'RES') + atom.resi + (atom.chain ? ' · ' + atom.chain : '');
+        /* One per polymer residue — Cα, else P — so nucleotides are labelled and a calcium ion,
+           whose atom is also called CA, is not. */
+        residueRows(entry).flatMap(row => row.residues).forEach(atom => {
+          const text = (atom.resn || 'RES') + residueNumber(atom) + (atom.chain ? ' · ' + atom.chain : '');
           target.addLabel(text, labelStyle({ x: atom.x, y: atom.y, z: atom.z }, { scale }));
         });
       }
@@ -3507,19 +3560,20 @@ html>body{padding:0}</style>
   }
 
   function atomReference(entry, atom) {
-    return { entryId: entry.id, chain: atom.chain || '', resi: atom.resi, atom: atom.atom || '', index: Number.isInteger(atom.index) ? atom.index : null };
+    const icode = insertionCodeOf(atom);
+    return { entryId: entry.id, chain: atom.chain || '', resi: atom.resi, ...(icode ? { icode } : {}), atom: atom.atom || '', index: Number.isInteger(atom.index) ? atom.index : null };
   }
 
   function resolvePoint(reference) {
     const entry = structures.find(item => item.id === reference.entryId);
     if (!entry) return null;
     return entry.atoms.find(atom => Number.isInteger(reference.index) && atom.index === reference.index)
-      || entry.atoms.find(atom => (atom.chain || '') === reference.chain && atom.resi === reference.resi && (atom.atom || '') === reference.atom) || null;
+      || entry.atoms.find(atom => sameResidue(atom, reference.chain, reference.resi, insertionCodeOf(reference)) && (atom.atom || '') === reference.atom) || null;
   }
 
   function pointName(reference) {
     const entry = structures.find(item => item.id === reference.entryId);
-    return (entry ? displayName(entry) : 'Missing model') + ' · ' + (reference.chain || '—') + ':' + reference.resi + ' ' + (reference.atom || 'atom');
+    return (entry ? displayName(entry) : 'Missing model') + ' · ' + (reference.chain || '—') + ':' + residueNumber(reference) + ' ' + (reference.atom || 'atom');
   }
 
   function measurementValue(record) {
@@ -3615,14 +3669,17 @@ html>body{padding:0}</style>
      "How far is everything from this residue?" answered on the structure itself: every residue of
      the selected residue's model is coloured by the distance of its closest heavy atom to the
      selected residue — the min_heavy_distance of the residue card's Distances CSV, from the same
-     function (residueDistanceRows, 04c) — in five fixed bands, the residue itself in the accent
-     colour. Other models, and every model while nothing is selected, are grey. The mode is a value
+     function (residueDistanceRows, 04c) — in five fixed bands, the residue itself in orange. Other models, and every model while nothing is selected, are grey. The mode is a value
      of #gpv-color-mode like any other, so scenes, sessions and share links carry it; the selection
      is not saved with them, as it never has been, so a restored scene is grey until a residue is
-     clicked. Fixed bands rather than a scale fitted to the model, so two figures read alike. */
+     clicked. Fixed bands rather than a scale fitted to the model, so two figures read alike. The
+     residue's orange is the Annotate highlight's, off the blue ramp and the same in either interface
+     theme, so the residue stands out and a figure does not depend on the theme it was exported from;
+     the far band is a grey dark enough to read on white paper. */
 
-  const distanceFromResidueBands = [[4, '#1e3a8a', '≤4 Å'], [6, '#2563eb', '4–6 Å'], [10, '#60a5fa', '6–10 Å'], [20, '#bfdbfe', '10–20 Å'], [Infinity, '#e5e7eb', '>20 Å']];
+  const distanceFromResidueBands = [[4, '#1e3a8a', '≤4 Å'], [6, '#2563eb', '4–6 Å'], [10, '#60a5fa', '6–10 Å'], [20, '#bfdbfe', '10–20 Å'], [Infinity, '#d1d5db', '>20 Å']];
   const distanceFromResidueGrey = '#9ca3af';
+  const distanceFromResidueSelf = '#f97316';
   /* { key, atoms, values } for the last residue coloured from: chain|resi → closest heavy-atom
      distance. One residue against a model is a single pass over its atoms, but colouring asks once
      per atom per viewer, panel and export, so the pass is made once per residue. */
@@ -3664,18 +3721,17 @@ html>body{padding:0}</style>
     return distanceFromResidueBands.find(([limit]) => value <= limit)[1];
   }
 
-  /* The colour function for one model, with the residue's distances and the accent resolved once
-     rather than per atom. Hetero groups and water have no distance of their own here — the rows are
+  /* The colour function for one model, with the residue's distances resolved once rather than per
+     atom. Hetero groups and water have no distance of their own here — the rows are
      the polymer residues — so they are grey, unless they are the selected residue itself. */
   function distanceFromResidueColorFunc(entry) {
     distanceColourDrawn = distanceColourKey();
     const picked = selectedResidue;
     if (!picked || picked.entryId !== entry.id) return () => distanceFromResidueGrey;
-    const accent = themeColor('--primary', '#339cff');
     const values = distanceFromResidueValues(entry, picked.chain || '', picked.resi);
     return atom => {
       const chain = atom.chain || '';
-      if (chain === (picked.chain || '') && atom.resi === picked.resi) return accent;
+      if (chain === (picked.chain || '') && atom.resi === picked.resi) return distanceFromResidueSelf;
       if (!values || atom.hetflag) return distanceFromResidueGrey;
       const value = values.get(chain + '|' + atom.resi);
       return value === undefined || value === null ? distanceFromResidueGrey : distanceFromResidueBand(value);
@@ -3706,7 +3762,7 @@ html>body{padding:0}</style>
   function distanceColourLegend() {
     const target = distanceColourTarget();
     if (!target) return { title: 'Distance from a residue', items: [[distanceFromResidueGrey, 'none', 'No residue selected — click a residue first']] };
-    return { title: 'Distance from ' + target.short, items: [...distanceFromResidueBands.map(([, color, label]) => [color, label]), [themeColor('--primary', '#339cff'), target.short, target.short + ' (selected)']] };
+    return { title: 'Distance from ' + target.short, items: [...distanceFromResidueBands.map(([, color, label]) => [color, label]), [distanceFromResidueSelf, target.short, target.short + ' (selected)']] };
   }
 
   function distanceColourStripNote() {
@@ -3719,7 +3775,7 @@ html>body{padding:0}</style>
     const target = distanceColourTarget();
     if (!target) return 'shown in grey (distance colouring is selected but no residue is)';
     const others = displayedEntries().some(entry => entry.model && entry.id !== target.entry.id);
-    return 'coloured by the distance of each residue’s closest heavy atom to ' + target.long + ' (≤4 Å dark blue, 4–6 Å blue, 6–10 Å light blue, 10–20 Å pale blue, >20 Å light grey; ' + target.short + ' itself in the accent colour' + (others ? '; other models grey' : '') + ')';
+    return 'coloured by the distance of each residue’s closest heavy atom to ' + target.long + ' (≤4 Å dark blue, 4–6 Å blue, 6–10 Å light blue, 10–20 Å pale blue, >20 Å light grey; ' + target.short + ' itself in orange' + (others ? '; other models grey' : '') + ')';
   }
 
   /* The methods sentence (28): the definition behind the colours, so the figure can be reproduced. */
@@ -4134,12 +4190,12 @@ html>body{padding:0}</style>
     const entryA = entryById(first.entryId); const entryB = entryById(second.entryId);
     if (!entryA || !entryB || !entryA.model || !entryB.model) return null;
     if (first.entryId === second.entryId && (first.chain || '') === (second.chain || '') && first.resi === second.resi) return null;
-    const residueA = { chain: first.chain || '', resi: first.resi }; const residueB = { chain: second.chain || '', resi: second.resi };
+    const residueA = { chain: first.chain || '', resi: first.resi, icode: insertionCodeOf(first) }; const residueB = { chain: second.chain || '', resi: second.resi, icode: insertionCodeOf(second) };
     const atomA = resolvePoint(first); const atomB = resolvePoint(second);
     const nearest = closestHeavyAtomPair(entryA, residueA, entryB, residueB);
     let state = 'measured';
     if (nearest && atomA === nearest.a && atomB === nearest.b) state = 'closest';
-    else if (atomA && atomB && atomA === residueAlphaCarbon(entryA, residueA.chain, residueA.resi) && atomB === residueAlphaCarbon(entryB, residueB.chain, residueB.resi) && atomA.atom === 'CA' && atomB.atom === 'CA') state = 'ca';
+    else if (atomA && atomB && atomA === residueAlphaCarbon(entryA, residueA.chain, residueA.resi, residueA.icode) && atomB === residueAlphaCarbon(entryB, residueB.chain, residueB.resi, residueB.icode) && atomA.atom === 'CA' && atomB.atom === 'CA') state = 'ca';
     return { entryA, entryB, residueA, residueB, nearest, state };
   }
 
@@ -4150,7 +4206,7 @@ html>body{padding:0}</style>
     if (!pair || pair.state === choice) return;
     let first = null; let second = null;
     if (choice === 'closest' && pair.nearest) { first = pair.nearest.a; second = pair.nearest.b; }
-    if (choice === 'ca') { first = residueAlphaCarbon(pair.entryA, pair.residueA.chain, pair.residueA.resi); second = residueAlphaCarbon(pair.entryB, pair.residueB.chain, pair.residueB.resi); }
+    if (choice === 'ca') { first = residueAlphaCarbon(pair.entryA, pair.residueA.chain, pair.residueA.resi, pair.residueA.icode); second = residueAlphaCarbon(pair.entryB, pair.residueB.chain, pair.residueB.resi, pair.residueB.icode); }
     if (!first || !second) { updateStatus('Those atoms are not loaded'); return; }
     remember('measurement atoms');
     record.points = [atomReference(pair.entryA, first), atomReference(pair.entryB, second)];
@@ -4232,8 +4288,7 @@ html>body{padding:0}</style>
     if (!measurementRecords.length) return;
     const text = measurementsText();
     const what = plural(measurementRecords.length, 'measurement');
-    try { await navigator.clipboard.writeText(text); announce(what + ' copied as tab-separated text'); }
-    catch (error) { root.querySelector('#gpv-data-text').value = text; announce('Clipboard unavailable — the ' + what + ' are in the paste box of Per-residue data'); }
+    await copyTextOrShow(text, what + ' copied as tab-separated text', what);
   }
 
   function downloadMeasurementsCsv() {
@@ -4650,8 +4705,8 @@ html>body{padding:0}</style>
         if (overLabel) { readout.textContent = 'Drag to move · click to edit “' + clipText(String(overLabel.text || ''), 40) + '”'; return; }
         const hit = pickAtomAt(hoverAt.x, hoverAt.y, true);
         readout.textContent = hit ? describeResidue(hit.entry, hit.atom) + (displayedEntries().length > 1 ? ' · ' + displayName(hit.entry) : '') : '';
-        const next = hit ? { entryId: hit.entry.id, chain: hit.atom.chain || '', resi: hit.atom.resi } : null;
-        const changed = next ? !sequenceHover || sequenceHover.entryId !== next.entryId || sequenceHover.chain !== next.chain || sequenceHover.resi !== next.resi : Boolean(sequenceHover);
+        const next = hit ? { entryId: hit.entry.id, chain: hit.atom.chain || '', resi: hit.atom.resi, icode: insertionCodeOf(hit.atom) } : null;
+        const changed = next ? !sequenceHover || sequenceHover.entryId !== next.entryId || sequenceHover.chain !== next.chain || sequenceHover.resi !== next.resi || (sequenceHover.icode || '') !== next.icode : Boolean(sequenceHover);
         if (changed) { sequenceHover = next; renderSequenceSoon(); }
       });
     });
@@ -4854,7 +4909,7 @@ html>body{padding:0}</style>
   }
 
   function labelEditorDefaultText(atom) {
-    return (atom.resn || 'RES') + atom.resi + (atom.chain ? ' · ' + atom.chain : '');
+    return (atom.resn || 'RES') + residueNumber(atom) + (atom.chain ? ' · ' + atom.chain : '');
   }
 
   function locationText(chain, resi) {
@@ -4863,7 +4918,7 @@ html>body{padding:0}</style>
 
   /* A residue picked in the viewer or the strip: a new label, or the one already on it. */
   function openLabelEditorForResidue(entry, atom) {
-    const key = residueKey(entry.id, atom.chain, atom.resi);
+    const key = residueKey(entry.id, atom.chain, atom.resi, insertionCodeOf(atom));
     const existing = labelRecords.find(label => label.key === key);
     if (existing) { openLabelEditor({ kind: 'label', entryId: entry.id, atom, key }, existing.text, describeResidue(entry, atom)); setActiveText('label', existing); return; }
     /* selectResidue has just filled the panel's field; that is the suggestion, so the panel and the
@@ -4878,7 +4933,7 @@ html>body{padding:0}</style>
     if (item.kind === 'label') {
       const label = item.record;
       const entry = entryById(label.entryId);
-      const atom = { chain: label.chain, resi: label.resi, resn: label.resn, b: label.b, x: label.x, y: label.y, z: label.z, atom: label.atom };
+      const atom = { chain: label.chain, resi: label.resi, icode: insertionCodeOf(label), resn: label.resn, b: label.b, x: label.x, y: label.y, z: label.z, atom: label.atom };
       openLabelEditor({ kind: 'label', entryId: label.entryId, atom, key: label.key, record: label }, label.text, entry ? describeResidue(entry, atom) : (label.resn || 'RES') + label.resi);
     } else if (item.kind === 'measurement') {
       openLabelEditor({ kind: 'measurement', id: item.record.id }, String(item.record.text || ''), measurementEditorHead(item.record));
@@ -4933,9 +4988,22 @@ html>body{padding:0}</style>
     if (!labelEditor) return;
     /* The text it was editing may have been removed from its row, cleared or undone. */
     if (labelEditor.kind !== 'new' && !labelEditorRecord()) { closeLabelEditor(false); return; }
+    /* A residue whose model or chain has just been hidden, or that Low confidence now cuts, is no
+       longer on screen; the card would be following nothing. */
+    if (!labelEditorResidueShown()) { closeLabelEditor(false); return; }
     positionLabelEditor();
     refreshMeasureToButton();
     labelEditorFrame = requestAnimationFrame(followLabelEditor);
+  }
+
+  function labelEditorResidueShown() {
+    const editor = labelEditor;
+    if (!editor || (editor.kind !== 'new' && editor.kind !== 'label')) return true;
+    const entry = entryById(editor.entryId);
+    if (!entry || !displayedEntries().includes(entry)) return false;
+    if ((entry.hiddenChains || []).includes(editor.atom.chain || '')) return false;
+    const threshold = entry.scores.length ? hideBelow() : 0;
+    return !(threshold && Number.isFinite(Number(editor.atom.b)) && Number(editor.atom.b) < threshold);
   }
 
   function labelEditorRecord() {
@@ -4960,7 +5028,7 @@ html>body{padding:0}</style>
     } else if (editor.kind === 'label' && record) point = labelPosition(record);
     /* A new label is anchored where it will be drawn — labelAnchor, the residue's Cα as a rule —
        not at whichever atom of the residue the click happened to land nearest. */
-    else point = labelAnchor({ entryId: editor.entryId, chain: editor.atom.chain || '', resi: editor.atom.resi, atom: editor.atom.atom || '', x: editor.atom.x, y: editor.atom.y, z: editor.atom.z });
+    else point = labelAnchor({ entryId: editor.entryId, chain: editor.atom.chain || '', resi: editor.atom.resi, icode: insertionCodeOf(editor.atom), atom: editor.atom.atom || '', x: editor.atom.x, y: editor.atom.y, z: editor.atom.z });
     if (!point || !Number.isFinite(point.x)) return null;
     const screen = viewer.modelToScreen(point);
     if (!screen || !Number.isFinite(screen.x) || !Number.isFinite(screen.y)) return null;
@@ -5013,7 +5081,7 @@ html>body{padding:0}</style>
       /* The panel's own path, so a label added here is the label the panel would have added: one
          record, one undo step. If something else was selected meanwhile, re-select this residue
          first so the panel names what is being labelled. */
-      const selected = selectedResidue && residueKey(selectedResidue.entryId, selectedResidue.chain, selectedResidue.resi);
+      const selected = selectedResidue && residueKey(selectedResidue.entryId, selectedResidue.chain, selectedResidue.resi, selectedResidue.icode);
       if (selected !== editor.key) selectResidue(entry, editor.atom);
       root.querySelector('#gpv-label-text').value = text;
       addOrEditLabel();
@@ -5242,7 +5310,7 @@ html>body{padding:0}</style>
     selectResiduesInBox(bounds);
   }
 
-  /* Every Cα drawn on screen whose projection falls inside the rectangle, one per residue: the same
+  /* Every residue drawn on screen whose Cα (P for a nucleotide) projects inside the rectangle: the same
      projection pickAtomAt uses, so what the box encloses is what a click there would have picked.
      A hidden chain, and residues hidden under the low-confidence cut, are not drawn, so they are not
      picked; neither is a calcium ion, whose atom is also called CA. */
@@ -5252,13 +5320,14 @@ html>body{padding:0}</style>
     displayedEntries().filter(entry => entry.model).forEach(entry => {
       const hidden = entry.hiddenChains || [];
       const cut = threshold && entry.scores.length;
-      entry.atoms.forEach(atom => {
-        if (atom.atom !== 'CA' || atom.hetflag || hidden.includes(atom.chain || '')) return;
+      /* One atom per polymer residue, as the strip has it: Cα, else P for a nucleotide. */
+      residueRows(entry).flatMap(row => row.residues).forEach(atom => {
+        if (hidden.includes(atom.chain || '')) return;
         if (cut && Number(atom.b) < threshold) return;
         const screen = viewer.modelToScreen({ x: atom.x, y: atom.y, z: atom.z });
         if (!screen || !Number.isFinite(screen.x) || !Number.isFinite(screen.y)) return;
         if (screen.x < bounds.left || screen.x > bounds.right || screen.y < bounds.top || screen.y > bounds.bottom) return;
-        const key = residueKey(entry.id, atom.chain, atom.resi);
+        const key = residueKey(entry.id, atom.chain, atom.resi, insertionCodeOf(atom));
         if (seen.has(key)) return;
         seen.add(key); picks.push({ entry, atom });
       });
@@ -5388,10 +5457,10 @@ html>body{padding:0}</style>
     const fresh = [];
     let kept = 0;
     picks.forEach(({ entry, atom }) => {
-      const key = residueKey(entry.id, atom.chain, atom.resi);
+      const key = residueKey(entry.id, atom.chain, atom.resi, insertionCodeOf(atom));
       if (taken.has(key)) { kept += 1; return; }
       taken.add(key);
-      fresh.push({ entryId: entry.id, chain: atom.chain || '', resi: atom.resi, resn: atom.resn || 'RES', atom: atom.atom || '', x: atom.x, y: atom.y, z: atom.z, b: atom.b, key, text: labelEditorDefaultText(atom) });
+      fresh.push({ entryId: entry.id, chain: atom.chain || '', resi: atom.resi, icode: insertionCodeOf(atom), resn: atom.resn || 'RES', atom: atom.atom || '', x: atom.x, y: atom.y, z: atom.z, b: atom.b, key, text: labelEditorDefaultText(atom) });
     });
     if (!fresh.length) { updateStatus(picks.length ? 'Every one of these residues is already labelled' : 'No residues of this selection are loaded'); return 0; }
     remember(what);
@@ -5413,7 +5482,7 @@ html>body{padding:0}</style>
     const found = new Map();
     entry.atoms.forEach(atom => {
       if (atom.hetflag || !wanted.has(atom.resi) || (record.chain && (atom.chain || '') !== record.chain)) return;
-      const key = residueKey(entry.id, atom.chain, atom.resi);
+      const key = residueKey(entry.id, atom.chain, atom.resi, insertionCodeOf(atom));
       const current = found.get(key);
       if (!current || (atom.atom === 'CA' && current.atom !== 'CA')) found.set(key, atom);
     });
@@ -5478,6 +5547,9 @@ html>body{padding:0}</style>
   /* The residue a contacts row is pointing at while the pointer or focus is on it:
      { entryId, chain, resi }, drawn as a temporary label on the main view only. */
   let contactHover = null;
+  /* True while a spin video records the stage canvas (30): the marker would be in every frame, but
+     the residue stays selected — colour by distance from it is what such a video is often for. */
+  let markerHiddenForVideo = false;
 
   function storedMeasureAtoms() {
     const stored = readJson(preferenceKey, null);
@@ -5486,11 +5558,14 @@ html>body{padding:0}</style>
 
   /* The atom that stands for a residue — the Cα, else a nucleotide's P, else the residue's first
      atom — so the card, the marker and a measurement read the same atom whichever atom of the
-     residue the click happened to land nearest. */
-  function residueAlphaCarbon(entry, chain, resi) {
+     residue the click happened to land nearest. With an insertion code ('' for none) it is that
+     residue's atom — 100A's, not 100's; with null, as the contacts rows call it, any residue numbered
+     resi. */
+  function residueAlphaCarbon(entry, chain, resi, icode = null) {
     let found = null;
     for (const atom of entry.atoms) {
       if ((atom.chain || '') !== (chain || '') || atom.resi !== resi) continue;
+      if (icode !== null && insertionCodeOf(atom) !== icode) continue;
       if (atom.atom === 'CA' && !atom.hetflag) return atom;
       if (!found || (atom.atom === 'P' && found.atom !== 'P')) found = atom;
     }
@@ -5594,9 +5669,9 @@ html>body{padding:0}</style>
     const entry = residueLine && !textWithoutResidue(target) ? entryById(target.entryId) : null;
     if (!entry || !target.atom) { facts.hidden = true; facts.textContent = ''; own.forEach(item => { item.hidden = true; }); return; }
     const chain = target.atom.chain || '';
-    const atom = residueAlphaCarbon(entry, chain, target.atom.resi) || target.atom;
+    const atom = residueAlphaCarbon(entry, chain, target.atom.resi, insertionCodeOf(target.atom)) || target.atom;
     /* The model is named only when there is more than one to tell apart. */
-    host.querySelector('.gpv-label-editor-residue').textContent = (atom.resn || 'RES') + atom.resi + (chain ? ' · chain ' + chain : '') + (structures.length > 1 ? ' · ' + displayName(entry) : '');
+    host.querySelector('.gpv-label-editor-residue').textContent = (atom.resn || 'RES') + residueNumber(atom) + (chain ? ' · chain ' + chain : '') + (structures.length > 1 ? ' · ' + displayName(entry) : '');
     const { parts, nearText } = residueCardFacts(entry, atom);
     /* The line reads exactly as before — the count is a link only in how it behaves. */
     facts.replaceChildren();
@@ -5665,9 +5740,9 @@ html>body{padding:0}</style>
 
   function armMeasureTo(entry, atom) {
     const chain = atom.chain || '';
-    const first = residueAlphaCarbon(entry, chain, atom.resi);
+    const first = residueAlphaCarbon(entry, chain, atom.resi, insertionCodeOf(atom));
     if (!first) { updateStatus('No atoms of that residue are loaded to measure from'); return; }
-    measureFrom = { entryId: entry.id, chain, resi: atom.resi, name: labelEditorDefaultText(first) };
+    measureFrom = { entryId: entry.id, chain, resi: atom.resi, icode: insertionCodeOf(atom), name: labelEditorDefaultText(first) };
     root.querySelector('#gpv-stage').classList.add('is-measuring-to');
     updateStatus('Click a second residue to measure from ' + measureFrom.name + ' · Esc cancels');
   }
@@ -5736,13 +5811,13 @@ html>body{padding:0}</style>
     const chain = atom.chain || '';
     /* A slip onto the same residue measures nothing and keeps the arm, so the next click can still
        land on the residue that was meant. */
-    if (from.entryId === entry.id && from.chain === chain && from.resi === atom.resi) {
+    if (from.entryId === entry.id && from.chain === chain && from.resi === atom.resi && (from.icode || '') === insertionCodeOf(atom)) {
       updateStatus('That is ' + from.name + ' itself — nothing measured · click a different residue, or Esc to cancel');
       return;
     }
     cancelMeasureTo(false);
     const fromEntry = entryById(from.entryId);
-    const made = fromEntry && measureResiduePair(fromEntry, from, entry, { chain, resi: atom.resi }, measureAtoms);
+    const made = fromEntry && measureResiduePair(fromEntry, from, entry, { chain, resi: atom.resi, icode: insertionCodeOf(atom) }, measureAtoms);
     if (!made) { updateStatus('The first residue’s model is no longer loaded · nothing measured'); return; }
     updateStatus(from.name + ' — ' + made.summary);
   }
@@ -5767,8 +5842,11 @@ html>body{padding:0}</style>
      or adding it — so Measure all can add a whole list under one step. */
   function residuePairMeasurement(entryA, residueA, entryB, residueB, atoms = 'ca') {
     const chainA = residueA.chain || ''; const chainB = residueB.chain || '';
-    const alphaA = residueAlphaCarbon(entryA, chainA, residueA.resi);
-    const alphaB = residueAlphaCarbon(entryB, chainB, residueB.resi);
+    /* A residue that says its insertion code (the selected residue, the card's) is that residue; a
+       contacts row, which does not, is any residue of that number. */
+    const codeOf = residue => ('icode' in residue ? insertionCodeOf(residue) : null);
+    const alphaA = residueAlphaCarbon(entryA, chainA, residueA.resi, codeOf(residueA));
+    const alphaB = residueAlphaCarbon(entryB, chainB, residueB.resi, codeOf(residueB));
     if (!alphaA || !alphaB) return null;
     const nearest = closestHeavyAtomPair(entryA, { chain: chainA, resi: residueA.resi }, entryB, { chain: chainB, resi: residueB.resi });
     const closest = nearest ? nearest.distance : null;
@@ -5840,12 +5918,12 @@ html>body{padding:0}</style>
      model or chain is not shown, or when the residue carries a label, which already says what it is. */
   function residueMarkerSpec(shownIds) {
     const picked = selectedResidue;
-    if (!picked || !shownIds.has(picked.entryId)) return null;
+    if (!picked || markerHiddenForVideo || !shownIds.has(picked.entryId)) return null;
     const entry = entryById(picked.entryId);
     if (!entry || !entry.model || (entry.hiddenChains || []).includes(picked.chain)) return null;
-    const key = residueKey(picked.entryId, picked.chain, picked.resi);
+    const key = residueKey(picked.entryId, picked.chain, picked.resi, picked.icode);
     if (labelRecords.some(label => label.key === key)) return null;
-    const atom = residueAlphaCarbon(entry, picked.chain, picked.resi) || picked;
+    const atom = residueAlphaCarbon(entry, picked.chain, picked.resi, insertionCodeOf(picked)) || picked;
     const confidence = entry.scores.length && Number.isFinite(Number(atom.b)) ? ' · pLDDT ' + Number(atom.b).toFixed(1) : '';
     return { text: labelEditorDefaultText(atom) + confidence, style: residueMarkerStyle(atom) };
   }
@@ -5876,8 +5954,8 @@ html>body{padding:0}</style>
     return spec ? spec.text : null;
   }
 
-  /* Esc with nothing else to close, Clear all, and recording a video leave no residue selected — and
-     so no marker. The panel's readout goes back to what a fresh page says. */
+  /* Esc with nothing else to close, Clear all, and removing the residue's model leave no residue
+     selected — and so no marker. The panel's readout goes back to what a fresh page says. */
   function clearSelectedResidue(shouldRender = true) {
     cancelMeasureTo(false);
     if (!selectedResidue) return false;
@@ -5944,9 +6022,19 @@ html>body{padding:0}</style>
     const entry = entryById(editor.entryId);
     if (!entry || !entry.model) return null;
     const chain = editor.atom.chain || '';
-    const atom = residueAlphaCarbon(entry, chain, editor.atom.resi) || editor.atom;
-    return { entry, chain, resi: editor.atom.resi, name: labelEditorDefaultText(atom) };
+    const atom = residueAlphaCarbon(entry, chain, editor.atom.resi, insertionCodeOf(editor.atom)) || editor.atom;
+    return { entry, chain, resi: editor.atom.resi, icode: insertionCodeOf(editor.atom), name: labelEditorDefaultText(atom) };
   }
+
+  /* The card's count and its contacts list use Annotate → Within (Å). A new cutoff is a new answer,
+     so an open card works both out again rather than keep the old count. */
+  root.querySelector('#gpv-near-cutoff').addEventListener('change', () => {
+    const editor = labelEditor; const host = labelEditorHost;
+    if (!editor || !host || host.hidden || textWithoutResidue(editor)) return;
+    const open = contactsPanelOpen();
+    fillResidueCard(host, editor, host.querySelector('.gpv-label-editor-residue').textContent);
+    if (open) openResidueContacts(); else positionLabelEditor();
+  });
 
   function contactsPanelOpen() {
     const panel = labelEditorHost && labelEditorHost.querySelector('#gpv-residue-contacts');
@@ -6080,8 +6168,7 @@ html>body{padding:0}</style>
     const live = liveContacts(); if (!live || !live.found.rows || !live.found.rows.length) return;
     const text = contactsText(live.found);
     const what = plural(live.found.rows.length, 'contact') + ' of ' + live.picked.name;
-    try { await navigator.clipboard.writeText(text); announce(what + ' copied as tab-separated text'); }
-    catch (error) { root.querySelector('#gpv-data-text').value = text; announce('Clipboard unavailable — the ' + what + ' are in the paste box of Per-residue data'); }
+    await copyTextOrShow(text, what + ' copied as tab-separated text', what);
   }
 
   function setMeasureAtoms(value) {
@@ -6133,8 +6220,15 @@ html>body{padding:0}</style>
      say whether an action added a step; this count can (read by the regression suite). */
   let rememberedSteps = 0;
 
+  /* Besides the records: each model's fade (Fade, Emphasise and Use medoid are undo steps), the
+     legend's renamed entries, and the per-residue data with the colour scheme it was painted in (MSA
+     colouring is one). The data and the neighbourhood table are replaced whole, never edited, so they
+     are kept by reference rather than copied on every step. */
   function snapshotRecords() {
-    return structuredClone({ labels: labelRecords, selections: selectionRecords, measurements: measurementRecords, annotations: annotationRecords, domains: domainRecords, positions: spotlightResidues, views: savedViews });
+    return {
+      ...structuredClone({ labels: labelRecords, selections: selectionRecords, measurements: measurementRecords, annotations: annotationRecords, domains: domainRecords, positions: spotlightResidues, views: savedViews, faded: structures.map(entry => ({ id: entry.id, faded: entry.faded })), figureLabels }),
+      residueData, colorMode: root.querySelector('#gpv-color-mode').value, positionEffect
+    };
   }
 
   function renderHistoryButtons() {
@@ -6172,7 +6266,17 @@ html>body{padding:0}</style>
     /* Saved views are records too: Make site figure adds two or three of them in one press, and undo
        has to take them back with the rest of the state that press changed. */
     if (Array.isArray(state.views)) savedViews = state.views;
-    renderLabelList(); renderSelectionList(); renderMeasurementList(); renderAnnotationList(); renderDomainList(); renderPositionState(); renderSavedViews();
+    (state.faded || []).forEach(item => { const entry = entryById(item.id); if (entry) entry.faded = item.faded; });
+    if (state.figureLabels) { setFigureLabels(state.figureLabels); applyFigureLabels(); }
+    /* The colour scheme is not itself an undo step; it goes back only with the data it showed. */
+    if ('residueData' in state && state.residueData !== residueData) {
+      residueData = state.residueData; renderDataState();
+      const mode = root.querySelector('#gpv-color-mode');
+      if (mode.value !== state.colorMode) mode.value = state.colorMode;
+    }
+    /* The neighbourhood table belongs to the compared positions it was measured around. */
+    positionEffect = spotlightResidues.length ? state.positionEffect || null : null; renderPositionEffect();
+    renderLabelList(); renderSelectionList(); renderMeasurementList(); renderAnnotationList(); renderDomainList(); renderPositionState(); renderSavedViews(); renderList(); renderSequenceSoon();
     applyStyle();
   }
 
@@ -6202,7 +6306,9 @@ html>body{padding:0}</style>
   let sequenceFrame = 0;
   let sequenceMarks = [];
 
-  /* One representative atom per residue (Cα, else P, else the first seen), grouped by chain. */
+  /* One representative atom per residue (Cα, else P, else the first seen), grouped by chain. A
+     residue is its number and its insertion code, so 100, 100A and 100B are three cells, in that
+     order. */
   function residueRows(entry) {
     if (entry.sequenceCache && entry.sequenceCache.atoms === entry.atoms) return entry.sequenceCache.rows;
     const chains = new Map();
@@ -6211,11 +6317,13 @@ html>body{padding:0}</style>
       const chain = atom.chain || '';
       if (!chains.has(chain)) chains.set(chain, new Map());
       const residues = chains.get(chain);
-      const current = residues.get(atom.resi);
-      if (!current || atom.atom === 'CA' || (atom.atom === 'P' && current.atom !== 'CA')) residues.set(atom.resi, atom);
+      const id = atom.resi + '|' + insertionCodeOf(atom);
+      const current = residues.get(id);
+      if (!current || atom.atom === 'CA' || (atom.atom === 'P' && current.atom !== 'CA')) residues.set(id, atom);
     });
+    const byNumber = (a, b) => a.resi - b.resi || (insertionCodeOf(a) < insertionCodeOf(b) ? -1 : insertionCodeOf(a) > insertionCodeOf(b) ? 1 : 0);
     const rows = [...chains.entries()]
-      .map(([chain, residues]) => ({ chain, residues: [...residues.values()].sort((a, b) => a.resi - b.resi) }))
+      .map(([chain, residues]) => ({ chain, residues: [...residues.values()].sort(byNumber) }))
       .filter(row => row.residues.length > 1)
       .sort((a, b) => compareChains(a.chain, b.chain));
     entry.sequenceCache = { atoms: entry.atoms, rows };
@@ -6253,7 +6361,7 @@ html>body{padding:0}</style>
 
   function describeResidue(entry, atom) {
     const confidence = entry.scores.length && Number.isFinite(Number(atom.b)) ? ' · pLDDT ' + Number(atom.b).toFixed(1) : '';
-    return (atom.resn || 'RES') + atom.resi + (atom.chain ? ' · chain ' + atom.chain : '') + confidence;
+    return (atom.resn || 'RES') + residueNumber(atom) + (atom.chain ? ' · chain ' + atom.chain : '') + confidence;
   }
 
   function drawSequenceRow(canvas, entry, row) {
@@ -6263,7 +6371,7 @@ html>body{padding:0}</style>
     context.setTransform(ratio, 0, 0, ratio, 0, 0); context.clearRect(0, 0, width, height);
     const count = row.residues.length; const cell = width / count; const gap = cell > 3 ? 1 : 0;
     const ink = themeColor('--card-foreground', '#111827');
-    const labelled = new Set(labelRecords.filter(label => label.entryId === entry.id && (label.chain || '') === row.chain).map(label => label.resi));
+    const labelled = new Set(labelRecords.filter(label => label.entryId === entry.id && (label.chain || '') === row.chain).map(label => label.resi + '|' + insertionCodeOf(label)));
     const highlighted = new Map();
     selectionRecords.filter(record => record.entryId === entry.id && record.action === 'highlight' && (!record.chain || record.chain === row.chain))
       .forEach(record => record.residues.forEach(resi => highlighted.set(resi, record.color)));
@@ -6284,7 +6392,7 @@ html>body{padding:0}</style>
         context.fillText(residueLetter(atom.resn), x + cell / 2, 10.5);
         context.textAlign = 'start';
       }
-      if (labelled.has(atom.resi)) {
+      if (labelled.has(atom.resi + '|' + insertionCodeOf(atom))) {
         context.fillStyle = ink; context.beginPath();
         context.moveTo(x + cell / 2, 3.5); context.lineTo(x + cell / 2 - 3.5, 0); context.lineTo(x + cell / 2 + 3.5, 0); context.fill();
       }
@@ -6309,7 +6417,7 @@ html>body{padding:0}</style>
       if (index >= 0) { context.strokeStyle = '#d946ef'; context.lineWidth = 2; context.strokeRect(index * cell, 2, Math.max(3, cell), 16); }
     });
     if (sequenceHover && sequenceHover.entryId === entry.id && sequenceHover.chain === row.chain) {
-      const index = row.residues.findIndex(atom => atom.resi === sequenceHover.resi);
+      const index = row.residues.findIndex(atom => atom.resi === sequenceHover.resi && insertionCodeOf(atom) === (sequenceHover.icode || ''));
       if (index >= 0) { context.strokeStyle = ink; context.lineWidth = 2; context.strokeRect(index * cell, 2, Math.max(3, cell), 16); }
     }
   }
@@ -6351,7 +6459,7 @@ html>body{padding:0}</style>
     canvas.addEventListener('pointermove', event => {
       const found = sequenceRowFor(canvas); if (!found) return;
       const index = sequenceIndexAt(canvas, found.row, event); const atom = found.row.residues[index];
-      sequenceHover = { entryId: found.entry.id, chain: found.row.chain, resi: atom.resi };
+      sequenceHover = { entryId: found.entry.id, chain: found.row.chain, resi: atom.resi, icode: insertionCodeOf(atom) };
       if (sequenceDrag && sequenceDrag.chain === found.row.chain) sequenceRange = { ...sequenceDrag, to: index };
       root.querySelector('#gpv-sequence-hint').textContent = describeResidue(found.entry, atom) + (sequenceDrag ? ' · release to pick the range' : '');
       drawSequenceRow(canvas, found.entry, found.row);
@@ -6845,8 +6953,13 @@ html>body{padding:0}</style>
     return true;
   }
 
+  /* An empty page has nothing of its own to save; it only replaces the stored session once it has
+     held models of its own. Otherwise the boot-time save would delete the session the restore banner
+     is offering, and Not now would be Forget it. */
+  let sessionHadModels = false;
   async function saveSession() {
-    if (!structures.length) { await sessionStore('readwrite', store => store.delete('current')); return; }
+    if (!structures.length) { if (sessionHadModels) await sessionStore('readwrite', store => store.delete('current')); return; }
+    sessionHadModels = true;
     const total = structures.reduce((sum, entry) => sum + (entry.text ? entry.text.length : 0), 0);
     if (total > 80 * 1024 * 1024) { if (!sessionWarned) { sessionWarned = true; toast('Session too large to autosave (over 80 MB of coordinates) — use Save session file to keep your work.'); } return; }
     const snapshot = {
@@ -6866,6 +6979,9 @@ html>body{padding:0}</style>
     root.querySelector('#gpv-session-yes').onclick = () => { banner.hidden = true; restoreSession(saved).catch(error => announce('Could not restore the session: ' + error.message, 'error')); };
     root.querySelector('#gpv-session-no').onclick = () => { banner.hidden = true; };
     root.querySelector('#gpv-session-forget').onclick = () => { banner.hidden = true; sessionStore('readwrite', store => store.delete('current')).then(() => updateStatus('Saved session discarded')).catch(() => {}); };
+  }
+  function dismissSessionBanner() {
+    root.querySelector('#gpv-session-banner').hidden = true;
   }
   async function restoreSession(saved) {
     const done = setBusy('Restoring session…');
@@ -6899,10 +7015,11 @@ html>body{padding:0}</style>
         applyViewState(savedViews[index], { panels: false });
         const uri = await withLegend(await renderPublicationImage(null, plan), plan);
         applyViewState(restore, { panels: false });
-        zip.file(String(index + 1).padStart(2, '0') + '-' + String.fromCharCode(65 + index) + '-' + String(savedViews[index].name || 'view').replace(/[^\w.-]+/g, '_') + '.png', await pngWithDpi(uri, plan.dpi));
+        const letter = panelLetter(savedViews[index]);
+        zip.file(String(index + 1).padStart(2, '0') + '-' + (letter === '—' ? '' : letter + '-') + String(savedViews[index].name || 'view').replace(/[^\w.-]+/g, '_') + '.png', await pngWithDpi(uri, plan.dpi));
       }
       const provenance = provenanceValues();
-      zip.file('captions.txt', [provenance.title || 'Protein structure figure', provenance.source, provenance.method, '', ...savedViews.map((view, index) => String.fromCharCode(65 + index) + '. ' + view.name + (view.caption ? ': ' + view.caption : '')), '', provenance.notes, '', figureLegendText()].filter((line, index, array) => line || array[index - 1]).join('\n'));
+      zip.file('captions.txt', [provenance.title || 'Protein structure figure', provenance.source, provenance.method, '', ...panelCaptionLines(), '', provenance.notes, '', figureLegendText()].filter((line, index, array) => line || array[index - 1]).join('\n'));
       const blob = await zip.generateAsync({ type: 'blob' });
       downloadBlob(blob, 'application/zip', exportFileName('protein-views', plan, 'zip'));
       announce(savedViews.length + ' view' + (savedViews.length === 1 ? '' : 's') + ' exported · ' + formatBytes(blob.size) + (plan.dpi ? ' · ' + plan.dpi + ' dpi' : ''));
@@ -7814,6 +7931,19 @@ html>body{padding:0}</style>
     root.querySelector('#gpv-contact-distances').disabled = !hasMap;
   }
 
+  /* The map, its CSVs and its composite panel answer the settings they were computed with. Once the
+     cutoff, the atoms or a chain changes the map is dimmed and says so, rather than pass for the
+     answer to the new settings. */
+  function markContactMapStale() {
+    if (!contactResult) return;
+    const wrap = root.querySelector('#gpv-contact-wrap');
+    if (wrap.classList.contains('is-stale')) return;
+    wrap.classList.add('is-stale');
+    const state = root.querySelector('#gpv-contact-state');
+    state.textContent = 'Settings changed · Compute map to update · shown: ' + state.textContent;
+  }
+  ['#gpv-contact-cutoff', '#gpv-contact-atoms', '#gpv-contact-a', '#gpv-contact-b'].forEach(selector => root.querySelector(selector).addEventListener('change', markContactMapStale));
+
   function contactChainOptions(entry) {
     const first = root.querySelector('#gpv-contact-a'); const second = root.querySelector('#gpv-contact-b');
     const rows = entry && entry.model ? residueRows(entry) : [];
@@ -7935,6 +8065,7 @@ html>body{padding:0}</style>
       + (caForced ? ' · Cα only: over ' + contactHeavyLimit.toLocaleString('en-US') + ' residues on an axis the heavy-atom search would be too slow' : '');
     setContactButtons();
     root.querySelector('#gpv-contact-wrap').hidden = false;
+    root.querySelector('#gpv-contact-wrap').classList.remove('is-stale');
     root.querySelector('#gpv-contact-readout').textContent = 'Hover a cell to read the pair and its Cα–Cα distance · click a cell to measure that distance on the model';
     updateStatus('Contact map: ' + pairs.size + ' residue pairs ' + (symmetric ? 'within ' + contactAxisName(chainA) : 'between ' + contactAxisName(chainA) + ' and ' + contactAxisName(chainB)) + ' within ' + cutoff + ' Å' + (caForced ? ' (Cα only above ' + contactHeavyLimit + ' residues)' : ''));
   }
@@ -8453,7 +8584,7 @@ html>body{padding:0}</style>
 
   function msaAssetsFor(entry) {
     if (!entry) return [];
-    return msaAssets.filter(asset => asset.collection === entry.collection);
+    return msaAssets.filter(asset => asset.loose || asset.collection === entry.collection);
   }
 
   function renderMsaState() {
@@ -8499,18 +8630,32 @@ html>body{padding:0}</style>
 
   /* ---------- Go to residue ---------- */
 
+  /* B:45, B/45, B 45, 45B or 45, with an insertion code after the number: H:100A. A letter right
+     after the number is the insertion code when the model has that residue and no chain of that
+     name, so 45B still means chain B wherever there is no residue 45B. A chain is matched as typed,
+     and regardless of case only when no chain has exactly that name — an assembly can have both a
+     and A. A bare number is the residue without an insertion code where there is one. */
   function goToResidue(raw) {
     const text = String(raw || '').trim();
     const entry = activeEntry();
     if (!entry || !entry.model) { updateStatus('Load and show a model first'); return; }
-    let chain = ''; let resi = null;
-    let match = text.match(/^([A-Za-z0-9]{1,4})[:/\s]+(-?\d+)$/);
-    if (match) { chain = match[1]; resi = Number(match[2]); }
-    else if ((match = text.match(/^(-?\d+)\s*([A-Za-z]{1,4})$/))) { resi = Number(match[1]); chain = match[2]; }
+    let chain = ''; let resi = null; let icode = null;
+    const chains = new Set(entry.atoms.map(atom => atom.chain || ''));
+    const hasCode = code => entry.atoms.some(atom => atom.resi === resi && insertionCodeOf(atom) === code);
+    let match = text.match(/^([A-Za-z0-9]{1,4})[:/\s]+(-?\d+)([A-Za-z]?)$/);
+    if (match) { chain = match[1]; resi = Number(match[2]); icode = match[3] || null; }
+    else if ((match = text.match(/^(-?\d+)(\s*)([A-Za-z]{1,4})$/))) {
+      resi = Number(match[1]); const letter = match[3];
+      const code = letter.length === 1 && !match[2] ? [letter, letter.toUpperCase()].find(hasCode) : undefined;
+      if (code && !chains.has(letter)) icode = code; else chain = letter;
+    }
     else if ((match = text.match(/^(-?\d+)$/))) resi = Number(match[1]);
-    if (resi === null) { updateStatus('Type a residue number, optionally with its chain: B:45, 45B, or 45'); return; }
-    const candidates = entry.atoms.filter(atom => atom.resi === resi && (!chain || String(atom.chain || '').toUpperCase() === chain.toUpperCase()));
-    const atom = candidates.find(item => item.atom === 'CA') || candidates[0];
+    if (resi === null) { updateStatus('Type a residue number, optionally with its chain and insertion code: B:45, 45B, 45, or H:100A'); return; }
+    if (chain && !chains.has(chain)) chain = [...chains].find(name => name.toUpperCase() === chain.toUpperCase()) ?? chain;
+    let candidates = entry.atoms.filter(atom => atom.resi === resi && (!chain || (atom.chain || '') === chain));
+    if (icode !== null) candidates = candidates.filter(atom => insertionCodeOf(atom) === icode || insertionCodeOf(atom) === icode.toUpperCase());
+    else if (candidates.some(atom => !insertionCodeOf(atom))) candidates = candidates.filter(atom => !insertionCodeOf(atom));
+    const atom = candidates.find(item => item.atom === 'CA' && !item.hetflag) || candidates.find(item => item.atom === 'CA') || candidates[0];
     if (!atom) { announce('No residue ' + text + ' in ' + displayName(entry), 'error'); return; }
     /* Go to can be the second residue of Measure to…, whose result the status line then keeps. */
     const measuring = Boolean(measureFrom);
@@ -8518,11 +8663,25 @@ html>body{padding:0}</style>
     const selection = { model: entry.model.getID(), resi };
     if (atom.chain) selection.chain = atom.chain;
     viewer.zoomTo(selection); viewer.render(); syncViewsFrom(viewer);
-    sequenceHover = { entryId: entry.id, chain: atom.chain || '', resi }; renderSequenceSoon();
+    sequenceHover = { entryId: entry.id, chain: atom.chain || '', resi, icode: insertionCodeOf(atom) }; renderSequenceSoon();
     if (!measuring) updateStatus(residueText(entry, atom));
   }
 
   /* ---------- Clipboard ---------- */
+
+  /* Text the clipboard refuses goes into a read-only box of its own under the view, selected for
+     Ctrl/⌘+C — never into a field the user types in, whose contents it would silently replace. */
+  async function copyTextOrShow(text, copied, what) {
+    try { await navigator.clipboard.writeText(text); announce(copied); return true; }
+    catch (error) {
+      const field = root.querySelector('#gpv-copy-fallback-text');
+      field.value = text; root.querySelector('#gpv-copy-fallback').hidden = false;
+      field.focus({ preventScroll: true }); field.select();
+      announce('Clipboard unavailable — the ' + what + ' are selected in the box under the view; press Ctrl/⌘+C');
+      return false;
+    }
+  }
+  root.querySelector('#gpv-copy-fallback-close').addEventListener('click', () => { root.querySelector('#gpv-copy-fallback').hidden = true; root.querySelector('#gpv-copy-fallback-text').value = ''; });
 
   async function copyPublicationPng() {
     if (!navigator.clipboard || typeof ClipboardItem === 'undefined' || typeof navigator.clipboard.write !== 'function') {
@@ -9557,6 +9716,16 @@ html>body{padding:0}</style>
     }
     return best;
   }
+  /* The matrix names the models it was computed over. Once a model is hidden, shown, added or
+     renamed it no longer describes the view, and the legend, methods text and composite would go on
+     quoting it, so it is dropped (updateStatus runs after every such change). */
+  function dropStaleRmsdMatrix() {
+    if (!rmsdMatrix) return;
+    const names = structures.filter(entry => entry.visible && entry.model).map(displayName);
+    if (names.join('\n') === rmsdMatrix.names.join('\n')) return;
+    rmsdMatrix = null; renderRmsdMatrix();
+    if (typeof renderCompositeControls === 'function') renderCompositeControls();
+  }
   function computeRmsdMatrix() {
     if (typeof numeric === 'undefined' || typeof numeric.svd !== 'function') { announce('The matrix needs the numeric.js library, which did not load. Reload the page and try again.', 'error'); return; }
     const shown = displayedEntries().filter(entry => entry.model);
@@ -9727,9 +9896,11 @@ html>body{padding:0}</style>
     }
     if (restoreMotion !== null) return;
     /* The video records the stage canvas itself, so the on-screen ring around the active label
-       would be in every frame of it — and so would the selected residue's marker. */
-    clearSelectedResidue();
-    clearActiveText();
+       would be in every frame of it — and so would the selected residue's marker. The marker is
+       hidden rather than the residue deselected, which would turn distance colouring grey. */
+    cancelMeasureTo(false);
+    clearActiveText(false);
+    markerHiddenForVideo = true; rebuildOverlays();
     const button = root.querySelector('#gpv-video');
     const duration = Number(root.querySelector('#gpv-video-length').value) || 5;
     const stream = canvas.captureStream(30);
@@ -9739,6 +9910,7 @@ html>body{padding:0}</style>
     recorder.ondataavailable = event => { if (event.data.size) chunks.push(event.data); };
     recorder.onstop = () => {
       viewer.spin(false);
+      markerHiddenForVideo = false; rebuildOverlays();
       stream.getTracks().forEach(track => track.stop());
       const url = URL.createObjectURL(new Blob(chunks, { type: 'video/webm' }));
       const link = document.createElement('a');
@@ -9888,9 +10060,12 @@ html>body{padding:0}</style>
   function sceneOverlays(keep = () => true) {
     const kept = record => keep(record.entryId);
     const keptPoints = record => record.points.every(point => keep(point.entryId));
-    const point = item => ({ model: nameOf(item.entryId), chain: item.chain, resi: item.resi, atom: item.atom, index: item.index });
+    /* A residue's insertion code is written only when it has one, so scenes without insertion codes
+       read exactly as before and older viewers ignore the field. */
+    const icodeOf = item => { const icode = insertionCodeOf(item); return icode ? { icode } : {}; };
+    const point = item => ({ model: nameOf(item.entryId), chain: item.chain, resi: item.resi, ...icodeOf(item), atom: item.atom, index: item.index });
     return {
-      labels: labelRecords.filter(kept).map(label => ({ model: nameOf(label.entryId), chain: label.chain, resi: label.resi, atom: label.atom, text: label.text, color: label.color, size: label.size, ...(label.kind === 'domain' || label.kind === 'position' ? { kind: label.kind } : {}), ...(labelOffsetLength(label) ? { offset: label.offset } : {}) })),
+      labels: labelRecords.filter(kept).map(label => ({ model: nameOf(label.entryId), chain: label.chain, resi: label.resi, ...icodeOf(label), atom: label.atom, text: label.text, color: label.color, size: label.size, ...(label.kind === 'domain' || label.kind === 'position' ? { kind: label.kind } : {}), ...(labelOffsetLength(label) ? { offset: label.offset } : {}) })),
       selections: selectionRecords.filter(kept).map(record => ({ model: nameOf(record.entryId), chain: record.chain, residues: record.residues, action: record.action, color: record.color })),
       /* A measurement's text, value switch, offset, colour and dash only when they differ from the
          defaults, so a scene with none of them reads exactly as it did before they existed. */
@@ -10094,12 +10269,22 @@ html>body{padding:0}</style>
     const active = byName.get(settings.activeModel);
     if (active) activeId = active.id;
     const reference = byName.get(settings.referenceModel);
+    /* Scenes are untrusted input: an insertion code is one letter or digit, or none. */
+    const sceneInsertionCode = record => { const code = record && typeof record.icode === 'string' ? record.icode.trim() : ''; return /^[A-Za-z0-9]$/.test(code) ? code : ''; };
+    const scenePoint = point => {
+      const entry = byName.get(point.model); if (!entry) return null;
+      const icode = sceneInsertionCode(point);
+      return { entryId: entry.id, chain: point.chain || '', resi: point.resi, ...(icode ? { icode } : {}), atom: point.atom || '', index: point.index };
+    };
     labelRecords = (scene.labels || []).map(label => {
       const entry = byName.get(label.model);
       if (!entry) return null;
-      const atom = entry.atoms.find(item => (item.chain || '') === (label.chain || '') && item.resi === label.resi && (item.atom === label.atom || item.atom === 'CA'));
+      /* A scene names an insertion code only for a residue that has one (2.52.0); without the field
+         the residue is the one with no code, as every older scene meant. */
+      const icode = sceneInsertionCode(label);
+      const atom = entry.atoms.find(item => sameResidue(item, label.chain, label.resi, icode) && (item.atom === label.atom || item.atom === 'CA'));
       if (!atom) return null;
-      return { entryId: entry.id, chain: label.chain || '', resi: label.resi, atom: label.atom || 'CA', resn: atom.resn, x: atom.x, y: atom.y, z: atom.z, key: residueKey(entry.id, label.chain, label.resi), ...(label.kind === 'domain' || label.kind === 'position' ? { kind: label.kind } : {}), ...(label.offset && Number.isFinite(Number(label.offset.x)) ? { offset: { x: Number(label.offset.x), y: Number(label.offset.y), z: Number(label.offset.z) } } : {}), text: label.text, color: /^#[0-9a-f]{6}$/i.test(label.color || '') ? label.color : undefined, size: labelSizes.some(([value]) => value === Number(label.size)) ? Number(label.size) : undefined };
+      return { entryId: entry.id, chain: label.chain || '', resi: label.resi, icode, atom: label.atom || 'CA', resn: atom.resn, x: atom.x, y: atom.y, z: atom.z, key: residueKey(entry.id, label.chain, label.resi, icode), ...(label.kind === 'domain' || label.kind === 'position' ? { kind: label.kind } : {}), ...(label.offset && Number.isFinite(Number(label.offset.x)) ? { offset: { x: Number(label.offset.x), y: Number(label.offset.y), z: Number(label.offset.z) } } : {}), text: label.text, color: /^#[0-9a-f]{6}$/i.test(label.color || '') ? label.color : undefined, size: labelSizes.some(([value]) => value === Number(label.size)) ? Number(label.size) : undefined };
     }).filter(Boolean);
     spotlightResidues = (Array.isArray(scene.positions) ? scene.positions : []).slice(0, 200)
       .map(record => ({ chain: String(record && record.chain || '').slice(0, 4), resi: Number(record && record.resi) }))
@@ -10111,7 +10296,7 @@ html>body{padding:0}</style>
       return { id: nextAnnotationId++, entryId: entry.id, chain: record.chain || '', residues: (record.residues || []).map(Number).filter(Number.isFinite), action: record.action === 'hide' ? 'hide' : 'highlight', color: /^#[0-9a-f]{6}$/i.test(record.color || '') ? record.color : '#f97316' };
     }).filter(Boolean);
     measurementRecords = (scene.measurements || []).map(record => {
-      const points = (record.points || []).map(point => { const entry = byName.get(point.model); return entry ? { entryId: entry.id, chain: point.chain || '', resi: point.resi, atom: point.atom || '', index: point.index } : null; }).filter(Boolean);
+      const points = (record.points || []).map(scenePoint).filter(Boolean);
       if (points.length < 2) return null;
       /* Read as the annotations are: a hex colour, a finite offset, booleans; anything else is the
          default, which is the field left out. */
@@ -10122,7 +10307,7 @@ html>body{padding:0}</style>
     annotationRecords = (scene.annotations || []).map(record => {
       const type = record.type === 'screen' || annotationTools[record.type] ? record.type : null;
       if (!type) return null;
-      const points = (record.points || []).map(point => { const entry = byName.get(point.model); return entry ? { entryId: entry.id, chain: point.chain || '', resi: point.resi, atom: point.atom || '', index: point.index } : null; }).filter(Boolean);
+      const points = (record.points || []).map(scenePoint).filter(Boolean);
       if (type !== 'screen' && points.length < annotationTools[type].points) return null;
       const offset = record.offset && ['x', 'y', 'z'].every(axis => Number.isFinite(Number(record.offset[axis]))) ? { x: Number(record.offset.x), y: Number(record.offset.y), z: Number(record.offset.z) } : { x: 0, y: 0, z: 0 };
       return { id: nextAnnotationId++, type, points, text: String(record.text || ''), color: /^#[0-9a-f]{6}$/i.test(record.color || '') ? record.color : '#f97316', size: Math.min(3, Math.max(0.5, Number(record.size) || 1)), dashed: record.dashed === true, corner: screenCorners.includes(record.corner) ? record.corner : 'top-left', offset, distance: Number.isFinite(Number(record.distance)) ? Number(record.distance) : null, dx: Number(record.dx) || 0, dy: Number(record.dy) || 0 };
@@ -10204,6 +10389,7 @@ html>body{padding:0}</style>
     let deferredPae = 0;
     let importedArchive = false;
     const failures = [];
+    const alignments = [];
     for (let fileIndex = 0; fileIndex < files.length; fileIndex += 1) {
       const file = files[fileIndex];
       const extension = file.name.split('.').pop().toLowerCase();
@@ -10269,8 +10455,11 @@ html>body{padding:0}</style>
           addStructure(uniqueModelName(file.name, 'Individual files'), await file.text(), extension === 'pdb' ? 'pdb' : 'cif', file.name, 'Individual files');
           loaded += 1;
         } else if (extension === 'a3m') {
-          msaAssets.push({ collection: 'Individual files', name: file.name, text: await file.text() });
-          loaded += 0;
+          /* An alignment dropped on its own belongs to no archive, so it is offered to every model —
+             fetched, opened from a zip or from single files — and paintByMsa matches its query
+             sequence to the chains. */
+          msaAssets.push({ collection: 'Individual files', loose: true, name: file.name, text: await file.text() });
+          alignments.push(file.name);
         } else if (['json', 'csv'].includes(extension)) {
           if (!registerMetadata(file.name, extension === 'json' ? new Uint8Array(await file.arrayBuffer()) : await file.text())) skipped += 1;
         } else if (extension === 'npz') {
@@ -10296,9 +10485,16 @@ html>body{padding:0}</style>
     root.querySelector('#gpv-import-state').hidden = true;
     if (pendingScene && structures.length) await applyScene(pendingScene);
     else {
-      const note = loaded ? 'Loaded ' + loaded + ' model' + (loaded === 1 ? '' : 's') + ' from ' + files.length + ' source' + (files.length === 1 ? '' : 's') : pendingScene ? 'Scene loaded; now add its matching structure files' : confidenceAssets.length ? 'Confidence data loaded; add matching structures' : 'No supported structures found';
+      const added = alignments.length ? 'Alignment added: ' + clipText(alignments.join(', '), 80) : '';
+      const note = loaded ? 'Loaded ' + loaded + ' model' + (loaded === 1 ? '' : 's') + ' from ' + files.length + ' source' + (files.length === 1 ? '' : 's') + (added ? ' · ' + added : '') : added || (pendingScene ? 'Scene loaded; now add its matching structure files' : confidenceAssets.length ? 'Confidence data loaded; add matching structures' : 'No supported structures found');
       updateStatus(note + (confidenceAssets.length ? ' · confidence attached' : '') + (deferredPae ? ' · skipped ' + deferredPae + ' large PAE files for performance' : '') + (skipped ? ' · ' + skipped + ' skipped' : ''));
     }
+    if (alignments.length) renderMsaState();
+    /* New work replaces the stored session within seconds, so its banner has nothing left to offer —
+       and Restore would put the old scene's labels and settings over the ones just loaded. */
+    if (loaded) dismissSessionBanner();
+    /* The motion was stopped while the files were read; the Motion select still names it. */
+    if (structures.length) applyMotion(false);
     showImportErrors(failures);
     doneBusy();
     if (loaded) toast('Loaded ' + loaded + ' model' + (loaded === 1 ? '' : 's') + (skipped ? ' · ' + skipped + ' skipped' : ''));
@@ -10324,13 +10520,14 @@ html>body{padding:0}</style>
     tick();
   }
 
-  function applyMotion() {
+  /* announceIt is false when an import resumes the chosen motion: its own status line stays. */
+  function applyMotion(announceIt = true) {
     stopMotion();
     const motion = root.querySelector('#gpv-motion').value;
     const speed = Number(root.querySelector('#gpv-speed').value);
     if (motion === 'spin') viewer.spin('y', 0.7 * speed);
     if (motion === 'rock') startRock();
-    updateStatus(motion === 'off' ? 'Ready' : root.querySelector('#gpv-motion').selectedOptions[0].text);
+    if (announceIt !== false) updateStatus(motion === 'off' ? 'Ready' : root.querySelector('#gpv-motion').selectedOptions[0].text);
   }
 
   function toggleSpin() {
@@ -10406,10 +10603,10 @@ html>body{padding:0}</style>
   function renderSavedViews(rebuildFigure = true) {
     if (rebuildFigure) renderFigureBuilder();
     const list = root.querySelector('#gpv-saved-views'); list.replaceChildren();
-    savedViews.forEach((view, index) => {
+    savedViews.forEach(view => {
       const row = document.createElement('div'); row.className = 'gpv-entry';
       const textValue = document.createElement('span'); textValue.className = 'gpv-entry-name';
-      textValue.textContent = String.fromCharCode(65 + index) + ' · ' + view.name + (view.caption ? ' — ' + view.caption : '');
+      textValue.textContent = panelLetter(view) + ' · ' + view.name + (view.caption ? ' — ' + view.caption : '');
       const load = document.createElement('button'); load.className = 'btn'; load.type = 'button'; load.textContent = 'Load'; load.addEventListener('click', () => { applyViewState(view); updateStatus('Loaded view ' + view.name); });
       const remove = document.createElement('button'); remove.className = 'btn btn-ghost'; remove.type = 'button'; remove.textContent = 'Remove'; remove.addEventListener('click', () => { remember('remove view'); savedViews = savedViews.filter(item => item.id !== view.id); renderSavedViews(); updateStatus('Saved view removed'); });
       row.append(textValue, load, remove); list.append(row);
@@ -10686,8 +10883,12 @@ html>body{padding:0}</style>
       th.append(fallback); tr.append(th);
       const td = document.createElement('td'); const input = document.createElement('input'); input.className = 'form-control'; input.type = 'text'; input.maxLength = figureLabelLimit;
       input.dataset.gpvLabelKey = key; input.placeholder = fallback; input.value = figureLabels[key] || ''; input.setAttribute('aria-label', 'Label for ' + fallback);
-      input.addEventListener('input', () => { const text = input.value.trim().slice(0, figureLabelLimit); if (text) figureLabels[key] = text; else delete figureLabels[key]; applyFigureLabels(false); });
-      input.addEventListener('change', () => { remember('figure labels'); setTimeout(renderFigureLabels, 0); });
+      /* The legend follows each keystroke, so the undo step is taken before the first one — taken on
+         change it would hold the new name, and undo would bring back what is already there. */
+      let remembered = false;
+      input.addEventListener('focus', () => { remembered = false; });
+      input.addEventListener('input', () => { if (!remembered) { remember('figure labels'); remembered = true; } const text = input.value.trim().slice(0, figureLabelLimit); if (text) figureLabels[key] = text; else delete figureLabels[key]; applyFigureLabels(false); });
+      input.addEventListener('change', () => { setTimeout(renderFigureLabels, 0); });
       td.append(input); tr.append(td); body.append(tr);
     };
     row(mode + '|title', legend.defaults.title, null);
@@ -11517,6 +11718,16 @@ html>body{padding:0}</style>
      ratio and are sized so the whole figure is the chosen output width. Panel letters and
      captions go in a strip under each cell; legend and scale bar sit inside the cell. */
   function figurePanelsSelected() { return savedViews.filter(view => view.inFigure !== false); }
+  /* A view's letter in the built figure — the ticked views in order, A, B, C… — or a dash when it is
+     not in the figure. One lettering for the saved-views list, the builder and both captions files,
+     so the list never says D for the panel the figure prints as A. */
+  function panelLetter(view) {
+    const index = figurePanelsSelected().indexOf(view);
+    return index < 0 ? '—' : String.fromCharCode(65 + index);
+  }
+  function panelCaptionLines() {
+    return figurePanelsSelected().map(view => panelLetter(view) + '. ' + view.name + (view.caption ? ': ' + view.caption : ''));
+  }
   function builderOptions() {
     const columns = root.querySelector('#gpv-panel-columns').value;
     return { columns, captions: root.querySelector('#gpv-builder-captions').value, letters: root.querySelector('#gpv-builder-letters').checked, legends: root.querySelector('#gpv-builder-legends').checked, architecture: root.querySelector('#gpv-builder-architecture').checked };
@@ -11560,15 +11771,14 @@ html>body{padding:0}</style>
   function renderFigureBuilder() {
     const body = root.querySelector('#gpv-builder-rows'); if (!body) return;
     body.replaceChildren();
-    let letter = 0;
     savedViews.forEach((view, index) => {
       const included = view.inFigure !== false;
       const tr = document.createElement('tr');
       const inCell = document.createElement('td'); const tick = document.createElement('input'); tick.type = 'checkbox'; tick.className = 'form-check-input'; tick.checked = included; tick.setAttribute('aria-label', 'Include ' + view.name + ' in the figure');
-      tick.addEventListener('change', () => { remember('figure panels'); view.inFigure = tick.checked; renderFigureBuilder(); });
+      tick.addEventListener('change', () => { remember('figure panels'); view.inFigure = tick.checked; renderSavedViews(); });
       /* The theme draws checkboxes only inside a .form-check label; a bare input is invisible. */
       const tickLabel = document.createElement('label'); tickLabel.className = 'form-check'; tickLabel.append(tick); inCell.append(tickLabel); tr.append(inCell);
-      const letterCell = document.createElement('td'); letterCell.className = 'gpv-builder-letter'; letterCell.textContent = included ? String.fromCharCode(65 + letter) : '—'; if (included) letter += 1; tr.append(letterCell);
+      const letterCell = document.createElement('td'); letterCell.className = 'gpv-builder-letter'; letterCell.textContent = panelLetter(view); tr.append(letterCell);
       const nameCell = document.createElement('th'); nameCell.scope = 'row'; nameCell.textContent = view.name; tr.append(nameCell);
       const captionCell = document.createElement('td'); const caption = document.createElement('input'); caption.type = 'text'; caption.className = 'form-control'; caption.value = view.caption || ''; caption.placeholder = 'Panel caption'; caption.maxLength = 200; caption.setAttribute('aria-label', 'Caption for ' + view.name);
       caption.addEventListener('input', () => { view.caption = caption.value.trim().slice(0, 200); renderSavedViews(false); });
@@ -11648,7 +11858,7 @@ html>body{padding:0}</style>
 
   function downloadCaptions() {
     const provenance = provenanceValues();
-    const lines = [provenance.title || 'Protein structure figure', provenance.source, provenance.method, '', ...savedViews.map((view, index) => String.fromCharCode(65 + index) + '. ' + view.name + (view.caption ? ': ' + view.caption : '')), '', provenance.notes].filter((line, index, array) => line || array[index - 1]);
+    const lines = [provenance.title || 'Protein structure figure', provenance.source, provenance.method, '', ...panelCaptionLines(), '', provenance.notes].filter((line, index, array) => line || array[index - 1]);
     downloadBlob(lines.join('\n'), 'text/plain', 'protein-figure-captions.txt'); updateStatus('Figure captions downloaded');
   }
 
@@ -12395,8 +12605,8 @@ applyBackground();
       const centre = { x: mean(cas.map(atom => atom.x)), y: mean(cas.map(atom => atom.y)), z: mean(cas.map(atom => atom.z)) };
       let best = cas[0]; let bestDistance = Infinity;
       cas.forEach(atom => { const d = (atom.x - centre.x) ** 2 + (atom.y - centre.y) ** 2 + (atom.z - centre.z) ** 2; if (d < bestDistance) { bestDistance = d; best = atom; } });
-      const key = residueKey(entry.id, best.chain || '', best.resi);
-      const record = { entryId: entry.id, chain: best.chain || '', resi: best.resi, resn: best.resn || 'RES', atom: 'CA', x: best.x, y: best.y, z: best.z, key, text: item.name, color: item.color, size: 15, kind: 'domain' };
+      const key = residueKey(entry.id, best.chain || '', best.resi, insertionCodeOf(best));
+      const record = { entryId: entry.id, chain: best.chain || '', resi: best.resi, icode: insertionCodeOf(best), resn: best.resn || 'RES', atom: 'CA', x: best.x, y: best.y, z: best.z, key, text: item.name, color: item.color, size: 15, kind: 'domain' };
       const index = labelRecords.findIndex(label => label.key === key);
       if (index >= 0) labelRecords[index] = { ...labelRecords[index], ...record }; else labelRecords.push(record);
       added += 1;
@@ -12887,9 +13097,9 @@ applyBackground();
   function addComparedPosition(spot, found) {
     if (!spotlightResidues.some(item => item.chain === spot.chain && item.resi === spot.resi)) spotlightResidues.push({ chain: spot.chain, resi: spot.resi });
     found.forEach(({ entry, atom }) => {
-      const key = residueKey(entry.id, atom.chain || '', atom.resi);
+      const key = residueKey(entry.id, atom.chain || '', atom.resi, insertionCodeOf(atom));
       const record = {
-        entryId: entry.id, chain: atom.chain || '', resi: atom.resi, resn: atom.resn || 'RES', atom: 'CA',
+        entryId: entry.id, chain: atom.chain || '', resi: atom.resi, icode: insertionCodeOf(atom), resn: atom.resn || 'RES', atom: 'CA',
         x: atom.x, y: atom.y, z: atom.z, key,
         text: positionResidueName(atom.resn) + atom.resi, color: entry.color, size: 15, kind: 'position'
       };
@@ -13360,7 +13570,8 @@ applyBackground();
     button.disabled = true;
     try {
       const { entry, source, note } = await fetchIdentifier(field.value);
-      selectModel(entry);
+      selectModel(entry, true, true);
+      dismissSessionBanner();
       field.value = '';
       announce('Loaded ' + entry.name + ' from ' + source.collection + note);
     } catch (error) {
@@ -13374,7 +13585,7 @@ applyBackground();
 
   const persistedControls = [
     '#gpv-style', '#gpv-color-mode', '#gpv-projection', '#gpv-outline', '#gpv-label-style', '#gpv-background', '#gpv-background-color', '#gpv-hetero',
-    '#gpv-export-mode', '#gpv-print-width', '#gpv-print-aspect', '#gpv-print-dpi', '#gpv-print-text', '#gpv-figure-font', '#gpv-scale-bar', '#gpv-legend-position', '#gpv-image-format',
+    '#gpv-export-mode', '#gpv-print-width', '#gpv-print-custom', '#gpv-print-aspect', '#gpv-print-dpi', '#gpv-print-text', '#gpv-figure-font', '#gpv-scale-bar', '#gpv-legend-position', '#gpv-image-format',
     '#gpv-view-mode', '#gpv-order', '#gpv-alignment-mode', '#gpv-fit-scope', '#gpv-position-cutoff', '#gpv-export-size', '#gpv-export-scale',
     '#gpv-panel-columns', '#gpv-video-length', '#gpv-cycle-speed', '#gpv-speed', '#gpv-report-scope',
     '#gpv-position-figure-deviation', '#gpv-ipsae-pae', '#gpv-ipsae-dist'
@@ -13521,10 +13732,29 @@ applyBackground();
     root.querySelector('#gpv-speed-value').textContent = Number(event.target.value).toFixed(2).replace(/0$/, '') + '×';
     applyMotion();
   });
+  /* Results computed from the models Clear all removes. Model ids are never reused (nextStructureId
+     keeps counting), so none of them could attach to a new model, but their tables, buttons and the
+     sentences the legend and methods text build from them would stay. Renamed legend entries name
+     things that are gone too; chain colours are a preference and stay. */
+  const motifIdleText = root.querySelector('#gpv-motif-state').textContent;
+  function resetAnalyses() {
+    siteResults = null; renderLigandSites(null);
+    ensembleSpread = null;
+    rmsdMatrix = null; renderRmsdMatrix();
+    msaAssets = []; renderMsaState();
+    nearbyResult = null; root.querySelector('#gpv-near-copy').disabled = true;
+    root.querySelector('#gpv-motif-state').textContent = motifIdleText;
+    setFigureLabels({}); renderFigureLabels();
+  }
   root.querySelector('#gpv-clear').addEventListener('click', () => {
-    if (structures.length > 1 && !confirm('Remove all ' + structures.length + ' models, plus any labels, selections, measurements, and saved views?')) return;
+    /* Clear all cannot be undone, so it asks whenever there is anything to lose beyond a single
+       model: work on it, saved views, or more models. */
+    const work = labelRecords.length + selectionRecords.length + measurementRecords.length + annotationRecords.length + domainRecords.length + savedViews.length;
+    if ((structures.length > 1 || work) && !confirm('Remove ' + (structures.length === 1 ? 'the model' : 'all ' + structures.length + ' models') + ' and everything made on ' + (structures.length === 1 ? 'it' : 'them') + ' — labels, selections, measurements, annotations, domains and saved views? This cannot be undone.')) return;
     stopCycle();
     stopMotion();
+    /* Nothing is left to turn; the Motion select says so, and S starts it again from off. */
+    root.querySelector('#gpv-motion').value = 'off';
     dismissCanvasText();
     cancelMeasureTo(false);
     setBoxSelectMode(false);
@@ -13575,8 +13805,8 @@ applyBackground();
     root.querySelector('#gpv-pae-detail').textContent = 'Move over the heatmap to inspect a residue pair.';
     root.querySelector('#gpv-fetch-id').value = '';
     listLimit = listPageSize;
-    nextStructureId = 1;
     nextAnnotationId = 1;
+    resetAnalyses();
     renderAlignmentResults();
     renderSelectionList();
     renderMeasurementList();
@@ -13754,8 +13984,16 @@ applyBackground();
     /* event.target is not always an Element (it can be the document), and a
        shortcut must never swallow a character someone is typing — including the
        "?" that opens help. */
-    const typing = target instanceof Element && (target.matches('input, select, textarea, [contenteditable]') || Boolean(target.closest('dialog[open]')));
-    if (typing && event.key !== 'Escape') return;
+    const typing = target instanceof Element && (target.matches('input:not([type=checkbox]):not([type=radio]):not([type=range]):not([type=color]):not([type=button]):not([type=file]), select, textarea, [contenteditable]') || Boolean(target.closest('dialog[open]')));
+    /* A field or the help dialog owns every key it gets, Esc included: Esc there cancels a rename or
+       closes the dialog, and must not also leave full screen, Drag to select, drawing or measuring.
+       A switch, slider or colour well is not typing, so the shortcuts still work after a click on one. */
+    if (typing) return;
+    /* A key another control has already used — a tab button's or the divider's arrows — is not also a
+       shortcut; nor is an arrow, Delete or Backspace on a slider, a radio button, or inside the residue
+       card or the box popover, where it would step to another model or move the active label. */
+    if (event.defaultPrevented) return;
+    if (target instanceof Element && /^(Arrow|Delete$|Backspace$)/.test(event.key) && target.closest('input[type=range], input[type=radio], #gpv-label-editor, #gpv-box-popover')) return;
     if ((event.ctrlKey || event.metaKey) && !event.altKey && event.key.toLowerCase() === 'z') { event.preventDefault(); if (event.shiftKey) redo(); else undo(); return; }
     if (event.ctrlKey || event.metaKey || event.altKey) return;
     /* The label editor, the active label's arrows and Delete, and L come first: while a label is
@@ -14117,7 +14355,7 @@ applyBackground();
   root.querySelector('#gpv-motif').addEventListener('keydown', event => { if (event.key === 'Enter') { event.preventDefault(); highlightMotif(); } });
   root.querySelector('#gpv-near-target').addEventListener('change', () => { root.querySelector('#gpv-near-chain').closest('label').hidden = root.querySelector('#gpv-near-target').value !== 'chain'; });
   root.querySelector('#gpv-near-chain').closest('label').hidden = true;
-  root.querySelector('#gpv-near-copy').addEventListener('click', async () => { const text = nearbyListText(); if (!text) return; try { await navigator.clipboard.writeText(text); announce('Residue list copied · ' + nearbyResult.residues.length + ' residues'); } catch (error) { root.querySelector('#gpv-data-text').value = text; announce('Clipboard unavailable — the list is in the paste box below'); } });
+  root.querySelector('#gpv-near-copy').addEventListener('click', async () => { const text = nearbyListText(); if (!text) return; await copyTextOrShow(text, 'Residue list copied · ' + nearbyResult.residues.length + ' residues', 'residues'); });
   root.querySelector('#gpv-data-apply').addEventListener('click', loadPastedData);
   root.querySelector('#gpv-data-file').addEventListener('change', async event => { const file = event.target.files[0]; if (!file) return; const table = parseResidueTable(await file.text()); if (!table) { announce('Could not read a residue column and a numeric value column from ' + file.name, 'error'); return; } setResidueData(table, fileStem(file.name)); event.target.value = ''; });
   root.querySelector('#gpv-data-paint').addEventListener('click', () => { const select = root.querySelector('#gpv-color-mode'); select.value = 'data'; select.dispatchEvent(new Event('change', { bubbles: true })); });

@@ -393,6 +393,21 @@ const tapStageCentre = async () => {
   await tap(box.x + box.width / 2, box.y + box.height / 2); await page.waitForTimeout(500);
 };
 const group = name => console.log('\n' + name);
+/* A page of its own, in a browser context of its own — so its own IndexedDB and localStorage — for
+   steps that clear, remove or reload: done on the main page, that would be done to every later step.
+   The caller closes it in its finally. */
+/* One fixed-column PDB ATOM/HETATM line, for the small hand-made models some steps need. */
+const pdbAtom = (record, serial, name, resn, chain, resi, [x, y, z], element, icode = ' ', b = 80) =>
+  record.padEnd(6) + String(serial).padStart(5) + ' ' + (name.length < 4 ? ' ' + name.padEnd(3) : name) + ' ' + resn.padStart(3) + ' ' + chain + String(resi).padStart(4) + icode + '   '
+  + x.toFixed(3).padStart(8) + y.toFixed(3).padStart(8) + z.toFixed(3).padStart(8) + '  1.00' + b.toFixed(2).padStart(6) + '          ' + element.padStart(2);
+const freshViewer = async (files = []) => {
+  const fresh = await browser.newPage({ viewport: { width: 1280, height: 1000 } });
+  fresh.on('pageerror', error => noteError('FRESH PAGEERROR: ' + error.message));
+  fresh.on('console', message => { if (message.type() === 'error' && !/favicon|404/.test(message.text())) noteError('fresh page: ' + message.text()); });
+  await fresh.goto(base + '/index.html?debug=1'); await fresh.waitForTimeout(2000);
+  if (files.length) { await fresh.setInputFiles('#gpv-files', files); await fresh.waitForTimeout(2000); }
+  return fresh;
+};
 
 await page.goto(base + '/index.html?debug=1'); /* ?debug=1 exposes window.__viewerDebug, a read-only hook used to check colours */
 await page.waitForTimeout(2500);
@@ -534,6 +549,19 @@ await step('a journal preset sets width, resolution, text size and font', async 
   await page.selectOption('#gpv-journal', '85|300|7'); await page.waitForTimeout(300);
   if ((await page.inputValue('#gpv-print-width')) !== '85') throw new Error('85 mm should pick the built-in single column');
   await page.selectOption('#gpv-export-mode', 'pixels'); await page.waitForTimeout(200);
+});
+await step('a journal width that is not one of the listed widths survives a reload', async () => {
+  /* Nature's 89 mm goes through Custom width; before 2.52.0 that field was not remembered, so after a
+     reload Figure width still said Custom… but printed at the default 120 mm. */
+  const fresh = await freshViewer();
+  try {
+    await fresh.click('[data-gpv-tab="publish"]'); await fresh.selectOption('#gpv-journal', '89|300|7'); await fresh.waitForTimeout(300);
+    if ((await fresh.inputValue('#gpv-print-custom')) !== '89') throw new Error('setup: the preset set ' + await fresh.inputValue('#gpv-print-custom') + ' mm');
+    await fresh.reload(); await fresh.waitForTimeout(2000);
+    await fresh.click('[data-gpv-tab="publish"]');
+    const after = { width: await fresh.inputValue('#gpv-print-width'), custom: await fresh.inputValue('#gpv-print-custom') };
+    if (after.width !== 'custom' || after.custom !== '89') throw new Error('after a reload: ' + JSON.stringify(after));
+  } finally { await fresh.close(); }
 });
 await step('the publication checklist flags pixel export and unsafe colours, and its fixes clear them', async () => {
   await tab('appearance'); await page.selectOption('#gpv-color-mode', 'chain'); await page.waitForTimeout(200);
@@ -815,6 +843,27 @@ await step('the All distances map exports as a PNG whose scale runs from 0 Å to
   } finally { await restoreMap(); await tab('models'); }
 });
 
+await step('a contact map whose settings change says it is out of date until computed again, and a hidden model drops the RMSD matrix', async () => {
+  /* Before 2.52.0 the old map and its CSVs stood under the new cutoff with nothing to say so. */
+  try {
+    await restoreMap();
+    if (await page.evaluate(() => document.querySelector('#gpv-contact-wrap').classList.contains('is-stale'))) throw new Error('a fresh map is marked out of date');
+    await page.fill('#gpv-contact-cutoff', '8'); await page.locator('#gpv-contact-cutoff').dispatchEvent('change'); await page.waitForTimeout(200);
+    const stale = await page.evaluate(() => ({ dimmed: document.querySelector('#gpv-contact-wrap').classList.contains('is-stale'), state: document.querySelector('#gpv-contact-state').textContent }));
+    if (!stale.dimmed || !/^Settings changed · Compute map to update/.test(stale.state)) throw new Error('after a new cutoff: ' + JSON.stringify(stale));
+    await page.click('#gpv-contact-run'); await page.waitForTimeout(400);
+    const fresh = await page.evaluate(() => ({ dimmed: document.querySelector('#gpv-contact-wrap').classList.contains('is-stale'), state: document.querySelector('#gpv-contact-state').textContent }));
+    if (fresh.dimmed || !/within 8 Å/.test(fresh.state)) throw new Error('after Compute map: ' + JSON.stringify(fresh));
+  } finally { await restoreMap(); await tab('models'); }
+  const viewer = await freshViewer([models[0], models[1], models[2]]);
+  try {
+    await viewer.click('[data-gpv-tab="models"]'); await viewer.selectOption('#gpv-view-mode', 'overlay'); await viewer.waitForTimeout(300);
+    await viewer.click('[data-gpv-tab="compare"]'); await viewer.click('#gpv-rmsd-matrix-run'); await viewer.waitForTimeout(1500);
+    if (!(await viewer.evaluate(() => Boolean(window.__viewerDebug.rmsdMatrix())))) throw new Error('setup: no matrix');
+    await viewer.click('[data-gpv-tab="models"]'); await viewer.locator('#gpv-list .gpv-entry').nth(2).locator('input[aria-label^="Show "]').uncheck(); await viewer.waitForTimeout(400);
+    if (await viewer.evaluate(() => Boolean(window.__viewerDebug.rmsdMatrix()))) throw new Error('the matrix still quotes a model that has been hidden');
+  } finally { await viewer.close(); }
+});
 await step('search filters the model list', async () => {
   await page.fill('#gpv-model-search', 'model_c'); await page.waitForTimeout(400);
   const rows = await page.locator('#gpv-list .gpv-entry').count();
@@ -856,6 +905,77 @@ await step('FASTA has one record per chain of the displayed models', async () =>
   console.log('       ' + records + ' FASTA records');
 });
 
+/* Clear all and Remove on a page of their own (freshViewer): on the main page they would take away
+   the models every later step counts on. */
+const freshGoTo = async (fresh, where) => {
+  await fresh.click('[data-gpv-tab="annotate"]'); await fresh.waitForTimeout(150);
+  await fresh.fill('#gpv-goto', where); await fresh.press('#gpv-goto', 'Enter'); await fresh.waitForTimeout(400);
+};
+const freshEntries = fresh => fresh.evaluate(() => window.__viewerDebug.entries().map(entry => ({ id: entry.id, name: entry.name })));
+await step('Removing a model takes its card, its selected residue, its records and the modes with it', async () => {
+  const fresh = await freshViewer([models[0], models[1]]);
+  try {
+    const [first, second] = await freshEntries(fresh);
+    await fresh.evaluate(id => { const select = document.querySelector('#gpv-current'); select.value = String(id); select.dispatchEvent(new Event('change', { bubbles: true })); }, second.id);
+    await fresh.waitForTimeout(400);
+    await freshGoTo(fresh, 'A:5');
+    await fresh.click('#gpv-add-label'); await fresh.waitForTimeout(200);
+    await fresh.evaluate(() => document.querySelector('#gpv-stage').focus({ preventScroll: true }));
+    await fresh.keyboard.press('l'); await fresh.waitForTimeout(400);
+    if (!(await fresh.locator('#gpv-label-editor').isVisible())) throw new Error('the card did not open for the residue of the second model');
+    await fresh.click('[data-gpv-tab="models"]'); await fresh.waitForTimeout(150);
+    await fresh.click('#gpv-list [data-entry-id="' + second.id + '"] button:has-text("Remove")'); await fresh.waitForTimeout(500);
+    const after = await fresh.evaluate(() => ({ selected: window.__viewerDebug.selectedResidue(), labels: window.__viewerDebug.labelRecords().length, add: document.querySelector('#gpv-add-label').disabled, status: document.querySelector('#gpv-state').textContent }));
+    if (await fresh.locator('#gpv-label-editor').isVisible()) throw new Error('the card stayed open over the removed model');
+    if (after.selected) throw new Error('the removed model’s residue is still selected: ' + JSON.stringify(after.selected));
+    if (after.labels) throw new Error(after.labels + ' label(s) of the removed model left behind');
+    if (!after.add) throw new Error('Add or update is still enabled');
+    if (!/Removed /.test(after.status)) throw new Error('no status for the removal: ' + after.status);
+    /* With the last model gone, a mode left on would have nothing to draw on and a disabled button. */
+    await fresh.click('[data-gpv-tab="annotate"]'); await fresh.click('#gpv-annotate'); await fresh.waitForTimeout(200);
+    await fresh.click('[data-gpv-tab="models"]'); await fresh.click('#gpv-list [data-entry-id="' + first.id + '"] button:has-text("Remove")'); await fresh.waitForTimeout(500);
+    if (await fresh.locator('#gpv-stage.is-drawing').count()) throw new Error('drawing stayed on with no model left');
+  } finally { await fresh.close(); }
+});
+await step('Clear all asks before discarding work on one model, and leaves no analysis to attach to the next models', async () => {
+  const fresh = await freshViewer([models[0], models[1]]);
+  try {
+    let asked = '';
+    await fresh.click('[data-gpv-tab="compare"]'); await fresh.click('#gpv-align'); await fresh.waitForTimeout(2000);
+    await fresh.click('#gpv-rmsd-matrix-run'); await fresh.waitForTimeout(2000);
+    const before = await fresh.evaluate(() => ({ matrix: Boolean(window.__viewerDebug.rmsdMatrix()), spread: Boolean(window.__viewerDebug.ensembleSpread()), ids: window.__viewerDebug.entries().map(entry => entry.id) }));
+    if (!before.matrix || !before.spread) throw new Error('setup: no matrix or agreement to clear ' + JSON.stringify(before));
+    await fresh.click('[data-gpv-tab="models"]');
+    fresh.once('dialog', dialog => dialog.accept());
+    await fresh.click('#gpv-clear'); await fresh.waitForTimeout(600);
+    if ((await freshEntries(fresh)).length) throw new Error('Clear all accepted but models remain');
+    await fresh.setInputFiles('#gpv-files', [models[0], models[1]]); await fresh.waitForTimeout(2000);
+    const after = await fresh.evaluate(() => ({ matrix: Boolean(window.__viewerDebug.rmsdMatrix()), spread: Boolean(window.__viewerDebug.ensembleSpread()), ids: window.__viewerDebug.entries().map(entry => entry.id), rmsf: document.querySelector('#gpv-rmsf-csv').disabled, matrixHidden: document.querySelector('#gpv-rmsd-matrix-wrap').hidden }));
+    if (after.matrix || !after.matrixHidden) throw new Error('the old RMSD matrix survived Clear all');
+    if (after.spread || !after.rmsf) throw new Error('the old model agreement survived Clear all');
+    if (after.ids.some(id => before.ids.includes(id))) throw new Error('model ids restarted: ' + JSON.stringify({ before: before.ids, after: after.ids }));
+    /* One model with a label: Clear all used to ask only with two or more models. */
+    const [, second] = await freshEntries(fresh);
+    await fresh.click('#gpv-list [data-entry-id="' + second.id + '"] button:has-text("Remove")'); await fresh.waitForTimeout(400);
+    await freshGoTo(fresh, 'A:5'); await fresh.click('#gpv-add-label'); await fresh.waitForTimeout(200);
+    await fresh.click('[data-gpv-tab="models"]');
+    fresh.once('dialog', dialog => { asked = dialog.message(); dialog.dismiss(); });
+    await fresh.click('#gpv-clear'); await fresh.waitForTimeout(400);
+    if (!asked) throw new Error('Clear all discarded a labelled model without asking');
+    if ((await freshEntries(fresh)).length !== 1) throw new Error('Cancel still cleared');
+    fresh.once('dialog', dialog => dialog.accept());
+    await fresh.click('#gpv-clear'); await fresh.waitForTimeout(600);
+    if ((await freshEntries(fresh)).length) throw new Error('Clear all accepted but the labelled model remains');
+    await fresh.setInputFiles('#gpv-files', [models[0]]); await fresh.waitForTimeout(2000);
+    /* A single model with nothing on it clears without a question. */
+    asked = '';
+    fresh.once('dialog', dialog => { asked = dialog.message(); dialog.dismiss(); });
+    await fresh.click('#gpv-clear'); await fresh.waitForTimeout(400);
+    if (asked) throw new Error('asked before clearing one model with no work on it: ' + asked);
+    if ((await freshEntries(fresh)).length) throw new Error('one bare model was not cleared');
+  } finally { await fresh.close(); }
+});
+
 group('navigation');
 await step('previous and next', async () => {
   await page.click('#gpv-next'); await page.waitForTimeout(400);
@@ -869,6 +989,36 @@ await step('arrow keys navigate', async () => {
   if (await page.locator('#gpv-label-editor').isVisible()) await page.keyboard.press('Escape');
   if (await page.evaluate(() => Boolean(window.__viewerDebug && window.__viewerDebug.activeText()))) await page.keyboard.press('Escape');
   await page.keyboard.press('ArrowRight'); await page.waitForTimeout(400);
+});
+await step('stepping to a model from an overlay says it shows one at a time, and remembers the mode', async () => {
+  const before = await page.inputValue('#gpv-view-mode');
+  try {
+    await tab('models'); await page.selectOption('#gpv-view-mode', 'overlay'); await page.waitForTimeout(400);
+    await page.evaluate(() => document.querySelector('#gpv-stage').focus({ preventScroll: true }));
+    await page.keyboard.press('ArrowRight'); await page.waitForTimeout(400);
+    const state = await page.evaluate(() => ({ mode: document.querySelector('#gpv-view-mode').value, status: document.querySelector('#gpv-state').textContent, saved: (JSON.parse(localStorage.getItem('protein-structure-viewer:preferences') || '{}') || {})['#gpv-view-mode'] }));
+    if (state.mode !== 'single') throw new Error('→ left the view mode at ' + state.mode);
+    if (!/one model at a time/.test(state.status)) throw new Error('the switch was not stated: ' + state.status);
+    if (state.saved !== 'single') throw new Error('the switched mode was not saved as a preference: ' + state.saved);
+  } finally { await page.selectOption('#gpv-view-mode', before); await page.waitForTimeout(300); }
+});
+await step('the arrows on a tab button or the divider move the tab or the divider, never the model', async () => {
+  /* Both controls use ← → themselves (the tablist pattern; resizing from the keyboard). Before
+     2.52.0 the page's shortcut took the same key as well, stepped to the next model and switched the
+     view to one at a time. */
+  const state = () => page.evaluate(() => ({ active: (window.__viewerDebug.activeEntry() || {}).id, mode: document.querySelector('#gpv-view-mode').value }));
+  const before = await state();
+  try {
+    await page.focus('[data-gpv-tab="models"]'); await page.keyboard.press('ArrowRight'); await page.waitForTimeout(300);
+    if (await page.locator('[data-gpv-panel="appearance"]').isHidden()) throw new Error('→ on the Models tab did not open Appearance');
+    let after = await state();
+    if (after.active !== before.active || after.mode !== before.mode) throw new Error('→ on a tab also changed the model: ' + JSON.stringify({ before, after }));
+    if (await page.locator('#gpv-splitter').isVisible()) {
+      await page.focus('#gpv-splitter'); await page.keyboard.press('ArrowRight'); await page.waitForTimeout(200); await page.keyboard.press('ArrowLeft'); await page.waitForTimeout(300);
+      after = await state();
+      if (after.active !== before.active || after.mode !== before.mode) throw new Error('← → on the divider also changed the model: ' + JSON.stringify({ before, after }));
+    }
+  } finally { await tab('models'); }
 });
 for (const [index, name] of ['models', 'appearance', 'annotate', 'compare', 'confidence', 'publish'].entries()) {
   await step(`digit ${index + 1} opens the ${name} tab`, async () => {
@@ -1227,6 +1377,57 @@ await step('Emphasise draws one model solid, fades and thins the others, and pre
     if (!restored) throw new Error('pressing Emphasise again did not restore the other models');
     console.log('       emphasised the first model · the others drawn at luminance ' + state.fadedLuminance.toFixed(2) + ' against ' + state.plainLuminance.toFixed(2) + ' · legend shows the tint · restored');
   } finally { await cleanup(); }
+});
+await step('undo takes back Emphasise, a renamed legend entry and MSA colouring, not just their names', async () => {
+  /* Before 2.52.0 these steps took an undo step that restored nothing: the status said "Undid
+     emphasis" and the models stayed faded. */
+  await tab('models'); await page.click('#gpv-show-all'); await page.waitForTimeout(400);
+  const faded = () => page.evaluate(() => window.__viewerDebug.entries().map(entry => Boolean(entry.faded)));
+  const rows = page.locator('#gpv-list .gpv-entry');
+  const before = await faded();
+  try {
+    await rows.nth(0).locator('button:has-text("Emphasise")').click(); await page.waitForTimeout(500);
+    if (JSON.stringify(await faded()) === JSON.stringify(before)) throw new Error('setup: Emphasise faded nothing');
+    await undoOnce();
+    if (JSON.stringify(await faded()) !== JSON.stringify(before)) throw new Error('undo left the emphasis: ' + JSON.stringify(await faded()));
+    if (!/Undid emphasis/.test(await page.locator('#gpv-state').textContent())) throw new Error('status: ' + await page.locator('#gpv-state').textContent());
+  } finally {
+    const fades = rows.locator('input[aria-label^="Fade"]');
+    for (let index = 0; index < await fades.count(); index += 1) if (await fades.nth(index).isChecked() !== before[index]) await fades.nth(index).click();
+  }
+  /* A renamed legend title: the step is taken before the first keystroke, so undo restores the name
+     the legend had before, not the one just typed. */
+  await tab('appearance'); const modeBefore = await page.inputValue('#gpv-color-mode'); await page.selectOption('#gpv-color-mode', 'chain'); await page.waitForTimeout(300);
+  try {
+    await tab('publish'); if (await page.locator('#gpv-labels-wrap').isHidden()) await page.click('#gpv-labels-edit'); await page.waitForTimeout(200);
+    const title = page.locator('#gpv-labels-rows input[data-gpv-label-key="chain|title"]');
+    await title.fill('Renamed chains'); await title.press('Tab'); await page.waitForTimeout(300);
+    const labels = () => page.evaluate(() => JSON.stringify(window.__viewerDebug.sceneSettings().figureLabels || {}));
+    if (!/Renamed chains/.test(await labels())) throw new Error('setup: the title was not renamed: ' + await labels());
+    await undoOnce();
+    if (/Renamed chains/.test(await labels())) throw new Error('undo left the renamed legend title: ' + await labels());
+  } finally {
+    if (await page.locator('#gpv-labels-reset').isEnabled()) { await page.click('#gpv-labels-reset'); await page.waitForTimeout(200); }
+    if (!(await page.locator('#gpv-labels-wrap').isHidden())) await page.click('#gpv-labels-edit');
+    await tab('appearance'); await page.selectOption('#gpv-color-mode', modeBefore); await page.waitForTimeout(300);
+  }
+  /* MSA colouring changes the per-residue data and the colour scheme; undo takes both back. The
+     alignment is the one the a3m step wrote; the reload since has dropped it, so it goes in again. */
+  await page.setInputFiles('#gpv-files', [join(work, 'fixture_unpaired_msa_chains_a_b.a3m')]); await page.waitForTimeout(800);
+  await tab('confidence');
+  if (await page.locator('#gpv-msa-paint').isDisabled()) throw new Error('setup: no alignment to paint with: ' + await page.locator('#gpv-msa-state').textContent());
+  const dataBefore = await page.evaluate(() => Boolean(window.__viewerDebug.residueData()));
+  const schemeBefore = await page.inputValue('#gpv-color-mode');
+  try {
+    await page.click('#gpv-msa-paint'); await page.waitForTimeout(500);
+    if ((await page.inputValue('#gpv-color-mode')) !== 'data') throw new Error('setup: MSA colouring did not switch to data');
+    await undoOnce();
+    const after = await page.evaluate(() => ({ data: Boolean(window.__viewerDebug.residueData()), mode: document.querySelector('#gpv-color-mode').value }));
+    if (after.data !== dataBefore || after.mode !== schemeBefore) throw new Error('undo of MSA colouring left ' + JSON.stringify(after) + ', expected ' + JSON.stringify({ data: dataBefore, mode: schemeBefore }));
+  } finally {
+    if (!dataBefore && await page.evaluate(() => Boolean(window.__viewerDebug.residueData()))) { await tab('annotate'); await page.click('#gpv-data-clear'); }
+    await tab('appearance'); await page.selectOption('#gpv-color-mode', schemeBefore); await page.waitForTimeout(300); await tab('models');
+  }
 });
 await step('identical chains are re-paired by position when a model places the same subunit elsewhere', async () => {
   /* The fixture's two chains carry the same sequence, so every chain pairs equally well and the
@@ -2259,6 +2460,42 @@ await step('Label residues on a highlight row labels its residues, and a hide ro
     await page.fill('#gpv-selection-chain', fields.chain); await page.fill('#gpv-selection-range', fields.range); await page.selectOption('#gpv-selection-action', fields.action);
   }
 });
+await step('an RNA chain is box-selected and labelled per residue through its P atoms, and a calcium ion is not labelled', async () => {
+  /* Before 2.52.0 both looked for atoms named CA: a nucleic acid had none, and a calcium ion's atom
+     is called CA too. */
+  const lines = []; let serial = 1;
+  ['A', 'G', 'C', 'U', 'A', 'G'].forEach((base, index) => {
+    const x = index * 6;
+    lines.push(pdbAtom('ATOM', serial++, 'P', base, 'R', index + 1, [x, 0, 0], 'P'));
+    lines.push(pdbAtom('ATOM', serial++, "C1'", base, 'R', index + 1, [x + 1.5, 2, 1], 'C'));
+    lines.push(pdbAtom('ATOM', serial++, 'N1', base, 'R', index + 1, [x + 2, 3.2, 1.4], 'N'));
+  });
+  lines.push(pdbAtom('HETATM', serial++, 'CA', 'CA', 'R', 101, [15, 8, 0], 'CA'));
+  const file = join(work, 'rna_with_calcium.pdb'); await writeFile(file, lines.join('\n') + '\nEND\n');
+  const fresh = await freshViewer([file]);
+  try {
+    const labels = await fresh.evaluate(() => {
+      const d = window.__viewerDebug; const shown = new Set(d.displayedEntries().map(entry => entry.id)); const texts = [];
+      document.querySelector('#gpv-all-labels').checked = true;
+      d.drawLabels({ addLabel: text => { texts.push(String(text)); return null; }, addLine: () => null }, shown);
+      document.querySelector('#gpv-all-labels').checked = false;
+      return texts;
+    });
+    if (labels.some(text => /^CA101/.test(text))) throw new Error('Label every residue labelled the calcium ion: ' + JSON.stringify(labels));
+    if (labels.filter(text => /^[AGCU]\d · R$/.test(text)).length !== 6) throw new Error('Label every residue wrote ' + JSON.stringify(labels) + ', not one label per nucleotide');
+    await fresh.click('[data-gpv-tab="annotate"]');
+    const box = await fresh.locator('#gpv-stage').boundingBox();
+    await fresh.keyboard.down('Shift');
+    try {
+      await fresh.mouse.move(box.x + 8, box.y + 8); await fresh.mouse.down();
+      await fresh.mouse.move(box.x + box.width / 2, box.y + box.height / 2, { steps: 4 });
+      await fresh.mouse.move(box.x + box.width - 8, box.y + box.height - 8, { steps: 4 }); await fresh.mouse.up();
+    } finally { await fresh.keyboard.up('Shift'); }
+    await fresh.waitForTimeout(500);
+    const picked = await fresh.evaluate(() => window.__viewerDebug.selectionRecords().flatMap(record => record.residues).sort((a, b) => a - b));
+    if (JSON.stringify(picked) !== JSON.stringify([1, 2, 3, 4, 5, 6])) throw new Error('a box over the whole RNA selected ' + JSON.stringify(picked) + ' · ' + await fresh.locator('#gpv-state').textContent());
+  } finally { await fresh.close(); }
+});
 await step('the popover\'s Esc keeps the highlight, and its Undo takes the selection back', async () => {
   const startCount = (await selectionsNow()).length;
   try {
@@ -2615,6 +2852,87 @@ await step('the card lists a residue\'s contacts: the proximity tool\'s residues
     console.log('       ' + target.text + ' · ' + rows.length + ' contacts within ' + truth.cutoff + ' Å · nearest ' + (rows[0] ? rows[0].name + ' ' + rows[0].closest.toFixed(2) + ' Å ' + rows[0].atoms : '—'));
   } finally { await clearSelection(); }
 });
+await step('the card closes when its model or its chain is hidden, instead of following a residue no longer drawn', async () => {
+  await clearSelection();
+  const startTab = await page.evaluate(() => (document.querySelector('[data-gpv-tab][aria-selected="true"]') || {}).dataset.gpvTab || 'annotate');
+  /* Showing a model again refits the view; the later steps want the turned view back exactly. */
+  const view = await page.evaluate(() => window.__viewerDebug.viewer.getView());
+  let target = await canvasResidue();
+  if (!target) throw new Error('no residue on screen to tap');
+  const id = target.key.split('|')[0];
+  const modelSwitch = page.locator('#gpv-list [data-entry-id="' + id + '"] input[aria-label^="Show "]');
+  let chainSwitch = null;
+  try {
+    await openCardAt(target);
+    await tab('models'); await modelSwitch.uncheck(); await page.waitForTimeout(400);
+    if (await editorShown()) throw new Error('the card stayed open over a hidden model');
+    await modelSwitch.check(); await page.waitForTimeout(400);
+    await page.evaluate(view => { const viewer = window.__viewerDebug.viewer; viewer.setView(view); viewer.render(); }, view); await page.waitForTimeout(200);
+    /* The Composition table lists the active model's chains. */
+    target = await canvasResidue();
+    const [tid, chain] = target ? target.key.split('|') : [];
+    chainSwitch = page.locator('#gpv-chain-rows input[aria-label="Show chain ' + chain + '"]');
+    if (target && chain && await page.evaluate(id => (window.__viewerDebug.activeEntry() || {}).id === Number(id), tid) && await chainSwitch.count()) {
+      await tab('annotate'); await openCardAt(target);
+      await tab('models'); await chainSwitch.uncheck(); await page.waitForTimeout(400);
+      if (await editorShown()) throw new Error('the card stayed open over a hidden chain');
+    }
+  } finally {
+    await tab('models');
+    if (!(await modelSwitch.isChecked())) { await modelSwitch.check(); await page.waitForTimeout(300); }
+    if (chainSwitch && (await chainSwitch.count()) && !(await chainSwitch.isChecked())) { await chainSwitch.check(); await page.waitForTimeout(300); }
+    await page.evaluate(view => { const viewer = window.__viewerDebug.viewer; viewer.setView(view); viewer.render(); }, view); await page.waitForTimeout(200);
+    await clearSelection(); await tab(startTab);
+  }
+});
+await step('a new proximity cutoff recounts the open card and its contacts list', async () => {
+  await clearSelection();
+  const cutoffBefore = await page.inputValue('#gpv-near-cutoff');
+  const startTab = await page.evaluate(() => (document.querySelector('[data-gpv-tab][aria-selected="true"]') || {}).dataset.gpvTab || 'annotate');
+  try {
+    const target = await canvasResidue();
+    if (!target) throw new Error('no residue on screen to tap');
+    await openCardAt(target);
+    await page.evaluate(() => document.querySelector('#gpv-residue-card-near').click()); await page.waitForTimeout(250);
+    const wanted = cutoffBefore === '8' ? '6' : '8';
+    await page.evaluate(value => { const field = document.querySelector('#gpv-near-cutoff'); field.value = value; field.dispatchEvent(new Event('change', { bubbles: true })); }, wanted);
+    await page.waitForTimeout(300);
+    if (!(await editorShown())) throw new Error('the card closed on a new cutoff');
+    const facts = (await page.locator('#gpv-residue-card-facts').textContent()) || '';
+    if (!facts.includes('within ' + Number(wanted) + ' Å')) throw new Error('the card still reads "' + facts + '" after the cutoff became ' + wanted + ' Å');
+    const count = Number((facts.match(/(\d+) residues? within/) || [])[1]);
+    const rows = await page.locator('#gpv-residue-contacts-rows .gpv-residue-contact').count();
+    if (!(await contactsShown()) || rows !== count) throw new Error('the contacts list has ' + rows + ' rows for a count of ' + count);
+  } finally {
+    await page.evaluate(value => { const field = document.querySelector('#gpv-near-cutoff'); field.value = value; field.dispatchEvent(new Event('change', { bubbles: true })); }, cutoffBefore);
+    await clearSelection(); await tab(startTab);
+  }
+});
+await step('on a phone the card with its contacts open fits inside the 380 px view and scrolls', async () => {
+  await clearSelection();
+  const startTab = await page.evaluate(() => (document.querySelector('[data-gpv-tab][aria-selected="true"]') || {}).dataset.gpvTab || 'annotate');
+  /* Go to zooms onto the residue; the later steps want the turned view back exactly. */
+  const view = await page.evaluate(() => window.__viewerDebug.viewer.getView());
+  try {
+    await page.setViewportSize({ width: 390, height: 844 }); await page.waitForTimeout(600);
+    await tab('annotate'); await page.fill('#gpv-goto', 'A:5'); await page.click('#gpv-goto-run'); await page.waitForTimeout(400);
+    await focusStage(); await page.keyboard.press('l'); await page.waitForTimeout(400);
+    if (!(await editorShown())) throw new Error('L did not open the card');
+    await page.click('#gpv-label-editor-contacts'); await page.waitForTimeout(400);
+    if (!(await contactsShown())) throw new Error('the contacts list did not open');
+    const fit = await page.evaluate(() => {
+      const host = document.querySelector('#gpv-label-editor'); const stage = document.querySelector('#gpv-stage');
+      return { top: host.offsetTop, bottom: host.offsetTop + host.offsetHeight, stage: stage.clientHeight, scrolls: host.scrollHeight > host.clientHeight + 1 };
+    });
+    if (fit.top < 0 || fit.bottom > fit.stage) throw new Error('the card runs from ' + fit.top + ' to ' + fit.bottom + ' px in a ' + fit.stage + ' px view');
+    console.log('       card ' + (fit.bottom - fit.top) + ' px in a ' + fit.stage + ' px view' + (fit.scrolls ? ', scrolling' : ''));
+  } finally {
+    await clearSelection();
+    await page.setViewportSize({ width: 1280, height: 1000 }); await page.waitForTimeout(600);
+    await page.evaluate(view => { const viewer = window.__viewerDebug.viewer; viewer.setView(view); viewer.render(); }, view); await page.waitForTimeout(200);
+    await tab(startTab);
+  }
+});
 await step('a click on a contact measures it — the two Cα atoms by default, the closest atoms when chosen — one undo step each, and the list stays open', async () => {
   await clearSelection();
   const startCount = (await measuresNow()).length;
@@ -2789,7 +3107,8 @@ await step('colour by distance from the selected residue: closest heavy-atom ban
       near: near ? { key: near[0], distance: near[1], colour: fn(alpha(near[0])), strip: strip(near[0]) } : null,
       far: far ? { key: far[0], distance: far[1], colour: fn(alpha(far[0])), strip: strip(far[0]) } : null,
       /* `key` carries the entry id too; alpha wants chain|resi. */
-      self: fn(alpha(chain + '|' + resi)), accent: d.themeColor('--primary', '#339cff')
+      /* The residue itself is orange in either theme (2.52.0): the theme accent was close to the blue bands. */
+      self: fn(alpha(chain + '|' + resi)), accent: '#f97316'
     };
   }, key);
   const close = (a, b) => { const rgb = hex => [1, 3, 5].map(i => parseInt(String(hex).slice(i, i + 2), 16)); const x = rgb(a); const y = rgb(b); return x.every((v, i) => Math.abs(v - y[i]) <= 3); };
@@ -2802,9 +3121,31 @@ await step('colour by distance from the selected residue: closest heavy-atom ban
     const seen = await coloursFor(target.key);
     if (!seen.near || !seen.far) throw new Error('the fixture has no residue within 4 Å and beyond 20 Å of ' + target.text);
     if (seen.near.colour !== '#1e3a8a') throw new Error(seen.near.key + ' at ' + seen.near.distance.toFixed(2) + ' Å is ' + seen.near.colour + ', not #1e3a8a');
-    if (seen.far.colour !== '#e5e7eb') throw new Error(seen.far.key + ' at ' + seen.far.distance.toFixed(2) + ' Å is ' + seen.far.colour + ', not #e5e7eb');
-    if (seen.self !== seen.accent) throw new Error('the selected residue is ' + seen.self + ', not the accent ' + seen.accent);
-    if (!seen.near.strip || !close(seen.near.strip, '#1e3a8a') || !seen.far.strip || !close(seen.far.strip, '#e5e7eb')) throw new Error('the strip shows ' + seen.near.strip + ' and ' + seen.far.strip);
+    if (seen.far.colour !== '#d1d5db') throw new Error(seen.far.key + ' at ' + seen.far.distance.toFixed(2) + ' Å is ' + seen.far.colour + ', not #d1d5db');
+    if (seen.self !== seen.accent) throw new Error('the selected residue is ' + seen.self + ', not ' + seen.accent);
+    if (!seen.near.strip || !close(seen.near.strip, '#1e3a8a') || !seen.far.strip || !close(seen.far.strip, '#d1d5db')) throw new Error('the strip shows ' + seen.near.strip + ' and ' + seen.far.strip);
+    /* The same colours in the dark interface theme: a figure must not depend on the theme. */
+    const themeBefore = await page.evaluate(() => document.querySelector('#gpv-theme').dataset.mode || 'system');
+    try {
+      await page.evaluate(() => { for (let i = 0; i < 3 && document.querySelector('#gpv-theme').dataset.mode !== 'dark'; i += 1) document.querySelector('#gpv-theme').click(); });
+      await page.waitForTimeout(300);
+      const dark = await coloursFor(target.key);
+      if (dark.self !== '#f97316' || dark.far.colour !== '#d1d5db') throw new Error('in the dark theme the residue is ' + dark.self + ' and the far band ' + dark.far.colour);
+    } finally { await page.evaluate(mode => { for (let i = 0; i < 3 && (document.querySelector('#gpv-theme').dataset.mode || 'system') !== mode; i += 1) document.querySelector('#gpv-theme').click(); }, themeBefore); await page.waitForTimeout(300); }
+    /* Recording a spin video hides the marker but keeps the residue selected, so the video is coloured
+       by distance too (before 2.52.0 it deselected the residue and every frame was grey). */
+    if (await page.evaluate(() => typeof MediaRecorder !== 'undefined' && Boolean(document.querySelector('#gpv-stage canvas').captureStream))) {
+      await tab('publish');
+      const video = page.waitForEvent('download', { timeout: 30000 });
+      await page.click('#gpv-video'); await page.waitForTimeout(300);
+      if (!(await selectedNow())) throw new Error('recording a video deselected the residue');
+      if (await markerNow()) throw new Error('the marker is drawn while the video records');
+      if ((await coloursFor(target.key)).self !== '#f97316') throw new Error('the video records the model without distance colouring');
+      await video; await page.waitForTimeout(300);
+      if (!(await selectedNow())) throw new Error('the residue was deselected after the video');
+      if (!(await markerNow())) throw new Error('the marker did not come back after the video');
+      await tab('appearance');
+    }
     const legend = (await page.locator('#gpv-plddt-legend').textContent()) || '';
     if (!legend.includes('Distance from ' + target.text) || !legend.includes('≤4 Å') || !legend.includes('>20 Å')) throw new Error('legend: ' + legend);
     const title = (await page.locator('#gpv-sequence-title').textContent()) || '';
@@ -3282,12 +3623,23 @@ await step('Copy measurements writes one TSV row per measurement with both atoms
     }
     await page.click('#gpv-measurements-copy'); await page.waitForTimeout(300);
     const said = await statusNow();
-    if (!/measurements? copied as tab-separated text/.test(said) && (await page.inputValue('#gpv-data-text')) !== tsv) throw new Error('Copy measurements neither copied nor filled the paste box: ' + said);
+    if (!/measurements? copied as tab-separated text/.test(said) && (await page.inputValue('#gpv-copy-fallback-text')) !== tsv) throw new Error('Copy measurements neither copied nor filled the copy box: ' + said);
+    /* With the clipboard refused, the text goes to a read-only box of its own and the Per-residue data
+       paste box keeps what the user put there (before 2.52.0 it was overwritten). */
+    await page.fill('#gpv-data-text', 'A,1,0.5');
+    await page.evaluate(() => { if (navigator.clipboard) navigator.clipboard.writeText = () => Promise.reject(new Error('refused by the test')); });
+    try {
+      await page.click('#gpv-measurements-copy'); await page.waitForTimeout(300);
+      if ((await page.inputValue('#gpv-data-text')) !== 'A,1,0.5') throw new Error('the clipboard fallback overwrote the Per-residue data paste box');
+      if ((await page.inputValue('#gpv-copy-fallback-text')) !== tsv || await page.locator('#gpv-copy-fallback').isHidden()) throw new Error('the refused copy is not in the copy box');
+      await page.click('#gpv-copy-fallback-close');
+      if (!(await page.locator('#gpv-copy-fallback').isHidden())) throw new Error('Done did not close the copy box');
+    } finally { await page.evaluate(() => { if (navigator.clipboard) delete navigator.clipboard.writeText; }); }
     const csv = await downloadText('#gpv-measurements-csv');
     const rows = csv.lines.filter(line => line.length).map(csvCells);
     if (csv.name !== 'measurements.csv') throw new Error('the CSV is named ' + csv.name);
     if (rows.length !== lines.length || rows.some((row, index) => row.join('\t') !== lines[index].join('\t'))) throw new Error('the CSV and the copied rows differ:\n' + rows.map(row => row.join('\t')).join('\n') + '\n---\n' + tsv);
-    console.log('       ' + records.length + ' measurements · ' + (said.includes('copied') ? 'copied' : 'paste box') + ' · CSV matches cell for cell');
+    console.log('       ' + records.length + ' measurements · ' + (said.includes('copied') ? 'copied' : 'copy box') + ' · CSV matches cell for cell');
   } finally {
     await letGo(); await trimMeasurements(startCount); await clearSelection();
     await page.fill('#gpv-data-text', startPaste);
@@ -3409,6 +3761,13 @@ await step('one position is compared across a wild-type and a mutant model: side
     if (effectRows !== effect.rows.length + 1) throw new Error('the effect table has ' + effectRows + ' body rows, not ' + (effect.rows.length + 1) + ' (rows plus the summary)');
     const effectState = (await page.locator('#gpv-position-state').textContent()) || '';
     if (!/site moved [\d.]+ Å/.test(effectState)) throw new Error('the readout does not state what moved: ' + effectState);
+    /* Undo takes this press back with its table and buttons (before 2.52.0 they stayed under a state
+       line saying nothing was compared), and redo brings them back. */
+    await undoOnce();
+    if (await page.evaluate(() => window.__viewerDebug.positionEffect())) throw new Error('undo left the neighbourhood of the press it took back');
+    if (await page.locator('#gpv-position-highlight').isEnabled()) throw new Error('Highlight neighbourhood stayed enabled after undo');
+    await page.evaluate(() => document.querySelector('#gpv-stage').focus({ preventScroll: true })); await page.keyboard.press('Control+Shift+z'); await page.waitForTimeout(400);
+    if (!(await page.evaluate(() => window.__viewerDebug.positionEffect()))) throw new Error('redo did not bring the neighbourhood back');
     const chains = new Set(effect.rows.filter(row => !row.isSite).map(row => row.chain)).size;
     const selectionsBefore = await page.locator('#gpv-selection-list .gpv-entry').count();
     await page.click('#gpv-position-highlight'); await page.waitForTimeout(700);
@@ -3471,6 +3830,12 @@ await step('one position is compared across a wild-type and a mutant model: side
     const builderLetters = await page.locator('#gpv-builder-rows .gpv-builder-letter').allTextContents();
     const expectedLetters = [...Array(viewsBefore).fill('—'), 'A', 'B', 'C'];
     if (builderLetters.join('') !== expectedLetters.join('')) throw new Error('builder letters: ' + builderLetters.join(',') + ' not ' + expectedLetters.join(','));
+    /* The saved-views list and the captions file letter the views as the figure prints them (before
+       2.52.0 they counted every view, so the list said D for the panel the figure printed as A). */
+    const listLetters = (await page.locator('#gpv-saved-views .gpv-entry .gpv-entry-name').allTextContents()).map(text => text.split(' · ')[0]);
+    if (listLetters.join('') !== expectedLetters.join('')) throw new Error('saved-views list letters: ' + listLetters.join(',') + ' not ' + expectedLetters.join(','));
+    const captions = (await downloadText('#gpv-captions')).lines.filter(line => /^[A-Z—]\. /.test(line));
+    if (captions.map(line => line.slice(0, 2)).join(' ') !== 'A. B. C.' || !/^A\. Overview/.test(captions[0])) throw new Error('captions file: ' + JSON.stringify(captions));
     if (!(await page.locator('[data-gpv-panel="publish"]').isVisible())) throw new Error('Make site figure did not open the Publish tab');
     if ((await page.inputValue('#gpv-panel-columns')) !== '3') throw new Error('panel columns: ' + (await page.inputValue('#gpv-panel-columns')) + ', not 3 for three panels');
     const estimate = (await page.locator('#gpv-export-estimate').textContent()) || '';
@@ -3790,6 +4155,79 @@ await step('the sequence strip shows both chains and selects a residue on click'
   if (!/^\d+-\d+$/.test(range)) throw new Error('range not filled: ' + range);
   if ((await page.inputValue('#gpv-selection-chain')) !== 'B') throw new Error('chain field not filled');
   console.log('       range ' + range + ' of chain B');
+});
+await step('insertion codes: 100, 100A and 100B are three residues in the strip, Go to, a label, the card and a scene', async () => {
+  /* A Kabat-numbered stretch of a heavy chain H beside a light chain L. Before 2.52.0 the strip
+     merged 100, 100A and 100B into one cell, a label on 100A sat on 100's Cα and shared its key, the
+     card for 100A read 100's pLDDT, and Go to read "100A" as chain A, residue 100. */
+  const numbering = [[98, ' ', 90], [99, ' ', 90], [100, ' ', 92], [100, 'A', 41], [100, 'B', 62], [101, ' ', 90]];
+  const lines = []; let serial = 1;
+  numbering.forEach(([resi, icode, b], index) => {
+    const x = index * 3.8;
+    lines.push(pdbAtom('ATOM', serial++, 'N', 'GLY', 'H', resi, [x - 1.2, 0.8, 0], 'N', icode, b));
+    lines.push(pdbAtom('ATOM', serial++, 'CA', 'GLY', 'H', resi, [x, 0, 0], 'C', icode, b));
+    lines.push(pdbAtom('ATOM', serial++, 'C', 'GLY', 'H', resi, [x + 1.2, 0.8, 0], 'C', icode, b));
+  });
+  [1, 2, 3, 4].forEach((resi, index) => {
+    const x = index * 3.8;
+    lines.push(pdbAtom('ATOM', serial++, 'N', 'ALA', 'L', resi, [x - 1.2, 9.8, 0], 'N'));
+    lines.push(pdbAtom('ATOM', serial++, 'CA', 'ALA', 'L', resi, [x, 9, 0], 'C'));
+    lines.push(pdbAtom('ATOM', serial++, 'C', 'ALA', 'L', resi, [x + 1.2, 9.8, 0], 'C'));
+  });
+  const file = join(work, 'kabat_insertions.pdb'); await writeFile(file, lines.join('\n') + '\nEND\n');
+  const fresh = await freshViewer([file]);
+  try {
+    const goTo = async where => {
+      await fresh.click('[data-gpv-tab="annotate"]'); await fresh.fill('#gpv-goto', where); await fresh.press('#gpv-goto', 'Enter'); await fresh.waitForTimeout(400);
+      return fresh.evaluate(() => window.__viewerDebug.selectedResidue());
+    };
+    let picked = await goTo('100A');
+    if (!picked || picked.chain !== 'H' || picked.resi !== 100 || picked.icode !== 'A') throw new Error('Go to 100A selected ' + JSON.stringify(picked && { chain: picked.chain, resi: picked.resi, icode: picked.icode }));
+    picked = await goTo('H:100B');
+    if (!picked || picked.icode !== 'B') throw new Error('Go to H:100B selected ' + JSON.stringify(picked));
+    picked = await goTo('100');
+    if (!picked || picked.icode !== '') throw new Error('Go to 100 selected the insertion ' + picked.icode);
+    picked = await goTo('L 3');
+    if (!picked || picked.chain !== 'L' || picked.resi !== 3) throw new Error('Go to "L 3" selected ' + JSON.stringify(picked));
+    /* The strip: one cell per residue, insertions included, in order. */
+    const hover = await fresh.evaluate(() => {
+      const canvas = document.querySelector('#gpv-sequence-rows canvas[data-chain="H"]'); if (!canvas) return null;
+      const box = canvas.getBoundingClientRect(); const texts = [];
+      for (let index = 0; index < 6; index += 1) {
+        canvas.dispatchEvent(new PointerEvent('pointermove', { clientX: box.left + (index + 0.5) * box.width / 6, clientY: box.top + 10, bubbles: true }));
+        texts.push(document.querySelector('#gpv-sequence-hint').textContent.split(' · ')[0]);
+      }
+      return texts;
+    });
+    if (!hover || hover.join(',') !== 'GLY98,GLY99,GLY100,GLY100A,GLY100B,GLY101') throw new Error('the strip reads ' + JSON.stringify(hover));
+    /* A label on 100A: its own key, on its own Cα; the card names it and reads its own pLDDT. */
+    await goTo('100A');
+    await fresh.click('#gpv-add-label'); await fresh.waitForTimeout(300);
+    const label = await fresh.evaluate(() => {
+      const d = window.__viewerDebug; const record = d.labelRecords()[0]; const entry = d.entries()[0];
+      const ca = entry.atoms.find(atom => atom.atom === 'CA' && atom.resi === 100 && String(atom.icode).trim() === 'A');
+      const anchor = d.labelPosition(record);
+      return { key: record.key, text: record.text, icode: record.icode, off: Math.hypot(anchor.x - ca.x, anchor.y - ca.y, anchor.z - ca.z) };
+    });
+    if (!/\|H\|100\|A$/.test(label.key) || label.icode !== 'A' || label.text !== 'GLY100A · H' || label.off > 1e-6) throw new Error('the label on 100A: ' + JSON.stringify(label));
+    await fresh.evaluate(() => document.querySelector('#gpv-stage').focus({ preventScroll: true })); await fresh.keyboard.press('l'); await fresh.waitForTimeout(400);
+    const head = (await fresh.locator('#gpv-label-editor .gpv-label-editor-residue').textContent()) || '';
+    const facts = (await fresh.locator('#gpv-residue-card-facts').textContent()) || '';
+    if (!head.startsWith('GLY100A · chain H')) throw new Error('the card is headed "' + head + '"');
+    if (!/^pLDDT 41\.0/.test(facts)) throw new Error('the card for 100A reads "' + facts + '", not its own pLDDT 41.0');
+    await fresh.keyboard.press('Escape'); await fresh.waitForTimeout(200);
+    /* A scene writes the insertion code and reads it back onto the same residue. */
+    await fresh.click('[data-gpv-tab="publish"]');
+    const download = fresh.waitForEvent('download', { timeout: 20000 });
+    await fresh.click('#gpv-save-scene');
+    const sceneFile = join(work, 'scene-insertions.json'); await (await download).saveAs(sceneFile);
+    const scene = JSON.parse(await readFile(sceneFile, 'utf8'));
+    if (!scene.labels || scene.labels[0].icode !== 'A') throw new Error('the scene label carries ' + JSON.stringify(scene.labels && scene.labels[0]));
+    await fresh.click('[data-gpv-tab="annotate"]'); await fresh.click('#gpv-clear-labels'); await fresh.waitForTimeout(200);
+    await fresh.setInputFiles('#gpv-load-scene', sceneFile); await fresh.waitForTimeout(1500);
+    const restored = await fresh.evaluate(() => window.__viewerDebug.labelRecords().map(record => ({ key: record.key, icode: record.icode })));
+    if (restored.length !== 1 || !/\|100\|A$/.test(restored[0].key)) throw new Error('the scene restored ' + JSON.stringify(restored));
+  } finally { await fresh.close(); }
 });
 await step('go to residue selects and zooms by chain and number', async () => {
   await page.fill('#gpv-goto', 'B:12'); await page.click('#gpv-goto-run'); await page.waitForTimeout(500);
@@ -4389,6 +4827,49 @@ await step('full screen toggles on and off', async () => {
   await page.keyboard.press('Escape'); await page.waitForTimeout(800);
   if (await page.locator('#gpv-view-grid.is-fullscreen').count()) throw new Error('did not leave');
 });
+await step('Esc in the help dialog or a rename field does only that, leaving full screen and drawing on', async () => {
+  /* Before 2.52.0 the same Esc also fell through to the page's shortcut: closing help left full
+     screen, and cancelling a rename stopped drawing. */
+  try {
+    await page.click('#gpv-fullscreen'); await page.waitForTimeout(600);
+    await page.keyboard.press('?'); await page.waitForTimeout(400);
+    if (!(await page.locator('#gpv-help').isVisible())) throw new Error('help did not open in full screen');
+    await page.keyboard.press('Escape'); await page.waitForTimeout(500);
+    if (await page.locator('#gpv-help').isVisible()) throw new Error('Esc did not close help');
+    if (!(await page.locator('#gpv-view-grid.is-fullscreen').count())) throw new Error('closing help also left full screen');
+  } finally {
+    /* In full screen the view covers the header's button; press it through the DOM. */
+    if (await page.locator('#gpv-view-grid.is-fullscreen').count()) { await page.evaluate(() => document.querySelector('#gpv-fullscreen').click()); await page.waitForTimeout(600); }
+  }
+  await tab('annotate'); await page.click('#gpv-annotate'); await page.waitForTimeout(200);
+  try {
+    await tab('models'); await page.locator('#gpv-list .gpv-entry').first().locator('button:has-text("Rename")').click(); await page.waitForTimeout(200);
+    await page.keyboard.press('Escape'); await page.waitForTimeout(300);
+    if (await page.locator('#gpv-list .gpv-entry input[type="text"]').count()) throw new Error('Esc did not cancel the rename');
+    if (!(await page.locator('#gpv-stage.is-drawing').count())) throw new Error('cancelling the rename also stopped drawing');
+  } finally { await tab('annotate'); if (await page.locator('#gpv-stage.is-drawing').count()) await page.click('#gpv-annotate'); await page.waitForTimeout(200); await tab('models'); }
+});
+await step('the shortcuts still work after a click on a switch, and a slider keeps its own arrows', async () => {
+  /* Every <input> used to count as typing, so after a click on Depth cueing "?" did nothing. */
+  await tab('appearance');
+  const fog = await page.isChecked('#gpv-fog');
+  try {
+    await page.click('#gpv-fog'); await page.waitForTimeout(200);
+    await page.keyboard.press('?'); await page.waitForTimeout(400);
+    if (!(await page.locator('#gpv-help').isVisible())) throw new Error('"?" after a click on a switch did not open help');
+    await page.keyboard.press('Escape'); await page.waitForTimeout(400);
+    await tab('models');
+    const before = await page.evaluate(() => ({ active: (window.__viewerDebug.activeEntry() || {}).id, value: document.querySelector('#gpv-cycle-speed').value }));
+    await page.focus('#gpv-cycle-speed'); await page.keyboard.press('ArrowRight'); await page.waitForTimeout(300);
+    const after = await page.evaluate(() => ({ active: (window.__viewerDebug.activeEntry() || {}).id, value: document.querySelector('#gpv-cycle-speed').value }));
+    if (after.active !== before.active) throw new Error('→ on the interval slider also stepped the model');
+    if (after.value === before.value) throw new Error('→ did not move the slider');
+    await page.keyboard.press('ArrowLeft'); await page.waitForTimeout(200);
+  } finally {
+    if (await page.locator('#gpv-help').isVisible()) await page.keyboard.press('Escape');
+    await tab('appearance'); if ((await page.isChecked('#gpv-fog')) !== fog) await page.click('#gpv-fog'); await page.waitForTimeout(200); await tab('models');
+  }
+});
 await step('cycling keeps the button icon', async () => {
   await tab('models');
   await page.click('#gpv-cycle'); await page.waitForTimeout(1500);
@@ -4699,6 +5180,32 @@ await step('reloading offers to restore the autosaved session', async () => {
   if (restored !== models) throw new Error('restored ' + restored + ' of ' + models + ' models');
   if ((await page.locator('#gpv-label-list .gpv-entry').count()) !== labels) throw new Error('labels not restored');
   console.log('       ' + text.trim().slice(0, 60));
+});
+await step('Not now keeps the autosaved session for the next visit, and Forget it discards it', async () => {
+  /* Before 2.52.0 the empty page saved itself 1.5 s after loading and deleted the stored session the
+     banner was offering, so Not now behaved as Forget it. */
+  const fresh = await freshViewer([models[0]]);
+  try {
+    await fresh.waitForTimeout(2500);
+    await fresh.reload(); await fresh.waitForTimeout(2500);
+    if (await fresh.locator('#gpv-session-banner').isHidden()) throw new Error('no restore banner after the first reload');
+    await fresh.click('#gpv-session-no'); await fresh.waitForTimeout(2500);
+    await fresh.reload(); await fresh.waitForTimeout(2500);
+    if (await fresh.locator('#gpv-session-banner').isHidden()) throw new Error('Not now threw the session away: no banner on the next visit');
+    await fresh.click('#gpv-session-forget'); await fresh.waitForTimeout(800);
+    await fresh.reload(); await fresh.waitForTimeout(2500);
+    if (!(await fresh.locator('#gpv-session-banner').isHidden())) throw new Error('Forget it kept the session');
+  } finally { await fresh.close(); }
+});
+await step('loading other work takes the restore banner down, so Restore cannot overwrite it', async () => {
+  const fresh = await freshViewer([models[0]]);
+  try {
+    await fresh.waitForTimeout(2500);
+    await fresh.reload(); await fresh.waitForTimeout(2500);
+    if (await fresh.locator('#gpv-session-banner').isHidden()) throw new Error('setup: no restore banner');
+    await fresh.setInputFiles('#gpv-files', [models[1]]); await fresh.waitForTimeout(2000);
+    if (!(await fresh.locator('#gpv-session-banner').isHidden())) throw new Error('the banner stayed up over the model just loaded');
+  } finally { await fresh.close(); }
 });
 await step('a session file saves everything and reopens it, by the picker and by drop', async () => {
   const models = await page.locator('#gpv-list [data-entry-id]').count();
@@ -5361,12 +5868,41 @@ function cifFromPdb(text) {
 const cifText = cifFromPdb(await readFile(models[0], 'utf8'));
 const serveFetch = target => target.route('https://files.rcsb.org/**', route => route.fulfill({ status: 200, contentType: 'chemical/x-mmcif', body: cifText }));
 await serveFetch(page);
-await step('a model fetched by ID enables the share link', async () => {
+await step('a model fetched by ID enables the share link, and joins an overlay without switching it to one at a time', async () => {
   const before = await page.locator('#gpv-list [data-entry-id]').count();
-  await page.fill('#gpv-fetch-id', '1tst'); await page.click('#gpv-fetch'); await page.waitForTimeout(2500);
-  const after = await page.locator('#gpv-list [data-entry-id]').count();
-  if (after !== before + 1) throw new Error('model count ' + before + ' → ' + after + ' · ' + (await page.locator('#gpv-state').textContent()));
-  if (await page.locator('#gpv-share-link').isDisabled()) throw new Error('share link still disabled');
+  const modeBefore = await page.inputValue('#gpv-view-mode');
+  try {
+    await tab('models'); await page.selectOption('#gpv-view-mode', 'overlay'); await page.waitForTimeout(300);
+    await page.fill('#gpv-fetch-id', '1tst'); await page.click('#gpv-fetch'); await page.waitForTimeout(2500);
+    const after = await page.locator('#gpv-list [data-entry-id]').count();
+    if (after !== before + 1) throw new Error('model count ' + before + ' → ' + after + ' · ' + (await page.locator('#gpv-state').textContent()));
+    if (await page.locator('#gpv-share-link').isDisabled()) throw new Error('share link still disabled');
+    const mode = await page.inputValue('#gpv-view-mode');
+    if (mode !== 'overlay') throw new Error('the fetch switched View mode to ' + mode);
+  } finally { await page.selectOption('#gpv-view-mode', modeBefore); await page.waitForTimeout(300); }
+});
+await step('an .a3m dropped on its own colours a fetched model, and the import says it was added', async () => {
+  /* Before 2.52.0 a loose alignment only matched models opened as individual files: with a fetched
+     model Colour by MSA stayed disabled and the import said "No supported structures found". */
+  const query = 'A'.repeat(30); const lines = ['>query', query];
+  for (let k = 0; k < 4; k += 1) { const letters = query.split(''); letters[4] = 'CDEF'[k]; lines.push('>seq' + k, letters.join('')); }
+  const a3m = join(work, 'loose_alignment.a3m'); await writeFile(a3m, lines.join('\n') + '\n');
+  const schemeBefore = await page.inputValue('#gpv-color-mode');
+  try {
+    const active = await page.evaluate(() => (window.__viewerDebug.activeEntry() || {}).collection);
+    if (active !== 'RCSB PDB') throw new Error('setup: the active model is from ' + active + ', not the fetched entry');
+    await page.setInputFiles('#gpv-files', [a3m]); await page.waitForTimeout(800);
+    const status = (await page.locator('#gpv-state').textContent()) || '';
+    if (!/Alignment added: loose_alignment\.a3m/.test(status)) throw new Error('import status: ' + status);
+    await tab('confidence');
+    if (await page.locator('#gpv-msa-paint').isDisabled()) throw new Error('Colour by MSA stayed disabled: ' + await page.locator('#gpv-msa-state').textContent());
+    await page.click('#gpv-msa-paint'); await page.waitForTimeout(500);
+    const count = await page.evaluate(() => (window.__viewerDebug.residueData() || {}).count || 0);
+    if (count < 30) throw new Error('MSA colouring painted ' + count + ' residues of the fetched model');
+  } finally {
+    await tab('annotate'); await page.click('#gpv-data-clear'); await page.waitForTimeout(200);
+    await tab('appearance'); await page.selectOption('#gpv-color-mode', schemeBefore); await page.waitForTimeout(300);
+  }
 });
 await step('a structure fetched from the PDB is not painted on the pLDDT scale', async () => {
   /* An RCSB entry carries crystallographic B-factors, not confidence, so it has no scores. The

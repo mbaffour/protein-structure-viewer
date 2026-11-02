@@ -82,7 +82,8 @@
     button.disabled = true;
     try {
       const { entry, source, note } = await fetchIdentifier(field.value);
-      selectModel(entry);
+      selectModel(entry, true, true);
+      dismissSessionBanner();
       field.value = '';
       announce('Loaded ' + entry.name + ' from ' + source.collection + note);
     } catch (error) {

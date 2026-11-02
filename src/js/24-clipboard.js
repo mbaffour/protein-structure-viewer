@@ -1,5 +1,19 @@
   /* ---------- Clipboard ---------- */
 
+  /* Text the clipboard refuses goes into a read-only box of its own under the view, selected for
+     Ctrl/⌘+C — never into a field the user types in, whose contents it would silently replace. */
+  async function copyTextOrShow(text, copied, what) {
+    try { await navigator.clipboard.writeText(text); announce(copied); return true; }
+    catch (error) {
+      const field = root.querySelector('#gpv-copy-fallback-text');
+      field.value = text; root.querySelector('#gpv-copy-fallback').hidden = false;
+      field.focus({ preventScroll: true }); field.select();
+      announce('Clipboard unavailable — the ' + what + ' are selected in the box under the view; press Ctrl/⌘+C');
+      return false;
+    }
+  }
+  root.querySelector('#gpv-copy-fallback-close').addEventListener('click', () => { root.querySelector('#gpv-copy-fallback').hidden = true; root.querySelector('#gpv-copy-fallback-text').value = ''; });
+
   async function copyPublicationPng() {
     if (!navigator.clipboard || typeof ClipboardItem === 'undefined' || typeof navigator.clipboard.write !== 'function') {
       announce('This browser cannot put images on the clipboard — download the PNG instead', 'error');

@@ -8,7 +8,9 @@
   let sequenceFrame = 0;
   let sequenceMarks = [];
 
-  /* One representative atom per residue (Cα, else P, else the first seen), grouped by chain. */
+  /* One representative atom per residue (Cα, else P, else the first seen), grouped by chain. A
+     residue is its number and its insertion code, so 100, 100A and 100B are three cells, in that
+     order. */
   function residueRows(entry) {
     if (entry.sequenceCache && entry.sequenceCache.atoms === entry.atoms) return entry.sequenceCache.rows;
     const chains = new Map();
@@ -17,11 +19,13 @@
       const chain = atom.chain || '';
       if (!chains.has(chain)) chains.set(chain, new Map());
       const residues = chains.get(chain);
-      const current = residues.get(atom.resi);
-      if (!current || atom.atom === 'CA' || (atom.atom === 'P' && current.atom !== 'CA')) residues.set(atom.resi, atom);
+      const id = atom.resi + '|' + insertionCodeOf(atom);
+      const current = residues.get(id);
+      if (!current || atom.atom === 'CA' || (atom.atom === 'P' && current.atom !== 'CA')) residues.set(id, atom);
     });
+    const byNumber = (a, b) => a.resi - b.resi || (insertionCodeOf(a) < insertionCodeOf(b) ? -1 : insertionCodeOf(a) > insertionCodeOf(b) ? 1 : 0);
     const rows = [...chains.entries()]
-      .map(([chain, residues]) => ({ chain, residues: [...residues.values()].sort((a, b) => a.resi - b.resi) }))
+      .map(([chain, residues]) => ({ chain, residues: [...residues.values()].sort(byNumber) }))
       .filter(row => row.residues.length > 1)
       .sort((a, b) => compareChains(a.chain, b.chain));
     entry.sequenceCache = { atoms: entry.atoms, rows };
@@ -59,7 +63,7 @@
 
   function describeResidue(entry, atom) {
     const confidence = entry.scores.length && Number.isFinite(Number(atom.b)) ? ' · pLDDT ' + Number(atom.b).toFixed(1) : '';
-    return (atom.resn || 'RES') + atom.resi + (atom.chain ? ' · chain ' + atom.chain : '') + confidence;
+    return (atom.resn || 'RES') + residueNumber(atom) + (atom.chain ? ' · chain ' + atom.chain : '') + confidence;
   }
 
   function drawSequenceRow(canvas, entry, row) {
@@ -69,7 +73,7 @@
     context.setTransform(ratio, 0, 0, ratio, 0, 0); context.clearRect(0, 0, width, height);
     const count = row.residues.length; const cell = width / count; const gap = cell > 3 ? 1 : 0;
     const ink = themeColor('--card-foreground', '#111827');
-    const labelled = new Set(labelRecords.filter(label => label.entryId === entry.id && (label.chain || '') === row.chain).map(label => label.resi));
+    const labelled = new Set(labelRecords.filter(label => label.entryId === entry.id && (label.chain || '') === row.chain).map(label => label.resi + '|' + insertionCodeOf(label)));
     const highlighted = new Map();
     selectionRecords.filter(record => record.entryId === entry.id && record.action === 'highlight' && (!record.chain || record.chain === row.chain))
       .forEach(record => record.residues.forEach(resi => highlighted.set(resi, record.color)));
@@ -90,7 +94,7 @@
         context.fillText(residueLetter(atom.resn), x + cell / 2, 10.5);
         context.textAlign = 'start';
       }
-      if (labelled.has(atom.resi)) {
+      if (labelled.has(atom.resi + '|' + insertionCodeOf(atom))) {
         context.fillStyle = ink; context.beginPath();
         context.moveTo(x + cell / 2, 3.5); context.lineTo(x + cell / 2 - 3.5, 0); context.lineTo(x + cell / 2 + 3.5, 0); context.fill();
       }
@@ -115,7 +119,7 @@
       if (index >= 0) { context.strokeStyle = '#d946ef'; context.lineWidth = 2; context.strokeRect(index * cell, 2, Math.max(3, cell), 16); }
     });
     if (sequenceHover && sequenceHover.entryId === entry.id && sequenceHover.chain === row.chain) {
-      const index = row.residues.findIndex(atom => atom.resi === sequenceHover.resi);
+      const index = row.residues.findIndex(atom => atom.resi === sequenceHover.resi && insertionCodeOf(atom) === (sequenceHover.icode || ''));
       if (index >= 0) { context.strokeStyle = ink; context.lineWidth = 2; context.strokeRect(index * cell, 2, Math.max(3, cell), 16); }
     }
   }
@@ -157,7 +161,7 @@
     canvas.addEventListener('pointermove', event => {
       const found = sequenceRowFor(canvas); if (!found) return;
       const index = sequenceIndexAt(canvas, found.row, event); const atom = found.row.residues[index];
-      sequenceHover = { entryId: found.entry.id, chain: found.row.chain, resi: atom.resi };
+      sequenceHover = { entryId: found.entry.id, chain: found.row.chain, resi: atom.resi, icode: insertionCodeOf(atom) };
       if (sequenceDrag && sequenceDrag.chain === found.row.chain) sequenceRange = { ...sequenceDrag, to: index };
       root.querySelector('#gpv-sequence-hint').textContent = describeResidue(found.entry, atom) + (sequenceDrag ? ' · release to pick the range' : '');
       drawSequenceRow(canvas, found.entry, found.row);

@@ -879,6 +879,7 @@ html>body{padding:0}</style>
     <span id="gpv-state" aria-live="polite">Ready</span>
     <span id="gpv-hover" class="gpv-hover" aria-hidden="true"></span>
   </div>
+  <div class="gpv-copy-fallback" id="gpv-copy-fallback" hidden><label class="form-label text-small"><span>The clipboard was not available — the text is selected here; press Ctrl/⌘+C</span><textarea class="form-control" id="gpv-copy-fallback-text" rows="3" readonly></textarea></label><button class="btn btn-ghost" type="button" id="gpv-copy-fallback-close">Done</button></div>
   <div class="gpv-sequence" id="gpv-sequence" hidden>
     <div class="gpv-sequence-head text-small">
       <strong id="gpv-sequence-title">Sequence</strong>
@@ -1418,7 +1419,9 @@ html>body{padding:0}</style>
   #generic-protein-viewer .gpv-nudge .btn { padding: 2px 8px; }
   #generic-protein-viewer .gpv-nudge .form-control { width: 64px; flex: 0 0 auto; padding: 2px 6px; }
   /* The on-canvas label editor: a popover inside the stage, placed by script next to its residue. */
-  #generic-protein-viewer .gpv-label-editor { position: absolute; z-index: 5; display: grid; gap: 6px; width: 240px; max-width: calc(100% - 8px); padding: 8px; border: 1px solid var(--border); border-radius: var(--radius-md); color: var(--popover-foreground); background: var(--popover); box-shadow: 0 6px 20px -8px rgb(0 0 0 / 35%); cursor: auto; }
+  #generic-protein-viewer .gpv-label-editor { position: absolute; z-index: 5; display: grid; gap: 6px; width: 240px; max-width: calc(100% - 8px); max-height: calc(100% - 8px); overflow: auto; overscroll-behavior: contain; padding: 8px; border: 1px solid var(--border); border-radius: var(--radius-md); color: var(--popover-foreground); background: var(--popover); box-shadow: 0 6px 20px -8px rgb(0 0 0 / 35%); cursor: auto; }
+  #generic-protein-viewer #gpv-contact-wrap.is-stale canvas { opacity: 0.4; }
+  #generic-protein-viewer .gpv-copy-fallback { display: flex; align-items: flex-end; gap: 8px; margin-top: 6px; } #generic-protein-viewer .gpv-copy-fallback[hidden] { display: none; } #generic-protein-viewer .gpv-copy-fallback .form-label { flex: 1 1 auto; margin: 0; }
   #generic-protein-viewer .gpv-label-editor[hidden], #generic-protein-viewer .gpv-label-editor .btn[hidden] { display: none; }
   #generic-protein-viewer .gpv-label-editor-head { display: flex; align-items: center; gap: 6px; min-width: 0; }
   #generic-protein-viewer .gpv-label-editor-residue { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--muted-foreground); }
