@@ -65,6 +65,13 @@
     const name = String(view.name || ''); const caption = String(view.caption || '');
     return options.captions === 'name' ? name : options.captions === 'caption' ? caption : options.captions === 'none' ? '' : [name, caption].filter(Boolean).join(' — ');
   }
+  /* Every change rebuilds the rows; the focus goes back to the same control of the same view — a moved
+     view's row is the one it moved to, and its other arrow once this one has nowhere left to go. */
+  function focusBuilderControl(index, control, fallback = null) {
+    const row = root.querySelectorAll('#gpv-builder-rows tr')[index]; if (!row) return;
+    const target = [control, fallback].map(name => name && row.querySelector('[data-control="' + name + '"]')).find(item => item && !item.disabled);
+    if (target) target.focus({ preventScroll: true });
+  }
   function renderFigureBuilder() {
     const body = root.querySelector('#gpv-builder-rows'); if (!body) return;
     body.replaceChildren();
@@ -72,7 +79,8 @@
       const included = view.inFigure !== false;
       const tr = document.createElement('tr');
       const inCell = document.createElement('td'); const tick = document.createElement('input'); tick.type = 'checkbox'; tick.className = 'form-check-input'; tick.checked = included; tick.setAttribute('aria-label', 'Include ' + view.name + ' in the figure');
-      tick.addEventListener('change', () => { remember('figure panels'); view.inFigure = tick.checked; renderSavedViews(); });
+      tick.dataset.control = 'include';
+      tick.addEventListener('change', () => { remember('figure panels'); view.inFigure = tick.checked; renderSavedViews(); focusBuilderControl(index, 'include'); });
       /* The theme draws checkboxes only inside a .form-check label; a bare input is invisible. */
       const tickLabel = document.createElement('label'); tickLabel.className = 'form-check'; tickLabel.append(tick); inCell.append(tickLabel); tr.append(inCell);
       const letterCell = document.createElement('td'); letterCell.className = 'gpv-builder-letter'; letterCell.textContent = panelLetter(view); tr.append(letterCell);
@@ -83,7 +91,8 @@
       captionCell.append(caption); tr.append(captionCell);
       const orderCell = document.createElement('td'); const order = document.createElement('span'); order.className = 'gpv-builder-order';
       const move = (delta, label, glyph) => { const button = document.createElement('button'); button.type = 'button'; button.className = 'btn btn-ghost'; button.textContent = glyph; button.setAttribute('aria-label', label + ' ' + view.name); button.disabled = index + delta < 0 || index + delta >= savedViews.length;
-        button.addEventListener('click', () => { remember('figure panel order'); const target = index + delta; [savedViews[index], savedViews[target]] = [savedViews[target], savedViews[index]]; renderSavedViews(); }); return button; };
+        button.dataset.control = delta < 0 ? 'up' : 'down';
+        button.addEventListener('click', () => { remember('figure panel order'); const target = index + delta; [savedViews[index], savedViews[target]] = [savedViews[target], savedViews[index]]; renderSavedViews(); focusBuilderControl(target, delta < 0 ? 'up' : 'down', delta < 0 ? 'down' : 'up'); }); return button; };
       order.append(move(-1, 'Move up', '↑'), move(1, 'Move down', '↓')); orderCell.append(order); tr.append(orderCell);
       body.append(tr);
     });
@@ -352,6 +361,8 @@
       domains: JSON.stringify(domainRecords.map(record => { const owner = entryById(record.entryId); return { name: record.name, color: record.color, chain: record.chain, residues: record.residues, scope: record.scope, model: owner ? owner.name : null, collection: owner ? owner.collection || '' : '' }; })),
       chainColors: JSON.stringify(Object.fromEntries([...chainOrder.keys()].map(chain => [chain, chainColor(chain)]))),
       residueThemes: JSON.stringify(residueThemeTables()),
+      /* The viewer's own ramp, as source, so the report's spectrum is the viewer's to the colour. */
+      spectrumRamp: spectrumRampColor.toString(),
       residueData: JSON.stringify(residueData ? (() => { const owner = entryById(residueData.entryId); return { name: residueData.name, scale: residueData.scale, scope: residueData.scope, model: owner ? owner.name : null, collection: owner ? owner.collection || '' : '', min: dataRange().min, max: dataRange().max, stops: dataScales[residueData.scale] || dataScales.viridis, rows: [...residueData.values.entries()].map(([key, value]) => [key.split('|')[0], Number(key.split('|')[1]), value]).concat([...residueData.byResi.entries()].map(([resi, value]) => ['', resi, value])) }; })() : null),
       heteroMode: JSON.stringify(root.querySelector('#gpv-hetero').value),
       title: (provenanceValues().title || 'Protein Model Report').replace(/[<>&]/g, ''),
@@ -444,6 +455,7 @@ const chainColors=${data.chainColors};
 const domainRecords=${data.domains};
 const residueDataset=${data.residueData};
 const residueThemes=${data.residueThemes};
+${data.spectrumRamp}
 const initialHetero=${data.heteroMode};
 const el = id => document.getElementById(id);
 const directContexts = typeof OffscreenCanvas !== 'undefined' && !(window.chrome && /Chrom/.test(navigator.userAgent));
@@ -502,7 +514,7 @@ function styleSpec(s) {
   if (mode === 'ss') options = { colorfunc: a => residueThemes.ss[a.ss] || residueThemes.ss.c };
   if (mode === 'data') options = { colorfunc: a => dataColorFor(s, a) };
   if (mode === 'annotated') { const lookup = domainLookupFor(s); options = { colorfunc: a => { const r = lookup.get((a.chain || '') + '|' + a.resi); return r ? r.color : '#9ca3af'; } }; }
-  if (mode === 'spectrum') options = { colorscheme: 'spectrum' };
+  if (mode === 'spectrum') options = { colorfunc: a => spectrumColorOf(s, a) };
   if (mode === 'element') options = { colorscheme: 'default' };
   if (s.faded) {
     const paper = paperColor(); const colorOf = options.colorfunc || (options.color ? () => options.color : null);
@@ -558,6 +570,7 @@ function show(pane, preserveView) {
   pane.viewer.removeAllModels(); pane.viewer.removeAllLabels(); pane.viewer.removeAllShapes();
   const m = pane.viewer.addModel(s.text, s.format);
   if (Array.isArray(s.coords)) m.selectedAtoms({}).forEach((a, i) => { if (s.coords.length >= i * 3 + 3) { a.x = s.coords[i * 3]; a.y = s.coords[i * 3 + 1]; a.z = s.coords[i * 3 + 2]; } });
+  spectrumFor(s, m);
   m.setStyle({}, styleSpec(s));
   const het = el('hetero').value;
   m.setStyle({ hetflag: true }, het === 'hide' ? {} : het === 'sphere' ? { sphere: { scale: 0.35, colorscheme: 'default' } } : { stick: { radius: 0.25, colorscheme: 'default' }, sphere: { scale: 0.28, colorscheme: 'default' } });
@@ -716,8 +729,31 @@ function stripRows(m) {
   m.selectedAtoms({}).forEach(a => { if (a.hetflag || a.atom !== 'CA') return; const c = a.chain || ''; if (!byChain.has(c)) byChain.set(c, []); byChain.get(c).push(a); });
   return [...byChain.entries()].map(([chain, atoms]) => ({ chain, atoms: atoms.sort((x, y) => x.resi - y.resi) })).filter(r => r.atoms.length > 1).slice(0, 12);
 }
+/* Sequence spectrum, as the viewer paints it: each chain blue at its first residue to red at its last,
+   by the residue's place in the chain (polymer residues, in number and insertion-code order; a chain
+   of one residue keeps the model colour). 3Dmol has no colour scheme called "spectrum" and drew grey. */
+function icodeOf(a) { const c = String(a && a.icode != null ? a.icode : '').trim(); return c === '?' || c === '.' ? '' : c; }
+function spectrumFor(s, m) {
+  if (s.spectrum) return s.spectrum;
+  const byChain = new Map();
+  m.selectedAtoms({}).forEach(a => {
+    if (a.hetflag || !Number.isFinite(Number(a.resi))) return;
+    const c = a.chain || ''; if (!byChain.has(c)) byChain.set(c, new Map());
+    const residues = byChain.get(c); const id = a.resi + '|' + icodeOf(a); const current = residues.get(id);
+    if (!current || a.atom === 'CA' || (a.atom === 'P' && current.atom !== 'CA')) residues.set(id, a);
+  });
+  const map = new Map();
+  byChain.forEach((residues, c) => {
+    const list = [...residues.values()].sort((x, y) => x.resi - y.resi || (icodeOf(x) < icodeOf(y) ? -1 : icodeOf(x) > icodeOf(y) ? 1 : 0));
+    if (list.length < 2) return;
+    list.forEach((a, i) => map.set(c + '|' + a.resi + '|' + icodeOf(a), spectrumRampColor(i / (list.length - 1))));
+  });
+  s.spectrum = map; return map;
+}
+function spectrumColorOf(s, a) { return (s.spectrum && s.spectrum.get((a.chain || '') + '|' + a.resi + '|' + icodeOf(a))) || s.color; }
 function stripColor(s, a) {
   const mode = el('colors').value;
+  if (mode === 'spectrum') return spectrumColorOf(s, a);
   if (mode === 'plddt') return s.hasConfidence ? pcolor(Number(a.b || 0)) : s.color;
   if (mode === 'chain') return chainColors[a.chain || ''] || '#9ca3af';
   if (mode === 'ss') return residueThemes.ss[a.ss] || residueThemes.ss.c;

@@ -283,6 +283,9 @@
     const assetsBefore = confidenceAssets.length;
     let firstNew = null; let restoredSession = false;
     stopCycle(); stopMotion();
+    /* An armed Measure to… was armed among the models already open: the next click may land on one
+       this import adds, and must open its card rather than measure into it. */
+    cancelMeasureTo(true);
     importProgress(0, files.length, 'Reading ' + files.length + ' file' + (files.length === 1 ? '' : 's') + '…');
     updateStatus('Loading…');
     let loaded = 0;
@@ -913,6 +916,9 @@
   function defaultLegendItems(kind = 'figure') {
     const mode = root.querySelector('#gpv-color-mode').value;
     if (residueLegends[mode]) return residueLegends[mode](kind);
+    /* A ramp, not a set of categories: on screen it says which end is which; an export has no key to
+       print for it, as for amino acids. */
+    if (mode === 'spectrum') return kind === 'screen' ? { title: 'Sequence spectrum', items: [[spectrumRampColor(0), 'N', 'N-terminus →'], [spectrumRampColor(0.25), '', ''], [spectrumRampColor(0.5), '', ''], [spectrumRampColor(0.75), '', ''], [spectrumRampColor(1), 'C', 'C-terminus, per chain']] } : null;
     if (mode === 'data') {
       if (!residueData) return { title: 'Per-residue data', items: [['#d1d5db', 'none', 'No per-residue data loaded — Annotate → Per-residue data']] };
       const stops = dataScales[residueData.scale] || dataScales.viridis;
@@ -933,9 +939,12 @@
       return { title: 'PAE domains (heuristic)', items: [...found.domains.slice(0, 12).map(domain => [domainColorFor(domain.id), 'D' + domain.id, 'Domain ' + domain.id + ' · ' + clipText(domainRanges(domain), 36)]), ...(found.unassigned ? [['#9ca3af', 'other', 'Unassigned']] : [])] };
     }
     /* A key for colours that are not on the model would say they are: before an alignment model
-       agreement is all grey, and a model without pLDDT is drawn in its own colour. Say why instead. */
-    if (mode === 'agreement' && !ensembleSpread) return { title: 'Cα RMSF', items: [['#9ca3af', 'align first', 'Grey until models are aligned — Compare → Align visible']] };
+       agreement is all grey, and a model without pLDDT is drawn in its own colour. Say why instead —
+       on screen only. Printed on a figure, the note would be a key to nothing, and the checklist would
+       ask for a legend the colours do not need. */
+    if (mode === 'agreement' && !ensembleSpread) return kind === 'screen' ? { title: 'Cα RMSF', items: [['#9ca3af', 'align first', 'Grey until models are aligned — Compare → Align visible']] } : null;
     if (mode === 'plddt' && !displayedEntries().some(entry => entry.model && entry.scores.length)) {
+      if (kind !== 'screen') return null;
       const shownNow = displayedEntries().filter(entry => entry.model);
       const experimental = shownNow.length && shownNow.every(entry => entry.experimentalMethod || entry.collection === 'RCSB PDB');
       return { title: 'pLDDT', items: [['#9ca3af', 'no pLDDT', 'No pLDDT in ' + (shownNow.length === 1 ? displayName(shownNow[0]) : 'the shown models') + (experimental ? ' (experimental)' : '') + ' — drawn in the model colour']] };

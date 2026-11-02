@@ -245,6 +245,8 @@
     ['#gpv-current', '#gpv-reference', '#gpv-selection-model', '#gpv-left-model', '#gpv-previous', '#gpv-next', '#gpv-add-selection', '#gpv-box-select', '#gpv-annotate', '#gpv-add-screen-text', '#gpv-interface-model', '#gpv-interface-run'].forEach(selector => {
       root.querySelector(selector).disabled = structures.length === 0;
     });
+    /* Nothing to click with nothing loaded, as for Start drawing; a mode already on can still be turned off. */
+    root.querySelector('#gpv-measure').disabled = structures.length === 0 && !measurementActive;
     /* Align needs a second shown model to superpose; Restore needs something superposed to put back;
        Cycle needs a shown model. Each used to stay enabled and answer with a misleading status. */
     root.querySelector('#gpv-align').disabled = structures.filter(entry => entry.visible).length < 2;
@@ -359,6 +361,7 @@
   function renderList() {
     syncModelControls();
     const list = root.querySelector('#gpv-list');
+    const kept = rememberListFocus(list);
     list.replaceChildren();
     const matching = filteredStructures();
     /* Large AlphaFold archives routinely hold hundreds of models. Building a row
@@ -372,7 +375,7 @@
     shownRows.forEach(entry => {
       const row = document.createElement('div');
       row.className = 'gpv-entry' + (entry.id === activeId ? ' is-active' : '');
-      row.dataset.entryId = String(entry.id);
+      row.dataset.entryId = String(entry.id); row.dataset.rowId = String(entry.id);
 
       const visibleLabel = document.createElement('label');
       visibleLabel.className = 'form-check form-switch';
@@ -398,10 +401,11 @@
       rename.className = 'btn btn-ghost';
       rename.type = 'button';
       rename.textContent = 'Rename';
-      rename.setAttribute('aria-label', 'Rename ' + entry.name);
+      rename.setAttribute('aria-label', 'Rename ' + entry.name); rename.dataset.control = 'rename';
       rename.addEventListener('click', () => {
         const input = document.createElement('input');
-        input.className = 'form-control'; input.type = 'text'; input.maxLength = 120;
+        /* The field stands in for the button while it is open, so the rebuilt row gives the focus back to Rename. */
+        input.className = 'form-control'; input.type = 'text'; input.maxLength = 120; input.dataset.control = 'rename';
         input.value = displayName(entry); input.placeholder = entry.name;
         input.setAttribute('aria-label', 'Display name for ' + entry.name);
         let done = false;
@@ -429,7 +433,7 @@
       color.className = 'form-control form-control-color';
       color.type = 'color';
       color.value = entry.color;
-      color.setAttribute('aria-label', 'Color for ' + entry.name);
+      color.setAttribute('aria-label', 'Colour for ' + displayName(entry));
       color.addEventListener('input', () => { entry.color = color.value; root.querySelector('#gpv-color-mode').value = 'structure'; applyStyle(); });
 
       const fadeLabel = document.createElement('label');
@@ -444,7 +448,7 @@
       const focus = document.createElement('button');
       focus.className = 'btn btn-ghost'; focus.type = 'button'; focus.textContent = 'Emphasise';
       focus.title = 'Draw this model solid and fade every other shown model';
-      focus.setAttribute('aria-label', 'Emphasise ' + entry.name);
+      focus.setAttribute('aria-label', 'Emphasise ' + entry.name); focus.dataset.control = 'emphasise';
       focus.addEventListener('click', () => {
         remember('emphasis');
         const shown = structures.filter(item => item.visible && item.model);
@@ -457,12 +461,14 @@
       const remove = document.createElement('button');
       remove.className = 'btn btn-ghost';
       remove.type = 'button';
-      remove.textContent = 'Remove';
+      remove.textContent = 'Remove'; remove.dataset.control = 'remove';
+      remove.setAttribute('aria-label', 'Remove ' + displayName(entry));
       remove.addEventListener('click', () => removeModelEntry(entry));
 
       row.append(visibleLabel, copy, score, color, fadeLabel, focus, rename, remove);
       list.append(row);
     });
+    restoreListFocus(list, kept);
     /* The alignment table names models and dims hidden ones; Show all, Hide all and Rename come here. */
     renderAlignmentResults();
   }
@@ -640,10 +646,10 @@
     return [entryId, chain || '', resi].join('|') + (icode ? '|' + icode : '');
   }
 
+  /* The Annotate readout and the status: the model as the lists name it, the residue as the card does. */
   function residueText(entry, atom) {
-    const chain = atom.chain ? ' chain ' + atom.chain : '';
     const confidence = entry.scores.length && Number.isFinite(Number(atom.b)) ? ' · pLDDT ' + Number(atom.b).toFixed(1) : '';
-    return entry.name + ' · ' + (atom.resn || 'Residue') + ' ' + residueNumber(atom) + chain + ' · atom ' + (atom.atom || '—') + confidence;
+    return displayName(entry) + ' · ' + residueName(atom, 'prose') + ' · atom ' + (atom.atom || '—') + confidence;
   }
 
   function selectResidue(entry, atom) {
@@ -719,18 +725,18 @@
 
   function renderLabelList() {
     renderSequenceSoon();
-    const list = root.querySelector('#gpv-label-list'); list.replaceChildren();
+    const list = root.querySelector('#gpv-label-list'); const kept = rememberListFocus(list); list.replaceChildren();
     updateSeparateLabelsButton();
     labelRecords.forEach(label => {
       const entry = entryById(label.entryId);
-      const row = document.createElement('div'); row.className = 'gpv-entry';
+      const row = document.createElement('div'); row.className = 'gpv-entry'; row.dataset.rowId = label.key;
       const copy = document.createElement('span'); copy.className = 'gpv-edit-copy';
       const text = document.createElement('input'); text.className = 'form-control'; text.type = 'text'; text.value = label.text; text.maxLength = 120;
-      text.setAttribute('aria-label', 'Label text for ' + (label.resn || 'residue') + ' ' + residueNumber(label));
+      text.setAttribute('aria-label', 'Label text for ' + residueName(label, 'prose'));
       text.addEventListener('change', () => { const value = text.value.trim(); if (!value) { text.value = label.text; return; } remember('label text'); label.text = value; rebuildOverlays(); updateStatus('Label updated'); });
       text.addEventListener('keydown', event => { if (event.key === 'Enter') { event.preventDefault(); text.blur(); } });
       const where = document.createElement('span'); where.className = 'gpv-entry-source text-small';
-      where.textContent = (entry ? displayName(entry) : 'Missing model') + ' · ' + (label.resn || 'RES') + ' ' + residueNumber(label) + (label.chain ? ' · chain ' + label.chain : '');
+      where.textContent = (entry ? displayName(entry) : 'Missing model') + ' · ' + residueName(label, 'prose');
       copy.append(text, where);
       const tools = document.createElement('span'); tools.className = 'gpv-edit-tools';
       const size = document.createElement('select'); size.className = 'form-select'; size.setAttribute('aria-label', 'Label size');
@@ -742,13 +748,16 @@
       color.setAttribute('aria-label', 'Label colour');
       color.addEventListener('input', () => { if (!color.dataset.remembered) { remember('label colour'); color.dataset.remembered = '1'; } label.color = color.value; rebuildOverlays(); });
       color.addEventListener('change', () => { delete color.dataset.remembered; });
-      const show = document.createElement('button'); show.className = 'btn btn-ghost'; show.type = 'button'; show.textContent = 'Show';
+      const show = document.createElement('button'); show.className = 'btn btn-ghost'; show.type = 'button'; show.textContent = 'Show'; show.dataset.control = 'show';
       show.title = 'Zoom to this residue';
       show.addEventListener('click', () => { if (!entry || !entry.model) return; const selection = { model: entry.model.getID(), resi: label.resi }; if (label.chain) selection.chain = label.chain; viewer.zoomTo(selection); viewer.render(); syncViewsFrom(viewer); });
       const reset = document.createElement('button'); reset.className = 'btn btn-ghost'; reset.type = 'button'; reset.textContent = 'Reset';
       reset.title = 'Put the label back on its residue'; reset.disabled = labelOffsetLength(label) === 0;
+      /* Reset greys itself out once used; the focus then goes to Show beside it rather than onto the page. */
+      reset.dataset.control = 'reset'; reset.dataset.controlFallback = 'show';
       reset.addEventListener('click', () => { remember('label position'); label.offset = null; delete label.autoPlaced; renderLabelList(); rebuildOverlays(); updateStatus('Label put back on its residue'); });
-      const remove = document.createElement('button'); remove.className = 'btn btn-ghost'; remove.type = 'button'; remove.textContent = 'Remove';
+      const remove = document.createElement('button'); remove.className = 'btn btn-ghost'; remove.type = 'button'; remove.textContent = 'Remove'; remove.dataset.control = 'remove';
+      remove.setAttribute('aria-label', 'Remove the label on ' + residueName(label, 'prose'));
       remove.addEventListener('click', () => { remember('label removal'); labelRecords = labelRecords.filter(item => item !== label); renderLabelList(); rebuildOverlays(); updateStatus('Label removed'); });
       tools.append(size, color, show, reset, remove);
       /* Dragging is mouse-only by design (a finger drag turns the model), so these are how a label is
@@ -773,6 +782,7 @@
       nudge.append(select);
       row.append(copy, tools, nudge); list.append(row);
     });
+    restoreListFocus(list, kept);
   }
 
   /* A label belongs to its residue: that is its anchor. Dragging it stores `offset`, a
@@ -885,9 +895,10 @@
       name.className = 'gpv-entry-name';
       /* compactRange (28-figure-legend.js) folds a long selection into runs — "10–20" instead of
          "10, 11, 12, 13 … 20" — the same way the figure legend and domain ranges already read. */
-      name.textContent = entry.name + ' · chain ' + (record.chain || '—') + ' · ' + compactRange(record.residues) + ' · ' + record.action;
+      name.textContent = displayName(entry) + ' · ' + (record.chain ? 'chain ' + record.chain : 'all chains') + ' · ' + compactRange(record.residues) + ' · ' + record.action;
       const remove = document.createElement('button');
       remove.className = 'btn btn-ghost'; remove.type = 'button'; remove.textContent = 'Remove';
+      remove.setAttribute('aria-label', 'Remove the selection ' + name.textContent);
       remove.addEventListener('click', () => { remember('selection removal'); selectionRecords = selectionRecords.filter(item => item.id !== record.id); renderSelectionList(); applyStyle(); });
       /* A highlight is a set of residues worth naming; a hidden range has nothing on screen to label. */
       row.append(name);
