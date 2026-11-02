@@ -3561,11 +3561,14 @@ await step('colour, Dashed and Show value from the row and the editor reach the 
     await one('the row\'s colour', () => setColour(rowSelector + ' input[type="color"]', '#00aa55'), now => (now.color === '#00aa55' ? null : 'colour ' + now.color));
     await one('the row\'s Dashed', () => page.locator(rowSelector + ' label:has-text("Dashed") input').uncheck(), now => (now.dashed === false ? null : 'dashed ' + now.dashed));
     await one('the row\'s text', async () => { await page.fill(rowSelector + ' .gpv-edit-copy input', 'H-bond'); await page.press(rowSelector + ' .gpv-edit-copy input', 'Enter'); }, now => (now.text === 'H-bond' ? null : 'text ' + now.text));
-    await one('the row\'s Show value', () => page.locator(rowSelector + ' label:has-text("Show value") input').uncheck(), now => (now.showValue === false ? null : 'showValue ' + now.showValue));
+    /* Show value from the keyboard: WebKit, like Safari, gives a checkbox no focus on a mouse click,
+       so a click would leave nothing in the row holding the focus for the check below. */
+    await one('the row\'s Show value', async () => { await page.locator(rowSelector + ' label:has-text("Show value") input').focus(); await page.keyboard.press('Space'); }, now => (now.showValue === false ? null : 'showValue ' + now.showValue));
     const plain = await page.evaluate(id => window.__viewerDebug.measurementLabelText(window.__viewerDebug.measurementRecords().find(item => item.id === id)), record.id);
     if (plain !== 'H-bond') throw new Error('with Show value off the label reads "' + plain + '"');
-    /* The row's own controls keep the keyboard focus after each edit, and a focused row marks its
-       measurement as a hovered one does; the mark goes once neither the pointer nor the focus is on it. */
+    /* The row's own controls keep the keyboard focus after each edit (Show value, toggled from the
+       keyboard, still holds it after the list is rebuilt), and a focused row marks its measurement as
+       a hovered one does; the mark goes once neither the pointer nor the focus is on it. */
     await page.mouse.move(5, 5); await page.waitForTimeout(150);
     if ((await page.evaluate(() => window.__viewerDebug.measurementHover())) !== record.id) throw new Error('the row holding the focus does not mark its measurement');
     await focusStage(); await page.waitForTimeout(150);
@@ -4526,7 +4529,11 @@ const chaClear = async fresh => {
     if (!(await fresh.isDisabled(selector))) { await fresh.click(selector); await fresh.waitForTimeout(150); }
   }
 };
-/* Viewport coordinates of a named atom of 5CHA where the page projects it now. */
+/* Viewport coordinates of a named atom of 5CHA where the page projects it now, on the nearest whole
+   pixel: Firefox and WebKit deliver a pointer event at a fractional position cut down to a whole
+   pixel (500.6 arrives as 500), Chromium as given, so a tap at a fraction lands on different pixels
+   in different engines. A whole-pixel tap arrives where it was aimed in all three, and pageX/pageY
+   are that same pixel, for a pickAtomAt check of what the tap will pick. */
 const chaAtom = async (fresh, chain, resi, name) => {
   await fresh.locator('#gpv-stage').scrollIntoViewIfNeeded(); await fresh.waitForTimeout(100);
   return fresh.evaluate(([chain, resi, name]) => {
@@ -4534,13 +4541,16 @@ const chaAtom = async (fresh, chain, resi, name) => {
     const atom = entry.atoms.find(item => (item.chain || '') === chain && item.resi === resi && item.atom === name);
     if (!atom) return null;
     const s = d.viewer.modelToScreen({ x: atom.x, y: atom.y, z: atom.z });
-    return { x: s.x - scrollX, y: s.y - scrollY, pageX: s.x, pageY: s.y };
+    const x = Math.round(s.x - scrollX); const y = Math.round(s.y - scrollY);
+    return { x, y, pageX: x + scrollX, pageY: y + scrollY };
   }, [chain, resi, name]);
 };
-/* The catalytic triad framed on the stage: His57 and Asp102 of chain B, Ser195 of chain C (each
-   number is in one chain only). Go to one residue zooms so close that the other two leave the view. */
+/* The catalytic triad framed on the stage: His57 and Asp102 of chain B, Ser195 of chain C. 5CHA holds
+   two copies of the enzyme (chains A–C and E–G), so the residue numbers alone frame both: the view
+   zooms out and the second copy lies over the first, with F45 CB 1.6 px from Ser195 OG. The chains
+   keep it to the one triad. Go to one residue zooms so close that the other two leave the view. */
 const chaFrameTriad = async fresh => {
-  await fresh.evaluate(() => { const v = window.__viewerDebug.viewer; v.zoomTo({ resi: [57, 102, 195] }); v.render(); });
+  await fresh.evaluate(() => { const v = window.__viewerDebug.viewer; v.zoomTo({ chain: ['B', 'C'], resi: [57, 102, 195] }); v.render(); });
   await fresh.waitForTimeout(300);
 };
 /* Where on the stage a piece of text with these words is hit, found the way a pointer finds it:
@@ -4619,7 +4629,7 @@ await step('on 5CHA in stick style a click reaches a side-chain atom: His57 NE2 
     await fresh.selectOption('#gpv-style', 'stick'); await fresh.waitForTimeout(600);
     await chaFrameTriad(fresh);
     const picks = [];
-    for (const [chain, resi, name] of [['B', 57, 'NE2'], ['C', 195, 'OG'], ['B', 102, 'OD1']]) {
+    for (const [chain, resi, name] of [['B', 57, 'NE2'], ['C', 195, 'OG'], ['B', 102, 'OD1'], ['B', 102, 'OD2']]) {
       const at = await chaAtom(fresh, chain, resi, name);
       const hit = await fresh.evaluate(([x, y]) => { const h = window.__viewerDebug.pickAtomAt(x, y); return h ? h.atom.chain + h.atom.resi + ' ' + h.atom.atom : null; }, [at.pageX, at.pageY]);
       if (hit !== chain + resi + ' ' + name) throw new Error('a click on ' + chain + resi + ' ' + name + ' picks ' + hit);
