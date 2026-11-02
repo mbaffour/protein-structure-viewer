@@ -69,9 +69,18 @@
     return { id: nextPanelId++, entryId, element: null, stage: null, label: null, viewer: null, model: null, observer: null };
   }
 
+  /* The next model without a panel. Only the first panel may repeat the primary's model (a single
+     model compared with itself); past that, a model already in a panel is not offered again, and
+     Add panel is disabled — it used to add syn_c a second time when the models ran out. */
   function defaultPanelEntry() {
     const taken = new Set([Number(root.querySelector('#gpv-left-model').value), ...comparePanels.map(panel => panel.entryId)]);
-    return structures.find(entry => !taken.has(entry.id)) || structures[structures.length - 1] || null;
+    return structures.find(entry => !taken.has(entry.id)) || (comparePanels.length ? null : structures[structures.length - 1]) || null;
+  }
+  function renderAddPanelButton() {
+    const button = root.querySelector('#gpv-add-panel');
+    const full = comparePanels.length >= maxComparePanels; const none = Boolean(structures.length) && !full && !defaultPanelEntry();
+    button.disabled = !structures.length || full || none;
+    button.title = none ? 'Every loaded model already has a panel' : '';
   }
 
   function addComparePanel(entryId = null) {
@@ -128,7 +137,7 @@
       const row = document.createElement('div'); row.className = 'gpv-entry gpv-panel-row';
       const name = document.createElement('span'); name.className = 'gpv-entry-score'; name.textContent = 'Panel ' + (index + 2);
       const select = document.createElement('select'); select.className = 'form-select'; select.setAttribute('aria-label', 'Model shown in panel ' + (index + 2));
-      structures.forEach(entry => select.append(new Option((entry.collection ? entry.collection + ' › ' : '') + displayName(entry), String(entry.id))));
+      structures.forEach(entry => select.append(new Option((entry.collection && !displayName(entry).startsWith(entry.collection + ' › ') ? entry.collection + ' › ' : '') + displayName(entry), String(entry.id))));
       select.value = String(panel.entryId);
       select.disabled = !structures.length;
       select.addEventListener('change', () => {
@@ -141,7 +150,7 @@
       row.append(name, select, remove);
       list.append(row);
     });
-    root.querySelector('#gpv-add-panel').disabled = !structures.length || comparePanels.length >= maxComparePanels;
+    renderAddPanelButton();
     root.querySelector('#gpv-clear-panels').disabled = !comparePanels.length;
   }
 
@@ -228,7 +237,7 @@
   }
 
   function restoreCoordinates(shouldRender = true) {
-    structures.forEach(entry => { entry.deviations = null; entry.alignedPairs = null; });
+    structures.forEach(entry => { entry.deviations = null; entry.alignedPairs = null; entry.superposed = false; });
     ensembleSpread = null;
     structures.filter(entry => entry.model).forEach(entry => entry.atoms.forEach((atom, index) => {
       const original = entry.originalAtoms[index];
@@ -467,6 +476,8 @@
       atom.z = transformed[2] + referenceCenter[2];
     });
     target.deviations = new Map();
+    /* Moved off its own coordinates: Restore coordinates has something to put back. */
+    target.superposed = true;
     /* The pairing this fit used, kept as reference residue tag → the target's own atom: the
        correspondence behind every deviation, and what Compare this position looks a residue up
        through when the two models number their residues differently. */
@@ -489,9 +500,17 @@
     return {
       count: pairs.length, rmsd: Math.sqrt(squaredError / pairs.length),
       fitCount: fitPairs.length, fitRmsd: Math.sqrt(fitSquaredError / fitPairs.length), fitRegion,
-      method: pairing.method, identity: pairing.identity, chainPairs: pairing.chainPairs, name: target.name, reference: reference.name
+      method: pairing.method, identity: pairing.identity, chainPairs: pairing.chainPairs, name: target.name, reference: reference.name,
+      entryId: target.id, referenceId: reference.id
     };
   }
+
+  /* Unrelated proteins superpose too — 5CHA onto 1BRS gives 34 Å over 368 pairs at 31 % identity — and
+     nothing else on screen says the numbers mean nothing. */
+  function alignmentCaution(result) {
+    return result.rmsd > 10 || (result.identity !== null && result.identity < 0.3);
+  }
+  const alignmentCautionText = 'low identity / large RMSD — these models may not be comparable';
 
   function renderAlignmentResults() {
     const wrap = root.querySelector('#gpv-alignment-wrap');
@@ -503,13 +522,19 @@
     body.replaceChildren();
     alignmentResults.forEach(result => {
       const row = document.createElement('tr');
-      const values = [result.name, result.reference, String(result.count), result.identity === null ? '—' : (result.identity * 100).toFixed(1) + '%', result.rmsd.toFixed(3), result.fitRegion ? result.fitRegion + ' · ' + result.fitCount + ' Cα' : 'all matched', result.fitRmsd.toFixed(3), result.method + (result.chainPairs ? ' · ' + result.chainPairs : '')];
+      /* Models by the names they have now (a rename after aligning used to leave the file name), and a
+         model hidden since is dimmed: the row describes a superposition the view no longer shows. */
+      const target = entryById(result.entryId); const reference = entryById(result.referenceId);
+      const caution = alignmentCaution(result); const hidden = Boolean(target && !target.visible);
+      const values = [target ? displayName(target) : result.name, reference ? displayName(reference) : result.reference, String(result.count), result.identity === null ? '—' : (result.identity * 100).toFixed(1) + '%', result.rmsd.toFixed(3), result.fitRegion ? result.fitRegion + ' · ' + result.fitCount + ' Cα' : 'all matched', result.fitRmsd.toFixed(3), result.method + (result.chainPairs ? ' · ' + result.chainPairs : '') + (caution ? ' · ' + alignmentCautionText : '') + (hidden ? ' · hidden since — Align visible to update' : '')];
       values.forEach((value, index) => {
         const cell = document.createElement(index < 2 ? 'th' : 'td');
         cell.textContent = value;
         if ((index >= 2 && index <= 4) || index === 6) cell.className = 'text-end';
         row.append(cell);
       });
+      if (caution) row.classList.add('is-caution');
+      if (hidden) row.style.opacity = '0.5';
       body.append(row);
     });
   }
@@ -530,6 +555,8 @@
     const referenceId = Number(root.querySelector('#gpv-reference').value);
     const reference = entryById(referenceId);
     if (!reference) return;
+    /* One shown model has nothing to be superposed on; say that rather than blame the matching. */
+    if (!visibleEntries().some(entry => entry !== reference)) { announce('Show at least two models to align', 'error'); return; }
     const done = setBusy('Aligning…');
     const failures = [];
     const ready = entry => {
@@ -577,7 +604,9 @@
     if (results.length) {
       const averageRmsd = mean(results.map(result => result.rmsd));
       const identities = results.map(result => result.identity).filter(value => value !== null);
-      announce('Aligned ' + results.length + ' model' + (results.length === 1 ? '' : 's') + (results[0].fitRegion ? ' on ' + results[0].fitRegion + ' · mean fitted RMSD ' + mean(results.map(result => result.fitRmsd)).toFixed(2) + ' Å' : '') + ' · mean Cα RMSD ' + averageRmsd.toFixed(2) + ' Å over all matched pairs' + (identities.length ? ' · mean identity ' + (mean(identities) * 100).toFixed(1) + '%' : ''));
+      const doubtful = results.filter(alignmentCaution);
+      announce('Aligned ' + results.length + ' model' + (results.length === 1 ? '' : 's') + (results[0].fitRegion ? ' on ' + results[0].fitRegion + ' · mean fitted RMSD ' + mean(results.map(result => result.fitRmsd)).toFixed(2) + ' Å' : '') + ' · mean Cα RMSD ' + averageRmsd.toFixed(2) + ' Å over all matched pairs' + (identities.length ? ' · mean identity ' + (mean(identities) * 100).toFixed(1) + '%' : '')
+        + (doubtful.length ? ' · caution: ' + alignmentCautionText + ' (' + clipText(doubtful.map(result => { const entry = entryById(result.entryId); return entry ? displayName(entry) : result.name; }).join(', '), 60) + ')' : ''));
     } else announce('No model had at least three matching Cα atoms to align on', 'error');
   }
 

@@ -363,25 +363,41 @@
 
   /* Per-residue pLDDT plot: one panel per chain, one line per displayed model,
      the four confidence bands shaded behind. */
-  function plddtProfileSvg() {
+  /* `fit` lays the profile out for a cell of the composite figure — { width, height, scale } in that
+     cell's pixels, scale being the text size (1 = 11 px tick labels) — instead of the 1200-unit page
+     the standalone downloads use. Drawn at 1200 units and shrunk into a 500-pixel cell, its tick labels
+     printed at about 1 pt in a strip along the top of the cell. The cell's caption names the plot, so
+     the title row goes; the model key stays when there is more than one model. */
+  function plddtProfileSvg(fit = null) {
     const entries = displayedEntries().filter(entry => entry.model && entry.scores.length).slice(0, 8);
     const chains = [...new Set(entries.flatMap(entry => residueRows(entry).map(row => row.chain)))].sort(compareChains).slice(0, 12);
     if (!entries.length || !chains.length) return null;
-    const width = 1200; const left = 72; const right = 30; const top = 64; const rowHeight = 170; const gap = 40; const bottom = 40;
-    const height = top + chains.length * rowHeight + (chains.length - 1) * gap + bottom;
+    const keyRow = !fit || entries.length > 1;
+    let k = 1; let width = 1200; let left = 72; let right = 30; let top = 64; let rowHeight = 170; let gap = 40; let bottom = 40; let axisLabel = 52;
+    if (fit) {
+      left = 50; right = 12; top = keyRow ? 48 : 24; gap = 30; bottom = 26; axisLabel = 40;
+      /* The chosen text size, unless the rows would then be too short to read a trace in. */
+      k = Math.min(fit.scale, fit.height / (top + bottom + (chains.length - 1) * gap + chains.length * 40));
+      [left, right, top, gap, bottom, axisLabel] = [left, right, top, gap, bottom, axisLabel].map(value => value * k);
+      width = fit.width; rowHeight = (fit.height - top - bottom - (chains.length - 1) * gap) / chains.length;
+    }
+    const height = fit ? fit.height : top + chains.length * rowHeight + (chains.length - 1) * gap + bottom;
     const ink = '#111827'; const muted = '#6b7280'; const grid = '#e5e7eb';
     const parts = [];
-    const text = (x, y, value, size, anchor = 'start', weight = 400, fill = ink, extra = '') => '<text x="' + f(x) + '" y="' + f(y) + '" font-family="' + svgFont + '" font-size="' + size + '" font-weight="' + weight + '" text-anchor="' + anchor + '" fill="' + fill + '"' + extra + '>' + svgEscape(value) + '</text>';
-    parts.push('<g id="title">' + text(left, 32, provenanceValues().title || 'Per-residue pLDDT', 20, 'start', 600) + '</g>');
-    parts.push('<g id="models">');
-    let cursor = width - right;
-    svgMeasure.font = '500 12px ' + svgFont;
-    [...entries].reverse().forEach(entry => {
-      const label = clipText(displayName(entry), 30); const labelWidth = svgMeasure.measureText(label).width;
-      cursor -= labelWidth; parts.push(text(cursor, 34, label, 12, 'start', 500));
-      cursor -= 18; parts.push('<rect x="' + f(cursor) + '" y="24" width="12" height="12" rx="2" fill="' + entry.color + '"/>'); cursor -= 16;
-    });
-    parts.push('</g>');
+    const text = (x, y, value, size, anchor = 'start', weight = 400, fill = ink, extra = '') => '<text x="' + f(x) + '" y="' + f(y) + '" font-family="' + svgFont + '" font-size="' + f(size * k) + '" font-weight="' + weight + '" text-anchor="' + anchor + '" fill="' + fill + '"' + extra + '>' + svgEscape(value) + '</text>';
+    if (!fit) parts.push('<g id="title">' + text(left, 32, provenanceValues().title || 'Per-residue pLDDT', 20, 'start', 600) + '</g>');
+    if (keyRow) {
+      const keyY = fit ? 22 * k : 34;
+      parts.push('<g id="models">');
+      let cursor = width - right;
+      svgMeasure.font = '500 ' + f(12 * k) + 'px ' + svgFont;
+      [...entries].reverse().forEach(entry => {
+        const label = clipText(displayName(entry), 30); const labelWidth = svgMeasure.measureText(label).width;
+        cursor -= labelWidth; parts.push(text(cursor, keyY, label, 12, 'start', 500));
+        cursor -= 18 * k; parts.push('<rect x="' + f(cursor) + '" y="' + f(keyY - 10 * k) + '" width="' + f(12 * k) + '" height="' + f(12 * k) + '" rx="' + f(2 * k) + '" fill="' + entry.color + '"/>'); cursor -= 16 * k;
+      });
+      parts.push('</g>');
+    }
     const plotWidth = width - left - right;
     chains.forEach((chain, index) => {
       const y0 = top + index * (rowHeight + gap);
@@ -392,21 +408,25 @@
       const y = value => y0 + rowHeight - value / 100 * rowHeight;
       parts.push('<g id="chain-' + svgEscape(chain || 'none') + '">');
       [[0, 50, '#ff7d45'], [50, 70, '#ffdb13'], [70, 90, '#65cbf3'], [90, 100, '#0053d6']].forEach(([low, high, color]) => parts.push('<rect x="' + f(left) + '" y="' + f(y(high)) + '" width="' + f(plotWidth) + '" height="' + f(y(low) - y(high)) + '" fill="' + color + '" fill-opacity="0.12"/>'));
+      /* A short row keeps the 0, 50 and 100 labels only; the band edges still have their grid lines. */
+      const labelled = fit && rowHeight < 70 * k ? [0, 50, 100] : [0, 50, 70, 90, 100];
       [0, 50, 70, 90, 100].forEach(value => {
         parts.push('<line x1="' + f(left) + '" x2="' + f(left + plotWidth) + '" y1="' + f(y(value)) + '" y2="' + f(y(value)) + '" stroke="' + grid + '"/>');
-        parts.push(text(left - 8, y(value) + 4, String(value), 11, 'end', 400, muted));
+        if (labelled.includes(value)) parts.push(text(left - 8 * k, y(value) + 4 * k, String(value), 11, 'end', 400, muted));
       });
-      const step = [10, 20, 25, 50, 100, 200, 250, 500, 1000].find(candidate => (maxResi - minResi) / candidate <= 14) || 1000;
+      /* Ticks no closer than five label widths in a narrow cell. */
+      const most = fit ? Math.max(3, Math.min(14, Math.floor(plotWidth / (40 * k)))) : 14;
+      const step = [10, 20, 25, 50, 100, 200, 250, 500, 1000].find(candidate => (maxResi - minResi) / candidate <= most) || 1000;
       for (let resi = Math.ceil(minResi / step) * step; resi <= maxResi; resi += step) {
-        parts.push('<line x1="' + f(x(resi)) + '" x2="' + f(x(resi)) + '" y1="' + f(y0 + rowHeight) + '" y2="' + f(y0 + rowHeight + 4) + '" stroke="' + muted + '"/>');
-        parts.push(text(x(resi), y0 + rowHeight + 17, String(resi), 11, 'middle', 400, muted));
+        parts.push('<line x1="' + f(x(resi)) + '" x2="' + f(x(resi)) + '" y1="' + f(y0 + rowHeight) + '" y2="' + f(y0 + rowHeight + 4 * k) + '" stroke="' + muted + '"/>');
+        parts.push(text(x(resi), y0 + rowHeight + 17 * k, String(resi), 11, 'middle', 400, muted));
       }
       parts.push('<rect x="' + f(left) + '" y="' + f(y0) + '" width="' + f(plotWidth) + '" height="' + f(rowHeight) + '" fill="none" stroke="' + muted + '"/>');
-      parts.push(text(left, y0 - 8, chain ? 'Chain ' + chain : 'Chain —', 13, 'start', 600));
-      parts.push(text(left - 52, y0 + rowHeight / 2, 'pLDDT', 11, 'middle', 400, muted, ' transform="rotate(-90 ' + f(left - 52) + ' ' + f(y0 + rowHeight / 2) + ')"'));
+      parts.push(text(left, y0 - 8 * k, chain ? 'Chain ' + chain : 'Chain —', fit ? 11 : 13, 'start', 600));
+      parts.push(text(left - axisLabel, y0 + rowHeight / 2, 'pLDDT', 11, 'middle', 400, muted, ' transform="rotate(-90 ' + f(left - axisLabel) + ' ' + f(y0 + rowHeight / 2) + ')"'));
       rows.forEach(item => {
         const d = item.row.residues.map((atom, position) => (position ? 'L' : 'M') + f(x(atom.resi)) + ' ' + f(y(Math.max(0, Math.min(100, Number(atom.b) || 0))))).join(' ');
-        parts.push('<path d="' + d + '" fill="none" stroke="' + item.entry.color + '" stroke-width="' + (entries.length > 1 ? 1.6 : 2) + '" stroke-linejoin="round"/>');
+        parts.push('<path d="' + d + '" fill="none" stroke="' + item.entry.color + '" stroke-width="' + f((entries.length > 1 ? 1.6 : 2) * k) + '" stroke-linejoin="round"/>');
       });
       parts.push('</g>');
     });

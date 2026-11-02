@@ -169,6 +169,57 @@ All notable changes to this project are recorded here.
   per chain, arrows, Enter); the help lists <kbd>Backspace</kbd> beside <kbd>Delete</kbd>; deleting a
   figure template asks first; a hand edit after a journal preset sets the journal select back to *Choose
   a journal…*; a per-residue table says how many rows it could not read (`· 2 rows skipped`).
+- **A figure with no colour legend and no scale bar was saved at twice the stated size.** 3Dmol draws at
+  twice the screen's resolution, and only a figure with a legend or a bar was drawn back to the plan:
+  an 85 mm, 300 dpi PNG or TIFF was 2008 × 1338 px with 300 dpi written in it, so it printed 170 mm wide;
+  the PDF page was 170 mm while its status said 85; JPEG, WebP, the views ZIP and *Copy PNG* were doubled
+  too. Every raster export is now exactly the size the estimate states.
+- **Large print figures came out black, with "downloaded" in the status.** At 178 mm and 600 dpi the
+  canvas passed the 8192 px a side many integrated GPUs and software renderers allow, and the PNG held
+  only the labels. The plan now stays inside the GPU's limit: the width is kept and the resolution
+  lowered, the estimate and the status say `rendered at 584 dpi, the most this GPU allows for 178 mm`,
+  and that is the dpi written into the file. When the browser then gives the canvas a smaller drawing
+  buffer than it asked for (Chromium does under memory pressure, and the figure came out shifted and
+  cropped), the figure is drawn once more at the size it allowed (`rendered at 503 dpi …`) and later
+  plans fit under it. A canvas past the limit all the same says so and saves nothing. The 24-megapixel
+  cap also keeps a print figure's width now; it kept the dpi and printed the figure smaller.
+- **Restoring a scene emptied the undo history** — Restore scene JSON, the autosaved session's *Restore*
+  and a session file alike — so the labels, measurements and views it replaced could not be got back.
+  A restore is now one undo step: ⌘Z says *Undid scene restore* and brings them back.
+- **The methods text called every structure predicted**, a crystal structure included. It now begins
+  *Experimental structure (PDB 5CHA) was inspected…*, *Predicted structures…* or *Structures…* from
+  what is shown, and says how the distances and angles in the figure were measured (between Cα atoms
+  or the atoms named). The figure legend names a renamed label's residue: *Catalytic Ser (SER195 · C)*.
+- **Opening an archive beside a loaded model hid the models it added**: View mode went to one at a time
+  with the old model still current, and stayed there, so later imports were hidden too. The first model
+  an import adds is now the current one, the status names it (`· showing hbdimer_model_0.cif`), and an
+  archive opens one at a time only on an empty page. *· confidence attached* counted every confidence
+  file loaded since the page opened, so it ended every later import, and a failed one read *Confidence
+  data loaded*; it now counts only the import's own files. A second copy of a file is `1brs.cif (2)`,
+  not `Individual files › 1brs.cif`, which the model menus read as *Individual files › Individual files ›*.
+- **A file of ligands and ions was given a pLDDT** (its calcium ion, atom name CA, read as a Cα), with an
+  empty chain table. It now has none, and the composition says *No polymer chains (ligands and ions
+  only)*. The legend no longer shows a key for colours that are not drawn: pLDDT on a model without
+  pLDDT says *No pLDDT in 5cha.cif (experimental) — drawn in the model colour*, and model agreement
+  before an alignment says to align first.
+- **Compare**: *Align visible* with one shown model blamed the matching, and *Restore coordinates* with
+  nothing aligned said it had restored; both, and the RMSD matrix, are now off until they have
+  something to do. Unrelated proteins superposed without a word (5CHA on 1BRS: 34 Å RMSD); an alignment
+  under 30 % identity or over 10 Å now says *low identity / large RMSD — these models may not be
+  comparable* in the status and its row. The alignment table follows renames and dims a model hidden
+  since. In the synchronized multi-view, ← → and *Current model* said *Showing …* and changed nothing:
+  they now change the primary panel. Removing a model handed its panel silently to the first model; the
+  panel now closes with it and the status says so. *Add panel* is off once every model has a panel.
+- **Hide all left a blank grey stage saying "Ready"**; the stage now says *All models are hidden* with
+  a *Show all* button, the status too, and *Cycle models* is off until a model is shown.
+- **Publish, smaller ones**: after the figure builder's downloads and *Download all views (ZIP)* the
+  status line read "Ready" instead of what was written; a builder caption longer than two lines was cut
+  mid-word without a word — captions now take three lines and the estimate and status name a panel whose
+  caption was shortened; the publication checklist kept ticking "The colour legend is drawn on exports"
+  after the legend was switched off, and missed a scale bar in perspective, until another setting
+  changed; in the composite figure the pLDDT profile was a 1200-unit chart shrunk into its cell (tick
+  labels about 1 pt) — it and the RMSF profile are now laid out at the cell's size with text at the
+  chosen point size — the PAE panel gains a colour bar, and its caption says "pLDDT", not "plddt".
 
 ## 2.51.0
 

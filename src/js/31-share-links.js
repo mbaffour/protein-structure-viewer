@@ -111,7 +111,10 @@
 
   async function applyScene(scene) {
     if (!scene || scene.type !== 'protein-viewer-scene') return;
-    clearHistory();
+    /* A restore replaces every record, so it is one undo step: ⌘Z puts back the labels, measurements,
+       selections and views it replaced. Before 2.52.0 it emptied the history instead, and the work it
+       wrote over was gone. A page with nothing to lose (a share link opening) takes no step. */
+    if (labelRecords.length + selectionRecords.length + measurementRecords.length + annotationRecords.length + domainRecords.length + savedViews.length + spotlightResidues.length) remember('scene restore');
     const byName = new Map(structures.map(entry => [entry.name, entry]));
     let hashWarnings = 0;
     for (const modelRecord of scene.models || []) {
@@ -258,13 +261,15 @@
     root.querySelector('#gpv-import-label').textContent = label;
   }
 
-  function uniqueModelName(name, collection) {
+  /* A second copy is "1brs.cif (2)". Before 2.52.0 it was "Individual files › 1brs.cif", which told two
+     copies of one file apart by nothing (both come from Individual files), and the model menus, which
+     name each model's source themselves, then read "Individual files › Individual files › 1brs.cif".
+     The source still shows under the name in the Models list. */
+  function uniqueModelName(name) {
     if (!structures.some(entry => entry.name === name)) return name;
-    const prefixed = collection + ' › ' + name;
-    if (!structures.some(entry => entry.name === prefixed)) return prefixed;
     let index = 2;
-    while (structures.some(entry => entry.name === prefixed + ' (' + index + ')')) index += 1;
-    return prefixed + ' (' + index + ')';
+    while (structures.some(entry => entry.name === name + ' (' + index + ')')) index += 1;
+    return name + ' (' + index + ')';
   }
 
   async function loadFiles(files) {
@@ -272,6 +277,11 @@
     showImportErrors([]);
     listLimit = listPageSize;
     const doneBusy = setBusy('Importing ' + files.length + ' file' + (files.length === 1 ? '' : 's') + '…');
+    /* What this import added, as against what earlier ones did: the first new model becomes the
+       current one, and only confidence files read now may be reported as attached. */
+    const wasEmpty = structures.length === 0;
+    const assetsBefore = confidenceAssets.length;
+    let firstNew = null; let restoredSession = false;
     stopCycle(); stopMotion();
     importProgress(0, files.length, 'Reading ' + files.length + ' file' + (files.length === 1 ? '' : 's') + '…');
     updateStatus('Loading…');
@@ -291,7 +301,7 @@
           const zip = await JSZip.loadAsync(file);
           if (zip.file('session.json')) {
             const snapshot = await readSessionZip(zip);
-            if (snapshot) { await restoreSession(snapshot); loaded += snapshot.files.length; continue; }
+            if (snapshot) { await restoreSession(snapshot); loaded += snapshot.files.length; restoredSession = true; continue; }
           }
           importedArchive = true;
           const members = Object.values(zip.files);
@@ -301,14 +311,17 @@
             return !member.dir && supported && !lower.includes('/templates/') && !lower.includes('template_hit');
           });
           if (!structureMembers.length) { skipped += 1; failures.push(file.name + ': no structure models found'); continue; }
-          root.querySelector('#gpv-view-mode').value = 'single';
+          /* A run's five models open one at a time on an empty page (they are rarely meant to be
+             overlaid unaligned); added to models already open, they follow the View mode in use. */
+          if (wasEmpty) root.querySelector('#gpv-view-mode').value = 'single';
           for (let memberIndex = 0; memberIndex < structureMembers.length; memberIndex += 1) {
             const member = structureMembers[memberIndex];
             const memberExtension = member.name.split('.').pop().toLowerCase();
             try {
               const pathParts = member.name.split('/').filter(Boolean);
               const displayName = pathParts.length > 1 ? pathParts.slice(-2).join(' / ') : pathParts[0];
-              addStructure(uniqueModelName(displayName, file.name), await member.async('string'), memberExtension === 'pdb' ? 'pdb' : 'cif', member.name, file.name, memberIndex > 0);
+              const added = addStructure(uniqueModelName(displayName), await member.async('string'), memberExtension === 'pdb' ? 'pdb' : 'cif', member.name, file.name, memberIndex > 0);
+              if (!firstNew) { firstNew = added; activeId = added.id; }
               loaded += 1;
               importProgress(fileIndex + (memberIndex + 1) / Math.max(1, structureMembers.length), files.length, file.name + ' · model ' + (memberIndex + 1) + ' of ' + structureMembers.length);
               if (memberIndex === 0) {
@@ -343,7 +356,8 @@
             if (metadataIndex % 12 === 11) await nextPaint();
           }
         } else if (['pdb', 'cif', 'mmcif'].includes(extension)) {
-          addStructure(uniqueModelName(file.name, 'Individual files'), await file.text(), extension === 'pdb' ? 'pdb' : 'cif', file.name, 'Individual files');
+          const added = addStructure(uniqueModelName(file.name), await file.text(), extension === 'pdb' ? 'pdb' : 'cif', file.name, 'Individual files');
+          if (!firstNew) firstNew = added;
           loaded += 1;
         } else if (extension === 'a3m') {
           /* An alignment dropped on its own belongs to no archive, so it is offered to every model —
@@ -364,8 +378,14 @@
       importProgress(fileIndex + 1, files.length, 'Finished ' + file.name);
       await nextPaint();
     }
-    if (importedArchive && structures.length > 1) root.querySelector('#gpv-view-mode').value = 'single';
+    if (importedArchive && wasEmpty && structures.length > 1) root.querySelector('#gpv-view-mode').value = 'single';
+    /* The models just read are what the user is looking for: the first of them is current, so in One
+       at a time it is the one shown (before, the previous model stayed current and the new ones were
+       loaded out of sight), and in Overlay it joins the others. */
+    if (firstNew && !restoredSession && structures.includes(firstNew)) activeId = firstNew.id;
     attachConfidenceAssets();
+    const newAssets = confidenceAssets.slice(assetsBefore);
+    const attachedNow = newAssets.some(asset => structures.some(entry => assetFitsEntry(asset, entry)));
     renderList();
     applyStyle();
     const active = activeEntry();
@@ -377,8 +397,12 @@
     if (pendingScene && structures.length) await applyScene(pendingScene);
     else {
       const added = alignments.length ? 'Alignment added: ' + clipText(alignments.join(', '), 80) : '';
-      const note = loaded ? 'Loaded ' + loaded + ' model' + (loaded === 1 ? '' : 's') + ' from ' + files.length + ' source' + (files.length === 1 ? '' : 's') + (added ? ' · ' + added : '') : added || (pendingScene ? 'Scene loaded; now add its matching structure files' : confidenceAssets.length ? 'Confidence data loaded; add matching structures' : 'No supported structures found');
-      updateStatus(note + (confidenceAssets.length ? ' · confidence attached' : '') + (deferredPae ? ' · skipped ' + deferredPae + ' large PAE files for performance' : '') + (skipped ? ' · ' + skipped + ' skipped' : ''));
+      /* Only this import's confidence files count: the session-wide list made every later import, a
+         failed one included, end "· confidence attached". */
+      const showing = loaded && firstNew && !restoredSession && structures.includes(firstNew) ? ' · showing ' + displayName(firstNew) : '';
+      const note = loaded ? 'Loaded ' + loaded + ' model' + (loaded === 1 ? '' : 's') + ' from ' + files.length + ' source' + (files.length === 1 ? '' : 's') + (added ? ' · ' + added : '') + showing + (attachedNow ? ' · confidence attached' : '')
+        : added || (pendingScene ? 'Scene loaded; now add its matching structure files' : newAssets.length ? (attachedNow ? 'Confidence data attached to the open models' : 'Confidence data loaded; add matching structures') : 'No supported structures found');
+      updateStatus(note + (deferredPae ? ' · skipped ' + deferredPae + ' large PAE files for performance' : '') + (skipped ? ' · ' + skipped + ' skipped' : ''));
     }
     if (alignments.length) renderMsaState();
     /* New work replaces the stored session within seconds, so its banner has nothing left to offer —
@@ -518,24 +542,83 @@
      chosen point size at that width. Overlays and legends read textScale. */
   function exportDimensions() {
     const maxPixels = 24000000;
-    const cap = (width, height) => {
-      if (width * height <= maxPixels) return { width, height, capped: false };
-      const correction = Math.sqrt(maxPixels / (width * height));
-      return { width: Math.floor(width * correction), height: Math.floor(height * correction), capped: true };
+    /* The longest side the export canvas can have on this GPU (see exportGpuLimit). The 24-megapixel
+       cap keeps the page responsive; this one keeps the render from coming out black. */
+    const ratio = exportPixelRatio();
+    const maxSide = Math.max(256, Math.floor(exportGpuLimit() / ratio));
+    const fit = (width, height) => {
+      const forPixels = Math.sqrt(maxPixels / (width * height));
+      const canvasArea = width * height * ratio * ratio;
+      const forGpu = Math.min(maxSide / Math.max(width, height), Math.sqrt(exportAreaLimit() / canvasArea));
+      return { factor: Math.min(1, forPixels, forGpu), gpu: forGpu < Math.min(1, forPixels) };
     };
     if (root.querySelector('#gpv-export-mode').value === 'print') {
       const choice = root.querySelector('#gpv-print-width').value;
       const mm = choice === 'custom' ? Math.min(400, Math.max(20, Number(root.querySelector('#gpv-print-custom').value) || 120)) : Number(choice);
-      const dpi = Number(root.querySelector('#gpv-print-dpi').value) || 300;
+      const requestedDpi = Number(root.querySelector('#gpv-print-dpi').value) || 300;
       const aspect = Number(root.querySelector('#gpv-print-aspect').value) || 1.5;
       const points = Number(root.querySelector('#gpv-print-text').value) || 8;
-      const sized = cap(Math.round(mm / 25.4 * dpi), Math.round(mm / 25.4 * dpi / aspect));
-      return { ...sized, dpi, mm, heightMm: mm / aspect, points, textScale: (points / 72 * dpi) / 12 };
+      /* A capped print figure keeps its physical width and gives up resolution: the dpi written into
+         the PNG, TIFF and PDF is the one the pixels have, so 178 mm still prints at 178 mm. Capping
+         the pixels and keeping the dpi printed it smaller than asked. */
+      const capping = fit(mm / 25.4 * requestedDpi, mm / 25.4 * requestedDpi / aspect);
+      const dpi = capping.factor < 1 ? Math.floor(requestedDpi * capping.factor) : requestedDpi;
+      return { width: Math.round(mm / 25.4 * dpi), height: Math.round(mm / 25.4 * dpi / aspect), capped: capping.factor < 1, gpuLimited: capping.factor < 1 && capping.gpu, dpi, requestedDpi, mm, heightMm: mm / aspect, points, textScale: (points / 72 * dpi) / 12 };
     }
     const parts = root.querySelector('#gpv-export-size').value.split('x').map(Number);
     const requestedScale = Number(root.querySelector('#gpv-export-scale').value) || 1;
-    const sized = cap(parts[0] * requestedScale, parts[1] * requestedScale);
-    return { ...sized, dpi: null, textScale: Math.max(1, sized.width / 600) };
+    const width = parts[0] * requestedScale; const height = parts[1] * requestedScale;
+    const capping = fit(width, height);
+    const sized = capping.factor < 1 ? { width: Math.floor(width * capping.factor), height: Math.floor(height * capping.factor) } : { width, height };
+    return { ...sized, capped: capping.factor < 1, gpuLimited: capping.factor < 1 && capping.gpu, dpi: null, textScale: Math.max(1, sized.width / 600) };
+  }
+
+  /* What a capped plan gave up, for the estimate and every download's status line. */
+  function exportCapNote(plan) {
+    if (!plan.capped) return '';
+    if (plan.dpi) return ' · rendered at ' + plan.dpi + ' dpi, the most ' + (plan.gpuLimited ? 'this GPU allows' : 'a browser page handles (24 megapixels)') + ' for ' + plan.mm + ' mm';
+    return plan.gpuLimited ? ' · size capped at the most this GPU can render' : ' · size capped for browser stability';
+  }
+
+  /* 3Dmol draws its canvas at the page's pixel ratio, doubled below 2 for its antialiasing — so on an
+     ordinary screen an export surface of W × H CSS pixels is a 2W × 2H canvas and the PNG it hands
+     back is twice the plan (withLegend draws it back to the plan's size). */
+  function exportPixelRatio() {
+    const ratio = window.devicePixelRatio || 1;
+    return ratio < 2 ? ratio * 2 : ratio;
+  }
+  /* The largest canvas side this GPU renders to: the smallest of its texture, renderbuffer and
+     viewport limits, read once from the main view's context (the export context is on the same GPU).
+     Past it WebGL leaves 3Dmol's framebuffer empty and the figure comes out black, only the overlays
+     drawn on it. 8192 is common on integrated GPUs and software renderers; the regression suite
+     lowers it through the debug hook rather than ask CI for an 8 000-pixel render. */
+  let exportGpuLimitCache = 0; let exportGpuLimitOverride = 0;
+  function exportGpuLimit() {
+    if (exportGpuLimitOverride) return exportGpuLimitOverride;
+    if (exportGpuLimitCache) return exportGpuLimitCache;
+    const canvas = typeof viewer.getCanvas === 'function' ? viewer.getCanvas() : root.querySelector('#gpv-stage canvas');
+    let context = null;
+    for (const type of ['webgl2', 'webgl']) { try { context = canvas ? canvas.getContext(type) : null; } catch (error) { context = null; } if (context) break; }
+    const viewport = context ? context.getParameter(context.MAX_VIEWPORT_DIMS) : null;
+    const limit = context ? Math.min(context.getParameter(context.MAX_TEXTURE_SIZE) || 0, context.getParameter(context.MAX_RENDERBUFFER_SIZE) || 0, ...(viewport ? [viewport[0], viewport[1]] : [])) : 0;
+    /* A lost or missing context says nothing: assume the common limit and ask again next time. */
+    if (!(limit > 0)) return 8192;
+    exportGpuLimitCache = limit;
+    return limit;
+  }
+  /* A browser can also give the export canvas a smaller drawing buffer than it asked for, under the
+     texture limit — Chromium gave 7055 × 4702 for an 8186 × 5456 canvas once the page held other
+     contexts — and says so only through drawingBufferWidth. 3Dmol then draws its full-size framebuffer
+     into the smaller buffer and the figure comes out shifted and cropped. It cannot be asked in
+     advance (a fresh context gets the full size), so the first render that meets it records it here
+     and every plan after fits under it. */
+  let exportAreaLearned = Infinity;
+  function exportAreaLimit() {
+    return exportGpuLimitOverride ? exportGpuLimitOverride * exportGpuLimitOverride : exportAreaLearned;
+  }
+  function setExportGpuLimit(limit) {
+    exportGpuLimitOverride = Number(limit) > 0 ? Number(limit) : 0;
+    updateExportEstimate();
   }
 
   function figureScale(plan) {
@@ -560,8 +643,8 @@
     ['#gpv-print-width', '#gpv-print-aspect', '#gpv-print-dpi', '#gpv-print-text'].forEach(selector => { root.querySelector(selector).closest('label').hidden = !printMode; });
     root.querySelector('#gpv-print-custom').closest('label').hidden = !printMode || root.querySelector('#gpv-print-width').value !== 'custom';
     root.querySelector('#gpv-export-estimate').textContent = printMode
-      ? plan.width + ' × ' + plan.height + ' px · ' + plan.mm + ' × ' + Math.round(plan.heightMm) + ' mm at ' + plan.dpi + ' dpi · text ' + plan.points + ' pt' + (plan.capped ? ' · capped for browser stability' : '')
-      : plan.width + ' × ' + plan.height + ' px · no physical size recorded' + (plan.capped ? ' · capped for browser stability' : '');
+      ? plan.width + ' × ' + plan.height + ' px · ' + plan.mm + ' × ' + Math.round(plan.heightMm) + ' mm at ' + plan.dpi + ' dpi · text ' + plan.points + ' pt' + (plan.capped ? ' · ' + plan.requestedDpi + ' dpi asked' + exportCapNote(plan) : '')
+      : plan.width + ' × ' + plan.height + ' px · no physical size recorded' + exportCapNote(plan);
   }
 
   /* Off-screen render target for PNG export.
@@ -610,7 +693,9 @@
     exportViewer.resize();
   }
 
-  async function renderPublicationImage(state = null, dimensions = exportDimensions(), overlays = true) {
+  /* strict: the caller can plan again and retry (renderFittedFigure), so a render the browser shrank is
+     refused rather than returned. */
+  async function renderPublicationImage(state = null, dimensions = exportDimensions(), overlays = true, strict = false) {
     const restore = state ? captureViewState() : null;
     if (state) applyViewState(state, { panels: false });
     const target = acquireExportViewer(dimensions.width, dimensions.height);
@@ -642,6 +727,20 @@
     frame();
     target.render();
     await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+    /* exportDimensions keeps the plan inside the GPU's limits. A canvas past the texture limit all the
+       same renders black: say so rather than save it. A drawing buffer the browser shrank is recorded
+       so the next plan fits, and refused when the caller can plan again. */
+    const surface = typeof target.getCanvas === 'function' ? target.getCanvas() : null;
+    let surfaceContext = null;
+    for (const type of ['webgl2', 'webgl']) { try { surfaceContext = surface ? surface.getContext(type) : null; } catch (error) { surfaceContext = null; } if (surfaceContext) break; }
+    const clamped = Boolean(surfaceContext && !surfaceContext.isContextLost() && surfaceContext.drawingBufferWidth > 0 && surfaceContext.drawingBufferWidth < surface.width);
+    if (clamped) { exportAreaLearned = Math.min(exportAreaLearned, surfaceContext.drawingBufferWidth * surfaceContext.drawingBufferHeight); setTimeout(updateExportEstimate, 0); }
+    if (surface && (Math.max(surface.width, surface.height) > (exportGpuLimitOverride || exportGpuLimitCache || Infinity) || (clamped && strict))) {
+      if (restore) applyViewState(restore, { panels: false });
+      const error = new Error('this GPU could not render ' + surface.width + ' × ' + surface.height + ' px — choose a lower resolution or a smaller width');
+      error.gpuRetry = clamped;
+      throw error;
+    }
     const uri = target.pngURI();
     if (restore) applyViewState(restore, { panels: false });
     return uri;
@@ -833,6 +932,14 @@
       if (!found || !found.domains.length) return { title: 'PAE domains (heuristic)', items: [['#9ca3af', 'none yet', 'No domains found yet — Confidence → Find domains']] };
       return { title: 'PAE domains (heuristic)', items: [...found.domains.slice(0, 12).map(domain => [domainColorFor(domain.id), 'D' + domain.id, 'Domain ' + domain.id + ' · ' + clipText(domainRanges(domain), 36)]), ...(found.unassigned ? [['#9ca3af', 'other', 'Unassigned']] : [])] };
     }
+    /* A key for colours that are not on the model would say they are: before an alignment model
+       agreement is all grey, and a model without pLDDT is drawn in its own colour. Say why instead. */
+    if (mode === 'agreement' && !ensembleSpread) return { title: 'Cα RMSF', items: [['#9ca3af', 'align first', 'Grey until models are aligned — Compare → Align visible']] };
+    if (mode === 'plddt' && !displayedEntries().some(entry => entry.model && entry.scores.length)) {
+      const shownNow = displayedEntries().filter(entry => entry.model);
+      const experimental = shownNow.length && shownNow.every(entry => entry.experimentalMethod || entry.collection === 'RCSB PDB');
+      return { title: 'pLDDT', items: [['#9ca3af', 'no pLDDT', 'No pLDDT in ' + (shownNow.length === 1 ? displayName(shownNow[0]) : 'the shown models') + (experimental ? ' (experimental)' : '') + ' — drawn in the model colour']] };
+    }
     if (mode === 'agreement') return { title: 'Cα RMSF', items: [...agreementBands.map(([, color, label]) => [color, label]), ['#9ca3af', 'single', 'In one model only']] };
     if (mode === 'deviation') return { title: 'Cα deviation', items: [...deviationBands.map(([, color, label]) => [color, label]), ['#9ca3af', 'unmatched']] };
     if (mode === 'fromresidue') return distanceColourLegend();
@@ -999,15 +1106,28 @@
     if (bar) { context.save(); context.translate(0, -layout.barLift); drawScaleBar(context, bar, scale, palette); context.restore(); }
     return layout;
   }
+  /* The single-image exports (figure, views ZIP): render at the plan, and if the browser shrank the
+     drawing buffer below it, once more at the plan that fits under what it allowed. Returns the plan
+     actually rendered, which is what the status line must state. */
+  async function renderFittedFigure(plan) {
+    try { return { plan, uri: await withLegend(await renderPublicationImage(null, plan, true, true), plan) }; }
+    catch (error) {
+      if (!error.gpuRetry) throw error;
+      const fitted = exportDimensions();
+      return { plan: fitted, uri: await withLegend(await renderPublicationImage(null, fitted, true, true), fitted) };
+    }
+  }
+  /* Always onto a canvas of exactly the plan's size, legend or not: 3Dmol hands back its canvas at
+     twice the plan (exportPixelRatio), and before 2.52.0 a figure with nothing to add was saved at
+     that size — an 85 mm, 300 dpi PNG that printed 170 mm wide. */
   async function withLegend(uri, plan) {
     const bar = scaleBarSpec(exportViewer, plan);
-    if (!legendWanted() && !bar) return uri;
     const { width, height } = plan;
     const imageValue = await loadImage(uri);
     const canvas = document.createElement('canvas'); canvas.width = width; canvas.height = height;
     const context = canvas.getContext('2d');
     context.drawImage(imageValue, 0, 0, width, height);
-    drawFurniture(context, width, height, figureScale(plan), bar, figurePalette());
+    if (legendWanted() || bar) drawFurniture(context, width, height, figureScale(plan), bar, figurePalette());
     return canvas.toDataURL('image/png');
   }
 

@@ -20,7 +20,10 @@
     wrap.hidden = false;
     const body = root.querySelector('#gpv-chain-rows'); body.replaceChildren();
     const hidden = entry.hiddenChains || [];
-    residueRows(entry).forEach(row => {
+    /* A model of ligands and ions has no chains to list: say so instead of drawing an empty table. */
+    const rows = residueRows(entry);
+    body.closest('table').hidden = !rows.length;
+    rows.forEach(row => {
       const tr = document.createElement('tr');
       const chainCell = document.createElement('th');
       const swatch = document.createElement('input');
@@ -72,7 +75,7 @@
       : 'No ligands or ions (water is not counted).';
     root.querySelector('#gpv-chains-all').disabled = hidden.length === 0 && !(entry.fadedChains || []).length;
     const groups = entityGroups(entry); const size = assemblyDimensions(entry);
-    root.querySelector('#gpv-assembly-summary').textContent = (groups.length ? 'Stoichiometry: ' + groups.map(group => group.label + ' ×' + group.chains.length + ' (' + clipText(group.chains.join(', '), 30) + ', ' + group.length + ' aa)').join(' · ') : '')
+    root.querySelector('#gpv-assembly-summary').textContent = !rows.length ? 'No polymer chains (ligands and ions only).' : (groups.length ? 'Stoichiometry: ' + groups.map(group => group.label + ' ×' + group.chains.length + ' (' + clipText(group.chains.join(', '), 30) + ', ' + group.length + ' aa)').join(' · ') : '')
       + (size ? (groups.length ? ' · ' : '') + 'Cα extent ' + (size.exact ? '' : '≥ ') + (size.extent / 10).toFixed(1) + ' nm · radius of gyration ' + (size.gyration / 10).toFixed(1) + ' nm' : '');
   }
 

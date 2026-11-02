@@ -134,19 +134,24 @@ panel of the same model that line up exactly.
 
 - **Source** filters to one loaded archive. **Find models** filters by name or stoichiometry.
 - **View mode** switches between overlaying every shown model and displaying one at a time. A
-  structure fetched by ID joins the view in whichever mode it is in.
+  structure fetched by ID joins the view in whichever mode it is in. Files you open do the same, and
+  the first model they add becomes the current one — the one shown in one-at-a-time mode — and the
+  status line names it (`Loaded 2 models from 1 source · showing hbdimer / hbdimer_model_0.cif`). A
+  second copy of a file already open is named `1brs.cif (2)`.
 - **Model order** sorts by load order, ranking score, or mean pLDDT. Models without the chosen score
   sort last.
 - **Cycle models** steps through the currently filtered, visible models at the chosen interval.
   Navigation (*Current model*, ← →, Previous/Next) and cycling switch the view to one at a time; the
   status line says so when it leaves an overlay, and the mode is remembered like a choice made in
-  *View mode*.
+  *View mode*. In the synchronized multi-view they change the model in the primary panel instead.
+  Cycling needs a shown model: after **Hide all** the button is off, and the view itself says *All
+  models are hidden* with a **Show all** button.
 - Each row has its own visibility switch, mean pLDDT readout, colour picker, and remove button.
   Changing a row's colour switches the colour scheme to *Per structure* so the change is visible.
   **Remove** takes the model's labels, selections, measurements and annotations with it, closes the
   residue card and clears the selected residue if they were on that model, drops the alignment and
-  comparison it was part of, and says *Removed …*; with no model left, *Drag to select*, measuring and
-  drawing turn off.
+  comparison it was part of, closes any comparison panel showing it, and says *Removed …* (`· its panel
+  closed`); with no model left, *Drag to select*, measuring and drawing turn off.
 - **Clear all** removes every model and everything made on them. It cannot be undone, so it asks
   first whenever there are two or more models, or any label, selection, measurement, annotation,
   domain or saved view; one bare model clears at once. Analyses go with the models (ligand sites,
@@ -171,7 +176,10 @@ Unticking a chain hides it everywhere — viewer,
 synchronized panels, PNG and SVG exports, the surface — while the sequence strip keeps the row, dimmed
 and marked *hidden*, so you still see what is missing. **Show all chains** restores them. The line
 underneath counts ligands and ions by residue name (HEM ×4, ZN ×2 …); water is never counted. Hidden
-chains are stored in scene JSON, carried by share links, and respected by the report.
+chains are stored in scene JSON, carried by share links, and respected by the report. A file of
+ligands and ions alone has no table: the line reads *No polymer chains (ligands and ions only)*, and
+it is given no pLDDT (a file without a header is otherwise read as a prediction, as ColabFold and
+AlphaFold write none).
 
 Under the table, a line gives the **stoichiometry** (entities by identical sequence with their chains
 and lengths) and the **Cα extent** (the exact maximum Cα–Cα distance, or a lower bound marked ≥ above 6 000 residues) and **radius of gyration**, both in
@@ -553,7 +561,11 @@ structural domain assignment, and it says nothing about whether that unit is pla
 
 **Align visible** superposes every visible model onto the reference using a Kabsch rotation over the
 paired Cα atoms, and reports per-model Cα pairs, sequence identity, RMSD, and the chain mapping used.
-**Restore coordinates** undoes the superposition. **Download RMSD CSV** exports the table.
+It needs two shown models, and is off until there are. A pair under 30 % identity or over 10 Å RMSD is
+aligned all the same, but the status line and its row add *low identity / large RMSD — these models
+may not be comparable*. The table names models by their current display names, and a row whose model
+has been hidden since is dimmed (*hidden since — Align visible to update*). **Restore coordinates**
+undoes the superposition, and is off while nothing is superposed. **Download RMSD CSV** exports the table.
 
 Alignment needs at least three paired Cα atoms. If nothing aligns, the models likely share no chains
 under the chosen mapping — try the sequence-aware mode.
@@ -564,8 +576,10 @@ one row, four make a 2 × 2 grid, five or six use three columns. Dragging, wheel
 rocking any panel moves them all. **Camera sync** chooses what is shared: *Rotation only* keeps each
 model framed on its own centre, which suits assemblies of different size; *Rotation and zoom* locks
 the cameras completely, which suits superposed models after **Align visible**. **Fit** (or
-<kbd>F</kbd>) refits every panel. The panel set, sync mode, and each panel's camera are stored in saved
-views and scene manifests, and the shared report opens with the same panels.
+<kbd>F</kbd>) refits every panel. **Add panel** offers the next model without a panel and is off once
+every loaded model has one; ← → and *Current model* change the primary panel. The panel set, sync
+mode, and each panel's camera are stored in saved views and scene manifests, and the shared report
+opens with the same panels.
 
 
 ### Contact and distance map
@@ -719,8 +733,15 @@ measurement value, legend and caption is drawn so its text prints at the chosen 
 **figure font** (Arial/Helvetica by default, Times, or the system font) applies to all of them and to
 SVG text. **Download publication TIFF** writes a baseline uncompressed RGBA TIFF with the resolution
 set; it is large (about 4 bytes per pixel) but it is what some journals ask for. The PNG is rendered
-off-screen at full resolution, independent of your window size. Very large requests are capped at roughly 24 megapixels
-for browser stability, and the status line says when that happened.
+off-screen at full resolution, independent of your window size, and the file is exactly the size the
+estimate states, legend or not. Very large requests are capped at roughly 24 megapixels for browser
+stability, and at the largest canvas your graphics card can draw (often 8192 px a side, which 3Dmol's
+doubled drawing resolution reaches at 178 mm and 600 dpi). A capped print figure keeps its width and
+gives up resolution — the estimate and the status line say `rendered at 584 dpi, the most this GPU
+allows for 178 mm`, and that dpi is the one written into the file, so it still prints 178 mm wide. If
+the browser then allows the canvas less than the card reports, the figure is drawn once more at what it
+allows and later estimates fit under it; a render that would still pass the limit says so and saves
+nothing.
 
 Rendering is one long synchronous WebGL call, so the page stops responding while it runs — expect a
 few seconds on a machine with a real GPU and considerably longer without one. A warning appears above
@@ -1012,6 +1033,8 @@ whether each panel carries its **legend and scale bar**. **Download built figure
 ticked view from its own camera, colour scheme, model selection and background at the same text
 size, puts the letter and caption in a strip under each cell, and writes the resolution into the
 file; **Download built figure SVG** does the same with vector captions, labels, legends and scale bars.
+A caption wraps onto up to three lines; one longer than that ends in an ellipsis, and the estimate
+line and the download's status say which panel's caption was shortened.
 The cells share the aspect ratio set under *Output* and are sized so the whole figure is exactly the
 chosen figure width: a 178 mm double-column figure stays 178 mm whether it holds two panels or six,
 and the estimate line gives the pixel size of the figure and of each panel before you render. The
@@ -1059,7 +1082,8 @@ into the report header, the caption export, and the scene manifest.
 **Figure legend.** **Write figure legend** drafts a legend from the scene: models shown,
 representation, colour scheme with its bands written out, any low-confidence cut, ligand handling,
 the alignment reference, method and per-model Cα RMSD, whether panels are synchronized, labelled
-residues, highlighted ranges, measurements with the atoms they join, their values and their text
+residues (a label you renamed is followed by its residue, `Catalytic Ser (SER195 · C)`), highlighted
+ranges, measurements with the atoms they join, their values and their text
 (`HIS57 · B NE2 ↔ SER195 · C OG 3.02 Å (H-bond)`), annotation text, and your provenance
 notes. The text is copied to the clipboard and appears in an editable field. It is a draft in the
 tool's words; edit it into yours.
@@ -1069,8 +1093,12 @@ models were superposed (Kabsch least squares on Cα atoms, and whether the pairs
 residue identifiers or from sequence alignment), that RMSD is over all paired Cα atoms without outlier
 rejection, how RMSF and Cα deviation are defined, the PAE-domain heuristic with its cutoff, the
 contact and ligand-site cutoffs, how extent and radius of gyration are computed, the colour scale in
-use, any hidden low-confidence residues and the export size — with the viewer and 3Dmol.js versions
-and a pointer to the validation record. Only sentences that apply to the current scene are written.
+use, how the distances and angles shown were measured (between Cα atoms, or between the atoms the
+figure legend names), any hidden low-confidence residues and the export size — with the viewer and
+3Dmol.js versions and a pointer to the validation record. It opens by saying what was inspected:
+*Experimental structure (PDB 5CHA)* for a model with an experimental method record or fetched from the
+PDB, *Predicted structures* for models with pLDDT or a predictor's confidence files, and *Structures*
+for a mixture or anything else. Only sentences that apply to the current scene are written.
 
 **Session files.** **Save session file** writes one ZIP that carries the models themselves (their
 coordinate text), every confidence matrix as binary floats, the current alignment, labels, selections,
@@ -1158,7 +1186,9 @@ figure at the chosen print size and resolution: panel A is the 3D view as it sta
 and scale bar you have chosen), followed by the panels you tick — the **PAE heatmap** of the current
 model, the **pLDDT profile** of the displayed models, and the **contact or distance map** when one has
 been computed in the Compare tab. Each panel is rendered fresh at output resolution, never scaled up
-from the screen, and carries a caption; the file carries its resolution. Choose one, two or three
+from the screen, and carries a caption; the file carries its resolution. The pLDDT and RMSF profiles
+are laid out at the size of their cell with their axis text at the chosen point size, and the PAE
+heatmap has a colour bar from 0 to its maximum in Å. Choose one, two or three
 columns. Panels that are not available for the current model are greyed out with the reason in their
 tooltip. The result is the confidence figure most AlphaFold papers need, assembled in one step; open
 it in Illustrator or Inkscape for the final layout if the journal needs a different arrangement.
@@ -1172,7 +1202,8 @@ entity or domain colours that are not colour-blind safe; a colour scheme whose l
 off; a scale bar in perspective projection, where its length depends on depth; several models shown
 without superposition; a pLDDT cut that hides residues; a dark or custom background; many chains
 without an outline; no figure title. Warnings have a one-click fix where one exists (use print size,
-use Okabe–Ito, draw legend, switch to orthographic). The list refreshes as you change settings, and
+use Okabe–Ito, draw legend, switch to orthographic). The list refreshes as you change settings — the
+legend switch and the scale bar included — and
 the badge on the heading reads *ready* when no warning remains. It is a checklist, not a judge:
 notes are suggestions, and a warning you have a reason to ignore can be ignored.
 
@@ -1214,7 +1245,9 @@ measurements, saved views, comparison and alignment settings, and your provenanc
 To restore one, load the structure files first, then pick the scene JSON under **Restore scene JSON**
 (or just drop the JSON in with the files — it is applied once structures are present). Hashes are
 recomputed on restore, and the status line warns if any file no longer matches the one the scene was
-saved from.
+saved from. A restore replaces the labels, selections, measurements, annotations and saved views on
+the page, so it is one undo step: <kbd>Ctrl</kbd>/<kbd>⌘</kbd>+<kbd>Z</kbd> (*Undid scene restore*)
+brings back what it replaced. The same holds for the autosaved session's **Restore** and for a session file.
 
 The manifest is what you archive alongside a figure so the scene can be rebuilt later. It is not a
 substitute for keeping the coordinate files.
@@ -1248,7 +1281,8 @@ region of interest, and quote the alignment statistics next to any RMSD you repo
 
 Archives with hundreds of predictions are handled with a few deliberate compromises:
 
-- Multi-model archives open in one-at-a-time mode rather than as a single overlay.
+- Multi-model archives opened on an empty page open in one-at-a-time mode rather than as a single
+  overlay; added to models already open, they follow the View mode in use.
 - Only the first model of an archive is parsed eagerly; the rest are parsed when first displayed.
 - Above 40 loaded models, models that are not displayed and not referenced by an annotation are
   released from GPU memory and re-parsed on demand.

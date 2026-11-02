@@ -2312,25 +2312,41 @@ html>body{padding:0}</style>
 
   /* Per-residue pLDDT plot: one panel per chain, one line per displayed model,
      the four confidence bands shaded behind. */
-  function plddtProfileSvg() {
+  /* `fit` lays the profile out for a cell of the composite figure — { width, height, scale } in that
+     cell's pixels, scale being the text size (1 = 11 px tick labels) — instead of the 1200-unit page
+     the standalone downloads use. Drawn at 1200 units and shrunk into a 500-pixel cell, its tick labels
+     printed at about 1 pt in a strip along the top of the cell. The cell's caption names the plot, so
+     the title row goes; the model key stays when there is more than one model. */
+  function plddtProfileSvg(fit = null) {
     const entries = displayedEntries().filter(entry => entry.model && entry.scores.length).slice(0, 8);
     const chains = [...new Set(entries.flatMap(entry => residueRows(entry).map(row => row.chain)))].sort(compareChains).slice(0, 12);
     if (!entries.length || !chains.length) return null;
-    const width = 1200; const left = 72; const right = 30; const top = 64; const rowHeight = 170; const gap = 40; const bottom = 40;
-    const height = top + chains.length * rowHeight + (chains.length - 1) * gap + bottom;
+    const keyRow = !fit || entries.length > 1;
+    let k = 1; let width = 1200; let left = 72; let right = 30; let top = 64; let rowHeight = 170; let gap = 40; let bottom = 40; let axisLabel = 52;
+    if (fit) {
+      left = 50; right = 12; top = keyRow ? 48 : 24; gap = 30; bottom = 26; axisLabel = 40;
+      /* The chosen text size, unless the rows would then be too short to read a trace in. */
+      k = Math.min(fit.scale, fit.height / (top + bottom + (chains.length - 1) * gap + chains.length * 40));
+      [left, right, top, gap, bottom, axisLabel] = [left, right, top, gap, bottom, axisLabel].map(value => value * k);
+      width = fit.width; rowHeight = (fit.height - top - bottom - (chains.length - 1) * gap) / chains.length;
+    }
+    const height = fit ? fit.height : top + chains.length * rowHeight + (chains.length - 1) * gap + bottom;
     const ink = '#111827'; const muted = '#6b7280'; const grid = '#e5e7eb';
     const parts = [];
-    const text = (x, y, value, size, anchor = 'start', weight = 400, fill = ink, extra = '') => '<text x="' + f(x) + '" y="' + f(y) + '" font-family="' + svgFont + '" font-size="' + size + '" font-weight="' + weight + '" text-anchor="' + anchor + '" fill="' + fill + '"' + extra + '>' + svgEscape(value) + '</text>';
-    parts.push('<g id="title">' + text(left, 32, provenanceValues().title || 'Per-residue pLDDT', 20, 'start', 600) + '</g>');
-    parts.push('<g id="models">');
-    let cursor = width - right;
-    svgMeasure.font = '500 12px ' + svgFont;
-    [...entries].reverse().forEach(entry => {
-      const label = clipText(displayName(entry), 30); const labelWidth = svgMeasure.measureText(label).width;
-      cursor -= labelWidth; parts.push(text(cursor, 34, label, 12, 'start', 500));
-      cursor -= 18; parts.push('<rect x="' + f(cursor) + '" y="24" width="12" height="12" rx="2" fill="' + entry.color + '"/>'); cursor -= 16;
-    });
-    parts.push('</g>');
+    const text = (x, y, value, size, anchor = 'start', weight = 400, fill = ink, extra = '') => '<text x="' + f(x) + '" y="' + f(y) + '" font-family="' + svgFont + '" font-size="' + f(size * k) + '" font-weight="' + weight + '" text-anchor="' + anchor + '" fill="' + fill + '"' + extra + '>' + svgEscape(value) + '</text>';
+    if (!fit) parts.push('<g id="title">' + text(left, 32, provenanceValues().title || 'Per-residue pLDDT', 20, 'start', 600) + '</g>');
+    if (keyRow) {
+      const keyY = fit ? 22 * k : 34;
+      parts.push('<g id="models">');
+      let cursor = width - right;
+      svgMeasure.font = '500 ' + f(12 * k) + 'px ' + svgFont;
+      [...entries].reverse().forEach(entry => {
+        const label = clipText(displayName(entry), 30); const labelWidth = svgMeasure.measureText(label).width;
+        cursor -= labelWidth; parts.push(text(cursor, keyY, label, 12, 'start', 500));
+        cursor -= 18 * k; parts.push('<rect x="' + f(cursor) + '" y="' + f(keyY - 10 * k) + '" width="' + f(12 * k) + '" height="' + f(12 * k) + '" rx="' + f(2 * k) + '" fill="' + entry.color + '"/>'); cursor -= 16 * k;
+      });
+      parts.push('</g>');
+    }
     const plotWidth = width - left - right;
     chains.forEach((chain, index) => {
       const y0 = top + index * (rowHeight + gap);
@@ -2341,21 +2357,25 @@ html>body{padding:0}</style>
       const y = value => y0 + rowHeight - value / 100 * rowHeight;
       parts.push('<g id="chain-' + svgEscape(chain || 'none') + '">');
       [[0, 50, '#ff7d45'], [50, 70, '#ffdb13'], [70, 90, '#65cbf3'], [90, 100, '#0053d6']].forEach(([low, high, color]) => parts.push('<rect x="' + f(left) + '" y="' + f(y(high)) + '" width="' + f(plotWidth) + '" height="' + f(y(low) - y(high)) + '" fill="' + color + '" fill-opacity="0.12"/>'));
+      /* A short row keeps the 0, 50 and 100 labels only; the band edges still have their grid lines. */
+      const labelled = fit && rowHeight < 70 * k ? [0, 50, 100] : [0, 50, 70, 90, 100];
       [0, 50, 70, 90, 100].forEach(value => {
         parts.push('<line x1="' + f(left) + '" x2="' + f(left + plotWidth) + '" y1="' + f(y(value)) + '" y2="' + f(y(value)) + '" stroke="' + grid + '"/>');
-        parts.push(text(left - 8, y(value) + 4, String(value), 11, 'end', 400, muted));
+        if (labelled.includes(value)) parts.push(text(left - 8 * k, y(value) + 4 * k, String(value), 11, 'end', 400, muted));
       });
-      const step = [10, 20, 25, 50, 100, 200, 250, 500, 1000].find(candidate => (maxResi - minResi) / candidate <= 14) || 1000;
+      /* Ticks no closer than five label widths in a narrow cell. */
+      const most = fit ? Math.max(3, Math.min(14, Math.floor(plotWidth / (40 * k)))) : 14;
+      const step = [10, 20, 25, 50, 100, 200, 250, 500, 1000].find(candidate => (maxResi - minResi) / candidate <= most) || 1000;
       for (let resi = Math.ceil(minResi / step) * step; resi <= maxResi; resi += step) {
-        parts.push('<line x1="' + f(x(resi)) + '" x2="' + f(x(resi)) + '" y1="' + f(y0 + rowHeight) + '" y2="' + f(y0 + rowHeight + 4) + '" stroke="' + muted + '"/>');
-        parts.push(text(x(resi), y0 + rowHeight + 17, String(resi), 11, 'middle', 400, muted));
+        parts.push('<line x1="' + f(x(resi)) + '" x2="' + f(x(resi)) + '" y1="' + f(y0 + rowHeight) + '" y2="' + f(y0 + rowHeight + 4 * k) + '" stroke="' + muted + '"/>');
+        parts.push(text(x(resi), y0 + rowHeight + 17 * k, String(resi), 11, 'middle', 400, muted));
       }
       parts.push('<rect x="' + f(left) + '" y="' + f(y0) + '" width="' + f(plotWidth) + '" height="' + f(rowHeight) + '" fill="none" stroke="' + muted + '"/>');
-      parts.push(text(left, y0 - 8, chain ? 'Chain ' + chain : 'Chain —', 13, 'start', 600));
-      parts.push(text(left - 52, y0 + rowHeight / 2, 'pLDDT', 11, 'middle', 400, muted, ' transform="rotate(-90 ' + f(left - 52) + ' ' + f(y0 + rowHeight / 2) + ')"'));
+      parts.push(text(left, y0 - 8 * k, chain ? 'Chain ' + chain : 'Chain —', fit ? 11 : 13, 'start', 600));
+      parts.push(text(left - axisLabel, y0 + rowHeight / 2, 'pLDDT', 11, 'middle', 400, muted, ' transform="rotate(-90 ' + f(left - axisLabel) + ' ' + f(y0 + rowHeight / 2) + ')"'));
       rows.forEach(item => {
         const d = item.row.residues.map((atom, position) => (position ? 'L' : 'M') + f(x(atom.resi)) + ' ' + f(y(Math.max(0, Math.min(100, Number(atom.b) || 0))))).join(' ');
-        parts.push('<path d="' + d + '" fill="none" stroke="' + item.entry.color + '" stroke-width="' + (entries.length > 1 ? 1.6 : 2) + '" stroke-linejoin="round"/>');
+        parts.push('<path d="' + d + '" fill="none" stroke="' + item.entry.color + '" stroke-width="' + f((entries.length > 1 ? 1.6 : 2) * k) + '" stroke-linejoin="round"/>');
       });
       parts.push('</g>');
     });
@@ -2909,6 +2929,19 @@ html>body{padding:0}</style>
   function updateStatus(message = 'Ready') {
     if (!root.querySelector('[data-gpv-panel="publish"]').hidden) { setTimeout(renderPublicationChecks, 0); setTimeout(renderCompositeControls, 0); }
     const visible = displayedEntries();
+    /* Models loaded but none of them shown (Hide all, or every switch off): an empty stage that does not
+       say why looks like a failed load. */
+    const allHidden = structures.length > 0 && !structures.some(entry => entry.visible);
+    if (allHidden && message === 'Ready') message = 'All models are hidden · Show all brings them back';
+    let hiddenHint = root.querySelector('#gpv-stage-hidden');
+    if (!hiddenHint && allHidden) {
+      hiddenHint = document.createElement('div'); hiddenHint.className = 'gpv-stage-empty'; hiddenHint.id = 'gpv-stage-hidden';
+      const title = document.createElement('strong'); title.textContent = 'All models are hidden';
+      const show = document.createElement('button'); show.className = 'btn'; show.type = 'button'; show.textContent = 'Show all';
+      show.addEventListener('click', () => root.querySelector('#gpv-show-all').click());
+      hiddenHint.append(title, show); root.querySelector('#gpv-stage-empty').after(hiddenHint);
+    }
+    if (hiddenHint) hiddenHint.hidden = !allHidden;
     root.querySelector('#gpv-count').textContent = visible.length + ' displayed / ' + structures.length + ' loaded';
     const scores = visible.flatMap(entry => entry.scores);
     const score = mean(scores);
@@ -2929,7 +2962,7 @@ html>body{padding:0}</style>
     root.querySelector('#gpv-profile-svg').disabled = !scored;
     root.querySelector('#gpv-profile-png').disabled = !scored;
     root.querySelector('#gpv-image').disabled = structures.length === 0; root.querySelector('#gpv-model-panels').disabled = structures.length < 2;
-    root.querySelector('#gpv-rmsd-matrix-run').disabled = structures.length < 2;
+    root.querySelector('#gpv-rmsd-matrix-run').disabled = visible.filter(entry => entry.visible).length < 2;
     root.querySelector('#gpv-svg').disabled = structures.length === 0;
     if (typeof renderImageButton === 'function') renderImageButton();
     root.querySelector('#gpv-video').disabled = structures.length === 0;
@@ -2946,11 +2979,16 @@ html>body{padding:0}</style>
     root.querySelector('#gpv-captions').disabled = savedViews.length === 0;
     ['#gpv-domain-labels', '#gpv-pae-domain-labels', '#gpv-architecture-png', '#gpv-architecture-svg'].forEach(selector => { root.querySelector(selector).disabled = structures.length === 0; });
     updateReportEstimate();
-    ['#gpv-current', '#gpv-reference', '#gpv-selection-model', '#gpv-left-model', '#gpv-previous', '#gpv-next', '#gpv-cycle', '#gpv-align', '#gpv-restore', '#gpv-add-selection', '#gpv-box-select', '#gpv-annotate', '#gpv-add-screen-text', '#gpv-interface-model', '#gpv-interface-run'].forEach(selector => {
+    ['#gpv-current', '#gpv-reference', '#gpv-selection-model', '#gpv-left-model', '#gpv-previous', '#gpv-next', '#gpv-add-selection', '#gpv-box-select', '#gpv-annotate', '#gpv-add-screen-text', '#gpv-interface-model', '#gpv-interface-run'].forEach(selector => {
       root.querySelector(selector).disabled = structures.length === 0;
     });
+    /* Align needs a second shown model to superpose; Restore needs something superposed to put back;
+       Cycle needs a shown model. Each used to stay enabled and answer with a misleading status. */
+    root.querySelector('#gpv-align').disabled = structures.filter(entry => entry.visible).length < 2;
+    root.querySelector('#gpv-restore').disabled = !structures.some(entry => entry.superposed);
+    root.querySelector('#gpv-cycle').disabled = !structures.some(entry => entry.visible) && !cycleTimer;
     const comparing = root.querySelector('#gpv-side-by-side').checked && comparePanels.length > 0 && structures.length > 0;
-    root.querySelector('#gpv-add-panel').disabled = structures.length === 0 || comparePanels.length >= maxComparePanels;
+    renderAddPanelButton();
     root.querySelector('#gpv-clear-panels').disabled = comparePanels.length === 0;
     root.querySelector('#gpv-compare-image').disabled = !comparing;
     root.querySelector('#gpv-compare-svg').disabled = !comparing;
@@ -2971,7 +3009,10 @@ html>body{padding:0}</style>
     /* Experimental structures carry crystallographic B-factors, not pLDDT, in the same
        column; do not report them as confidence. */
     entry.experimentalMethod = entry.experimentalMethod ?? experimentalMethod(entry.text);
-    if (!entry.scores.length && entry.collection !== 'RCSB PDB' && !entry.experimentalMethod) entry.scores = modelScores(model);
+    /* A header-less PDB is read as a prediction (ColabFold and AlphaFold write none), but only one with
+       a polymer: a file of ligands and ions has no pLDDT, and its calcium ion, named CA, is not a Cα. */
+    const polymer = atoms.some(atom => !atom.hetflag && (atom.atom === 'CA' || atom.atom === "C1'"));
+    if (!entry.scores.length && entry.collection !== 'RCSB PDB' && !entry.experimentalMethod && polymer) entry.scores = modelScores(model);
     entry.originalAtoms = atoms.map(atom => ({ x: atom.x, y: atom.y, z: atom.z }));
     return model;
   }
@@ -3031,7 +3072,8 @@ html>body{padding:0}</style>
       structures.forEach(entry => {
         const option = document.createElement('option');
         option.value = String(entry.id);
-        option.textContent = (entry.collection ? entry.collection + ' › ' : '') + displayName(entry);
+        /* A name that already carries its source (from an older scene or session) is not prefixed twice. */
+        option.textContent = (entry.collection && !displayName(entry).startsWith(entry.collection + ' › ') ? entry.collection + ' › ' : '') + displayName(entry);
         select.append(option);
       });
       if (structures.some(entry => String(entry.id) === String(previous))) select.value = String(previous);
@@ -3076,7 +3118,7 @@ html>body{padding:0}</style>
       visible.type = 'checkbox';
       visible.checked = entry.visible;
       visible.setAttribute('aria-label', 'Show ' + entry.name);
-      visible.addEventListener('change', () => { entry.visible = visible.checked; applyStyle(); });
+      visible.addEventListener('change', () => { entry.visible = visible.checked; applyStyle(); renderAlignmentResults(); });
       visibleLabel.append(visible);
 
       const copy = document.createElement('span');
@@ -3158,6 +3200,8 @@ html>body{padding:0}</style>
       row.append(visibleLabel, copy, score, color, fadeLabel, focus, rename, remove);
       list.append(row);
     });
+    /* The alignment table names models and dims hidden ones; Show all, Hide all and Rename come here. */
+    renderAlignmentResults();
   }
 
   /* Everything that names the model goes with it: its records, the card and the selected residue
@@ -3184,6 +3228,13 @@ html>body{padding:0}</style>
     if (siteResults && siteResults.entryId === entry.id) siteResults = null;
     if (nearbyResult && nearbyResult.entry === entry) { nearbyResult = null; root.querySelector('#gpv-near-copy').disabled = true; }
     if (rmsdMatrix) { rmsdMatrix = null; renderRmsdMatrix(); }
+    /* Its comparison panels close with it. They used to be handed silently to the first model, until
+       every panel showed the same one; and with no panel left the multi-view has nothing to compare. */
+    const panelsClosed = comparePanels.filter(panel => panel.entryId === entry.id);
+    panelsClosed.forEach(destroyPanelViewer);
+    comparePanels = comparePanels.filter(panel => panel.entryId !== entry.id);
+    const wasPrimary = root.querySelector('#gpv-side-by-side').checked && Number(root.querySelector('#gpv-left-model').value) === entry.id;
+    if (!comparePanels.length) root.querySelector('#gpv-side-by-side').checked = false;
     if (!structures.length) {
       setBoxSelectMode(false);
       if (annotationActive) toggleAnnotating(false);
@@ -3193,7 +3244,8 @@ html>body{padding:0}</style>
     renderLabelList(); renderSelectionList(); renderMeasurementList(); renderAnnotationList();
     renderList();
     applyStyle();
-    announce('Removed ' + displayName(entry));
+    const primary = root.querySelector('#gpv-side-by-side').checked ? activeEntry() : null;
+    announce('Removed ' + displayName(entry) + (panelsClosed.length ? ' · its panel' + (panelsClosed.length === 1 ? '' : 's') + ' closed' : '') + (wasPrimary && primary ? ' · the primary panel now shows ' + displayName(primary) : ''));
   }
 
   function addStructure(name, text, format, sourcePath = name, collection = 'Individual files', lazy = false) {
@@ -3260,8 +3312,13 @@ html>body{padding:0}</style>
     }
     activeId = entry.id;
     root.querySelector('#gpv-current').value = String(entry.id);
+    /* In the synchronized multi-view the primary panel is the current model: it changes with the
+       choice, where the status used to say "Showing" a model no panel showed. The View mode is not
+       the multi-view's, so it is left alone. */
+    const comparing = root.querySelector('#gpv-side-by-side').checked;
+    if (comparing) root.querySelector('#gpv-left-model').value = String(entry.id);
     const mode = root.querySelector('#gpv-view-mode');
-    const leftOverlay = !keepMode && mode.value !== 'single';
+    const leftOverlay = !keepMode && !comparing && mode.value !== 'single';
     if (leftOverlay) { mode.value = 'single'; savePreferences(); }
     applyStyle();
     root.querySelectorAll('#gpv-list [data-entry-id]').forEach(row => row.classList.toggle('is-active', Number(row.dataset.entryId) === entry.id));
@@ -3269,7 +3326,8 @@ html>body{padding:0}</style>
     const average = mean(entry.scores);
     if (activeRow) activeRow.textContent = average === null ? 'pLDDT —' : average.toFixed(1);
     if (fit && entry.model) { viewer.zoomTo({ model: entry.model.getID() }); viewer.render(); }
-    updateStatus('Showing ' + displayName(entry) + (leftOverlay ? ' · one model at a time (View mode)' : ''));
+    if (comparing) syncViewsFrom(viewer);
+    updateStatus('Showing ' + displayName(entry) + (comparing ? ' in the primary panel' : leftOverlay ? ' · one model at a time (View mode)' : ''));
   }
 
   function selectRelative(delta, fit = true) {
@@ -3282,7 +3340,7 @@ html>body{padding:0}</style>
 
   function toggleCycle() {
     if (cycleTimer) { stopCycle(); return; }
-    if (!cycleEntries().length) return;
+    if (!cycleEntries().length) { updateStatus('No shown models to cycle'); return; }
     const delay = Math.max(500, Number(root.querySelector('#gpv-cycle-speed').value) * 1000);
     cycleTimer = setInterval(() => selectRelative(1, false), delay);
     const button = root.querySelector('#gpv-cycle');
@@ -7277,9 +7335,12 @@ html>body{padding:0}</style>
   async function downloadViewsZip() {
     if (!savedViews.length) { announce('Save a view first (Publish → Save current view)', 'error'); return; }
     if (typeof JSZip === 'undefined') { announce('The ZIP writer did not load. Refresh the page and try again.', 'error'); return; }
-    const plan = exportDimensions(); const button = root.querySelector('#gpv-views-zip');
+    let plan = exportDimensions(); const button = root.querySelector('#gpv-views-zip');
     const done = setBusy('Rendering views…'); button.disabled = true;
     const restore = captureViewState();
+    /* Said last, after the on-screen view is put back: putting it back restyles the models, and the
+       restyle's status line ('Ready') would otherwise replace what was written. */
+    let outcome = null;
     try {
       const zip = new JSZip();
       for (let index = 0; index < savedViews.length; index += 1) {
@@ -7287,7 +7348,7 @@ html>body{padding:0}</style>
         /* Apply the view first so the legend and scale bar describe that view, not the one on screen;
            restore straight after so side-by-side views do not stack up WebGL panel contexts. */
         applyViewState(savedViews[index], { panels: false });
-        const uri = await withLegend(await renderPublicationImage(null, plan), plan);
+        const rendered = await renderFittedFigure(plan); plan = rendered.plan; const uri = rendered.uri;
         applyViewState(restore, { panels: false });
         const letter = panelLetter(savedViews[index]);
         zip.file(String(index + 1).padStart(2, '0') + '-' + (letter === '—' ? '' : letter + '-') + String(savedViews[index].name || 'view').replace(/[^\w.-]+/g, '_') + '.png', await pngWithDpi(uri, plan.dpi));
@@ -7296,14 +7357,14 @@ html>body{padding:0}</style>
       zip.file('captions.txt', [provenance.title || 'Protein structure figure', provenance.source, provenance.method, '', ...panelCaptionLines(), '', provenance.notes, '', figureLegendText()].filter((line, index, array) => line || array[index - 1]).join('\n'));
       const blob = await zip.generateAsync({ type: 'blob' });
       downloadBlob(blob, 'application/zip', exportFileName('protein-views', plan, 'zip'));
-      announce(savedViews.length + ' view' + (savedViews.length === 1 ? '' : 's') + ' exported · ' + formatBytes(blob.size) + (plan.dpi ? ' · ' + plan.dpi + ' dpi' : ''));
+      outcome = [savedViews.length + ' view' + (savedViews.length === 1 ? '' : 's') + ' exported · ' + formatBytes(blob.size) + ' · ' + plan.width + ' × ' + plan.height + (plan.dpi ? ' at ' + plan.dpi + ' dpi' : '') + exportCapNote(plan)];
     } catch (error) {
-      announce('Could not export the views: ' + error.message, 'error');
+      outcome = ['Could not export the views: ' + error.message, 'error'];
     } finally {
       releaseExportViewer(); applyViewState(restore, { panels: false }); done(); button.disabled = savedViews.length === 0; button.textContent = 'Download all views (ZIP)';
+      if (outcome) announce(...outcome);
     }
   }
-
   /* ---------- Annotated domains ---------- */
 
   let domainRecords = [];
@@ -7456,23 +7517,33 @@ html>body{padding:0}</style>
   /* The RMSF profile: per-residue Cα spread across the aligned models, one panel per chain,
      the agreement bands as stripes behind the trace so the reader sees at a glance which
      stretches the models agree on. The ensemble figure's companion to the pLDDT profile. */
-  function rmsfProfileSvg() {
+  /* `fit` lays it out for a composite cell, as plddtProfileSvg's does: no title or band key (the
+     caption and the stripes carry them), text at the figure's size. */
+  function rmsfProfileSvg(fit = null) {
     if (!ensembleSpread || !ensembleSpread.values.size) return null;
     const byChain = new Map();
     ensembleSpread.values.forEach((value, tag) => { const [chain, resi] = tag.split('|'); if (!byChain.has(chain)) byChain.set(chain, []); byChain.get(chain).push({ resi: Number(resi), value }); });
     const chains = [...byChain.keys()].sort(compareChains).slice(0, 12);
     if (!chains.length) return null;
-    const width = 1200; const left = 72; const right = 30; const top = 64; const rowHeight = 170; const gap = 40; const bottom = 40;
-    const height = top + chains.length * rowHeight + (chains.length - 1) * gap + bottom;
+    let k = 1; let width = 1200; let left = 72; let right = 30; let top = 64; let rowHeight = 170; let gap = 40; let bottom = 40; let axisLabel = 52;
+    if (fit) {
+      left = 50; right = 12; top = 24; gap = 30; bottom = 26; axisLabel = 40;
+      k = Math.min(fit.scale, fit.height / (top + bottom + (chains.length - 1) * gap + chains.length * 40));
+      [left, right, top, gap, bottom, axisLabel] = [left, right, top, gap, bottom, axisLabel].map(value => value * k);
+      width = fit.width; rowHeight = (fit.height - top - bottom - (chains.length - 1) * gap) / chains.length;
+    }
+    const height = fit ? fit.height : top + chains.length * rowHeight + (chains.length - 1) * gap + bottom;
     const ink = '#111827'; const muted = '#6b7280'; const grid = '#e5e7eb';
     const ceiling = Math.max(1, Math.ceil(ensembleSpread.max * 1.05 * 2) / 2);
     const parts = [];
-    const text = (x, y, value, size, anchor = 'start', weight = 400, fill = ink, extra = '') => '<text x="' + f(x) + '" y="' + f(y) + '" font-family="' + svgFont + '" font-size="' + size + '" font-weight="' + weight + '" text-anchor="' + anchor + '" fill="' + fill + '"' + extra + '>' + svgEscape(value) + '</text>';
-    parts.push('<g id="title">' + text(left, 32, (provenanceValues().title ? provenanceValues().title + ' · ' : '') + 'Per-residue Cα RMSF across ' + ensembleSpread.count + ' models', 20, 'start', 600) + '</g>');
-    parts.push('<g id="bands">');
-    let cursor = width - right; svgMeasure.font = '500 12px ' + svgFont;
-    [...agreementBands].reverse().forEach(([, color, label]) => { const labelWidth = svgMeasure.measureText(label).width; cursor -= labelWidth; parts.push(text(cursor, 34, label, 12, 'start', 500)); cursor -= 18; parts.push('<rect x="' + f(cursor) + '" y="24" width="12" height="12" rx="2" fill="' + color + '"/>'); cursor -= 16; });
-    parts.push('</g>');
+    const text = (x, y, value, size, anchor = 'start', weight = 400, fill = ink, extra = '') => '<text x="' + f(x) + '" y="' + f(y) + '" font-family="' + svgFont + '" font-size="' + f(size * k) + '" font-weight="' + weight + '" text-anchor="' + anchor + '" fill="' + fill + '"' + extra + '>' + svgEscape(value) + '</text>';
+    if (!fit) parts.push('<g id="title">' + text(left, 32, (provenanceValues().title ? provenanceValues().title + ' · ' : '') + 'Per-residue Cα RMSF across ' + ensembleSpread.count + ' models', 20, 'start', 600) + '</g>');
+    if (!fit) {
+      parts.push('<g id="bands">');
+      let cursor = width - right; svgMeasure.font = '500 12px ' + svgFont;
+      [...agreementBands].reverse().forEach(([, color, label]) => { const labelWidth = svgMeasure.measureText(label).width; cursor -= labelWidth; parts.push(text(cursor, 34, label, 12, 'start', 500)); cursor -= 18; parts.push('<rect x="' + f(cursor) + '" y="24" width="12" height="12" rx="2" fill="' + color + '"/>'); cursor -= 16; });
+      parts.push('</g>');
+    }
     const plotWidth = width - left - right;
     chains.forEach((chain, index) => {
       const y0 = top + index * (rowHeight + gap);
@@ -7486,19 +7557,20 @@ html>body{padding:0}</style>
       const tickStep = ceiling <= 2 ? 0.5 : ceiling <= 5 ? 1 : ceiling <= 12 ? 2 : 5;
       for (let value = 0; value <= ceiling + 1e-9; value += tickStep) {
         parts.push('<line x1="' + f(left) + '" x2="' + f(left + plotWidth) + '" y1="' + f(y(value)) + '" y2="' + f(y(value)) + '" stroke="' + grid + '"/>');
-        parts.push(text(left - 8, y(value) + 4, String(Math.round(value * 10) / 10), 11, 'end', 400, muted));
+        parts.push(text(left - 8 * k, y(value) + 4 * k, String(Math.round(value * 10) / 10), 11, 'end', 400, muted));
       }
-      const step = [10, 20, 25, 50, 100, 200, 250, 500, 1000].find(candidate => (maxResi - minResi) / candidate <= 14) || 1000;
+      const most = fit ? Math.max(3, Math.min(14, Math.floor(plotWidth / (40 * k)))) : 14;
+      const step = [10, 20, 25, 50, 100, 200, 250, 500, 1000].find(candidate => (maxResi - minResi) / candidate <= most) || 1000;
       for (let resi = Math.ceil(minResi / step) * step; resi <= maxResi; resi += step) {
-        parts.push('<line x1="' + f(x(resi)) + '" x2="' + f(x(resi)) + '" y1="' + f(y0 + rowHeight) + '" y2="' + f(y0 + rowHeight + 4) + '" stroke="' + muted + '"/>');
-        parts.push(text(x(resi), y0 + rowHeight + 17, String(resi), 11, 'middle', 400, muted));
+        parts.push('<line x1="' + f(x(resi)) + '" x2="' + f(x(resi)) + '" y1="' + f(y0 + rowHeight) + '" y2="' + f(y0 + rowHeight + 4 * k) + '" stroke="' + muted + '"/>');
+        parts.push(text(x(resi), y0 + rowHeight + 17 * k, String(resi), 11, 'middle', 400, muted));
       }
       parts.push('<rect x="' + f(left) + '" y="' + f(y0) + '" width="' + f(plotWidth) + '" height="' + f(rowHeight) + '" fill="none" stroke="' + muted + '"/>');
-      parts.push(text(left, y0 - 8, chain ? 'Chain ' + chain : 'Chain —', 13, 'start', 600));
-      parts.push(text(left - 52, y0 + rowHeight / 2, 'RMSF (Å)', 11, 'middle', 400, muted, ' transform="rotate(-90 ' + f(left - 52) + ' ' + f(y0 + rowHeight / 2) + ')"'));
+      parts.push(text(left, y0 - 8 * k, chain ? 'Chain ' + chain : 'Chain —', fit ? 11 : 13, 'start', 600));
+      parts.push(text(left - axisLabel, y0 + rowHeight / 2, 'RMSF (Å)', 11, 'middle', 400, muted, ' transform="rotate(-90 ' + f(left - axisLabel) + ' ' + f(y0 + rowHeight / 2) + ')"'));
       const d = residues.map((item, position) => (position ? 'L' : 'M') + f(x(item.resi)) + ' ' + f(y(item.value))).join(' ');
       parts.push('<path d="' + d + ' L' + f(x(maxResi)) + ' ' + f(y(0)) + ' L' + f(x(minResi)) + ' ' + f(y(0)) + ' Z" fill="' + ink + '" fill-opacity="0.08"/>');
-      parts.push('<path d="' + d + '" fill="none" stroke="' + ink + '" stroke-width="1.8" stroke-linejoin="round"/>');
+      parts.push('<path d="' + d + '" fill="none" stroke="' + ink + '" stroke-width="' + f(1.8 * k) + '" stroke-linejoin="round"/>');
       parts.push('</g>');
     });
     return { svg: svgDocument(width, height, '#ffffff', parts.join('\n')), width, height };
@@ -8120,7 +8192,10 @@ html>body{padding:0}</style>
     wrap.hidden = false;
     const body = root.querySelector('#gpv-chain-rows'); body.replaceChildren();
     const hidden = entry.hiddenChains || [];
-    residueRows(entry).forEach(row => {
+    /* A model of ligands and ions has no chains to list: say so instead of drawing an empty table. */
+    const rows = residueRows(entry);
+    body.closest('table').hidden = !rows.length;
+    rows.forEach(row => {
       const tr = document.createElement('tr');
       const chainCell = document.createElement('th');
       const swatch = document.createElement('input');
@@ -8172,7 +8247,7 @@ html>body{padding:0}</style>
       : 'No ligands or ions (water is not counted).';
     root.querySelector('#gpv-chains-all').disabled = hidden.length === 0 && !(entry.fadedChains || []).length;
     const groups = entityGroups(entry); const size = assemblyDimensions(entry);
-    root.querySelector('#gpv-assembly-summary').textContent = (groups.length ? 'Stoichiometry: ' + groups.map(group => group.label + ' ×' + group.chains.length + ' (' + clipText(group.chains.join(', '), 30) + ', ' + group.length + ' aa)').join(' · ') : '')
+    root.querySelector('#gpv-assembly-summary').textContent = !rows.length ? 'No polymer chains (ligands and ions only).' : (groups.length ? 'Stoichiometry: ' + groups.map(group => group.label + ' ×' + group.chains.length + ' (' + clipText(group.chains.join(', '), 30) + ', ' + group.length + ' aa)').join(' · ') : '')
       + (size ? (groups.length ? ' · ' : '') + 'Cα extent ' + (size.exact ? '' : '≥ ') + (size.extent / 10).toFixed(1) + ' nm · radius of gyration ' + (size.gyration / 10).toFixed(1) + ' nm' : '');
   }
 
@@ -8669,6 +8744,10 @@ html>body{padding:0}</style>
   }
 
 
+  /* The rules read these two controls live, but nothing else they touch re-renders the list: switching
+     the legend off left it ticking "The colour legend is drawn on exports" until some other setting
+     changed. */
+  ['#gpv-export-legend', '#gpv-scale-bar'].forEach(selector => root.querySelector(selector).addEventListener('change', () => renderPublicationChecks()));
   /* ---------- Composite figure ----------
      The 3D view and the confidence panels a paper puts beside it — PAE heatmap, pLDDT profile,
      contact map — stitched into one lettered figure at the chosen print size. Each panel is
@@ -8695,9 +8774,12 @@ html>body{padding:0}</style>
     root.querySelector('#gpv-composite').disabled = structures.length === 0;
   }
 
-  function drawPaePanel(entry, size) {
+  /* The heatmap with a colour bar beside it when `font` (its label size in pixels) is given: a PAE
+     panel with no key left the reader to guess what dark meant. */
+  function drawPaePanel(entry, size, font = 0, palette = figurePalette()) {
     const matrix = entry.confidence.pae; const n = matrix.length;
-    const canvas = document.createElement('canvas'); canvas.width = size; canvas.height = size;
+    const barWidth = font ? Math.round(font * 0.9) : 0; const barArea = font ? Math.round(font * 4.6) : 0;
+    const canvas = document.createElement('canvas'); canvas.width = size + barArea; canvas.height = size;
     const context = canvas.getContext('2d'); const image = context.createImageData(size, size);
     const maximum = finiteNumber(entry.confidence.paeMaximum) || matrixMaximum(matrix);
     for (let y = 0; y < size; y += 1) {
@@ -8717,6 +8799,16 @@ html>body{padding:0}</style>
       context.beginPath(); context.moveTo(position, 0); context.lineTo(position, size); context.moveTo(0, position); context.lineTo(size, position); context.stroke();
     }
     context.globalAlpha = 1;
+    if (font) {
+      context.fillStyle = palette.paper; context.fillRect(size, 0, barArea, size);
+      const x = size + Math.round(font * 0.7); const top = Math.round(font * 1.8); const bottom = size - Math.round(font * 0.8); const span = bottom - top;
+      for (let row = 0; row < span; row += 1) { const color = paeColor(maximum * (1 - row / Math.max(1, span - 1)), maximum); context.fillStyle = 'rgb(' + color[0] + ',' + color[1] + ',' + color[2] + ')'; context.fillRect(x, top + row, barWidth, 1); }
+      context.strokeStyle = palette.ink; context.lineWidth = Math.max(1, font / 14); context.strokeRect(x, top, barWidth, span);
+      context.fillStyle = palette.ink; context.font = '500 ' + font + 'px ' + figureFont(); context.textBaseline = 'middle'; context.textAlign = 'left';
+      context.fillText(maximum.toFixed(0), x + barWidth + Math.round(font * 0.3), top);
+      context.fillText('0', x + barWidth + Math.round(font * 0.3), bottom);
+      context.fillText('Å', x, Math.round(font * 0.8));
+    }
     return { canvas, caption: 'Predicted aligned error, ' + n + ' × ' + n + ' tokens, 0 (dark) to ' + maximum.toFixed(1) + ' Å' };
   }
 
@@ -8747,15 +8839,21 @@ html>body{padding:0}</style>
       /* The panel is a fraction of the figure width, so text and legend scale down with it. */
       const panelPlan = { ...requested, width: cell, height: cellHeight, textScale: (requested.textScale || 1) * cell / requested.width };
       const uri = await withLegend(await renderPublicationImage(null, panelPlan), panelPlan);
-      panels.push({ image: await loadImage(uri), caption: displayName(entry) + (root.querySelector('#gpv-color-mode').value !== 'structure' ? ', coloured by ' + root.querySelector('#gpv-color-mode').selectedOptions[0].textContent.toLowerCase() : '') });
-      if (wanted.pae) { const pae = drawPaePanel(entry, Math.min(cell, cellHeight)); panels.push({ image: pae.canvas, caption: pae.caption }); }
+      /* "coloured by pLDDT confidence", not "plddt": only a leading capital that starts a word is lowered. */
+      panels.push({ image: await loadImage(uri), caption: displayName(entry) + (root.querySelector('#gpv-color-mode').value !== 'structure' ? ', coloured by ' + root.querySelector('#gpv-color-mode').selectedOptions[0].textContent.replace(/^[A-Z](?=[a-z])/, letter => letter.toLowerCase()) : '') });
+      /* The charts are laid out at the size of the box they are drawn into, with their text at the
+         figure's text size — 11 px labels on a 1200-unit chart shrunk into the cell printed at 1 pt. */
+      const pad = Math.round(cell * 0.03); const box = { width: cell - 2 * pad, height: cellHeight - 2 * pad };
+      const labelPx = requested.dpi ? requested.points / 72 * requested.dpi : 12 * figureScale(requested);
+      const fit = { ...box, scale: labelPx / 11 };
+      if (wanted.pae) { const pae = drawPaePanel(entry, Math.min(box.height, box.width - Math.round(labelPx * 4.6)), Math.round(labelPx), palette); panels.push({ image: pae.canvas, caption: pae.caption }); }
       if (wanted.profile) {
-        const profile = plddtProfileSvg();
+        const profile = plddtProfileSvg(fit);
         if (profile) { const image = await loadImage('data:image/svg+xml;charset=utf-8,' + encodeURIComponent(profile.svg)); panels.push({ image, caption: 'Per-residue pLDDT' + (displayedEntries().filter(item => item.scores.length).length > 1 ? ' of the displayed models' : ''), aspect: profile.width / profile.height }); }
       }
       if (wanted.contacts) { const canvas = document.createElement('canvas'); drawContactMap(canvas, true, Math.max(1, Math.round(cell / 600 * 2))); panels.push({ image: canvas, caption: contactCaption() }); }
       if (wanted.rmsf) {
-        const profile = rmsfProfileSvg();
+        const profile = rmsfProfileSvg(fit);
         if (profile) { const image = await loadImage('data:image/svg+xml;charset=utf-8,' + encodeURIComponent(profile.svg)); panels.push({ image, caption: 'Per-residue Cα RMSF across ' + ensembleSpread.count + ' aligned models' }); }
       }
       if (wanted.matrix) {
@@ -9115,7 +9213,10 @@ html>body{padding:0}</style>
     if (root.querySelector('#gpv-side-by-side').checked && comparePanels.length) sentences.push('Panels share one orientation' + (root.querySelector('#gpv-sync-mode').value === 'full' ? ' and zoom' : '') + '.');
     const shownIds = new Set(shown.map(entry => entry.id));
     const labels = labelRecords.filter(label => shownIds.has(label.entryId));
-    if (labels.length) sentences.push('Labelled residues: ' + labels.map(label => label.text).join(', ') + '.');
+    /* A renamed label names its residue too — "Catalytic Ser (SER195 · C)" — so the reader can find it;
+       a label that already reads as its residue is not repeated, and a domain label names a domain. */
+    const labelResidue = label => (label.resn || 'RES') + label.resi + (label.icode || '') + (label.chain ? ' · ' + label.chain : '');
+    if (labels.length) sentences.push('Labelled residues: ' + labels.map(label => label.text + (label.kind === 'domain' || label.text === labelResidue(label) ? '' : ' (' + labelResidue(label) + ')')).join(', ') + '.');
     spotlightResidues.forEach(spot => {
       const sentence = positionSentence(spot); if (sentence) sentences.push(sentence);
       const effect = positionEffectLegend(spot); if (effect) sentences.push(effect);
@@ -9142,6 +9243,28 @@ html>body{padding:0}</style>
     catch (error) { field.focus(); field.select(); announce('Figure legend written — copy it from the field'); }
   }
 
+  /* The PDB code a model came with: the identifier it was fetched by, the mmCIF entry id, the PDB
+     HEADER's id columns, or a file named after it (5cha.cif). */
+  function pdbCodeOf(entry) {
+    if (entry.fetchId && /^[0-9][a-z0-9]{3}$/i.test(entry.fetchId)) return entry.fetchId.toUpperCase();
+    const text = String(entry.text || '').slice(0, 20000);
+    const found = text.match(/^_entry\.id\s+'?([0-9][a-z0-9]{3})'?\s*$/im) || text.match(/^HEADER.{56}([0-9][A-Z0-9]{3})/m) || String(entry.name || '').match(/^([0-9][a-z0-9]{3})(?:\.|$)/i);
+    return found ? found[1].toUpperCase() : null;
+  }
+  /* What the methods say was inspected. A crystal structure is not a prediction: experimental models
+     (a method record, or fetched from the PDB) are named with their codes, predicted ones (pLDDT read,
+     or a predictor's confidence files) as predicted, and anything mixed or unknown as structures. */
+  function methodsSubject(shown) {
+    const experimental = entry => Boolean(entry.experimentalMethod || entry.collection === 'RCSB PDB');
+    const predicted = entry => !experimental(entry) && Boolean(entry.scores.length || (entry.confidence && Object.keys(entry.confidence).length));
+    if (shown.length && shown.every(experimental)) {
+      const codes = [...new Set(shown.map(pdbCodeOf).filter(Boolean))];
+      return 'Experimental structure' + (shown.length === 1 ? '' : 's') + (codes.length ? ' (PDB ' + codes.join(', ') + ')' : '') + (shown.length === 1 ? ' was' : ' were');
+    }
+    if (shown.length && shown.every(predicted)) return 'Predicted structure' + (shown.length === 1 ? ' was' : 's were');
+    return 'Structure' + (shown.length === 1 ? ' was' : 's were');
+  }
+
   /* A methods paragraph in the past tense, stating the definitions behind every number the
      viewer can show, so a paper's Methods section describes what was actually computed. */
   function methodsText() {
@@ -9149,7 +9272,7 @@ html>body{padding:0}</style>
     const first = shown[0] || structures.find(entry => entry.model) || null;
     const mode = root.querySelector('#gpv-color-mode').value;
     const sentences = [];
-    sentences.push('Predicted structures were inspected in Protein Structure Viewer ' + viewerVersion + ' (Awuah, 2026; github.com/mbaffour/protein-structure-viewer), a browser application built on 3Dmol.js 2.4.2 (Rego & Koes, 2015).');
+    sentences.push(methodsSubject(shown) + ' inspected in Protein Structure Viewer ' + viewerVersion + ' (Awuah, 2026; github.com/mbaffour/protein-structure-viewer), a browser application built on 3Dmol.js 2.4.2 (Rego & Koes, 2015).');
     if (shown.some(entry => entry.scores.length)) sentences.push('Per-residue pLDDT was read from the B-factor column of the model files and mean pLDDT was calculated over Cα atoms (C1′ for nucleotides)' + (shown.some(entry => entry.confidence && entry.confidence.pae) ? '; predicted aligned error (PAE) matrices were read from the accompanying confidence files' : '') + '.');
     if (alignmentResults.length) {
       const bySequence = alignmentResults[0].method !== 'chain/residue IDs';
@@ -9161,6 +9284,20 @@ html>body{padding:0}</style>
     if (ensembleSpread) sentences.push('Model agreement was expressed per residue as the Cα root-mean-square fluctuation about the mean Cα position across the ' + ensembleSpread.count + ' superposed models, for residues present in at least two models; each model\'s residues were matched to the reference (' + ensembleSpread.models[0] + ') through the residue pairing used for its superposition, and values are reported in the reference\'s residue numbering.');
     /* The contact or distance map's sentence (19): the contact rule, or the Cα–Cα scale of the All distances view. */
     const contactSentence = contactMethodsSentence(); if (contactSentence) sentences.push(contactSentence);
+    /* The legend quotes each measurement's value; this says what it was measured between. */
+    const shownIds = new Set(shown.map(entry => entry.id));
+    const measured = measurementRecords.filter(record => record.points.every(point => shownIds.has(point.entryId)));
+    if (measured.length) {
+      const distances = measured.filter(record => record.type === 'distance'); const angles = measured.length - distances.length;
+      const alpha = distances.filter(record => record.points.every(point => point.atom === 'CA')).length;
+      const named = 'the specific atoms named in the figure legend (for two residues, the closest pair of heavy atoms where that was chosen)';
+      const tail = ', in Å, from the model coordinates without fitting or averaging.';
+      const plural = distances.length === 1 ? 'The distance shown was' : 'The ' + distances.length + ' distances shown were';
+      if (distances.length && alpha === distances.length) sentences.push(plural + ' measured between Cα atoms' + tail);
+      else if (distances.length && !alpha) sentences.push(plural + ' measured between ' + named + tail);
+      else if (distances.length) sentences.push('Of the ' + distances.length + ' distances shown, ' + alpha + (alpha === 1 ? ' was' : ' were') + ' measured between Cα atoms and ' + (distances.length - alpha) + ' between ' + named + tail);
+      if (angles) sentences.push((angles === 1 ? 'The angle' : 'The ' + angles + ' angles') + ' shown ' + (angles === 1 ? 'was' : 'were') + ' measured at the middle of the three atoms named in the figure legend, in degrees.');
+    }
     if (residueData && residueData.msa && root.querySelector('#gpv-color-mode').value === 'data') sentences.push('Per-residue ' + (residueData.msa.metric === 'depth' ? 'alignment coverage (number of sequences with a residue at the column)' : residueData.msa.metric === 'identity' ? 'identity to the query (fraction of aligned sequences sharing the query residue)' : 'conservation, defined as 1 − H/log₂20 with H the Shannon entropy of the amino-acid distribution at the column (gaps excluded' + (residueData.msa.weighted ? '; sequences weighted with the position-based scheme of Henikoff & Henikoff, 1994' : '; sequences unweighted') + '),') + ' was computed from the unpaired multiple sequence alignment written by AlphaFold 3 (' + residueData.msa.sequences.join(' and ') + ' sequences) and mapped onto the chains whose sequence matches the query.');
     const domains = first && first.domains;
     if (domains && domains.domains.length) sentences.push('Domains were derived from the PAE matrix by greedy agglomeration of ten-residue segments: the pair with the lowest mean inter-segment PAE was merged while that mean stayed below ' + domains.cutoff + ' Å; groups of fewer than twenty residues were absorbed into the nearest domain when within twice the cutoff and otherwise left unassigned. This segmentation is a heuristic and differs from the graph clustering used by the AlphaFold Protein Structure Database.');
@@ -9439,9 +9576,18 @@ html>body{padding:0}</style>
     return { id: nextPanelId++, entryId, element: null, stage: null, label: null, viewer: null, model: null, observer: null };
   }
 
+  /* The next model without a panel. Only the first panel may repeat the primary's model (a single
+     model compared with itself); past that, a model already in a panel is not offered again, and
+     Add panel is disabled — it used to add syn_c a second time when the models ran out. */
   function defaultPanelEntry() {
     const taken = new Set([Number(root.querySelector('#gpv-left-model').value), ...comparePanels.map(panel => panel.entryId)]);
-    return structures.find(entry => !taken.has(entry.id)) || structures[structures.length - 1] || null;
+    return structures.find(entry => !taken.has(entry.id)) || (comparePanels.length ? null : structures[structures.length - 1]) || null;
+  }
+  function renderAddPanelButton() {
+    const button = root.querySelector('#gpv-add-panel');
+    const full = comparePanels.length >= maxComparePanels; const none = Boolean(structures.length) && !full && !defaultPanelEntry();
+    button.disabled = !structures.length || full || none;
+    button.title = none ? 'Every loaded model already has a panel' : '';
   }
 
   function addComparePanel(entryId = null) {
@@ -9498,7 +9644,7 @@ html>body{padding:0}</style>
       const row = document.createElement('div'); row.className = 'gpv-entry gpv-panel-row';
       const name = document.createElement('span'); name.className = 'gpv-entry-score'; name.textContent = 'Panel ' + (index + 2);
       const select = document.createElement('select'); select.className = 'form-select'; select.setAttribute('aria-label', 'Model shown in panel ' + (index + 2));
-      structures.forEach(entry => select.append(new Option((entry.collection ? entry.collection + ' › ' : '') + displayName(entry), String(entry.id))));
+      structures.forEach(entry => select.append(new Option((entry.collection && !displayName(entry).startsWith(entry.collection + ' › ') ? entry.collection + ' › ' : '') + displayName(entry), String(entry.id))));
       select.value = String(panel.entryId);
       select.disabled = !structures.length;
       select.addEventListener('change', () => {
@@ -9511,7 +9657,7 @@ html>body{padding:0}</style>
       row.append(name, select, remove);
       list.append(row);
     });
-    root.querySelector('#gpv-add-panel').disabled = !structures.length || comparePanels.length >= maxComparePanels;
+    renderAddPanelButton();
     root.querySelector('#gpv-clear-panels').disabled = !comparePanels.length;
   }
 
@@ -9598,7 +9744,7 @@ html>body{padding:0}</style>
   }
 
   function restoreCoordinates(shouldRender = true) {
-    structures.forEach(entry => { entry.deviations = null; entry.alignedPairs = null; });
+    structures.forEach(entry => { entry.deviations = null; entry.alignedPairs = null; entry.superposed = false; });
     ensembleSpread = null;
     structures.filter(entry => entry.model).forEach(entry => entry.atoms.forEach((atom, index) => {
       const original = entry.originalAtoms[index];
@@ -9837,6 +9983,8 @@ html>body{padding:0}</style>
       atom.z = transformed[2] + referenceCenter[2];
     });
     target.deviations = new Map();
+    /* Moved off its own coordinates: Restore coordinates has something to put back. */
+    target.superposed = true;
     /* The pairing this fit used, kept as reference residue tag → the target's own atom: the
        correspondence behind every deviation, and what Compare this position looks a residue up
        through when the two models number their residues differently. */
@@ -9859,9 +10007,17 @@ html>body{padding:0}</style>
     return {
       count: pairs.length, rmsd: Math.sqrt(squaredError / pairs.length),
       fitCount: fitPairs.length, fitRmsd: Math.sqrt(fitSquaredError / fitPairs.length), fitRegion,
-      method: pairing.method, identity: pairing.identity, chainPairs: pairing.chainPairs, name: target.name, reference: reference.name
+      method: pairing.method, identity: pairing.identity, chainPairs: pairing.chainPairs, name: target.name, reference: reference.name,
+      entryId: target.id, referenceId: reference.id
     };
   }
+
+  /* Unrelated proteins superpose too — 5CHA onto 1BRS gives 34 Å over 368 pairs at 31 % identity — and
+     nothing else on screen says the numbers mean nothing. */
+  function alignmentCaution(result) {
+    return result.rmsd > 10 || (result.identity !== null && result.identity < 0.3);
+  }
+  const alignmentCautionText = 'low identity / large RMSD — these models may not be comparable';
 
   function renderAlignmentResults() {
     const wrap = root.querySelector('#gpv-alignment-wrap');
@@ -9873,13 +10029,19 @@ html>body{padding:0}</style>
     body.replaceChildren();
     alignmentResults.forEach(result => {
       const row = document.createElement('tr');
-      const values = [result.name, result.reference, String(result.count), result.identity === null ? '—' : (result.identity * 100).toFixed(1) + '%', result.rmsd.toFixed(3), result.fitRegion ? result.fitRegion + ' · ' + result.fitCount + ' Cα' : 'all matched', result.fitRmsd.toFixed(3), result.method + (result.chainPairs ? ' · ' + result.chainPairs : '')];
+      /* Models by the names they have now (a rename after aligning used to leave the file name), and a
+         model hidden since is dimmed: the row describes a superposition the view no longer shows. */
+      const target = entryById(result.entryId); const reference = entryById(result.referenceId);
+      const caution = alignmentCaution(result); const hidden = Boolean(target && !target.visible);
+      const values = [target ? displayName(target) : result.name, reference ? displayName(reference) : result.reference, String(result.count), result.identity === null ? '—' : (result.identity * 100).toFixed(1) + '%', result.rmsd.toFixed(3), result.fitRegion ? result.fitRegion + ' · ' + result.fitCount + ' Cα' : 'all matched', result.fitRmsd.toFixed(3), result.method + (result.chainPairs ? ' · ' + result.chainPairs : '') + (caution ? ' · ' + alignmentCautionText : '') + (hidden ? ' · hidden since — Align visible to update' : '')];
       values.forEach((value, index) => {
         const cell = document.createElement(index < 2 ? 'th' : 'td');
         cell.textContent = value;
         if ((index >= 2 && index <= 4) || index === 6) cell.className = 'text-end';
         row.append(cell);
       });
+      if (caution) row.classList.add('is-caution');
+      if (hidden) row.style.opacity = '0.5';
       body.append(row);
     });
   }
@@ -9900,6 +10062,8 @@ html>body{padding:0}</style>
     const referenceId = Number(root.querySelector('#gpv-reference').value);
     const reference = entryById(referenceId);
     if (!reference) return;
+    /* One shown model has nothing to be superposed on; say that rather than blame the matching. */
+    if (!visibleEntries().some(entry => entry !== reference)) { announce('Show at least two models to align', 'error'); return; }
     const done = setBusy('Aligning…');
     const failures = [];
     const ready = entry => {
@@ -9947,7 +10111,9 @@ html>body{padding:0}</style>
     if (results.length) {
       const averageRmsd = mean(results.map(result => result.rmsd));
       const identities = results.map(result => result.identity).filter(value => value !== null);
-      announce('Aligned ' + results.length + ' model' + (results.length === 1 ? '' : 's') + (results[0].fitRegion ? ' on ' + results[0].fitRegion + ' · mean fitted RMSD ' + mean(results.map(result => result.fitRmsd)).toFixed(2) + ' Å' : '') + ' · mean Cα RMSD ' + averageRmsd.toFixed(2) + ' Å over all matched pairs' + (identities.length ? ' · mean identity ' + (mean(identities) * 100).toFixed(1) + '%' : ''));
+      const doubtful = results.filter(alignmentCaution);
+      announce('Aligned ' + results.length + ' model' + (results.length === 1 ? '' : 's') + (results[0].fitRegion ? ' on ' + results[0].fitRegion + ' · mean fitted RMSD ' + mean(results.map(result => result.fitRmsd)).toFixed(2) + ' Å' : '') + ' · mean Cα RMSD ' + averageRmsd.toFixed(2) + ' Å over all matched pairs' + (identities.length ? ' · mean identity ' + (mean(identities) * 100).toFixed(1) + '%' : '')
+        + (doubtful.length ? ' · caution: ' + alignmentCautionText + ' (' + clipText(doubtful.map(result => { const entry = entryById(result.entryId); return entry ? displayName(entry) : result.name; }).join(', '), 60) + ')' : ''));
     } else announce('No model had at least three matching Cα atoms to align on', 'error');
   }
 
@@ -10499,7 +10665,10 @@ html>body{padding:0}</style>
 
   async function applyScene(scene) {
     if (!scene || scene.type !== 'protein-viewer-scene') return;
-    clearHistory();
+    /* A restore replaces every record, so it is one undo step: ⌘Z puts back the labels, measurements,
+       selections and views it replaced. Before 2.52.0 it emptied the history instead, and the work it
+       wrote over was gone. A page with nothing to lose (a share link opening) takes no step. */
+    if (labelRecords.length + selectionRecords.length + measurementRecords.length + annotationRecords.length + domainRecords.length + savedViews.length + spotlightResidues.length) remember('scene restore');
     const byName = new Map(structures.map(entry => [entry.name, entry]));
     let hashWarnings = 0;
     for (const modelRecord of scene.models || []) {
@@ -10646,13 +10815,15 @@ html>body{padding:0}</style>
     root.querySelector('#gpv-import-label').textContent = label;
   }
 
-  function uniqueModelName(name, collection) {
+  /* A second copy is "1brs.cif (2)". Before 2.52.0 it was "Individual files › 1brs.cif", which told two
+     copies of one file apart by nothing (both come from Individual files), and the model menus, which
+     name each model's source themselves, then read "Individual files › Individual files › 1brs.cif".
+     The source still shows under the name in the Models list. */
+  function uniqueModelName(name) {
     if (!structures.some(entry => entry.name === name)) return name;
-    const prefixed = collection + ' › ' + name;
-    if (!structures.some(entry => entry.name === prefixed)) return prefixed;
     let index = 2;
-    while (structures.some(entry => entry.name === prefixed + ' (' + index + ')')) index += 1;
-    return prefixed + ' (' + index + ')';
+    while (structures.some(entry => entry.name === name + ' (' + index + ')')) index += 1;
+    return name + ' (' + index + ')';
   }
 
   async function loadFiles(files) {
@@ -10660,6 +10831,11 @@ html>body{padding:0}</style>
     showImportErrors([]);
     listLimit = listPageSize;
     const doneBusy = setBusy('Importing ' + files.length + ' file' + (files.length === 1 ? '' : 's') + '…');
+    /* What this import added, as against what earlier ones did: the first new model becomes the
+       current one, and only confidence files read now may be reported as attached. */
+    const wasEmpty = structures.length === 0;
+    const assetsBefore = confidenceAssets.length;
+    let firstNew = null; let restoredSession = false;
     stopCycle(); stopMotion();
     importProgress(0, files.length, 'Reading ' + files.length + ' file' + (files.length === 1 ? '' : 's') + '…');
     updateStatus('Loading…');
@@ -10679,7 +10855,7 @@ html>body{padding:0}</style>
           const zip = await JSZip.loadAsync(file);
           if (zip.file('session.json')) {
             const snapshot = await readSessionZip(zip);
-            if (snapshot) { await restoreSession(snapshot); loaded += snapshot.files.length; continue; }
+            if (snapshot) { await restoreSession(snapshot); loaded += snapshot.files.length; restoredSession = true; continue; }
           }
           importedArchive = true;
           const members = Object.values(zip.files);
@@ -10689,14 +10865,17 @@ html>body{padding:0}</style>
             return !member.dir && supported && !lower.includes('/templates/') && !lower.includes('template_hit');
           });
           if (!structureMembers.length) { skipped += 1; failures.push(file.name + ': no structure models found'); continue; }
-          root.querySelector('#gpv-view-mode').value = 'single';
+          /* A run's five models open one at a time on an empty page (they are rarely meant to be
+             overlaid unaligned); added to models already open, they follow the View mode in use. */
+          if (wasEmpty) root.querySelector('#gpv-view-mode').value = 'single';
           for (let memberIndex = 0; memberIndex < structureMembers.length; memberIndex += 1) {
             const member = structureMembers[memberIndex];
             const memberExtension = member.name.split('.').pop().toLowerCase();
             try {
               const pathParts = member.name.split('/').filter(Boolean);
               const displayName = pathParts.length > 1 ? pathParts.slice(-2).join(' / ') : pathParts[0];
-              addStructure(uniqueModelName(displayName, file.name), await member.async('string'), memberExtension === 'pdb' ? 'pdb' : 'cif', member.name, file.name, memberIndex > 0);
+              const added = addStructure(uniqueModelName(displayName), await member.async('string'), memberExtension === 'pdb' ? 'pdb' : 'cif', member.name, file.name, memberIndex > 0);
+              if (!firstNew) { firstNew = added; activeId = added.id; }
               loaded += 1;
               importProgress(fileIndex + (memberIndex + 1) / Math.max(1, structureMembers.length), files.length, file.name + ' · model ' + (memberIndex + 1) + ' of ' + structureMembers.length);
               if (memberIndex === 0) {
@@ -10731,7 +10910,8 @@ html>body{padding:0}</style>
             if (metadataIndex % 12 === 11) await nextPaint();
           }
         } else if (['pdb', 'cif', 'mmcif'].includes(extension)) {
-          addStructure(uniqueModelName(file.name, 'Individual files'), await file.text(), extension === 'pdb' ? 'pdb' : 'cif', file.name, 'Individual files');
+          const added = addStructure(uniqueModelName(file.name), await file.text(), extension === 'pdb' ? 'pdb' : 'cif', file.name, 'Individual files');
+          if (!firstNew) firstNew = added;
           loaded += 1;
         } else if (extension === 'a3m') {
           /* An alignment dropped on its own belongs to no archive, so it is offered to every model —
@@ -10752,8 +10932,14 @@ html>body{padding:0}</style>
       importProgress(fileIndex + 1, files.length, 'Finished ' + file.name);
       await nextPaint();
     }
-    if (importedArchive && structures.length > 1) root.querySelector('#gpv-view-mode').value = 'single';
+    if (importedArchive && wasEmpty && structures.length > 1) root.querySelector('#gpv-view-mode').value = 'single';
+    /* The models just read are what the user is looking for: the first of them is current, so in One
+       at a time it is the one shown (before, the previous model stayed current and the new ones were
+       loaded out of sight), and in Overlay it joins the others. */
+    if (firstNew && !restoredSession && structures.includes(firstNew)) activeId = firstNew.id;
     attachConfidenceAssets();
+    const newAssets = confidenceAssets.slice(assetsBefore);
+    const attachedNow = newAssets.some(asset => structures.some(entry => assetFitsEntry(asset, entry)));
     renderList();
     applyStyle();
     const active = activeEntry();
@@ -10765,8 +10951,12 @@ html>body{padding:0}</style>
     if (pendingScene && structures.length) await applyScene(pendingScene);
     else {
       const added = alignments.length ? 'Alignment added: ' + clipText(alignments.join(', '), 80) : '';
-      const note = loaded ? 'Loaded ' + loaded + ' model' + (loaded === 1 ? '' : 's') + ' from ' + files.length + ' source' + (files.length === 1 ? '' : 's') + (added ? ' · ' + added : '') : added || (pendingScene ? 'Scene loaded; now add its matching structure files' : confidenceAssets.length ? 'Confidence data loaded; add matching structures' : 'No supported structures found');
-      updateStatus(note + (confidenceAssets.length ? ' · confidence attached' : '') + (deferredPae ? ' · skipped ' + deferredPae + ' large PAE files for performance' : '') + (skipped ? ' · ' + skipped + ' skipped' : ''));
+      /* Only this import's confidence files count: the session-wide list made every later import, a
+         failed one included, end "· confidence attached". */
+      const showing = loaded && firstNew && !restoredSession && structures.includes(firstNew) ? ' · showing ' + displayName(firstNew) : '';
+      const note = loaded ? 'Loaded ' + loaded + ' model' + (loaded === 1 ? '' : 's') + ' from ' + files.length + ' source' + (files.length === 1 ? '' : 's') + (added ? ' · ' + added : '') + showing + (attachedNow ? ' · confidence attached' : '')
+        : added || (pendingScene ? 'Scene loaded; now add its matching structure files' : newAssets.length ? (attachedNow ? 'Confidence data attached to the open models' : 'Confidence data loaded; add matching structures') : 'No supported structures found');
+      updateStatus(note + (deferredPae ? ' · skipped ' + deferredPae + ' large PAE files for performance' : '') + (skipped ? ' · ' + skipped + ' skipped' : ''));
     }
     if (alignments.length) renderMsaState();
     /* New work replaces the stored session within seconds, so its banner has nothing left to offer —
@@ -10906,24 +11096,83 @@ html>body{padding:0}</style>
      chosen point size at that width. Overlays and legends read textScale. */
   function exportDimensions() {
     const maxPixels = 24000000;
-    const cap = (width, height) => {
-      if (width * height <= maxPixels) return { width, height, capped: false };
-      const correction = Math.sqrt(maxPixels / (width * height));
-      return { width: Math.floor(width * correction), height: Math.floor(height * correction), capped: true };
+    /* The longest side the export canvas can have on this GPU (see exportGpuLimit). The 24-megapixel
+       cap keeps the page responsive; this one keeps the render from coming out black. */
+    const ratio = exportPixelRatio();
+    const maxSide = Math.max(256, Math.floor(exportGpuLimit() / ratio));
+    const fit = (width, height) => {
+      const forPixels = Math.sqrt(maxPixels / (width * height));
+      const canvasArea = width * height * ratio * ratio;
+      const forGpu = Math.min(maxSide / Math.max(width, height), Math.sqrt(exportAreaLimit() / canvasArea));
+      return { factor: Math.min(1, forPixels, forGpu), gpu: forGpu < Math.min(1, forPixels) };
     };
     if (root.querySelector('#gpv-export-mode').value === 'print') {
       const choice = root.querySelector('#gpv-print-width').value;
       const mm = choice === 'custom' ? Math.min(400, Math.max(20, Number(root.querySelector('#gpv-print-custom').value) || 120)) : Number(choice);
-      const dpi = Number(root.querySelector('#gpv-print-dpi').value) || 300;
+      const requestedDpi = Number(root.querySelector('#gpv-print-dpi').value) || 300;
       const aspect = Number(root.querySelector('#gpv-print-aspect').value) || 1.5;
       const points = Number(root.querySelector('#gpv-print-text').value) || 8;
-      const sized = cap(Math.round(mm / 25.4 * dpi), Math.round(mm / 25.4 * dpi / aspect));
-      return { ...sized, dpi, mm, heightMm: mm / aspect, points, textScale: (points / 72 * dpi) / 12 };
+      /* A capped print figure keeps its physical width and gives up resolution: the dpi written into
+         the PNG, TIFF and PDF is the one the pixels have, so 178 mm still prints at 178 mm. Capping
+         the pixels and keeping the dpi printed it smaller than asked. */
+      const capping = fit(mm / 25.4 * requestedDpi, mm / 25.4 * requestedDpi / aspect);
+      const dpi = capping.factor < 1 ? Math.floor(requestedDpi * capping.factor) : requestedDpi;
+      return { width: Math.round(mm / 25.4 * dpi), height: Math.round(mm / 25.4 * dpi / aspect), capped: capping.factor < 1, gpuLimited: capping.factor < 1 && capping.gpu, dpi, requestedDpi, mm, heightMm: mm / aspect, points, textScale: (points / 72 * dpi) / 12 };
     }
     const parts = root.querySelector('#gpv-export-size').value.split('x').map(Number);
     const requestedScale = Number(root.querySelector('#gpv-export-scale').value) || 1;
-    const sized = cap(parts[0] * requestedScale, parts[1] * requestedScale);
-    return { ...sized, dpi: null, textScale: Math.max(1, sized.width / 600) };
+    const width = parts[0] * requestedScale; const height = parts[1] * requestedScale;
+    const capping = fit(width, height);
+    const sized = capping.factor < 1 ? { width: Math.floor(width * capping.factor), height: Math.floor(height * capping.factor) } : { width, height };
+    return { ...sized, capped: capping.factor < 1, gpuLimited: capping.factor < 1 && capping.gpu, dpi: null, textScale: Math.max(1, sized.width / 600) };
+  }
+
+  /* What a capped plan gave up, for the estimate and every download's status line. */
+  function exportCapNote(plan) {
+    if (!plan.capped) return '';
+    if (plan.dpi) return ' · rendered at ' + plan.dpi + ' dpi, the most ' + (plan.gpuLimited ? 'this GPU allows' : 'a browser page handles (24 megapixels)') + ' for ' + plan.mm + ' mm';
+    return plan.gpuLimited ? ' · size capped at the most this GPU can render' : ' · size capped for browser stability';
+  }
+
+  /* 3Dmol draws its canvas at the page's pixel ratio, doubled below 2 for its antialiasing — so on an
+     ordinary screen an export surface of W × H CSS pixels is a 2W × 2H canvas and the PNG it hands
+     back is twice the plan (withLegend draws it back to the plan's size). */
+  function exportPixelRatio() {
+    const ratio = window.devicePixelRatio || 1;
+    return ratio < 2 ? ratio * 2 : ratio;
+  }
+  /* The largest canvas side this GPU renders to: the smallest of its texture, renderbuffer and
+     viewport limits, read once from the main view's context (the export context is on the same GPU).
+     Past it WebGL leaves 3Dmol's framebuffer empty and the figure comes out black, only the overlays
+     drawn on it. 8192 is common on integrated GPUs and software renderers; the regression suite
+     lowers it through the debug hook rather than ask CI for an 8 000-pixel render. */
+  let exportGpuLimitCache = 0; let exportGpuLimitOverride = 0;
+  function exportGpuLimit() {
+    if (exportGpuLimitOverride) return exportGpuLimitOverride;
+    if (exportGpuLimitCache) return exportGpuLimitCache;
+    const canvas = typeof viewer.getCanvas === 'function' ? viewer.getCanvas() : root.querySelector('#gpv-stage canvas');
+    let context = null;
+    for (const type of ['webgl2', 'webgl']) { try { context = canvas ? canvas.getContext(type) : null; } catch (error) { context = null; } if (context) break; }
+    const viewport = context ? context.getParameter(context.MAX_VIEWPORT_DIMS) : null;
+    const limit = context ? Math.min(context.getParameter(context.MAX_TEXTURE_SIZE) || 0, context.getParameter(context.MAX_RENDERBUFFER_SIZE) || 0, ...(viewport ? [viewport[0], viewport[1]] : [])) : 0;
+    /* A lost or missing context says nothing: assume the common limit and ask again next time. */
+    if (!(limit > 0)) return 8192;
+    exportGpuLimitCache = limit;
+    return limit;
+  }
+  /* A browser can also give the export canvas a smaller drawing buffer than it asked for, under the
+     texture limit — Chromium gave 7055 × 4702 for an 8186 × 5456 canvas once the page held other
+     contexts — and says so only through drawingBufferWidth. 3Dmol then draws its full-size framebuffer
+     into the smaller buffer and the figure comes out shifted and cropped. It cannot be asked in
+     advance (a fresh context gets the full size), so the first render that meets it records it here
+     and every plan after fits under it. */
+  let exportAreaLearned = Infinity;
+  function exportAreaLimit() {
+    return exportGpuLimitOverride ? exportGpuLimitOverride * exportGpuLimitOverride : exportAreaLearned;
+  }
+  function setExportGpuLimit(limit) {
+    exportGpuLimitOverride = Number(limit) > 0 ? Number(limit) : 0;
+    updateExportEstimate();
   }
 
   function figureScale(plan) {
@@ -10948,8 +11197,8 @@ html>body{padding:0}</style>
     ['#gpv-print-width', '#gpv-print-aspect', '#gpv-print-dpi', '#gpv-print-text'].forEach(selector => { root.querySelector(selector).closest('label').hidden = !printMode; });
     root.querySelector('#gpv-print-custom').closest('label').hidden = !printMode || root.querySelector('#gpv-print-width').value !== 'custom';
     root.querySelector('#gpv-export-estimate').textContent = printMode
-      ? plan.width + ' × ' + plan.height + ' px · ' + plan.mm + ' × ' + Math.round(plan.heightMm) + ' mm at ' + plan.dpi + ' dpi · text ' + plan.points + ' pt' + (plan.capped ? ' · capped for browser stability' : '')
-      : plan.width + ' × ' + plan.height + ' px · no physical size recorded' + (plan.capped ? ' · capped for browser stability' : '');
+      ? plan.width + ' × ' + plan.height + ' px · ' + plan.mm + ' × ' + Math.round(plan.heightMm) + ' mm at ' + plan.dpi + ' dpi · text ' + plan.points + ' pt' + (plan.capped ? ' · ' + plan.requestedDpi + ' dpi asked' + exportCapNote(plan) : '')
+      : plan.width + ' × ' + plan.height + ' px · no physical size recorded' + exportCapNote(plan);
   }
 
   /* Off-screen render target for PNG export.
@@ -10998,7 +11247,9 @@ html>body{padding:0}</style>
     exportViewer.resize();
   }
 
-  async function renderPublicationImage(state = null, dimensions = exportDimensions(), overlays = true) {
+  /* strict: the caller can plan again and retry (renderFittedFigure), so a render the browser shrank is
+     refused rather than returned. */
+  async function renderPublicationImage(state = null, dimensions = exportDimensions(), overlays = true, strict = false) {
     const restore = state ? captureViewState() : null;
     if (state) applyViewState(state, { panels: false });
     const target = acquireExportViewer(dimensions.width, dimensions.height);
@@ -11030,6 +11281,20 @@ html>body{padding:0}</style>
     frame();
     target.render();
     await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+    /* exportDimensions keeps the plan inside the GPU's limits. A canvas past the texture limit all the
+       same renders black: say so rather than save it. A drawing buffer the browser shrank is recorded
+       so the next plan fits, and refused when the caller can plan again. */
+    const surface = typeof target.getCanvas === 'function' ? target.getCanvas() : null;
+    let surfaceContext = null;
+    for (const type of ['webgl2', 'webgl']) { try { surfaceContext = surface ? surface.getContext(type) : null; } catch (error) { surfaceContext = null; } if (surfaceContext) break; }
+    const clamped = Boolean(surfaceContext && !surfaceContext.isContextLost() && surfaceContext.drawingBufferWidth > 0 && surfaceContext.drawingBufferWidth < surface.width);
+    if (clamped) { exportAreaLearned = Math.min(exportAreaLearned, surfaceContext.drawingBufferWidth * surfaceContext.drawingBufferHeight); setTimeout(updateExportEstimate, 0); }
+    if (surface && (Math.max(surface.width, surface.height) > (exportGpuLimitOverride || exportGpuLimitCache || Infinity) || (clamped && strict))) {
+      if (restore) applyViewState(restore, { panels: false });
+      const error = new Error('this GPU could not render ' + surface.width + ' × ' + surface.height + ' px — choose a lower resolution or a smaller width');
+      error.gpuRetry = clamped;
+      throw error;
+    }
     const uri = target.pngURI();
     if (restore) applyViewState(restore, { panels: false });
     return uri;
@@ -11221,6 +11486,14 @@ html>body{padding:0}</style>
       if (!found || !found.domains.length) return { title: 'PAE domains (heuristic)', items: [['#9ca3af', 'none yet', 'No domains found yet — Confidence → Find domains']] };
       return { title: 'PAE domains (heuristic)', items: [...found.domains.slice(0, 12).map(domain => [domainColorFor(domain.id), 'D' + domain.id, 'Domain ' + domain.id + ' · ' + clipText(domainRanges(domain), 36)]), ...(found.unassigned ? [['#9ca3af', 'other', 'Unassigned']] : [])] };
     }
+    /* A key for colours that are not on the model would say they are: before an alignment model
+       agreement is all grey, and a model without pLDDT is drawn in its own colour. Say why instead. */
+    if (mode === 'agreement' && !ensembleSpread) return { title: 'Cα RMSF', items: [['#9ca3af', 'align first', 'Grey until models are aligned — Compare → Align visible']] };
+    if (mode === 'plddt' && !displayedEntries().some(entry => entry.model && entry.scores.length)) {
+      const shownNow = displayedEntries().filter(entry => entry.model);
+      const experimental = shownNow.length && shownNow.every(entry => entry.experimentalMethod || entry.collection === 'RCSB PDB');
+      return { title: 'pLDDT', items: [['#9ca3af', 'no pLDDT', 'No pLDDT in ' + (shownNow.length === 1 ? displayName(shownNow[0]) : 'the shown models') + (experimental ? ' (experimental)' : '') + ' — drawn in the model colour']] };
+    }
     if (mode === 'agreement') return { title: 'Cα RMSF', items: [...agreementBands.map(([, color, label]) => [color, label]), ['#9ca3af', 'single', 'In one model only']] };
     if (mode === 'deviation') return { title: 'Cα deviation', items: [...deviationBands.map(([, color, label]) => [color, label]), ['#9ca3af', 'unmatched']] };
     if (mode === 'fromresidue') return distanceColourLegend();
@@ -11387,15 +11660,28 @@ html>body{padding:0}</style>
     if (bar) { context.save(); context.translate(0, -layout.barLift); drawScaleBar(context, bar, scale, palette); context.restore(); }
     return layout;
   }
+  /* The single-image exports (figure, views ZIP): render at the plan, and if the browser shrank the
+     drawing buffer below it, once more at the plan that fits under what it allowed. Returns the plan
+     actually rendered, which is what the status line must state. */
+  async function renderFittedFigure(plan) {
+    try { return { plan, uri: await withLegend(await renderPublicationImage(null, plan, true, true), plan) }; }
+    catch (error) {
+      if (!error.gpuRetry) throw error;
+      const fitted = exportDimensions();
+      return { plan: fitted, uri: await withLegend(await renderPublicationImage(null, fitted, true, true), fitted) };
+    }
+  }
+  /* Always onto a canvas of exactly the plan's size, legend or not: 3Dmol hands back its canvas at
+     twice the plan (exportPixelRatio), and before 2.52.0 a figure with nothing to add was saved at
+     that size — an 85 mm, 300 dpi PNG that printed 170 mm wide. */
   async function withLegend(uri, plan) {
     const bar = scaleBarSpec(exportViewer, plan);
-    if (!legendWanted() && !bar) return uri;
     const { width, height } = plan;
     const imageValue = await loadImage(uri);
     const canvas = document.createElement('canvas'); canvas.width = width; canvas.height = height;
     const context = canvas.getContext('2d');
     context.drawImage(imageValue, 0, 0, width, height);
-    drawFurniture(context, width, height, figureScale(plan), bar, figurePalette());
+    if (legendWanted() || bar) drawFurniture(context, width, height, figureScale(plan), bar, figurePalette());
     return canvas.toDataURL('image/png');
   }
 
@@ -11593,18 +11879,18 @@ html>body{padding:0}</style>
   async function downloadPublicationImage() {
     const key = imageFormat(); const format = imageFormats[key];
     const button = root.querySelector('#gpv-image');
-    const plan = exportDimensions();
-    if (plan.width * plan.height > 6000000) toast('Rendering ' + plan.width + ' × ' + plan.height + ' — this can take a while and the page will not respond meanwhile.');
+    const planned = exportDimensions();
+    if (planned.width * planned.height > 6000000) toast('Rendering ' + planned.width + ' × ' + planned.height + ' — this can take a while and the page will not respond meanwhile.');
     const done = setBusy('Rendering ' + format.label + '…');
     button.dataset.busy = '1'; button.disabled = true; button.textContent = 'Rendering…';
     await afterPaint();
     try {
-      const uri = await withLegend(await renderPublicationImage(null, plan), plan);
-      const size = plan.width + ' × ' + plan.height + (plan.dpi ? ' at ' + plan.dpi + ' dpi (' + plan.mm + ' mm wide)' : '');
+      const { plan, uri } = await renderFittedFigure(planned);
+      const size = plan.width + ' × ' + plan.height + (plan.dpi ? ' at ' + plan.dpi + ' dpi (' + plan.mm + ' mm wide)' : '') + exportCapNote(plan);
       if (key === 'png') {
         const blob = await pngWithDpi(uri, plan.dpi);
         downloadBlob(blob, 'image/png', exportFileName('protein-publication', plan, 'png'));
-        announce('Figure PNG downloaded · ' + size + (plan.capped ? ' · size capped for browser stability' : ''));
+        announce('Figure PNG downloaded · ' + size);
       } else if (key === 'tiff') {
         const blob = await tiffFromImage(uri, plan.dpi || 96);
         downloadBlob(blob, 'image/tiff', exportFileName('protein-publication', plan, 'tiff'));
@@ -12029,22 +12315,33 @@ html>body{padding:0}</style>
     const cellWidth = Math.floor(requested.width / columns);
     const cellHeight = Math.max(1, Math.floor(cellWidth * requested.height / Math.max(1, requested.width)));
     const fontPx = Math.max(10, Math.round(requested.dpi ? requested.points / 72 * requested.dpi : 12 * figureScale(requested)));
-    /* Captions wrap onto a second line when they do not fit beside the letter; the strip is as
-       tall as the longest caption in the figure needs, so every row lines up. */
+    /* Captions wrap onto up to three lines when they do not fit beside the letter; the strip is as
+       tall as the longest caption in the figure needs, so every row lines up. Past three the last
+       line ends in an ellipsis and `cut` marks it, so the estimate and the status can say so — Make
+       site figure writes captions that long itself. */
     const inset = Math.round(cellWidth * 0.025);
     furnitureMeasure.font = '700 ' + Math.round(fontPx * 1.3) + 'px ' + figureFont();
     const letterWidth = options.letters ? furnitureMeasure.measureText('W').width + fontPx * 0.8 : 0;
     const captionWidth = cellWidth - inset - letterWidth - fontPx;
     furnitureMeasure.font = '500 ' + fontPx + 'px ' + figureFont();
-    const captionLines = view => { const wrapped = wrapText(furnitureMeasure, builderCaption(view, options), captionWidth); return wrapped.length > 2 ? [wrapped[0], truncateToWidth(furnitureMeasure, wrapped.slice(1).join(' '), captionWidth)] : wrapped; };
+    const captionLines = view => {
+      const wrapped = wrapText(furnitureMeasure, builderCaption(view, options), captionWidth);
+      if (wrapped.length <= 3) return wrapped;
+      const kept = [wrapped[0], wrapped[1], truncateToWidth(furnitureMeasure, wrapped.slice(2).join(' '), captionWidth)]; kept.cut = true;
+      return kept;
+    };
     const lines = Math.max(1, ...panels.map(view => captionLines(view).length));
+    const shortened = panels.filter(view => captionLines(view).cut).map(panelLetter);
     const captionHeight = options.letters || options.captions !== 'none' ? Math.round(fontPx * (0.9 + 1.3 * lines)) : Math.round(fontPx * 0.5);
     const cellPlan = { width: cellWidth, height: cellHeight, dpi: requested.dpi, points: requested.points, textScale: requested.textScale, mm: requested.mm ? requested.mm / columns : undefined };
     /* The optional architecture row spans the figure width under the panels and reads the
        domains of the model on screen. */
     const scale = figureScale(cellPlan); const architecture = options.architecture ? architectureModel(activeEntry()) : null;
     const architectureRow = architecture ? architectureHeight(architecture, scale) + Math.round(24 * scale) : 0;
-    return { requested, options, columns, rows, cellWidth, cellHeight, fontPx, inset, letterWidth, captionWidth, captionLines, lines, captionHeight, architecture, architectureRow, scale, width: columns * cellWidth, height: rows * (cellHeight + captionHeight) + architectureRow, cellPlan };
+    return { requested, options, columns, rows, cellWidth, cellHeight, fontPx, inset, letterWidth, captionWidth, captionLines, lines, captionHeight, architecture, architectureRow, scale, width: columns * cellWidth, height: rows * (cellHeight + captionHeight) + architectureRow, cellPlan, shortened };
+  }
+  function shortenedCaptionsNote(layout) {
+    return layout.shortened.length ? ' · caption' + (layout.shortened.length === 1 ? ' of panel ' : 's of panels ') + layout.shortened.join(', ') + ' shortened to fit three lines' : '';
   }
   function builderCaption(view, options) {
     const name = String(view.name || ''); const caption = String(view.caption || '');
@@ -12077,7 +12374,7 @@ html>body{padding:0}</style>
     if (!savedViews.length) { estimate.textContent = 'Save a view above to start a figure.'; return; }
     if (!panels.length) { estimate.textContent = 'No view is ticked.'; return; }
     const layout = figureLayout(panels.length, panels);
-    estimate.textContent = panels.length + ' panel' + (panels.length === 1 ? '' : 's') + ' · ' + layout.columns + ' column' + (layout.columns === 1 ? '' : 's') + ' · ' + layout.width + ' × ' + layout.height + ' px' + (layout.requested.dpi ? ' · ' + layout.requested.mm + ' mm wide at ' + layout.requested.dpi + ' dpi · text ' + layout.requested.points + ' pt' : '') + ' · each panel ' + layout.cellWidth + ' × ' + layout.cellHeight + ' px' + (layout.architecture ? ' · architecture row ' + layout.architectureRow + ' px' : layout.options.architecture ? ' · no domains for an architecture row' : '');
+    estimate.textContent = panels.length + ' panel' + (panels.length === 1 ? '' : 's') + ' · ' + layout.columns + ' column' + (layout.columns === 1 ? '' : 's') + ' · ' + layout.width + ' × ' + layout.height + ' px' + (layout.requested.dpi ? ' · ' + layout.requested.mm + ' mm wide at ' + layout.requested.dpi + ' dpi · text ' + layout.requested.points + ' pt' : '') + ' · each panel ' + layout.cellWidth + ' × ' + layout.cellHeight + ' px' + (layout.architecture ? ' · architecture row ' + layout.architectureRow + ' px' : layout.options.architecture ? ' · no domains for an architecture row' : '') + shortenedCaptionsNote(layout);
   }
   async function downloadFigure(kind) {
     const panels = figurePanelsSelected();
@@ -12086,6 +12383,9 @@ html>body{padding:0}</style>
     const layout = figureLayout(panels.length, panels); const options = layout.options; const palette = figurePalette();
     const done = setBusy('Rendering figure…'); button.disabled = true; button.textContent = 'Rendering…'; await afterPaint();
     const restore = captureViewState();
+    /* Said last, after the on-screen view is back: putting it back restyles the models, whose status
+       line ('Ready') would otherwise replace what was written. */
+    let outcome = null;
     const canvas = kind === 'png' ? document.createElement('canvas') : null; let context = null;
     if (canvas) { canvas.width = layout.width; canvas.height = layout.height; context = canvas.getContext('2d'); context.fillStyle = palette.paper; context.fillRect(0, 0, canvas.width, canvas.height); }
     const parts = []; const scale = figureScale(layout.cellPlan);
@@ -12126,11 +12426,12 @@ html>body{padding:0}</style>
       const stem = 'protein-figure-' + panels.length + '-panel' + (panels.length === 1 ? '' : 's');
       if (kind === 'png') downloadBlob(await pngWithDpi(canvas.toDataURL('image/png'), layout.requested.dpi), 'image/png', exportFileName(stem, layout.requested, 'png'));
       else downloadBlob(svgDocument(layout.width, layout.height, palette.paper, parts.join('\n')), 'image/svg+xml', stem + '.svg');
-      announce('Figure ' + kind.toUpperCase() + ' downloaded · ' + panels.length + ' panel' + (panels.length === 1 ? '' : 's') + ' · ' + layout.width + ' × ' + layout.height + ' px' + (layout.requested.dpi ? ' · ' + layout.requested.mm + ' mm wide at ' + layout.requested.dpi + ' dpi' : ''));
+      outcome = ['Figure ' + kind.toUpperCase() + ' downloaded · ' + panels.length + ' panel' + (panels.length === 1 ? '' : 's') + ' · ' + layout.width + ' × ' + layout.height + ' px' + (layout.requested.dpi ? ' · ' + layout.requested.mm + ' mm wide at ' + layout.requested.dpi + ' dpi' : '') + shortenedCaptionsNote(layout)];
     } catch (error) {
-      announce('Could not render the figure: ' + error.message, 'error');
+      outcome = ['Could not render the figure: ' + error.message, 'error'];
     } finally {
       releaseExportViewer(); applyViewState(restore, { panels: false }); done(); button.textContent = idle; renderFigureBuilder();
+      if (outcome) announce(...outcome);
     }
   }
   function downloadContactSheet() { return downloadFigure('png'); }
@@ -14700,7 +15001,7 @@ applyBackground();
   offerSessionRestore();
   /* ?debug=1 exposes a few internals for the regression suite and for bug reports;
      it has no effect otherwise. */
-  if (new URLSearchParams(location.search).has('debug')) window.__viewerDebug = { viewer, pickAtomAt, displayedEntries, activeEntry, colorOptions, sceneSettings, contactResult: () => contactResult, residueData: () => residueData, msaAssets: () => msaAssets, entries: () => structures, nearbyResidues, assemblyDimensions, paeDomains, parseConfidenceBytes, methodsText, alignmentResults: () => alignmentResults, ensembleSpread: () => ensembleSpread, siteResults: () => siteResults, interfaceResults: () => interfaceResults, solventAccessibleArea, heavyAtoms, ligandGroups, architectureModel, domainSets, distinguishingNames, rmsdMatrix: () => rmsdMatrix, rmsdMedoid, scaleBarSpec, pixelsPerAngstrom, sceneCentre, exportDimensions, exportViewer: () => exportViewer, renderPublicationImage, furnitureLayout, legendMetrics, legendWanted, figurePalette, figureScale, releaseExportViewer, labelRecords: () => labelRecords, labelPosition, labelHitAt, labelScreenBox, separateLabels, spotlightResidues: () => spotlightResidues, positionEffect: () => positionEffect, savedViews: () => savedViews, selectionRecords: () => selectionRecords, labelStyle, themeColor, hexLuminance, backgroundSpec, paeTokenLayout, readNpy, materializeEntry, interactionScores, reportedPairIptm, reportedPairIptmMax, interactionResults: () => interactionResults, reportConfidence, activeText: () => { const resolved = activeCanvasText(); return resolved ? { kind: resolved.kind, key: resolved.record.key || null, id: resolved.record.id || null } : null; }, labelEditor: () => (labelEditor ? { kind: labelEditor.kind, key: labelEditor.key || null, id: labelEditor.id || null } : null), undoDepth: () => undoStack.length, rememberedSteps: () => rememberedSteps, boxSelectMode: () => boxSelectMode, residueMarker: residueMarkerText, selectedResidue: () => (selectedResidue ? { ...selectedResidue } : null), measureFrom: () => (measureFrom ? { ...measureFrom } : null), measurementRecords: () => measurementRecords, drawLabels, distanceMatrix: contactDistanceMatrix, residueContacts: debugResidueContacts, residueDistances: debugResidueDistances, atomPairDistance: debugAtomPairDistance, measureAtoms: () => measureAtoms, contactHover: () => (contactHover ? { ...contactHover } : null), measurementHover: () => measurementHover, measurementLabelText, measurementAtomsText, measurementsText, measurementAnchor, measurementScreenBox, panelLabelPlacement };
+  if (new URLSearchParams(location.search).has('debug')) window.__viewerDebug = { viewer, pickAtomAt, displayedEntries, activeEntry, colorOptions, sceneSettings, contactResult: () => contactResult, residueData: () => residueData, msaAssets: () => msaAssets, entries: () => structures, nearbyResidues, assemblyDimensions, paeDomains, parseConfidenceBytes, methodsText, alignmentResults: () => alignmentResults, ensembleSpread: () => ensembleSpread, siteResults: () => siteResults, interfaceResults: () => interfaceResults, solventAccessibleArea, heavyAtoms, ligandGroups, architectureModel, domainSets, distinguishingNames, rmsdMatrix: () => rmsdMatrix, rmsdMedoid, scaleBarSpec, pixelsPerAngstrom, sceneCentre, exportDimensions, exportGpuLimit, setExportGpuLimit, exportViewer: () => exportViewer, renderPublicationImage, furnitureLayout, legendMetrics, legendWanted, figurePalette, figureScale, releaseExportViewer, labelRecords: () => labelRecords, labelPosition, labelHitAt, labelScreenBox, separateLabels, spotlightResidues: () => spotlightResidues, positionEffect: () => positionEffect, savedViews: () => savedViews, selectionRecords: () => selectionRecords, labelStyle, themeColor, hexLuminance, backgroundSpec, paeTokenLayout, readNpy, materializeEntry, interactionScores, reportedPairIptm, reportedPairIptmMax, interactionResults: () => interactionResults, reportConfidence, activeText: () => { const resolved = activeCanvasText(); return resolved ? { kind: resolved.kind, key: resolved.record.key || null, id: resolved.record.id || null } : null; }, labelEditor: () => (labelEditor ? { kind: labelEditor.kind, key: labelEditor.key || null, id: labelEditor.id || null } : null), undoDepth: () => undoStack.length, rememberedSteps: () => rememberedSteps, boxSelectMode: () => boxSelectMode, residueMarker: residueMarkerText, selectedResidue: () => (selectedResidue ? { ...selectedResidue } : null), measureFrom: () => (measureFrom ? { ...measureFrom } : null), measurementRecords: () => measurementRecords, drawLabels, distanceMatrix: contactDistanceMatrix, residueContacts: debugResidueContacts, residueDistances: debugResidueDistances, atomPairDistance: debugAtomPairDistance, measureAtoms: () => measureAtoms, contactHover: () => (contactHover ? { ...contactHover } : null), measurementHover: () => measurementHover, measurementLabelText, measurementAtomsText, measurementsText, measurementAnchor, measurementScreenBox, panelLabelPlacement };
   applyTheme(readJson(themeKey, 'system'));
   selectToolTab('models');
   applyAppearance();
