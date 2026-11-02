@@ -67,8 +67,9 @@
     const scores = [];
     model.selectedAtoms({}).forEach(atom => {
       const score = Number(atom.b);
-      /* One value per residue: the Cα, or for a nucleotide (an RNA or DNA prediction has no Cα) the C1′. */
-      if ((atom.atom === 'CA' || (atom.atom === "C1'" && !atom.hetflag)) && Number.isFinite(score)) scores.push(score);
+      /* One value per residue: the Cα, or for a nucleotide (an RNA or DNA prediction has no Cα) the C1′.
+         A calcium ion is also an atom called CA; it is a HETATM, and not a residue's confidence. */
+      if (!atom.hetflag && (atom.atom === 'CA' || atom.atom === "C1'") && Number.isFinite(score)) scores.push(score);
     });
     return scores;
   }

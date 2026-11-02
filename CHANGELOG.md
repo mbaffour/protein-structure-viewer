@@ -160,7 +160,7 @@ All notable changes to this project are recorded here.
   "peptide bon…" (it now wraps under the name) and the atoms column wrote `CA` beside a `Cα` column (it
   writes Cα); *Within (Å)* kept 15 or 1 in its field while the card counted at 12 or 2 Å (it is now set
   to the nearest end); *Clear measurements* was enabled and *Start measuring* turned on with nothing
-  loaded (Clear is greyed out until there is a measurement, and Start says to load a model); *Go to*
+  loaded (Clear is greyed out until there is a measurement, and Start until there is a model); *Go to*
   rejected `B57`, the way the card writes a residue (it now reads a chain name then a number).
 - **Polish**: one way of spelling a residue in the card, its contacts, the marker, the hover readout and
   *Copy residue list* (`HIS57 · B`, `HIS57 · chain B`, `B:HIS57`); *Colour scheme* and *Highlight colour*
@@ -201,7 +201,11 @@ All notable changes to this project are recorded here.
   empty chain table. It now has none, and the composition says *No polymer chains (ligands and ions
   only)*. The legend no longer shows a key for colours that are not drawn: pLDDT on a model without
   pLDDT says *No pLDDT in 5cha.cif (experimental) — drawn in the model colour*, and model agreement
-  before an alignment says to align first.
+  before an alignment says to align first. Those two lines are notes on screen, not keys: they are not
+  printed on exports, and the publication checklist does not ask for a legend for them. Choosing *Model
+  agreement* before an alignment also says *Model agreement stays grey until you align*, as Cα deviation
+  does. A calcium ion in a predicted model with protein in it was averaged into the mean pLDDT the same
+  way (five residues scored 80 read 66.7); only polymer residues are scored.
 - **Compare**: *Align visible* with one shown model blamed the matching, and *Restore coordinates* with
   nothing aligned said it had restored; both, and the RMSD matrix, are now off until they have
   something to do. Unrelated proteins superposed without a word (5CHA on 1BRS: 34 Å RMSD); an alignment
@@ -220,6 +224,24 @@ All notable changes to this project are recorded here.
   changed; in the composite figure the pLDDT profile was a 1200-unit chart shrunk into its cell (tick
   labels about 1 pt) — it and the RMSF profile are now laid out at the cell's size with text at the
   chosen point size — the PAE panel gains a colour bar, and its caption says "pLDDT", not "plddt".
+- **An armed *Measure to…* survived an import**, so the first click on the model just loaded measured
+  into it. Loading a file now cancels it, and the click opens that residue's card.
+- **Sequence spectrum was grey in the HTML report**, which asked 3Dmol for a colour scheme it does not
+  have. The report's view and strip now run each chain blue to red with the viewer's own colours, and
+  the legend under the viewer shows the ramp, *N-terminus → C-terminus, per chain* (exports carry no
+  key for it).
+- ***Copy PNG to clipboard* stated the size asked for**, and rendered without the second try the
+  downloads make when the browser gives the canvas less than it asked. It now renders as they do and
+  states the size copied, with *rendered at … dpi, the most this GPU allows* when it had to be lowered.
+- **Polish, continued**: the Annotate readout and the status name a renamed model by its new name and
+  the residue as the card does (`Wild type · ALA12 · chain B · atom CA`), the label list writes
+  `ALA12 · chain B`, the selection list *all chains* rather than *chain —*, and the contact map's readout
+  `A:GLU57 — B:ARG59`; *Highlight interface* and a ligand site's *Highlight* use Annotate's *Highlight
+  colour*, as every other highlight does; the model rows' colour wells are read out as *Colour for …*,
+  and every *Remove* in the model, label and selection lists names its row; Rename, Emphasise, a label's
+  or a measurement's *Reset* (the focus goes to *Show* beside it once Reset greys out), a domain's
+  scope, and the figure builder's tick and ↑/↓ keep the keyboard focus instead of dropping it on the
+  page; the site-figure tip in Help names *Download built figure PNG or SVG*.
 
 ## 2.51.0
 

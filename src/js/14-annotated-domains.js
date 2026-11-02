@@ -66,14 +66,14 @@
   }
 
   function renderDomainList() {
-    const list = root.querySelector('#gpv-domain-list'); list.replaceChildren();
+    const list = root.querySelector('#gpv-domain-list'); const kept = rememberListFocus(list); list.replaceChildren();
     const active = activeEntry();
     root.querySelector('#gpv-add-domain').disabled = !active;
     root.querySelector('#gpv-domain-adopt').disabled = !(active && active.domains && active.domains.domains.length);
     root.querySelector('#gpv-domain-paint').disabled = !domainRecords.length;
     domainRecords.forEach(record => {
       const owner = entryById(record.entryId);
-      const row = document.createElement('div'); row.className = 'gpv-entry';
+      const row = document.createElement('div'); row.className = 'gpv-entry'; row.dataset.rowId = String(record.id);
       const copy = document.createElement('span'); copy.className = 'gpv-edit-copy';
       const name = document.createElement('input'); name.className = 'form-control'; name.type = 'text'; name.value = record.name; name.maxLength = 60; name.setAttribute('aria-label', 'Domain name');
       name.addEventListener('change', () => { const value = name.value.trim(); if (!value) { name.value = record.name; return; } remember('domain name'); record.name = value; domainVersion += 1; applyStyle(); updateStatus('Domain renamed'); });
@@ -85,7 +85,7 @@
       const color = document.createElement('input'); color.className = 'form-control form-control-color'; color.type = 'color'; color.value = record.color; color.setAttribute('aria-label', 'Domain colour');
       color.addEventListener('input', () => { if (!color.dataset.remembered) { remember('domain colour'); color.dataset.remembered = '1'; } record.color = color.value; domainVersion += 1; applyStyle(); });
       color.addEventListener('change', () => { delete color.dataset.remembered; });
-      const scope = document.createElement('select'); scope.className = 'form-select'; scope.setAttribute('aria-label', 'Where the domain applies');
+      const scope = document.createElement('select'); scope.className = 'form-select'; scope.setAttribute('aria-label', 'Where the domain applies'); scope.dataset.control = 'scope';
       [['source', 'Same source'], ['model', 'This model'], ['all', 'All models']].forEach(([value, label]) => scope.append(new Option(label, value)));
       scope.value = record.scope;
       scope.addEventListener('change', () => { remember('domain scope'); record.scope = scope.value; domainVersion += 1; renderDomainList(); applyStyle(); });
@@ -94,5 +94,6 @@
       tools.append(color, scope, remove);
       row.append(copy, tools); list.append(row);
     });
+    restoreListFocus(list, kept);
   }
 

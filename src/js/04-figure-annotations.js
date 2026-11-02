@@ -123,11 +123,14 @@
     return { id: row ? row.dataset.rowId : null, index: [...list.children].indexOf(row), control: focused.dataset.control };
   }
 
+  /* A control that greys itself out once used (Reset) names a neighbour to take the focus instead
+     with data-control-fallback. */
   function restoreListFocus(list, kept) {
     if (!kept) return;
     const rows = [...list.children];
     const row = rows.find(item => item.dataset.rowId === kept.id) || rows[Math.min(kept.index, rows.length - 1)];
-    const control = row && row.querySelector('[data-control="' + kept.control + '"]');
+    let control = row && row.querySelector('[data-control="' + kept.control + '"]');
+    if (control && control.disabled && control.dataset.controlFallback) control = row.querySelector('[data-control="' + control.dataset.controlFallback + '"]');
     if (control && !control.disabled) control.focus({ preventScroll: true });
   }
 
@@ -369,7 +372,7 @@
       const show = document.createElement('button'); show.className = 'btn btn-ghost'; show.type = 'button'; show.textContent = 'Show'; show.dataset.control = 'show';
       show.title = 'Centre the view on this measurement without changing the zoom';
       show.addEventListener('click', () => { centreOnMeasurement(record); updateStatus('Centred on ' + measurementRowText(record)); });
-      const reset = document.createElement('button'); reset.className = 'btn btn-ghost'; reset.type = 'button'; reset.textContent = 'Reset'; reset.dataset.control = 'reset';
+      const reset = document.createElement('button'); reset.className = 'btn btn-ghost'; reset.type = 'button'; reset.textContent = 'Reset'; reset.dataset.control = 'reset'; reset.dataset.controlFallback = 'show';
       reset.title = 'Put the text back where it started'; reset.disabled = labelOffsetLength(record) === 0;
       reset.addEventListener('click', () => { remember('measurement position'); record.offset = null; delete record.autoPlaced; measurementChanged(record); updateStatus('Measurement text put back in place'); });
       const remove = document.createElement('button'); remove.className = 'btn btn-ghost'; remove.type = 'button'; remove.textContent = 'Remove'; remove.dataset.control = 'remove';

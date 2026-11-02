@@ -84,7 +84,7 @@
       highlight.addEventListener('click', () => {
         remember('ligand site');
         const byChain = new Map(); row.site.forEach(atom => { const chain = atom.chain || ''; if (!byChain.has(chain)) byChain.set(chain, []); byChain.get(chain).push(atom.resi); });
-        byChain.forEach((residues, chain) => selectionRecords.push({ id: nextAnnotationId++, entryId: entry.id, chain, residues: residues.sort((a, b) => a - b), action: 'highlight', color: root.querySelector('#gpv-interface-color').value }));
+        byChain.forEach((residues, chain) => selectionRecords.push({ id: nextAnnotationId++, entryId: entry.id, chain, residues: residues.sort((a, b) => a - b), action: 'highlight', color: root.querySelector('#gpv-selection-color').value }));
         renderSelectionList(); applyStyle();
         updateStatus(siteLabel(row.group) + ' site highlighted · ' + row.site.length + ' residues');
       });

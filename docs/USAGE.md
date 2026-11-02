@@ -217,7 +217,10 @@ Notes on the colour schemes:
   without confidence scores — any structure fetched from the PDB — keeps its own model colour instead,
   in the view, the strip, every export and the report, so crystallographic B-factors are never shown
   as pLDDT. A structure opened from a local file is treated as scored if its B-factor column holds
-  values, so check what an experimental file you open yourself is being coloured by.
+  values, so check what an experimental file you open yourself is being coloured by. With no scored
+  model shown, the legend under the viewport says so (*No pLDDT in 5cha.cif (experimental) — drawn in
+  the model colour*). That line is a note for you, not a key: it is not printed on exports, and the
+  publication checklist does not ask for a legend for it.
 - **Per entity** gives every chain with the same sequence one colour, so a sixty-copy capsid shows
   its two or three distinct proteins; the legend names each entity with a Greek letter and its copy
   count, chains and length (α ×60 · A, B, … · 426 aa), abbreviating with `+N more` past twenty
@@ -247,7 +250,9 @@ Notes on the colour schemes:
   sessions and share links keep the scheme, but not the selection (they never have), so a restored
   scene or a saved view is grey until you click the residue again.
 - **Sequence spectrum** runs each chain from blue at its N-terminus to red at its C-terminus, by the
-  residue's place in the chain; the sequence strip and its letters are painted from the same colours.
+  residue's place in the chain; the sequence strip and its letters are painted from the same colours,
+  and so are the HTML report's view and strip. The legend under the viewport shows the ramp
+  (*N-terminus → C-terminus, per chain*); exports carry no key for it.
 - **Residue charge**, **Hydrophobicity (Kyte–Doolittle)**, **Residue type**, **Amino acid** and
   **Secondary structure** colour by what the residue is rather than by model or confidence. Charge:
   Lys and Arg blue, His light blue (partial), Asp, Glu and nucleotides red, everything else grey.
@@ -263,7 +268,9 @@ Notes on the colour schemes:
   differently — an AlphaFold DB model with its initiator Met beside a crystal structure without it —
   are compared residue for residue; values are reported in the reference's numbering. **Download RMSF
   CSV** in the Compare tab writes the values per residue, how many models each residue was found in,
-  and the models used.
+  and the models used. Before an alignment every residue is grey: choosing the scheme says *Model
+  agreement stays grey until you align: Compare → Align visible*, and the legend under the viewport says
+  the same. Like the pLDDT note above, that line is screen-only — never printed on an export.
 - **Low confidence** hides residues below pLDDT 50 or 70 — in the viewer, in every synchronized
   panel, and in every PNG and SVG export, so a figure without disordered tails takes one click. The
   sequence strip dims the hidden residues and its title says what is hidden. The setting is stored in
@@ -530,7 +537,7 @@ rendered at twice the nominal size. Up to eight models and twelve chains are plo
 4.5 Å) and press **Analyse ligand sites**. Each ligand or ion group gets a row: its atom count, the
 residues with a heavy atom within the cutoff, the mean pLDDT of those residues and — when the PAE
 matrix carries AlphaFold 3 ligand tokens — the mean predicted aligned error between the ligand's tokens
-and the site's residues. **Highlight** adds the site as a selection in the interface colour; **Download
+and the site's residues. **Highlight** adds the site as a selection in Annotate's *Highlight colour*; **Download
 sites CSV** lists everything with the residue lists. Read the two numbers together: a site with high
 pLDDT but high ligand–site PAE is a well-folded pocket with an uncertain pose.
 
@@ -604,15 +611,15 @@ compute again.
   whichever is smaller (light) — the pairs that touch and the ones that do not. The cutoff still
   decides which pairs are contacts for the contacts CSV and **Highlight interface**.
 - **Hover** any cell to read the pair with its Cα–Cα distance, and the closest heavy-atom distance
-  when the pair is a contact: `A:GLU 57 — B:ARG 59 · Cα–Cα 9.42 Å · closest atoms 3.12 Å`, or
+  when the pair is a contact: `A:GLU57 — B:ARG59 · Cα–Cα 9.42 Å · closest atoms 3.12 Å`, or
   `… · Cα–Cα 21.70 Å · no contact within 4.5 Å`.
 - **Click** any cell to draw that distance on the model: an ordinary distance measurement between
   the two residues' Cα atoms — listed, exported, saved and undone like one made in measurement mode,
   in one undo step — with the first residue selected and the view zoomed to the pair. A distance
   between two residues that do not interact is one click away.
 
-**Highlight interface** adds one selection per chain involved (two for a pair of chains) in the
-interface colour. **Download map PNG** writes the map as shown — contacts or all distances — with
+**Highlight interface** adds one selection per chain involved (two for a pair of chains) in Annotate's
+*Highlight colour*, as every other highlight does. **Download map PNG** writes the map as shown — contacts or all distances — with
 axes, title and a distance scale in Å at 300 dpi. **Download contacts CSV** lists one row per pair in
 contact with the closest-atom distance. **Download distances CSV** lists **every** pair of the map in
 long form — `model, chain_a, resi_a, resn_a, chain_b, resi_b, resn_b, ca_distance_angstrom,
@@ -748,7 +755,10 @@ few seconds on a machine with a real GPU and considerably longer without one. A 
 6 megapixels. If you only need a figure for a slide, 1× scale is four times faster than 2×.
 
 **Copy PNG to clipboard** renders the same publication figure and places it on the clipboard, so a
-figure goes into a slide or a manuscript draft without a file in between. Chrome and Edge support
+figure goes into a slide or a manuscript draft without a file in between. It is rendered the way the
+download is — inside the GPU's limit, and once more at the size the browser allowed if it gave the
+canvas less — and the status states the size copied (`Figure copied to the clipboard · 1004 × 669 at
+300 dpi (85 mm wide)`), with the same *rendered at … dpi, the most this GPU allows* when it was lowered. Chrome and Edge support
 image clipboard writes; Firefox and Safari may refuse, in which case the viewer says so and the
 download remains.
 

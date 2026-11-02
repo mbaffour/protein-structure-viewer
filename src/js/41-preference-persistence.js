@@ -345,6 +345,7 @@
   root.querySelector('#gpv-color-mode').addEventListener('change', () => {
     const mode = root.querySelector('#gpv-color-mode').value;
     if (mode === 'deviation' && !alignmentResults.length) announce('Deviation colouring stays grey until you align: Compare → Align visible');
+    if (mode === 'agreement' && !ensembleSpread) announce('Model agreement stays grey until you align: Compare → Align visible');
     if (mode === 'fromresidue' && !distanceColourTarget()) announce(distanceColourHint + ' — distance colouring stays grey until a residue is selected');
   });
   root.querySelector('#gpv-interface-run').addEventListener('click', analyseInterfaces);

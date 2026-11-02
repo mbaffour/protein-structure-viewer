@@ -275,9 +275,9 @@
     return { i, j, a, b, same: a === b, distance: contactPairDistance(i, j), ca: contactCaDistance(i, j) };
   }
 
-  /* `A:GLU 57 — B:ARG 59 · Cα–Cα 9.42 Å · closest atoms 3.12 Å`, or `· no contact within 4.5 Å`. */
+  /* `A:GLU57 — B:ARG59 · Cα–Cα 9.42 Å · closest atoms 3.12 Å`, or `· no contact within 4.5 Å`. */
   function contactPairText(hit) {
-    const label = atom => (atom.chain ? atom.chain + ':' : '') + (atom.resn || '') + ' ' + atom.resi;
+    const label = atom => residueName(atom, 'list');
     if (hit.same) return label(hit.a) + ' — the same residue';
     const pair = (hit.a.atom === 'CA' && hit.b.atom === 'CA' ? 'Cα–Cα ' : 'Cα–Cα (or P) ') + hit.ca.toFixed(2) + ' Å';
     if (hit.distance === undefined) return label(hit.a) + ' — ' + label(hit.b) + ' · ' + pair + ' · no contact within ' + contactResult.cutoff + ' Å';
@@ -305,7 +305,8 @@
     if (!contactResult) return;
     const entry = entryById(contactResult.entryId); if (!entry) return;
     remember('interface highlight');
-    const color = root.querySelector('#gpv-interface-color').value;
+    /* Every highlight takes Annotate's Highlight colour, as selections, the card and Near do. */
+    const color = root.querySelector('#gpv-selection-color').value;
     /* One selection per chain, first axis first — two for a pair of chains, as always; one for an
        intra-chain map; one per chain involved when an axis is all chains. */
     const byChain = new Map();

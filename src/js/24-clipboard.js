@@ -25,10 +25,12 @@
     button.disabled = true;
     await afterPaint();
     try {
-      const uri = await withLegend(await renderPublicationImage(null, requested), requested);
+      /* The download's path: inside the GPU's limit, rendered once more at the size the browser allowed
+         if it shrank the canvas, and the status states what was rendered rather than what was asked. */
+      const { plan, uri } = await renderFittedFigure(requested);
       const blob = await (await fetch(uri)).blob();
       await navigator.clipboard.write([new ClipboardItem({ 'image/png': blob })]);
-      announce('Figure copied to the clipboard · ' + requested.width + ' × ' + requested.height);
+      announce('Figure copied to the clipboard · ' + plan.width + ' × ' + plan.height + (plan.dpi ? ' at ' + plan.dpi + ' dpi (' + plan.mm + ' mm wide)' : '') + exportCapNote(plan));
     } catch (error) {
       announce('Could not copy the figure to the clipboard: ' + error.message, 'error');
     } finally {
