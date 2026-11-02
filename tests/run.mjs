@@ -2015,8 +2015,13 @@ await step('a label is dragged with the mouse, keeps a model-space offset, and r
     return { x: screen.x, y: screen.y, offset: label.offset || null, view: d.viewer.getView().slice(0, 8), scrollX, scrollY };
   });
   const before = await read();
-  await page.mouse.move(before.x - before.scrollX, before.y - before.scrollY); await page.waitForTimeout(300);
-  const hint = (await page.locator('#gpv-hover').textContent()) || '';
+  /* The hover readout follows the pointer on an animation frame; on a loaded machine one move and
+     300 ms is not always enough, so the pointer is nudged until the readout offers the drag. */
+  let hint = '';
+  for (let attempt = 0; attempt < 8 && !/Drag to move/.test(hint); attempt++) {
+    await page.mouse.move(before.x - before.scrollX + (attempt % 2), before.y - before.scrollY); await page.waitForTimeout(300);
+    hint = (await page.locator('#gpv-hover').textContent()) || '';
+  }
   if (!/Drag to move/.test(hint)) throw new Error('the pointer over a label does not offer to move it: ' + hint);
   await page.mouse.down();
   await page.mouse.move(before.x - before.scrollX + 70, before.y - before.scrollY - 45, { steps: 10 });
