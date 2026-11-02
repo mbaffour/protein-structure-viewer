@@ -4,11 +4,13 @@
   /* With no options it reads the Annotate panel, as the Highlight button always has. The residue
      card (04c) asks the same question about one residue of any shown model — not only the active
      one — by passing { entry, mode: 'residue', residue }; the cutoff still comes from the panel's
-     Within (Å) field, so the card and the proximity tool count with one rule and agree. */
+     Within (Å) field, so the card and the proximity tool count with one rule and agree. Only the
+     validation hook passes { cutoff }, to ask the same rule at the reference's cutoff without
+     touching the panel. */
   function nearbyResidues(options = {}) {
     const entry = options.entry || activeEntry(); if (!entry || !entry.model) return null;
     const mode = options.mode || root.querySelector('#gpv-near-target').value;
-    const cutoff = Math.min(12, Math.max(2, Number(root.querySelector('#gpv-near-cutoff').value) || 4.5));
+    const cutoff = Math.min(12, Math.max(2, Number(options.cutoff !== undefined ? options.cutoff : root.querySelector('#gpv-near-cutoff').value) || 4.5));
     const chain = root.querySelector('#gpv-near-chain').value.trim();
     const residue = options.residue ? { entryId: entry.id, chain: options.residue.chain || '', resi: options.residue.resi } : selectedResidue;
     const heavy = heavyAtoms(entry);
@@ -30,7 +32,13 @@
   }
 
   function highlightNearby() {
-    const result = nearbyResidues(); if (!result) return;
+    highlightNearbyResult(nearbyResidues());
+  }
+
+  /* The highlight itself, apart from the question, so the residue card's Highlight (04c) makes from
+     its own list exactly what this button makes: one selection record per chain, one undo step. */
+  function highlightNearbyResult(result) {
+    if (!result) return;
     if (result.error) { updateStatus(result.error); return; }
     nearbyResult = result;
     root.querySelector('#gpv-near-copy').disabled = !result.residues.length;

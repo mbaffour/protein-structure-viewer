@@ -38,6 +38,13 @@
     if (chains > 4 && root.querySelector('#gpv-outline').value === 'none') push('info', chains + ' chains in view: a thin outline (Appearance → Outline) keeps overlapping chains legible at column width.');
     if (!provenanceValues().title) push('info', 'No figure title yet. A title in Provenance names the exports and appears in the report.');
     else push('ok', 'Figure title set: ' + clipText(provenanceValues().title, 60) + '.');
+    /* Distance colouring means nothing without the residue it is measured from, and the selection is
+       not saved with a view or a session — so say which residue it is, or that there is none. */
+    if (mode === 'fromresidue') {
+      const target = distanceColourTarget();
+      if (!target) push('warn', 'Colour by distance from the selected residue is on, but no residue is selected, so every residue is grey. Click the residue to measure from.');
+      else push('info', 'Colours are distances from ' + target.short + '; the legend and methods text name it. Saved views do not keep the selection — reselect it before exporting one again.');
+    }
     if (shown.some(entry => entry.scores.length) && !['plddt', 'deviation', 'agreement'].includes(mode) && !legendWanted('figure')) push('info', 'pLDDT is available but not shown; a confidence panel or legend note helps a reviewer weigh the model.');
     return items;
   }

@@ -85,6 +85,7 @@
        as "very low confidence". The sequence strip already falls back to the model colour here. */
     if (mode === 'plddt') return entry.scores.length ? { colorfunc: atom => plddtColor(Number(atom.b || 0)) } : { color: entry.color };
     if (mode === 'deviation') return { colorfunc: atom => deviationColor(entry, atom) };
+    if (mode === 'fromresidue') return { colorfunc: distanceFromResidueColorFunc(entry) };
     if (mode === 'agreement') return { colorfunc: atom => agreementColor(entry, atom) };
     if (mode === 'domain') return { colorfunc: atom => domainColor(entry, atom) };
     if (mode === 'annotated') return { colorfunc: atom => annotatedColor(entry, atom) };
@@ -558,6 +559,8 @@
     root.querySelector('#gpv-label-text').value = saved ? saved.text : (atom.resn || 'RES') + atom.resi + (atom.chain ? ' · ' + atom.chain : '');
     root.querySelector('#gpv-add-label').disabled = false;
     updatePositionCompare();
+    /* Colour by distance from the selected residue (03a) follows the selection. */
+    distanceColourSelectionChanged();
     /* The residue marker (04c) moves to the residue just selected. */
     rebuildOverlays();
   }
@@ -695,6 +698,9 @@
     /* The selected residue's marker is the screen's alone, like the ring above. */
     const marker = target === viewer ? residueMarkerSpec(shownIds) : null;
     if (marker) target.addLabel(marker.text, marker.style);
+    /* So is the label a row of the card's contacts list puts on the residue it points at. */
+    const hover = target === viewer ? contactHoverSpec(shownIds) : null;
+    if (hover) target.addLabel(hover.text, hover.style);
     if (root.querySelector('#gpv-all-labels').checked) {
       const entry = activeEntry();
       if (entry && shownIds.has(entry.id)) {

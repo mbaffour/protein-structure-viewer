@@ -28,6 +28,7 @@
       plddt: 'coloured by per-residue pLDDT (very low <50 orange, low 50–70 yellow, confident 70–90 light blue, very high ≥90 dark blue)',
       agreement: 'coloured by per-residue Cα RMSF across ' + (ensembleSpread ? ensembleSpread.count + ' aligned models' : 'the aligned models') + ' (<0.5 Å blue, 0.5–1 Å green, 1–2 Å yellow, 2–4 Å orange, ≥4 Å red; residues present in one model grey)',
       deviation: 'coloured by Cα deviation from the reference after superposition (<1 Å blue, 1–2 Å green, 2–4 Å yellow, 4–8 Å orange, ≥8 Å red; unmatched residues grey)',
+      fromresidue: distanceColourCaption(),
       spectrum: 'coloured as a sequence spectrum from the N- to the C-terminus',
       element: 'coloured by element',
       charge: 'coloured by residue charge at neutral pH (Lys and Arg blue, His light blue, Asp and Glu red, others grey)',
@@ -45,6 +46,7 @@
     if (surfaceChoice !== 'none') colourText += ', with a ' + (surfaceChoice === 'translucent' ? 'translucent' : 'solid') + ' molecular surface in the same colours';
     if (mode === 'deviation' && !alignmentResults.length) colourText = 'shown in grey (Cα deviation colouring is selected but no alignment has been made)';
     if (mode === 'agreement' && !ensembleSpread) colourText = 'shown in grey (model agreement colouring is selected but no models have been aligned)';
+    if (mode === 'fromresidue' && !distanceColourTarget()) colourText = distanceColourCaption();
     const representation = { cartoon: 'Cartoon representation', stick: 'Stick representation', sphere: 'Space-filling representation', line: 'Line representation' }[root.querySelector('#gpv-style').value] || 'Representation';
     const sentences = [];
     sentences.push((provenance.title ? provenance.title + '. ' : '') + representation + ' of ' + (shown.length ? shown.map(displayName).join(', ') : 'the model') + (provenance.method ? ' predicted with ' + provenance.method : '') + (provenance.source ? ' (' + provenance.source + ')' : '') + ', ' + colourText + '.');
@@ -123,6 +125,7 @@
       hydrophobicity: 'Hydrophobicity colouring used the Kyte–Doolittle scale.',
       chain: abbreviated ? 'Each chain was given its own colour; the figure key names the first ' + (legendNamedLimit - 1) + ' of the ' + abbreviated.length + ' chains and counts the remainder, all of which are named in the figure legend.' : null,
       entity: 'Chains were grouped into entities by identical sequence.',
+      fromresidue: distanceColourMethods(),
       data: residueData ? 'Per-residue values (' + residueData.name + ') were mapped linearly onto a ' + ({ viridis: 'viridis', diverging: 'diverging blue–white–red', heat: 'white–red' })[residueData.scale] + ' scale between the minimum and maximum of the data.' : null
     };
     if (colourNotes[mode]) sentences.push(colourNotes[mode]);

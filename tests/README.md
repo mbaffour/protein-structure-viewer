@@ -188,6 +188,20 @@ Phone checks emulate viewport dimensions, not a physical phone or its GPU.
   measures nothing and keeps waiting); Esc cancels an armed Measure to… and the next tap opens the card; with
   measurement mode on the card's button is disabled and `M` arms nothing; and a non-main drawing target and a figure
   export draw every label but never the marker.
+- A residue's contacts, closest-atom measurements and colour by distance (2.51.0, right after the card steps, still in
+  the turned view): the neighbour count opens the contacts list, which has exactly the `nearbyResidues` rows, nearest
+  first, each closest distance equal to the atoms' own to 10⁻³ Å, within the cutoff, with an atom pair whose named
+  atoms are that far apart, and as many rows as the count says; a click on a row adds one Cα–Cα record (and, with
+  *closest atoms* chosen, one record between the two atoms the row names at the row's distance, the status naming
+  them), one undo step each, and the list stays open; Measure all adds one record per row in one undo step that one
+  undo takes back, and Highlight adds one highlight record per chain covering exactly the listed residues in one undo
+  step; with *closest atoms* chosen `M` measures the closest heavy-atom pair to the next residue tapped, the status
+  reading `first — second: ATOM–ATOM d.dd Å`; Distance from selected residue paints a residue within 4 Å `#1e3a8a`
+  and one beyond 20 Å `#e5e7eb` and the residue itself in the accent colour, the strip's pixels agree, the legend,
+  strip title and methods text name the residue, another selection recolours, nothing selected is grey and the mode
+  announces *Click a residue first*, and a saved and reloaded scene keeps the mode; and on
+  `fixtures/experimental/5cha.cif` His57 of chain B lists `SER195 · C` at NE2–OG 3.02 Å and `ASP102 · B` at ND1–OD1
+  2.67 Å. Each step takes its records, selection, measure choice and colour scheme back, and the last removes 5CHA.
 - The contact and distance map (2.50.0, in 'figure finishing' after the methods-text step, beside the other
   contact-map steps): A against A gives a square map with no diagonal or mirrored pair stored and a diagonal cell
   painted like the paper while its contacting neighbour is painted on both sides; All chains lays A and B end to end
@@ -391,7 +405,19 @@ The folder holds the run's `*_model_*.cif` and `*_full_data_*.json` / `*_summary
 Passing the archive as well loads through the ZIP path instead of individual files. The validator prints
 a Markdown table, writes `validation.json` next to the reference and exits non-zero on any disagreement
 (0.01 pLDDT, 0.001 Å, exact residue set). Results on three runs are in `../VALIDATION.md`. No run data
-is committed; point the scripts at your own.
+is committed; point the scripts at your own. Since 2.51.0 it also compares every residue's contacts on the
+contact-map chain (neighbour set, closest heavy-atom distance and atom pair, Cα–Cα) and three residues' distances to
+every residue.
+
+## Validation against measured structures
+
+`validate-experimental.mjs` (`npm run validate:experimental`; needs only `vendor/` from `npm test`) checks the
+viewer's atom-pair distances and residue contacts against numbers measured by others on the deposited structures in
+`fixtures/experimental/` (sources in its README): every hydrogen bond and salt bridge PDBePISA lists across the
+interfaces of 2HHB and 1BRS — the distance between the two named atoms within 10⁻³ Å of PISA's, and the bonded
+residue in the first residue's contacts list at 4.5 Å no farther than the bond — and the published 5CHA
+catalytic-triad distances to 0.01 Å, each the closest atom pair of its two residues. It prints a table and exits
+non-zero on any failure; CI runs it in the Chromium leg after `npm test`.
 
 ## Notes
 

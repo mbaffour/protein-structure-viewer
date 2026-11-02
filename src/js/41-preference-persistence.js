@@ -11,10 +11,15 @@
   function savePreferences() {
     /* A switch is remembered by its state, not by its value — a checkbox's value is "on" whether it
        is ticked or not. */
-    writeJson(preferenceKey, Object.fromEntries(persistedControls.map(selector => {
-      const control = root.querySelector(selector);
-      return [selector, control.type === 'checkbox' ? control.checked : control.value];
-    })));
+    writeJson(preferenceKey, {
+      ...Object.fromEntries(persistedControls.map(selector => {
+        const control = root.querySelector(selector);
+        return [selector, control.type === 'checkbox' ? control.checked : control.value];
+      })),
+      /* The card's Cα–Cα / closest-atoms choice (04c) lives in the same store; its select exists only
+         once the card has opened, so it is carried by value rather than by selector. */
+      measureAtoms
+    });
   }
 
   function restorePreferences() {
@@ -295,7 +300,11 @@
   root.querySelector('#gpv-rmsf-png').addEventListener('click', () => { downloadRmsfProfilePng().catch(error => announce('Could not render the RMSF profile: ' + error.message, 'error')); });
   root.querySelector('#gpv-profile-png').addEventListener('click', () => { downloadProfilePng().catch(error => announce('Could not render the profile: ' + error.message, 'error')); });
   root.querySelector('#gpv-hide-below').addEventListener('change', () => { applyStyle(); updateStatus(hideBelow() ? 'Residues with pLDDT below ' + hideBelow() + ' hidden in the viewer, panels and exports' : 'Every residue shown'); });
-  root.querySelector('#gpv-color-mode').addEventListener('change', () => { if (root.querySelector('#gpv-color-mode').value === 'deviation' && !alignmentResults.length) announce('Deviation colouring stays grey until you align: Compare → Align visible'); });
+  root.querySelector('#gpv-color-mode').addEventListener('change', () => {
+    const mode = root.querySelector('#gpv-color-mode').value;
+    if (mode === 'deviation' && !alignmentResults.length) announce('Deviation colouring stays grey until you align: Compare → Align visible');
+    if (mode === 'fromresidue' && !distanceColourTarget()) announce('Click a residue first — distance colouring stays grey until a residue is selected');
+  });
   root.querySelector('#gpv-interface-run').addEventListener('click', analyseInterfaces);
   root.querySelector('#gpv-interface-csv').addEventListener('click', downloadInterfaceCsv);
   root.querySelector('#gpv-interface-cutoff').addEventListener('input', () => { root.querySelector('#gpv-interface-cutoff-value').textContent = Number(root.querySelector('#gpv-interface-cutoff').value).toFixed(1) + ' Å'; });

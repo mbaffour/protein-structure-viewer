@@ -2530,6 +2530,361 @@ await step('a figure export and the comparison panels never draw the residue mar
     console.log('       "' + marker + '" on screen · not in a ' + exported.length + '-label export or a panel');
   } finally { await clearSelection(); if (labelled) await removeLabelByKey(labelled.key); await clearSelection(); }
 });
+/* ---- A residue's contacts on the card, closest-atom measurements, colour by distance (2.51.0) ----
+   The card's neighbour count (or Contacts) opens the residue's contacts — the proximity tool's own
+   residues, nearest first, with their closest heavy atoms and Cα–Cα distance; a row measures, Measure
+   all measures every one in one undo step, Highlight makes what Highlight nearby residues makes. The
+   card's Measure choice (Cα–Cα or closest atoms) governs every residue-to-residue measurement it
+   makes. Every step takes back what it made: records, selection, the measure choice, the colour
+   scheme. Still in the turned view. */
+const contactRowsNow = () => page.evaluate(() => [...document.querySelectorAll('#gpv-residue-contacts-rows .gpv-residue-contact')].map(button => ({
+  chain: button.dataset.chain, resi: Number(button.dataset.resi), closest: Number(button.dataset.closest), atoms: button.dataset.atoms,
+  name: button.querySelector('.gpv-contact-name').textContent, text: button.textContent
+})));
+const contactsShown = () => page.locator('#gpv-residue-contacts').isVisible();
+/* The card's measure choice, put back without needing the card open: the select keeps its listener. */
+const setMeasureChoice = value => page.evaluate(value => {
+  const select = document.querySelector('#gpv-label-editor-measure-atoms'); if (!select || select.value === value) return;
+  select.value = value; select.dispatchEvent(new Event('change', { bubbles: true }));
+}, value);
+const pointKey = point => [point.entryId, point.chain || '', point.resi].join('|') + ':' + point.atom;
+/* A residue's contacts from the atoms alone: the residues with a heavy atom within the proximity
+   tool's cutoff of one of its heavy atoms, each with its closest distance. */
+const contactsFromAtoms = key => page.evaluate(key => {
+  const d = window.__viewerDebug; const [id, chain, resi] = key.split('|');
+  const entry = d.entries().find(item => item.id === Number(id));
+  const near = d.nearbyResidues({ entry, mode: 'residue', residue: { chain, resi: Number(resi) } });
+  const heavy = d.heavyAtoms(entry);
+  const own = heavy.filter(atom => (atom.chain || '') === chain && atom.resi === Number(resi));
+  const byResidue = new Map();
+  heavy.forEach(atom => {
+    if (atom.hetflag || ((atom.chain || '') === chain && atom.resi === Number(resi))) return;
+    const k = (atom.chain || '') + '|' + atom.resi; let best = Infinity;
+    own.forEach(mine => { best = Math.min(best, Math.hypot(atom.x - mine.x, atom.y - mine.y, atom.z - mine.z)); });
+    if (!byResidue.has(k) || byResidue.get(k) > best) byResidue.set(k, best);
+  });
+  return { cutoff: near.cutoff, near: near.residues.map(item => item.chain + '|' + item.resi), closest: Object.fromEntries(byResidue) };
+}, key);
+/* The distance between two named atoms of two residues of one model, from the atoms themselves. */
+const namedAtomDistance = (id, chainA, resiA, atomA, chainB, resiB, atomB) => page.evaluate(([id, chainA, resiA, atomA, chainB, resiB, atomB]) => {
+  const entry = window.__viewerDebug.entries().find(item => item.id === id);
+  const find = (chain, resi, name) => entry.atoms.find(atom => (atom.chain || '') === chain && atom.resi === resi && atom.atom === name);
+  const a = find(chainA, resiA, atomA); const b = find(chainB, resiB, atomB);
+  return a && b ? Math.hypot(a.x - b.x, a.y - b.y, a.z - b.z) : null;
+}, [id, chainA, resiA, atomA, chainB, resiB, atomB]);
+const newestMeasurementText = async () => (await page.locator('#gpv-measurement-list .gpv-entry .gpv-entry-name').last().textContent()) || '';
+const openCardAt = async target => {
+  await tap(target.x, target.y); await page.waitForTimeout(400);
+  if (!(await editorShown())) throw new Error('the card did not open at ' + target.text);
+};
+await step('the card lists a residue\'s contacts: the proximity tool\'s residues, nearest first, each with its closest atoms as the atoms give them', async () => {
+  await clearSelection();
+  try {
+    const target = await canvasResidue();
+    if (!target) throw new Error('no residue on screen to tap');
+    await openCardAt(target);
+    if (await contactsShown()) throw new Error('the contacts list was open before it was asked for');
+    /* The count on the facts line is the way in. */
+    await page.click('#gpv-residue-card-near'); await page.waitForTimeout(250);
+    if (!(await contactsShown())) throw new Error('the neighbour count did not open the contacts list');
+    if ((await page.getAttribute('#gpv-label-editor-contacts', 'aria-expanded')) !== 'true') throw new Error('Contacts does not say the list is open');
+    const rows = await contactRowsNow();
+    const truth = await contactsFromAtoms(target.key);
+    const facts = (await page.locator('#gpv-residue-card-facts').textContent()) || '';
+    const counted = Number((facts.match(/(\d+) residues? within/) || [])[1]);
+    if (rows.length !== truth.near.length) throw new Error('the list has ' + rows.length + ' rows, the proximity tool ' + truth.near.length + ' residues');
+    if (counted !== rows.length) throw new Error('the card counts ' + counted + ', the list has ' + rows.length + ' rows');
+    const keys = rows.map(row => row.chain + '|' + row.resi);
+    if (truth.near.some(key => !keys.includes(key))) throw new Error('the list leaves out ' + truth.near.filter(key => !keys.includes(key)).join(', '));
+    const [entryId] = target.key.split('|'); const [, chain, resi] = target.key.split('|');
+    for (const [index, row] of rows.entries()) {
+      if (index && row.closest < rows[index - 1].closest - 1e-9) throw new Error('the list is not nearest first at ' + row.name);
+      const direct = truth.closest[row.chain + '|' + row.resi];
+      if (!(Math.abs(row.closest - direct) <= 0.001)) throw new Error(row.name + ' is listed at ' + row.closest + ' Å, the atoms say ' + direct.toFixed(3));
+      if (!(row.closest <= truth.cutoff + 1e-9)) throw new Error(row.name + ' at ' + row.closest + ' Å is beyond the ' + truth.cutoff + ' Å cutoff');
+      const pair = row.atoms.match(/^([A-Z0-9'"*]+)–([A-Z0-9'"*]+)$/);
+      if (!pair) throw new Error(row.name + ' names the atom pair "' + row.atoms + '"');
+      const named = await namedAtomDistance(Number(entryId), chain, Number(resi), pair[1], row.chain, row.resi, pair[2]);
+      if (!(Math.abs(named - row.closest) <= 0.001)) throw new Error(row.name + ': ' + row.atoms + ' are ' + named + ' Å apart, the row says ' + row.closest);
+      if (!/^\S+\d+ · \S+\d+\.\d\d Å\S+–\S+Cα \d+\.\d\d Å$/.test(row.text)) throw new Error('a row reads "' + row.text + '"');
+    }
+    console.log('       ' + target.text + ' · ' + rows.length + ' contacts within ' + truth.cutoff + ' Å · nearest ' + (rows[0] ? rows[0].name + ' ' + rows[0].closest.toFixed(2) + ' Å ' + rows[0].atoms : '—'));
+  } finally { await clearSelection(); }
+});
+await step('a click on a contact measures it — the two Cα atoms by default, the closest atoms when chosen — one undo step each, and the list stays open', async () => {
+  await clearSelection();
+  const startCount = (await measuresNow()).length;
+  try {
+    const target = await canvasResidue();
+    if (!target) throw new Error('no residue on screen to tap');
+    const [entryId] = target.key.split('|');
+    await openCardAt(target);
+    if ((await page.inputValue('#gpv-label-editor-measure-atoms')) !== 'ca') throw new Error('the measure choice does not start at Cα–Cα');
+    await page.click('#gpv-label-editor-contacts'); await page.waitForTimeout(250);
+    const rows = await contactRowsNow();
+    if (!rows.length) throw new Error('no contacts to click');
+    const row = rows[0];
+    let steps = await rememberedSteps();
+    await page.locator('#gpv-residue-contacts-rows .gpv-residue-contact').first().click(); await page.waitForTimeout(300);
+    let records = await measuresNow();
+    if (records.length !== startCount + 1) throw new Error('a click on a contact made ' + (records.length - startCount) + ' measurements, not 1');
+    let keys = records[records.length - 1].points.map(pointKey);
+    if (keys[0] !== target.key + ':CA' || keys[1] !== [entryId, row.chain, row.resi].join('|') + ':CA') throw new Error('the click measured ' + keys.join(' → ') + ', not the two Cα atoms');
+    if ((await rememberedSteps()) - steps !== 1) throw new Error('the click took ' + ((await rememberedSteps()) - steps) + ' undo steps');
+    if (!(await editorShown()) || !(await contactsShown())) throw new Error('measuring a contact closed the list');
+    await undoOnce();
+    if ((await measuresNow()).length !== startCount) throw new Error('undo did not take the Cα–Cα measurement away');
+    /* Closest atoms: the record joins the two atoms the row names, at the row's distance. */
+    await clearSelection();
+    await openCardAt(target);
+    await page.selectOption('#gpv-label-editor-measure-atoms', 'closest'); await page.waitForTimeout(150);
+    if (await page.evaluate(() => window.__viewerDebug.measureAtoms()) !== 'closest') throw new Error('the choice did not take');
+    await page.click('#gpv-label-editor-contacts'); await page.waitForTimeout(250);
+    const again = (await contactRowsNow())[0];
+    steps = await rememberedSteps();
+    await page.locator('#gpv-residue-contacts-rows .gpv-residue-contact').first().click(); await page.waitForTimeout(300);
+    records = await measuresNow();
+    if (records.length !== startCount + 1) throw new Error('a click with closest atoms made ' + (records.length - startCount) + ' measurements, not 1');
+    keys = records[records.length - 1].points.map(pointKey);
+    const [atomA, atomB] = again.atoms.split('–');
+    if (keys[0] !== target.key + ':' + atomA || keys[1] !== [entryId, again.chain, again.resi].join('|') + ':' + atomB) throw new Error('closest atoms measured ' + keys.join(' → ') + ', the row names ' + again.atoms);
+    const drawn = Number(((await newestMeasurementText()).match(/· ([\d.]+) Å$/) || [])[1]);
+    if (!(Math.abs(drawn - again.closest) <= 0.006)) throw new Error('the measurement reads ' + drawn + ' Å, the row ' + again.closest);
+    /* The status writes a Cα as Cα, as every measurement status does. */
+    const spoken = [atomA, atomB].map(name => (name === 'CA' ? 'Cα' : name)).join('–');
+    if (!(await statusNow()).includes(': ' + spoken + ' ' + drawn.toFixed(2) + ' Å')) throw new Error('the status does not name the atoms: ' + (await statusNow()));
+    if ((await rememberedSteps()) - steps !== 1) throw new Error('the click took ' + ((await rememberedSteps()) - steps) + ' undo steps');
+    await undoOnce();
+    if ((await measuresNow()).length !== startCount) throw new Error('undo did not take the closest-atom measurement away');
+    console.log('       ' + target.text + ' → ' + row.name + ' Cα–Cα, then ' + again.name + ' ' + again.atoms + ' ' + drawn.toFixed(2) + ' Å · one undo step each');
+  } finally { await setMeasureChoice('ca'); await clearSelection(); await trimMeasurements(startCount); }
+});
+await step('Measure all draws every contact in one undo step; Highlight makes what Highlight nearby residues makes, in one undo step', async () => {
+  await clearSelection();
+  const startCount = (await measuresNow()).length;
+  const startSelections = await page.evaluate(() => window.__viewerDebug.selectionRecords().length);
+  try {
+    const target = await canvasResidue();
+    if (!target) throw new Error('no residue on screen to tap');
+    const [entryId] = target.key.split('|');
+    await openCardAt(target);
+    await page.click('#gpv-label-editor-contacts'); await page.waitForTimeout(250);
+    const rows = await contactRowsNow();
+    if (rows.length < 2) throw new Error('only ' + rows.length + ' contacts — Measure all needs a list');
+    const wanted = rows.map(row => [entryId, row.chain, row.resi].join('|') + ':CA').sort();
+    let steps = await rememberedSteps();
+    await page.click('#gpv-residue-contacts-measure-all'); await page.waitForTimeout(400);
+    const records = await measuresNow();
+    if (records.length !== startCount + rows.length) throw new Error('Measure all made ' + (records.length - startCount) + ' measurements for ' + rows.length + ' contacts');
+    const made = records.slice(startCount);
+    if (made.some(record => pointKey(record.points[0]) !== target.key + ':CA')) throw new Error('a measurement does not start at ' + target.text + '\'s Cα');
+    const reached = made.map(record => pointKey(record.points[1])).sort();
+    if (reached.join(',') !== wanted.join(',')) throw new Error('Measure all reached ' + reached.join(', ') + ', the list ' + wanted.join(', '));
+    if ((await rememberedSteps()) - steps !== 1) throw new Error('Measure all took ' + ((await rememberedSteps()) - steps) + ' undo steps, not 1');
+    if (!new RegExp('^' + rows.length + ' measurements from ').test(await statusNow())) throw new Error('Measure all announced: ' + (await statusNow()));
+    await undoOnce();
+    if ((await measuresNow()).length !== startCount) throw new Error('one undo left ' + ((await measuresNow()).length - startCount) + ' of the ' + rows.length + ' measurements');
+    /* Highlight: the selection records Highlight nearby residues makes — one per chain, in the
+       highlight colour, together the listed residues — as one undo step. */
+    await clearSelection();
+    await openCardAt(target);
+    await page.click('#gpv-label-editor-contacts'); await page.waitForTimeout(250);
+    steps = await rememberedSteps();
+    await page.click('#gpv-residue-contacts-highlight'); await page.waitForTimeout(400);
+    const added = await page.evaluate(count => JSON.parse(JSON.stringify(window.__viewerDebug.selectionRecords().slice(count))), startSelections);
+    const colour = await page.inputValue('#gpv-selection-color');
+    const chains = [...new Set(rows.map(row => row.chain))];
+    if (added.length !== chains.length) throw new Error('Highlight made ' + added.length + ' selection records for contacts on ' + chains.length + ' chains');
+    if (added.some(record => record.action !== 'highlight' || record.color !== colour || String(record.entryId) !== entryId)) throw new Error('Highlight made ' + JSON.stringify(added));
+    const highlighted = added.flatMap(record => record.residues.map(resi => record.chain + '|' + resi)).sort();
+    const listed = rows.map(row => row.chain + '|' + row.resi).sort();
+    if (highlighted.join(',') !== listed.join(',')) throw new Error('Highlight covers ' + highlighted.join(', ') + ', the list ' + listed.join(', '));
+    if ((await rememberedSteps()) - steps !== 1) throw new Error('Highlight took ' + ((await rememberedSteps()) - steps) + ' undo steps, not 1');
+    await undoOnce();
+    if ((await page.evaluate(() => window.__viewerDebug.selectionRecords().length)) !== startSelections) throw new Error('undo did not take the highlight away');
+    console.log('       ' + target.text + ': ' + rows.length + ' measurements in one step · highlight of ' + listed.length + ' residues on ' + chains.length + ' chain' + (chains.length === 1 ? '' : 's'));
+  } finally {
+    await clearSelection(); await trimMeasurements(startCount);
+    for (let guard = 0; guard < 10 && (await page.evaluate(() => window.__viewerDebug.selectionRecords().length)) > startSelections; guard += 1) {
+      await page.locator('#gpv-selection-list .gpv-entry').last().locator('button:has-text("Remove")').click(); await page.waitForTimeout(250);
+    }
+  }
+});
+await step('with closest atoms chosen, M measures the closest heavy atoms to the next residue tapped and the status names them', async () => {
+  await clearSelection();
+  const startCount = (await measuresNow()).length;
+  try {
+    const first = await canvasResidue();
+    if (!first) throw new Error('no residue on screen to tap');
+    await openCardAt(first);
+    await page.selectOption('#gpv-label-editor-measure-atoms', 'closest'); await page.waitForTimeout(150);
+    await letGo();
+    if (!(await selectedNow())) throw new Error('closing the card dropped the selected residue');
+    const steps = await rememberedSteps();
+    await focusStage(); await page.keyboard.press('m'); await page.waitForTimeout(200);
+    if (!(await measureArmed())) throw new Error('M armed nothing');
+    const second = await canvasResidue([first.key]);
+    if (!second) throw new Error('no second residue on screen');
+    await tap(second.x, second.y); await page.waitForTimeout(400);
+    const records = await measuresNow();
+    if (records.length !== startCount + 1) throw new Error('M made ' + (records.length - startCount) + ' measurements, not 1');
+    const points = records[records.length - 1].points;
+    const keys = points.map(point => [point.entryId, point.chain || '', point.resi].join('|'));
+    if (keys[0] !== first.key || keys[1] !== second.key) throw new Error('M measured ' + keys.join(' → ') + ', not ' + first.key + ' → ' + second.key);
+    /* The two atoms are the closest pair: as close as any heavy atom of one residue gets to the other. */
+    const closest = await page.evaluate(([a, b]) => {
+      const d = window.__viewerDebug; const [id, chainA, resiA] = a.split('|'); const [, chainB, resiB] = b.split('|');
+      const entry = d.entries().find(item => item.id === Number(id)); const heavy = d.heavyAtoms(entry);
+      const of = (chain, resi) => heavy.filter(atom => (atom.chain || '') === chain && atom.resi === Number(resi));
+      let best = Infinity; of(chainA, resiA).forEach(x => of(chainB, resiB).forEach(y => { best = Math.min(best, Math.hypot(x.x - y.x, x.y - y.y, x.z - y.z)); }));
+      return best;
+    }, [first.key, second.key]);
+    const drawn = Number(((await newestMeasurementText()).match(/· ([\d.]+) Å$/) || [])[1]);
+    if (!(Math.abs(drawn - closest) <= 0.006)) throw new Error('M drew ' + drawn + ' Å, the closest atoms are ' + closest.toFixed(3) + ' Å apart');
+    const said = await statusNow();
+    const names = points.map(point => (point.atom === 'CA' ? 'Cα' : point.atom)).join('–');
+    if (!said.startsWith(first.text + ' — ' + second.text + ': ' + names + ' ' + drawn.toFixed(2) + ' Å')) throw new Error('M announced: ' + said);
+    if ((await rememberedSteps()) - steps !== 1) throw new Error('M took ' + ((await rememberedSteps()) - steps) + ' undo steps, not 1');
+    await undoOnce();
+    if ((await measuresNow()).length !== startCount) throw new Error('undo did not take the measurement away');
+    console.log('       "' + said + '"');
+  } finally { await setMeasureChoice('ca'); await clearSelection(); await trimMeasurements(startCount); }
+});
+await step('colour by distance from the selected residue: closest heavy-atom bands on the model and the strip, a legend and methods sentence naming the residue, an announcement with nothing selected, and a scene keeps the mode', async () => {
+  await clearSelection();
+  const startMode = await page.inputValue('#gpv-color-mode');
+  const startTab = await page.evaluate(() => (document.querySelector('[data-gpv-tab][aria-selected="true"]') || {}).dataset.gpvTab || 'annotate');
+  /* The picked residue's colours, and the strip's pixels for the near and far residues. */
+  const coloursFor = key => page.evaluate(key => {
+    const d = window.__viewerDebug; const [id, chain, resi] = key.split('|');
+    const entry = d.entries().find(item => item.id === Number(id));
+    const heavy = d.heavyAtoms(entry).filter(atom => !atom.hetflag);
+    const own = heavy.filter(atom => (atom.chain || '') === chain && atom.resi === Number(resi));
+    const closest = new Map();
+    heavy.forEach(atom => {
+      if ((atom.chain || '') === chain && atom.resi === Number(resi)) return;
+      const k = (atom.chain || '') + '|' + atom.resi; let best = Infinity;
+      own.forEach(mine => { best = Math.min(best, Math.hypot(atom.x - mine.x, atom.y - mine.y, atom.z - mine.z)); });
+      if (!closest.has(k) || closest.get(k) > best) closest.set(k, best);
+    });
+    const entries = [...closest.entries()];
+    const near = entries.filter(([, value]) => value <= 4).sort((a, b) => a[1] - b[1])[0];
+    const far = entries.filter(([, value]) => value > 20).sort((a, b) => b[1] - a[1])[0];
+    const fn = d.colorOptions(entry).colorfunc;
+    const alpha = k => { const [c, r] = k.split('|'); return entry.atoms.find(atom => atom.atom === 'CA' && (atom.chain || '') === c && atom.resi === Number(r)); };
+    const strip = k => {
+      const [c, r] = k.split('|');
+      const canvas = document.querySelector('#gpv-sequence-rows canvas[data-entry-id="' + entry.id + '"][data-chain="' + c + '"]');
+      if (!canvas) return null;
+      const residues = [...new Set(entry.atoms.filter(atom => !atom.hetflag && (atom.chain || '') === c).map(atom => atom.resi))].sort((a, b) => a - b);
+      const index = residues.indexOf(Number(r)); const ratio = window.devicePixelRatio || 1; const cell = canvas.clientWidth / residues.length;
+      const px = canvas.getContext('2d').getImageData(Math.floor((index * cell + Math.min(1.5, cell / 4)) * ratio), Math.floor(5 * ratio), 1, 1).data;
+      return '#' + [px[0], px[1], px[2]].map(v => v.toString(16).padStart(2, '0')).join('');
+    };
+    return {
+      near: near ? { key: near[0], distance: near[1], colour: fn(alpha(near[0])), strip: strip(near[0]) } : null,
+      far: far ? { key: far[0], distance: far[1], colour: fn(alpha(far[0])), strip: strip(far[0]) } : null,
+      /* `key` carries the entry id too; alpha wants chain|resi. */
+      self: fn(alpha(chain + '|' + resi)), accent: d.themeColor('--primary', '#339cff')
+    };
+  }, key);
+  const close = (a, b) => { const rgb = hex => [1, 3, 5].map(i => parseInt(String(hex).slice(i, i + 2), 16)); const x = rgb(a); const y = rgb(b); return x.every((v, i) => Math.abs(v - y[i]) <= 3); };
+  try {
+    const target = await canvasResidue();
+    if (!target) throw new Error('no residue on screen to tap');
+    await tap(target.x, target.y); await page.waitForTimeout(400);
+    await letGo();
+    await tab('appearance'); await page.selectOption('#gpv-color-mode', 'fromresidue'); await page.waitForTimeout(600);
+    const seen = await coloursFor(target.key);
+    if (!seen.near || !seen.far) throw new Error('the fixture has no residue within 4 Å and beyond 20 Å of ' + target.text);
+    if (seen.near.colour !== '#1e3a8a') throw new Error(seen.near.key + ' at ' + seen.near.distance.toFixed(2) + ' Å is ' + seen.near.colour + ', not #1e3a8a');
+    if (seen.far.colour !== '#e5e7eb') throw new Error(seen.far.key + ' at ' + seen.far.distance.toFixed(2) + ' Å is ' + seen.far.colour + ', not #e5e7eb');
+    if (seen.self !== seen.accent) throw new Error('the selected residue is ' + seen.self + ', not the accent ' + seen.accent);
+    if (!seen.near.strip || !close(seen.near.strip, '#1e3a8a') || !seen.far.strip || !close(seen.far.strip, '#e5e7eb')) throw new Error('the strip shows ' + seen.near.strip + ' and ' + seen.far.strip);
+    const legend = (await page.locator('#gpv-plddt-legend').textContent()) || '';
+    if (!legend.includes('Distance from ' + target.text) || !legend.includes('≤4 Å') || !legend.includes('>20 Å')) throw new Error('legend: ' + legend);
+    const title = (await page.locator('#gpv-sequence-title').textContent()) || '';
+    if (!title.includes('coloured by distance from ' + target.text)) throw new Error('strip title: ' + title);
+    const [, chain, resi] = target.key.split('|');
+    const methods = await page.evaluate(() => window.__viewerDebug.methodsText());
+    const wanted = 'Residues are coloured by the distance of their closest heavy atom to ' + target.text.split(' · ')[0] + (chain ? ' of chain ' + chain : '');
+    if (!methods.includes(wanted)) throw new Error('the methods text lacks "' + wanted + '"');
+    /* Another residue recolours; nothing selected is grey and the mode says what it needs. */
+    const other = await canvasResidue([target.key]);
+    if (other) {
+      await tap(other.x, other.y); await page.waitForTimeout(500); await letGo();
+      const moved = await coloursFor(other.key);
+      if (moved.self !== moved.accent) throw new Error('selecting ' + other.text + ' did not recolour from it');
+    }
+    await clearSelection(); await page.waitForTimeout(300);
+    const grey = await page.evaluate(([key, resi]) => { const d = window.__viewerDebug; const entry = d.entries().find(item => item.id === Number(key.split('|')[0])); const atom = entry.atoms.find(a => a.atom === 'CA' && a.resi === resi); return d.colorOptions(entry).colorfunc(atom); }, [target.key, Number(resi)]);
+    if (grey !== '#9ca3af') throw new Error('with nothing selected a residue is ' + grey + ', not grey');
+    await page.selectOption('#gpv-color-mode', 'structure'); await page.waitForTimeout(200);
+    await page.selectOption('#gpv-color-mode', 'fromresidue'); await page.waitForTimeout(300);
+    if (!/Click a residue first/.test(await statusNow())) throw new Error('with nothing selected the mode announced: ' + (await statusNow()));
+    /* A scene carries the mode like any other value of the colour scheme. */
+    const scene = await page.evaluate(() => window.__viewerDebug.sceneSettings().colorMode);
+    if (scene !== 'fromresidue') throw new Error('the scene records the colour scheme as ' + scene);
+    await tab('publish');
+    const download = page.waitForEvent('download', { timeout: 20000 });
+    await page.click('#gpv-save-scene');
+    const file = join(work, 'scene-fromresidue.json'); await (await download).saveAs(file);
+    await tab('appearance'); await page.selectOption('#gpv-color-mode', 'structure'); await page.waitForTimeout(200);
+    await page.setInputFiles('#gpv-load-scene', file); await page.waitForTimeout(2500);
+    if ((await page.inputValue('#gpv-color-mode')) !== 'fromresidue') throw new Error('the restored scene has the colour scheme ' + (await page.inputValue('#gpv-color-mode')));
+    console.log('       ' + target.text + ': ' + seen.near.key + ' ' + seen.near.distance.toFixed(2) + ' Å ' + seen.near.colour + ' · ' + seen.far.key + ' ' + seen.far.distance.toFixed(2) + ' Å ' + seen.far.colour + ' · strip agrees · scene keeps the mode');
+  } finally {
+    await clearSelection();
+    await tab('appearance'); await page.selectOption('#gpv-color-mode', startMode); await page.waitForTimeout(300);
+    await tab(startTab);
+  }
+});
+await step('on α-chymotrypsin (5CHA), His57 of chain B lists Ser195 · C at NE2–OG 3.02 Å and Asp102 · B at ND1–OD1 2.67 Å', async () => {
+  await clearSelection();
+  const file = join(here, 'fixtures', 'experimental', '5cha.cif');
+  const startCurrent = await page.inputValue('#gpv-current');
+  const startView = await page.evaluate(() => window.__viewerDebug.viewer.getView());
+  const startTab = await page.evaluate(() => (document.querySelector('[data-gpv-tab][aria-selected="true"]') || {}).dataset.gpvTab || 'annotate');
+  /* The list is at the Annotate cutoff; the published pairs are under 3.1 Å, so 4.5 Å is set here
+     rather than inherited from whatever an earlier step left. */
+  const startCutoff = await page.inputValue('#gpv-near-cutoff');
+  let id = null;
+  try {
+    await tab('annotate'); await page.fill('#gpv-near-cutoff', '4.5');
+    await tab('models'); await page.setInputFiles('#gpv-files', [file]); await page.waitForTimeout(2500);
+    id = await page.evaluate(() => { const entry = window.__viewerDebug.entries().find(item => /5cha/i.test(item.name)); return entry ? entry.id : null; });
+    if (id === null) throw new Error('5cha.cif did not load');
+    await page.evaluate(id => { const select = document.querySelector('#gpv-current'); select.value = String(id); select.dispatchEvent(new Event('change', { bubbles: true })); }, id); await page.waitForTimeout(600);
+    await tab('annotate');
+    await page.fill('#gpv-goto', 'B:57'); await page.click('#gpv-goto-run'); await page.waitForTimeout(500);
+    const picked = await selectedNow();
+    if (!picked || picked.entryId !== id || picked.chain !== 'B' || picked.resi !== 57) throw new Error('Go to B:57 selected ' + JSON.stringify(picked));
+    await focusStage(); await page.keyboard.press('l'); await page.waitForTimeout(400);
+    if (!(await editorShown())) throw new Error('L did not open the card at His57');
+    await page.click('#gpv-label-editor-contacts'); await page.waitForTimeout(400);
+    const rows = await contactRowsNow();
+    const expect = [['SER195 · C', 'NE2–OG', 3.02], ['ASP102 · B', 'ND1–OD1', 2.67]];
+    for (const [name, atoms, distance] of expect) {
+      const row = rows.find(item => item.name === name);
+      if (!row) throw new Error('His57\'s contacts do not list ' + name + ': ' + rows.map(item => item.name).join(', '));
+      if (row.atoms !== atoms) throw new Error(name + ' is listed with ' + row.atoms + ', not ' + atoms);
+      if (!(Math.abs(row.closest - distance) <= 0.01)) throw new Error(name + ' is listed at ' + row.closest + ' Å, published ' + distance + ' Å');
+      if (!row.text.includes(distance.toFixed(2) + ' Å')) throw new Error('the row reads "' + row.text + '"');
+    }
+    console.log('       HIS57 · B: ' + expect.map(([name]) => { const row = rows.find(item => item.name === name); return name + ' ' + row.atoms + ' ' + row.closest.toFixed(3) + ' Å'; }).join(' · ') + ' · ' + rows.length + ' contacts');
+  } finally {
+    await clearSelection();
+    if (id !== null) {
+      await tab('models');
+      const remove = page.locator('#gpv-list [data-entry-id="' + id + '"] button:has-text("Remove")');
+      if (await remove.count()) { await remove.click(); await page.waitForTimeout(500); }
+    }
+    await page.evaluate(value => { const select = document.querySelector('#gpv-current'); if ([...select.options].some(option => option.value === value)) { select.value = value; select.dispatchEvent(new Event('change', { bubbles: true })); } }, startCurrent); await page.waitForTimeout(400);
+    await page.evaluate(view => { const v = window.__viewerDebug.viewer; v.setView(view); v.render(); }, startView); await page.waitForTimeout(300);
+    await tab('annotate'); await page.fill('#gpv-near-cutoff', startCutoff);
+    await tab(startTab);
+  }
+});
 await step('the orientation is put back after the canvas steps', async () => {
   await letGo();
   await focusStage(); await page.keyboard.press('Shift+r'); await page.waitForTimeout(500);

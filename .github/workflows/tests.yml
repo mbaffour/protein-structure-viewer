@@ -53,6 +53,13 @@ jobs:
           PSV_HEADED: '1'
         run: xvfb-run --auto-servernum --server-args="-screen 0 1920x1200x24" npm test
 
+      # Distances and contacts against PDBePISA and a published catalytic triad. It drives Chromium, so
+      # it runs in the Chromium leg, after npm test has written vendor/; validate-scripts has no browser.
+      - name: Validate against measured structures
+        if: matrix.browser == 'chromium'
+        working-directory: tests
+        run: npm run validate:experimental
+
   validate-scripts:
     name: validate scripts
     runs-on: ubuntu-latest
