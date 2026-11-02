@@ -210,11 +210,13 @@
 
   /* Rows: chain A residues (top to bottom); columns: chain B residues (left to right).
      Closer pairs are darker. With `figure` the map gets margins, ticks, titles and a scale. */
-  function drawContactMap(canvas, figure = false, scale = 1) {
+  /* `cellScale` sizes the residue cells on its own when given (the composite fits the grid to its
+     cell and keeps the text at the figure's size); otherwise text and cells share `scale`. */
+  function drawContactMap(canvas, figure = false, scale = 1, cellScale = scale) {
     if (!contactResult) return;
     const { rowA, rowB, pairs, cutoff, chainA, chainB, symmetric, view } = contactResult;
     const n = rowA.residues.length; const m = rowB.residues.length;
-    const cell = contactCell(canvas) * scale;
+    const cell = contactCell(canvas) * cellScale;
     const margin = figure ? { left: 72 * scale, top: 54 * scale, right: 24 * scale, bottom: 64 * scale } : { left: 0, top: 0, right: 0, bottom: 0 };
     canvas.width = Math.round(m * cell + margin.left + margin.right); canvas.height = Math.round(n * cell + margin.top + margin.bottom);
     const context = canvas.getContext('2d');

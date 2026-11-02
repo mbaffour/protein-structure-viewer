@@ -109,29 +109,10 @@
     }
   }
 
-  async function applyScene(scene) {
-    if (!scene || scene.type !== 'protein-viewer-scene') return;
-    /* A restore replaces every record, so it is one undo step: ⌘Z puts back the labels, measurements,
-       selections and views it replaced. Before 2.52.0 it emptied the history instead, and the work it
-       wrote over was gone. A page with nothing to lose (a share link opening) takes no step. */
-    if (labelRecords.length + selectionRecords.length + measurementRecords.length + annotationRecords.length + domainRecords.length + savedViews.length + spotlightResidues.length) remember('scene restore');
-    const byName = new Map(structures.map(entry => [entry.name, entry]));
-    let hashWarnings = 0;
-    for (const modelRecord of scene.models || []) {
-      const entry = byName.get(modelRecord.name);
-      if (!entry) continue;
-      entry.visible = modelRecord.visible !== false;
-      if (/^#[0-9a-f]{6}$/i.test(modelRecord.color || '')) entry.color = modelRecord.color;
-      if (typeof modelRecord.label === 'string') entry.label = modelRecord.label.trim().slice(0, 120);
-      entry.hiddenChains = Array.isArray(modelRecord.hiddenChains) ? modelRecord.hiddenChains.map(String).slice(0, 200) : [];
-      entry.fadedChains = Array.isArray(modelRecord.fadedChains) ? modelRecord.fadedChains.map(String).slice(0, 200) : [];
-      entry.faded = modelRecord.faded === true;
-      if (modelRecord.sha256) {
-        const actual = entry.hash || await sha256(entry.text);
-        if (actual && actual !== modelRecord.sha256) hashWarnings += 1;
-      }
-    }
-    const settings = scene.settings || {};
+  /* A scene's display settings, read as untrusted input: each control takes only a value it offers.
+     Shared by applyScene and by undoing a scene restore (sceneDisplayState / applySceneDisplay). */
+  function applySceneSettings(settings) {
+    settings = settings && typeof settings === 'object' ? settings : {};
     if (['overlay', 'single'].includes(settings.viewMode)) root.querySelector('#gpv-view-mode').value = settings.viewMode;
     if (['cartoon', 'stick', 'sphere', 'line'].includes(settings.representation)) root.querySelector('#gpv-style').value = settings.representation;
     if (['structure', 'chain', 'entity', 'plddt', 'deviation', 'fromresidue', 'agreement', 'domain', 'annotated', 'data', 'charge', 'hydrophobicity', 'restype', 'amino', 'ss', 'spectrum', 'element'].includes(settings.colorMode)) root.querySelector('#gpv-color-mode').value = settings.colorMode;
@@ -160,6 +141,71 @@
     if (['none', 'translucent', 'opaque'].includes(settings.surface)) root.querySelector('#gpv-surface').value = settings.surface;
     if (['transparent', 'white', 'dark', 'custom'].includes(settings.background)) root.querySelector('#gpv-background').value = settings.background;
     if (/^#[0-9a-f]{6}$/i.test(settings.backgroundColor || '')) root.querySelector('#gpv-background-color').value = settings.backgroundColor;
+  }
+
+  /* What a scene restore replaces besides the records: the settings, the provenance (the title names
+     the exports) and each model's colour, name, visibility and hidden chains. Kept on the 'scene
+     restore' undo step; undo puts it back, redo the scene's. */
+  function sceneDisplayState() {
+    return {
+      settings: sceneSettings(), provenance: provenanceValues(),
+      models: structures.map(entry => ({ id: entry.id, visible: entry.visible, color: entry.color, label: entry.label || '', hiddenChains: [...(entry.hiddenChains || [])], fadedChains: [...(entry.fadedChains || [])] }))
+    };
+  }
+  function applySceneDisplay(display) {
+    if (!display || typeof display !== 'object') return;
+    (display.models || []).forEach(item => {
+      const entry = entryById(item.id); if (!entry) return;
+      entry.visible = item.visible !== false; entry.color = item.color || entry.color; entry.label = item.label || '';
+      entry.hiddenChains = [...(item.hiddenChains || [])]; entry.fadedChains = [...(item.fadedChains || [])];
+    });
+    const settings = display.settings || {};
+    applySceneSettings(settings);
+    root.querySelector('#gpv-all-labels').checked = settings.allResidueLabels === true;
+    const active = structures.find(entry => entry.name === settings.activeModel); if (active) activeId = active.id;
+    const provenance = display.provenance || {};
+    ['title', 'source', 'method', 'notes'].forEach(key => { root.querySelector('#gpv-project-' + key).value = provenance[key] || ''; });
+    applyModelOrder(); renderList(); applyAppearance(); applyStyle();
+    if (settings.camera && typeof viewer.setView === 'function') viewer.setView(settings.camera);
+    viewer.render();
+  }
+
+  async function applyScene(scene) {
+    if (!scene || scene.type !== 'protein-viewer-scene') return;
+    /* A restore replaces every record, so it is one undo step: ⌘Z puts back the labels, measurements,
+       selections and views it replaced. Before 2.52.0 it emptied the history instead, and the work it
+       wrote over was gone. A page with nothing to lose (a share link opening) takes no step. */
+    if (labelRecords.length + selectionRecords.length + measurementRecords.length + annotationRecords.length + domainRecords.length + savedViews.length + spotlightResidues.length) {
+      remember('scene restore');
+      /* The step also holds the display the scene is about to replace — colour scheme, representation,
+         background, projection, title, model colours, camera — so ⌘Z gives back the page as it looked,
+         not the old labels in the scene's style (05 reads `display` on undo and redo). */
+      undoStack[undoStack.length - 1].state.display = sceneDisplayState();
+    }
+    const byName = new Map(structures.map(entry => [entry.name, entry]));
+    /* Records are matched to the page's models by name; one whose model is not open is dropped, and the
+       status says how many were, rather than "Scene restored" over half a scene. */
+    const absent = name => !byName.has(name);
+    const unmatched = [...(scene.labels || []), ...(scene.selections || [])].filter(record => record && absent(record.model)).length
+      + [...(scene.measurements || []), ...(scene.annotations || [])].filter(record => record && (record.points || []).some(point => point && absent(point.model))).length
+      + (scene.domains || []).filter(record => record && record.scope !== 'all' && absent(record.model)).length;
+    let hashWarnings = 0;
+    for (const modelRecord of scene.models || []) {
+      const entry = byName.get(modelRecord.name);
+      if (!entry) continue;
+      entry.visible = modelRecord.visible !== false;
+      if (/^#[0-9a-f]{6}$/i.test(modelRecord.color || '')) entry.color = modelRecord.color;
+      if (typeof modelRecord.label === 'string') entry.label = modelRecord.label.trim().slice(0, 120);
+      entry.hiddenChains = Array.isArray(modelRecord.hiddenChains) ? modelRecord.hiddenChains.map(String).slice(0, 200) : [];
+      entry.fadedChains = Array.isArray(modelRecord.fadedChains) ? modelRecord.fadedChains.map(String).slice(0, 200) : [];
+      entry.faded = modelRecord.faded === true;
+      if (modelRecord.sha256) {
+        const actual = entry.hash || await sha256(entry.text);
+        if (actual && actual !== modelRecord.sha256) hashWarnings += 1;
+      }
+    }
+    const settings = scene.settings || {};
+    applySceneSettings(settings);
     const active = byName.get(settings.activeModel);
     if (active) activeId = active.id;
     const reference = byName.get(settings.referenceModel);
@@ -242,7 +288,7 @@
     if (settings.camera && typeof viewer.setView === 'function') viewer.setView(settings.camera);
     viewer.render();
     pendingScene = null;
-    updateStatus('Scene restored' + (hashWarnings ? ' · warning: ' + hashWarnings + ' file hash mismatch' + (hashWarnings === 1 ? '' : 'es') : ''));
+    updateStatus('Scene restored' + (unmatched ? ' · ' + unmatched + ' record' + (unmatched === 1 ? '' : 's') + ' matched no model on this page' : '') + (hashWarnings ? ' · warning: ' + hashWarnings + ' file hash mismatch' + (hashWarnings === 1 ? '' : 'es') : ''));
   }
 
   function nextPaint() {
@@ -281,7 +327,7 @@
        current one, and only confidence files read now may be reported as attached. */
     const wasEmpty = structures.length === 0;
     const assetsBefore = confidenceAssets.length;
-    let firstNew = null; let restoredSession = false;
+    let firstNew = null; let restoredSession = false; let sessionDeclined = false;
     stopCycle(); stopMotion();
     /* An armed Measure to… was armed among the models already open: the next click may land on one
        this import adds, and must open its card rather than measure into it. */
@@ -304,7 +350,13 @@
           const zip = await JSZip.loadAsync(file);
           if (zip.file('session.json')) {
             const snapshot = await readSessionZip(zip);
-            if (snapshot) { await restoreSession(snapshot); loaded += snapshot.files.length; restoredSession = true; continue; }
+            /* A session replaces the page (12): it asks first when there is anything to replace, and
+               Cancel keeps the page and skips the archive. */
+            if (snapshot) {
+              const restored = await restoreSession(snapshot);
+              if (restored) { loaded += restored.models; restoredSession = restored.message; } else sessionDeclined = true;
+              continue;
+            }
           }
           importedArchive = true;
           const members = Object.values(zip.files);
@@ -330,6 +382,9 @@
               if (memberIndex === 0) {
                 renderList(); applyStyle();
                 const active = activeEntry(); if (active && active.model) { viewer.zoomTo({ model: active.model.getID() }); viewer.render(); }
+                /* The restyle ends in updateStatus('Ready'), which read "Ready" for seconds while the
+                   rest of the archive was still being read. */
+                updateStatus('Loading ' + file.name + '…');
               }
               if (memberIndex % 5 === 4) await nextPaint();
             } catch (error) { skipped += 1; failures.push(member.name + ': ' + error.message); }
@@ -403,7 +458,9 @@
       /* Only this import's confidence files count: the session-wide list made every later import, a
          failed one included, end "· confidence attached". */
       const showing = loaded && firstNew && !restoredSession && structures.includes(firstNew) ? ' · showing ' + displayName(firstNew) : '';
-      const note = loaded ? 'Loaded ' + loaded + ' model' + (loaded === 1 ? '' : 's') + ' from ' + files.length + ' source' + (files.length === 1 ? '' : 's') + (added ? ' · ' + added : '') + showing + (attachedNow ? ' · confidence attached' : '')
+      const note = restoredSession && files.length === 1 ? restoredSession
+        : sessionDeclined && !loaded ? 'Session not opened · the page is kept as it was'
+        : loaded ? 'Loaded ' + loaded + ' model' + (loaded === 1 ? '' : 's') + ' from ' + files.length + ' source' + (files.length === 1 ? '' : 's') + (added ? ' · ' + added : '') + showing + (attachedNow ? ' · confidence attached' : '')
         : added || (pendingScene ? 'Scene loaded; now add its matching structure files' : newAssets.length ? (attachedNow ? 'Confidence data attached to the open models' : 'Confidence data loaded; add matching structures') : 'No supported structures found');
       updateStatus(note + (deferredPae ? ' · skipped ' + deferredPae + ' large PAE files for performance' : '') + (skipped ? ' · ' + skipped + ' skipped' : ''));
     }
@@ -581,6 +638,13 @@
     if (!plan.capped) return '';
     if (plan.dpi) return ' · rendered at ' + plan.dpi + ' dpi, the most ' + (plan.gpuLimited ? 'this GPU allows' : 'a browser page handles (24 megapixels)') + ' for ' + plan.mm + ' mm';
     return plan.gpuLimited ? ' · size capped at the most this GPU can render' : ' · size capped for browser stability';
+  }
+
+  /* The same note with the dpi that was asked for, for figures whose status does not otherwise name it
+     (the builder, the composite): "600 dpi asked · rendered at 142 dpi, the most this GPU allows…". */
+  function exportCapText(plan) {
+    if (!plan.capped) return '';
+    return (plan.dpi && plan.requestedDpi ? ' · ' + plan.requestedDpi + ' dpi asked' : '') + exportCapNote(plan);
   }
 
   /* 3Dmol draws its canvas at the page's pixel ratio, doubled below 2 for its antialiasing — so on an
@@ -943,6 +1007,9 @@
        on screen only. Printed on a figure, the note would be a key to nothing, and the checklist would
        ask for a legend the colours do not need. */
     if (mode === 'agreement' && !ensembleSpread) return kind === 'screen' ? { title: 'Cα RMSF', items: [['#9ca3af', 'align first', 'Grey until models are aligned — Compare → Align visible']] } : null;
+    /* Deviation before an alignment is the same case: every residue grey, and a printed key would read
+       the grey as "unmatched". */
+    if (mode === 'deviation' && !alignmentResults.length) return kind === 'screen' ? { title: 'Cα deviation', items: [['#9ca3af', 'align first', 'Grey until models are aligned — Compare → Align visible']] } : null;
     if (mode === 'plddt' && !displayedEntries().some(entry => entry.model && entry.scores.length)) {
       if (kind !== 'screen') return null;
       const shownNow = displayedEntries().filter(entry => entry.model);
@@ -1077,7 +1144,9 @@
      width it has when even the floor is too wide, and the bar is lifted clear when the two
      rectangles still meet. The width the legend is given travels with the layout as
      legendAvailable, so the canvas and the SVG drawer wrap it the same way. */
-  function furnitureLayout(width, height, scale, bar, palette, wanted = legendWanted()) {
+  /* `fixedText`: wrap but never shrink — the composite's 3D panel, whose legend must print at the
+     figure's text size like every other label in it. */
+  function furnitureLayout(width, height, scale, bar, palette, wanted = legendWanted(), fixedText = false) {
     const margin = Math.round(24 * scale);
     const place = legendPlacement();
     const available = place.vertical ? Math.max(1, width * 0.45) : width - margin * 2;
@@ -1085,7 +1154,7 @@
     if (wanted) {
       metrics = legendMetrics(furnitureMeasure, legendScale, 'figure', place.vertical);
       if (metrics && metrics.width > available) {
-        legendScale = Math.max(scale * 0.55, scale * available / metrics.width);
+        legendScale = fixedText ? scale : Math.max(scale * 0.55, scale * available / metrics.width);
         metrics = legendMetrics(furnitureMeasure, legendScale, 'figure', place.vertical, available);
       }
     }
@@ -1109,8 +1178,8 @@
     }
     return { legendX, legendY, legendScale, legendAvailable: available, barLift, vertical: place.vertical, position: place.value };
   }
-  function drawFurniture(context, width, height, scale, bar, palette, wanted = legendWanted()) {
-    const layout = furnitureLayout(width, height, scale, bar, palette, wanted);
+  function drawFurniture(context, width, height, scale, bar, palette, wanted = legendWanted(), fixedText = false) {
+    const layout = furnitureLayout(width, height, scale, bar, palette, wanted, fixedText);
     if (wanted) drawPlddtLegend(context, layout.legendX, layout.legendY, layout.legendScale, palette, 'figure', false, layout.vertical, layout.legendAvailable);
     if (bar) { context.save(); context.translate(0, -layout.barLift); drawScaleBar(context, bar, scale, palette); context.restore(); }
     return layout;
@@ -1136,7 +1205,7 @@
     const canvas = document.createElement('canvas'); canvas.width = width; canvas.height = height;
     const context = canvas.getContext('2d');
     context.drawImage(imageValue, 0, 0, width, height);
-    if (legendWanted() || bar) drawFurniture(context, width, height, figureScale(plan), bar, figurePalette());
+    if (legendWanted() || bar) drawFurniture(context, width, height, figureScale(plan), bar, figurePalette(), legendWanted(), plan.fixedText === true);
     return canvas.toDataURL('image/png');
   }
 

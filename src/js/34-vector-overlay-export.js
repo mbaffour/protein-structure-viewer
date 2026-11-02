@@ -165,21 +165,48 @@
     }
   }
 
-  async function downloadComparisonSvg() {
-    const panes = comparisonPanes();
-    if (panes.length < 2) { announce('Turn on the synchronized multi-view with at least one panel first', 'error'); return; }
-    const button = root.querySelector('#gpv-compare-svg');
+  /* One layout for the comparison and per-model figures, PNG and SVG. The comparison keeps the chosen
+     size per panel; the per-model figure (`fitWidth`) is the chosen width overall, as the builder is —
+     before 2.52.0 it was N × 85 mm wide and named "…-85mm-…". Captions, letters and the footer's legend
+     and title are at the chosen text size, not a fraction of the cell. */
+  function panelFigureCaption(pane) {
+    const score = mean(pane.entry.scores);
+    return displayName(pane.entry) + (score === null ? '' : ' · mean pLDDT ' + score.toFixed(1));
+  }
+  function panelFigureLayout(panes, fitWidth = false) {
     const requested = exportDimensions();
     const columns = panelColumns(panes.length); const rows = Math.ceil(panes.length / columns);
     let cellWidth = requested.width; let cellHeight = requested.height;
+    if (fitWidth) { cellWidth = Math.floor(requested.width / columns); cellHeight = Math.max(1, Math.floor(cellWidth * requested.height / Math.max(1, requested.width))); }
     const maxPixels = 24000000;
     if (cellWidth * cellHeight * panes.length > maxPixels) {
       const correction = Math.sqrt(maxPixels / (cellWidth * cellHeight * panes.length));
       cellWidth = Math.floor(cellWidth * correction); cellHeight = Math.floor(cellHeight * correction);
     }
-    const captionHeight = Math.round(cellHeight * 0.09); const palette = figurePalette();
-    const footer = legendWanted('comparison') || provenanceValues().title ? captionHeight : 0;
-    const width = columns * cellWidth; const height = rows * (cellHeight + captionHeight) + footer;
+    const fontPx = figureTextPx(requested); const textScale = figureScale(requested);
+    const cellPlan = { width: cellWidth, height: cellHeight, textScale, dpi: requested.dpi, points: requested.points, mm: requested.mm ? requested.mm * cellWidth / requested.width : undefined };
+    const captions = figureCaptionLayout(panes.map(panelFigureCaption), cellWidth, fontPx);
+    const width = columns * cellWidth; const inset = Math.round(cellWidth * 0.025);
+    const title = provenanceValues().title;
+    const legend = legendWanted('comparison') ? legendMetrics(furnitureMeasure, textScale, 'comparison', false, width - inset * 2) : null;
+    const footer = legend || title ? Math.round((legend ? legend.height : fontPx * 1.3) + fontPx * 1.2) : 0;
+    const height = rows * (cellHeight + captions.height) + footer;
+    /* The centre line of the footer's last row; a legend that wrapped stacks its rows above it. */
+    const footerY = height - Math.round(fontPx * 0.6) - (legend ? legend.swatch : Math.round(fontPx * 0.65));
+    return { requested, columns, rows, cellWidth, cellHeight, cellPlan, captions, fontPx, textScale, inset, title, legend, footer, footerY, width, height };
+  }
+  /* "W × H at D dpi (M mm wide)": the whole figure, which for a comparison is columns × the chosen size. */
+  function panelFigureSize(layout) {
+    const plan = layout.requested;
+    return layout.width + ' × ' + layout.height + (plan.dpi ? ' at ' + plan.dpi + ' dpi (' + Math.round(layout.width / plan.dpi * 25.4) + ' mm wide)' : '') + exportCapText(plan) + figureCaptionsCutNote(layout.captions);
+  }
+
+  async function downloadComparisonSvg() {
+    const panes = comparisonPanes();
+    if (panes.length < 2) { announce('Turn on the synchronized multi-view with at least one panel first', 'error'); return; }
+    const button = root.querySelector('#gpv-compare-svg');
+    const layout = panelFigureLayout(panes); const palette = figurePalette();
+    const { columns, cellWidth, cellHeight, captions, width, height } = layout;
     const done = setBusy('Rendering comparison SVG…');
     button.disabled = true; button.textContent = 'Rendering…';
     await afterPaint();
@@ -189,25 +216,22 @@
       for (let index = 0; index < panes.length; index += 1) {
         button.textContent = 'Rendering ' + (index + 1) + ' / ' + panes.length + '…';
         await afterPaint();
-        const uri = await renderEntryImage(panes[index].entry, panes[index].camera, { width: cellWidth, height: cellHeight }, false);
-        const overlay = overlaySvg(exportViewer, new Set([panes[index].entry.id]), { width: cellWidth, height: cellHeight }, false);
-        const x = (index % columns) * cellWidth; const y = Math.floor(index / columns) * (cellHeight + captionHeight);
+        const uri = await renderEntryImage(panes[index].entry, panes[index].camera, layout.cellPlan, false);
+        const overlay = overlaySvg(exportViewer, new Set([panes[index].entry.id]), layout.cellPlan, false);
+        const x = (index % columns) * cellWidth; const y = Math.floor(index / columns) * (cellHeight + captions.height);
         parts.push(svgImage(uri, x, y, cellWidth, cellHeight));
         parts.push('<g transform="translate(' + f(x) + ' ' + f(y) + ')">' + overlay + '</g>');
-        const score = mean(panes[index].entry.scores);
-        parts.push(caption(x + cellWidth * 0.025, y + cellHeight + captionHeight / 2, captionHeight * 0.46, 700, String.fromCharCode(65 + index)));
-        parts.push(caption(x + cellWidth * 0.08, y + cellHeight + captionHeight / 2, captionHeight * 0.34, 500, displayName(panes[index].entry) + (score === null ? '' : ' · mean pLDDT ' + score.toFixed(1))));
+        parts.push(svgFigureCaption(captions, index, x, y + cellHeight, palette));
       }
-      if (footer) {
-        const y = height - footer / 2; const scale = captionHeight / 40; let used = 0;
+      if (layout.footer) {
+        let used = 0;
         /* The footer band is as wide as the figure, so that is the legend's room — it wraps rather than running past the last panel. */
-        if (legendWanted('comparison')) { const legend = svgLegend(cellWidth * 0.025, y, scale, palette, 'comparison', false, width - cellWidth * 0.05); parts.push(legend.markup); used = legend.width + cellWidth * 0.06; }
-        const title = provenanceValues().title;
-        if (title) parts.push(caption(cellWidth * 0.025 + used, y, captionHeight * 0.36, 600, title));
+        if (layout.legend) { const legend = svgLegend(layout.inset, layout.footerY, layout.textScale, palette, 'comparison', false, width - layout.inset * 2); parts.push(legend.markup); used = legend.width + layout.fontPx * 1.5; }
+        if (layout.title) { svgMeasure.font = '600 ' + layout.fontPx + 'px ' + svgFont; parts.push(caption(layout.inset + used, layout.footerY, layout.fontPx, 600, truncateToWidth(svgMeasure, layout.title, Math.max(layout.fontPx, width - used - layout.inset * 2)))); }
       }
       const svg = svgDocument(width, height, palette.paper, parts.join('\n'));
       downloadBlob(svg, 'image/svg+xml', 'protein-comparison-' + panes.length + '-panels.svg');
-      announce('Comparison SVG downloaded · ' + panes.length + ' panels · vector captions');
+      announce('Comparison SVG downloaded · ' + panes.length + ' panels · ' + panelFigureSize(layout) + ' · vector captions');
     } catch (error) {
       announce('Could not build the comparison SVG: ' + error.message, 'error');
     } finally {
@@ -245,60 +269,44 @@
     if (failures.length) showImportErrors(failures.map(name => name + ': could not be read'));
     const camera = typeof viewer.getView === 'function' ? viewer.getView() : null;
     await renderPanelFigure(ready.map(entry => ({ entry, camera })), root.querySelector('#gpv-model-panels'), {
-      idle: 'Download one panel per model', noun: 'Per-model figure', filename: exportFileName('protein-models-' + ready.length + '-panels', exportDimensions(), 'png'),
+      idle: 'Download one panel per model', noun: 'Per-model figure', fitWidth: true, filename: exportFileName('protein-models-' + ready.length + '-panels', exportDimensions(), 'png'),
       disabledAfter: () => structures.length < 2
     });
   }
 
   async function renderPanelFigure(panes, button, options) {
-    const requested = exportDimensions();
-    const columns = panelColumns(panes.length); const rows = Math.ceil(panes.length / columns);
-    let cellWidth = requested.width; let cellHeight = requested.height;
-    const maxPixels = 24000000;
-    if (cellWidth * cellHeight * panes.length > maxPixels) {
-      const correction = Math.sqrt(maxPixels / (cellWidth * cellHeight * panes.length));
-      cellWidth = Math.floor(cellWidth * correction); cellHeight = Math.floor(cellHeight * correction);
-    }
-    const captionHeight = Math.round(cellHeight * 0.09);
+    const layout = panelFigureLayout(panes, options.fitWidth === true);
+    const { requested, columns, cellWidth, cellHeight, captions } = layout;
     const palette = figurePalette();
-    const footer = legendWanted('comparison') || provenanceValues().title ? captionHeight : 0;
     const done = setBusy('Rendering comparison…');
     button.disabled = true; button.textContent = 'Rendering…';
     await afterPaint();
     try {
       const canvas = document.createElement('canvas');
-      canvas.width = columns * cellWidth; canvas.height = rows * (cellHeight + captionHeight) + footer;
+      canvas.width = layout.width; canvas.height = layout.height;
       const context = canvas.getContext('2d');
       context.fillStyle = palette.paper; context.fillRect(0, 0, canvas.width, canvas.height);
-      if (footer) {
-        const y = canvas.height - footer / 2; const scale = captionHeight / 40;
+      if (layout.footer) {
         let used = 0;
         /* The footer band is as wide as the figure, so that is the legend's room — it wraps rather than running past the last panel. */
-        if (legendWanted('comparison')) used = drawPlddtLegend(context, Math.round(cellWidth * 0.025), y, scale, palette, 'comparison', false, false, canvas.width - Math.round(cellWidth * 0.05)) + Math.round(cellWidth * 0.06);
-        const title = provenanceValues().title;
-        if (title) {
-          context.fillStyle = palette.ink; context.textBaseline = 'middle'; context.font = '600 ' + Math.round(captionHeight * 0.36) + 'px ' + figureFont();
-          context.fillText(truncateToWidth(context, title, canvas.width - used - Math.round(cellWidth * 0.05)), Math.round(cellWidth * 0.025) + used, y);
+        if (layout.legend) used = drawPlddtLegend(context, layout.inset, layout.footerY, layout.textScale, palette, 'comparison', false, false, canvas.width - layout.inset * 2) + layout.fontPx * 1.5;
+        if (layout.title) {
+          context.fillStyle = palette.ink; context.textBaseline = 'middle'; context.textAlign = 'left'; context.font = '600 ' + layout.fontPx + 'px ' + figureFont();
+          context.fillText(truncateToWidth(context, layout.title, Math.max(layout.fontPx, canvas.width - used - layout.inset * 2)), layout.inset + used, layout.footerY);
         }
       }
       for (let index = 0; index < panes.length; index += 1) {
         button.textContent = 'Rendering ' + (index + 1) + ' / ' + panes.length + '…';
         await afterPaint();
-        const uri = await renderEntryImage(panes[index].entry, panes[index].camera, { width: cellWidth, height: cellHeight });
+        const uri = await renderEntryImage(panes[index].entry, panes[index].camera, layout.cellPlan);
         const imageValue = await loadImage(uri);
-        const x = (index % columns) * cellWidth; const y = Math.floor(index / columns) * (cellHeight + captionHeight);
+        const x = (index % columns) * cellWidth; const y = Math.floor(index / columns) * (cellHeight + captions.height);
         context.drawImage(imageValue, x, y, cellWidth, cellHeight);
-        context.fillStyle = palette.ink; context.textBaseline = 'middle';
-        context.font = '700 ' + Math.round(captionHeight * 0.46) + 'px ' + figureFont();
-        context.fillText(String.fromCharCode(65 + index), x + Math.round(cellWidth * 0.025), y + cellHeight + captionHeight / 2);
-        const score = mean(panes[index].entry.scores);
-        context.font = '500 ' + Math.round(captionHeight * 0.34) + 'px ' + figureFont();
-        const caption = displayName(panes[index].entry) + (score === null ? '' : ' · mean pLDDT ' + score.toFixed(1));
-        context.fillText(truncateToWidth(context, caption, cellWidth * 0.9), x + Math.round(cellWidth * 0.08), y + cellHeight + captionHeight / 2);
+        drawFigureCaption(context, captions, index, x, y + cellHeight, palette);
       }
       const uri = canvas.toDataURL('image/png');
       downloadBlob(await pngWithDpi(uri, requested.dpi), 'image/png', options.filename);
-      announce(options.noun + ' downloaded · ' + panes.length + ' panels · ' + canvas.width + ' × ' + canvas.height + (requested.dpi ? ' at ' + requested.dpi + ' dpi' : ''));
+      announce(options.noun + ' downloaded · ' + panes.length + ' panels · ' + panelFigureSize(layout));
     } catch (error) {
       announce('Could not render the figure: ' + error.message, 'error');
     } finally {

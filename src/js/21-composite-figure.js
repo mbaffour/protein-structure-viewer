@@ -62,6 +62,50 @@
     return { canvas, caption: 'Predicted aligned error, ' + n + ' × ' + n + ' tokens, 0 (dark) to ' + maximum.toFixed(1) + ' Å' };
   }
 
+  /* The caption strip under a row of panels, as the figure builder lays it out (35): the letter in bold
+     at 1.3 × the text size, the caption at the text size wrapped onto up to three lines, the strip as
+     tall as the longest caption needs. The text size is the one chosen for print — before 2.52.0 the
+     composite, comparison and per-model figures sized it from the cell, 3–5 pt at 85 mm. */
+  function figureCaptionLayout(captions, cellWidth, fontPx) {
+    const inset = Math.round(cellWidth * 0.025);
+    furnitureMeasure.font = '700 ' + Math.round(fontPx * 1.3) + 'px ' + figureFont();
+    const letterWidth = furnitureMeasure.measureText('W').width + fontPx * 0.8;
+    const width = Math.max(fontPx * 3, cellWidth - inset * 2 - letterWidth);
+    furnitureMeasure.font = '500 ' + fontPx + 'px ' + figureFont();
+    const cut = [];
+    const lines = captions.map((caption, index) => {
+      const wrapped = wrapText(furnitureMeasure, caption, width).map(line => truncateToWidth(furnitureMeasure, line, width));
+      if (wrapped.length <= 3) return wrapped.length ? wrapped : [''];
+      cut.push(String.fromCharCode(65 + index));
+      return [wrapped[0], wrapped[1], truncateToWidth(furnitureMeasure, wrapped.slice(2).join(' '), width)];
+    });
+    const most = Math.max(1, ...lines.map(item => item.length));
+    return { fontPx, inset, letterWidth, width, lines, height: Math.round(fontPx * (0.9 + 1.3 * most)), cut };
+  }
+  function figureCaptionsCutNote(layout) {
+    return layout.cut.length ? ' · caption' + (layout.cut.length === 1 ? ' of panel ' : 's of panels ') + layout.cut.join(', ') + ' shortened to fit three lines' : '';
+  }
+  /* (x, top) is the left edge of the cell and the top of its caption strip. */
+  function drawFigureCaption(context, layout, index, x, top, palette) {
+    const first = top + Math.round(layout.fontPx * 1.1); const step = Math.round(layout.fontPx * 1.3);
+    context.save(); context.fillStyle = palette.ink; context.textBaseline = 'middle'; context.textAlign = 'left';
+    context.font = '700 ' + Math.round(layout.fontPx * 1.3) + 'px ' + figureFont();
+    context.fillText(String.fromCharCode(65 + index), x + layout.inset, first);
+    context.font = '500 ' + layout.fontPx + 'px ' + figureFont();
+    layout.lines[index].forEach((line, lineIndex) => context.fillText(line, x + layout.inset + layout.letterWidth, first + lineIndex * step));
+    context.restore();
+  }
+  function svgFigureCaption(layout, index, x, top, palette) {
+    const first = top + Math.round(layout.fontPx * 1.1); const step = Math.round(layout.fontPx * 1.3);
+    const text = (tx, ty, size, weight, value) => '<text x="' + f(tx) + '" y="' + f(ty) + '" dominant-baseline="central" font-family="' + svgFont + '" font-size="' + f(size) + '" font-weight="' + weight + '" fill="' + palette.ink + '">' + svgEscape(value) + '</text>';
+    return [text(x + layout.inset, first, Math.round(layout.fontPx * 1.3), 700, String.fromCharCode(65 + index)), ...layout.lines[index].map((line, lineIndex) => text(x + layout.inset + layout.letterWidth, first + lineIndex * step, layout.fontPx, 500, line))].join('\n');
+  }
+  /* The text size of a print figure in pixels: the chosen points at the figure's dpi, or the screen
+     export's 12 px scaled with its width. */
+  function figureTextPx(plan) {
+    return Math.max(10, Math.round(plan.dpi ? plan.points / 72 * plan.dpi : 12 * figureScale(plan)));
+  }
+
   async function downloadCompositeFigure() {
     const entry = activeEntry(); if (!entry || !entry.model) { announce('Show a model first', 'error'); return; }
     const button = root.querySelector('#gpv-composite');
@@ -80,68 +124,84 @@
     const rows = Math.ceil(count / columns);
     const cell = Math.max(300, Math.floor(requested.width / columns));
     const cellHeight = Math.round(cell / (requested.width / requested.height));
-    const captionHeight = Math.round(Math.max(28, cell * 0.08));
     const palette = figurePalette();
     const done = setBusy('Rendering composite…'); button.disabled = true; button.textContent = 'Rendering…';
     await afterPaint();
     try {
       const panels = [];
-      /* The panel is a fraction of the figure width, so text and legend scale down with it. */
-      const panelPlan = { ...requested, width: cell, height: cellHeight, textScale: (requested.textScale || 1) * cell / requested.width };
+      /* Every panel's text at the figure's text size: the 3D panel keeps the figure's textScale (its
+         legend and labels were halved at two columns), and the charts are laid out at the size of the
+         box they are drawn into, with their text at that size — drawn 1:1 (`natural`), never shrunk to
+         fit. A chart that cannot hold its text in the cell makes its row taller instead. */
+      const panelPlan = { ...requested, width: cell, height: cellHeight, mm: requested.mm ? requested.mm / columns : undefined, fixedText: true };
       const uri = await withLegend(await renderPublicationImage(null, panelPlan), panelPlan);
       /* "coloured by pLDDT confidence", not "plddt": only a leading capital that starts a word is lowered. */
-      panels.push({ image: await loadImage(uri), caption: displayName(entry) + (root.querySelector('#gpv-color-mode').value !== 'structure' ? ', coloured by ' + root.querySelector('#gpv-color-mode').selectedOptions[0].textContent.replace(/^[A-Z](?=[a-z])/, letter => letter.toLowerCase()) : '') });
-      /* The charts are laid out at the size of the box they are drawn into, with their text at the
-         figure's text size — 11 px labels on a 1200-unit chart shrunk into the cell printed at 1 pt. */
+      panels.push({ image: await loadImage(uri), whole: true, caption: displayName(entry) + (root.querySelector('#gpv-color-mode').value !== 'structure' ? ', coloured by ' + root.querySelector('#gpv-color-mode').selectedOptions[0].textContent.replace(/^[A-Z](?=[a-z])/, letter => letter.toLowerCase()) : '') });
       const pad = Math.round(cell * 0.03); const box = { width: cell - 2 * pad, height: cellHeight - 2 * pad };
       const labelPx = requested.dpi ? requested.points / 72 * requested.dpi : 12 * figureScale(requested);
       const fit = { ...box, scale: labelPx / 11 };
-      if (wanted.pae) { const pae = drawPaePanel(entry, Math.min(box.height, box.width - Math.round(labelPx * 4.6)), Math.round(labelPx), palette); panels.push({ image: pae.canvas, caption: pae.caption }); }
+      const inner = Math.round(labelPx * 0.4);
+      if (wanted.pae) { const pae = drawPaePanel(entry, Math.min(box.height, box.width - Math.round(labelPx * 4.6)), Math.round(labelPx), palette); panels.push({ image: pae.canvas, natural: true, caption: pae.caption }); }
       if (wanted.profile) {
         const profile = plddtProfileSvg(fit);
-        if (profile) { const image = await loadImage('data:image/svg+xml;charset=utf-8,' + encodeURIComponent(profile.svg)); panels.push({ image, caption: 'Per-residue pLDDT' + (displayedEntries().filter(item => item.scores.length).length > 1 ? ' of the displayed models' : ''), aspect: profile.width / profile.height }); }
+        if (profile) { const image = await loadImage('data:image/svg+xml;charset=utf-8,' + encodeURIComponent(profile.svg)); panels.push({ image, natural: true, caption: 'Per-residue pLDDT' + (displayedEntries().filter(item => item.scores.length).length > 1 ? ' of the displayed models' : ''), aspect: profile.width / profile.height }); }
       }
-      if (wanted.contacts) { const canvas = document.createElement('canvas'); drawContactMap(canvas, true, Math.max(1, Math.round(cell / 600 * 2))); panels.push({ image: canvas, caption: contactCaption() }); }
+      if (wanted.contacts) {
+        /* Ticks and titles at the text size (11-unit ticks, as the profile's), the grid sized to the
+           width that is left — up to square, the row growing to hold it: a map squeezed into the cell's
+           height left its title no room at all at 8 pt. */
+        const canvas = document.createElement('canvas'); const textScale = labelPx / 11;
+        const n = contactResult.rowA.residues.length; const m = contactResult.rowB.residues.length;
+        const gridWidth = Math.max(20, box.width - 96 * textScale); const gridHeight = Math.max(gridWidth, box.height - 118 * textScale);
+        const side = Math.min(gridWidth / m, gridHeight / n);
+        drawContactMap(canvas, true, textScale, side / contactCell(canvas));
+        panels.push({ image: canvas, natural: true, caption: contactCaption() });
+      }
       if (wanted.rmsf) {
         const profile = rmsfProfileSvg(fit);
-        if (profile) { const image = await loadImage('data:image/svg+xml;charset=utf-8,' + encodeURIComponent(profile.svg)); panels.push({ image, caption: 'Per-residue Cα RMSF across ' + ensembleSpread.count + ' aligned models' }); }
+        if (profile) { const image = await loadImage('data:image/svg+xml;charset=utf-8,' + encodeURIComponent(profile.svg)); panels.push({ image, natural: true, caption: 'Per-residue Cα RMSF across ' + ensembleSpread.count + ' aligned models' }); }
       }
       if (wanted.matrix) {
-        const scale = figureScale(panelPlan); const pad = Math.round(16 * scale); const side = Math.min(cell, cellHeight) - pad * 2;
-        const canvasM = document.createElement('canvas'); const metrics = rmsdMatrixMetrics(side, scale); canvasM.width = metrics.width + pad * 2; canvasM.height = metrics.height + pad * 2;
+        /* Model names at the text size (10-unit labels); a matrix too short for its values takes the width. */
+        const scale = labelPx / 10; const n = rmsdMatrix.names.length;
+        const side = Math.min(box.width - inner * 2, Math.max(box.height - inner * 2, Math.round(labelPx * (4 + 2.5 * n))));
+        const canvasM = document.createElement('canvas'); const metrics = rmsdMatrixMetrics(side, scale); canvasM.width = metrics.width + inner * 2; canvasM.height = metrics.height + inner * 2;
         const contextM = canvasM.getContext('2d'); contextM.fillStyle = palette.paper; contextM.fillRect(0, 0, canvasM.width, canvasM.height);
-        drawRmsdMatrix(contextM, pad, pad, side, scale, palette);
-        panels.push({ image: canvasM, caption: 'Pairwise Cα RMSD between ' + rmsdMatrix.names.length + ' models' + (rmsdMatrix.fitRegion ? ', fitted on ' + rmsdMatrix.fitRegion : '') + (rmsdMatrix.byPosition ? ', identical chains matched by position' : '') });
+        drawRmsdMatrix(contextM, inner, inner, side, scale, palette);
+        panels.push({ image: canvasM, natural: true, caption: 'Pairwise Cα RMSD between ' + n + ' models' + (rmsdMatrix.fitRegion ? ', fitted on ' + rmsdMatrix.fitRegion : '') + (rmsdMatrix.byPosition ? ', identical chains matched by position' : '') });
       }
       if (wanted.architecture) {
-        const model = architectureModel(entry); const scale = figureScale(panelPlan); const pad = Math.round(16 * scale);
-        const canvasA = document.createElement('canvas'); canvasA.width = cell; canvasA.height = architectureHeight(model, scale) + pad * 2;
+        const model = architectureModel(entry); const scale = labelPx / 11;
+        const canvasA = document.createElement('canvas'); canvasA.width = box.width; canvasA.height = architectureHeight(model, scale) + inner * 2;
         const contextA = canvasA.getContext('2d'); contextA.fillStyle = palette.paper; contextA.fillRect(0, 0, canvasA.width, canvasA.height);
-        drawArchitecture(contextA, pad, pad, cell - pad * 2, model, scale, palette);
-        panels.push({ image: canvasA, caption: 'Domain architecture (' + (model.source === 'pae' ? 'PAE domains, heuristic' : 'annotated domains') + ')' });
+        drawArchitecture(contextA, 0, inner, box.width, model, scale, palette);
+        panels.push({ image: canvasA, natural: true, caption: 'Domain architecture (' + (model.source === 'pae' ? 'PAE domains, heuristic' : 'annotated domains') + ')' });
       }
+      const captions = figureCaptionLayout(panels.map(panel => panel.caption), cell, figureTextPx(requested));
+      /* Each row as tall as the cell, or as its tallest chart drawn at its own size. */
+      const drawnSize = panel => { const k = panel.natural ? Math.min(1, box.width / panel.image.width) : 1; return { w: panel.image.width * k, h: panel.image.height * k }; };
+      const rowHeights = Array.from({ length: rows }, (_, row) => Math.max(cellHeight, ...panels.slice(row * columns, row * columns + columns).filter(panel => panel.natural).map(panel => Math.ceil(drawnSize(panel).h) + 2 * pad)));
+      const rowTops = rowHeights.map((_, row) => rowHeights.slice(0, row).reduce((sum, value) => sum + value + captions.height, 0));
+      const grown = rowHeights.some(value => value > cellHeight);
       const canvas = document.createElement('canvas');
-      canvas.width = columns * cell; canvas.height = rows * (cellHeight + captionHeight);
+      canvas.width = columns * cell; canvas.height = rowHeights.reduce((sum, value) => sum + value + captions.height, 0);
       const context = canvas.getContext('2d');
       context.fillStyle = palette.paper; context.fillRect(0, 0, canvas.width, canvas.height);
       panels.forEach((panel, index) => {
-        const x = (index % columns) * cell; const y = Math.floor(index / columns) * (cellHeight + captionHeight);
-        const pad = Math.round(cell * 0.03); const boxW = cell - 2 * pad; const boxH = cellHeight - 2 * pad;
-        const ratio = panel.image.width / panel.image.height; let w = boxW; let h = w / ratio; if (h > boxH) { h = boxH; w = h * ratio; }
-        context.drawImage(panel.image, x + pad + (boxW - w) / 2, y + pad + (boxH - h) / 2, w, h);
-        context.fillStyle = palette.ink; context.textBaseline = 'middle'; context.textAlign = 'left';
-        context.font = '700 ' + Math.round(captionHeight * 0.5) + 'px ' + figureFont();
-        context.fillText(String.fromCharCode(65 + index), x + pad, y + cellHeight + captionHeight / 2);
-        context.font = '400 ' + Math.round(captionHeight * 0.36) + 'px ' + figureFont();
-        context.fillText(truncateToWidth(context, panel.caption, cell - pad * 2 - Math.round(captionHeight * 0.9)), x + pad + Math.round(captionHeight * 0.9), y + cellHeight + captionHeight / 2);
+        const row = Math.floor(index / columns); const x = (index % columns) * cell; const y = rowTops[row]; const rowHeight = rowHeights[row];
+        if (panel.whole) context.drawImage(panel.image, x, y + (rowHeight - cellHeight) / 2, cell, cellHeight);
+        else if (panel.natural) { const { w, h } = drawnSize(panel); context.drawImage(panel.image, x + pad + (box.width - w) / 2, y + pad + (rowHeight - 2 * pad - h) / 2, w, h); }
+        else {
+          const boxH = rowHeight - 2 * pad; const ratio = panel.image.width / panel.image.height; let w = box.width; let h = w / ratio; if (h > boxH) { h = boxH; w = h * ratio; }
+          context.drawImage(panel.image, x + pad + (box.width - w) / 2, y + pad + (boxH - h) / 2, w, h);
+        }
+        drawFigureCaption(context, captions, index, x, y + rowHeight, palette);
       });
-      downloadBlob(await pngWithDpi(canvas.toDataURL('image/png'), requested.dpi), 'image/png', exportFileName('protein-composite-' + panels.length + '-panels', requested, 'png'));
-      announce('Composite figure downloaded · ' + panels.length + ' panels · ' + canvas.width + ' × ' + canvas.height + (requested.dpi ? ' at ' + requested.dpi + ' dpi' : ''));
+      downloadBlob(await pngWithDpi(canvas.toDataURL('image/png'), requested.dpi), 'image/png', exportFileName('protein-composite-' + panels.length + '-panel' + (panels.length === 1 ? '' : 's'), requested, 'png'));
+      announce('Composite figure downloaded · ' + panels.length + ' panel' + (panels.length === 1 ? '' : 's') + ' · ' + canvas.width + ' × ' + canvas.height + (requested.dpi ? ' at ' + requested.dpi + ' dpi' : '') + exportCapText(requested) + (grown ? ' · rows made taller to keep the text at ' + (requested.dpi ? requested.points + ' pt' : 'its size') : '') + figureCaptionsCutNote(captions));
     } catch (error) {
       announce('Could not render the composite figure: ' + error.message, 'error');
     } finally {
       releaseExportViewer(); done(); button.textContent = 'Download composite figure'; button.disabled = structures.length === 0;
     }
   }
-
-

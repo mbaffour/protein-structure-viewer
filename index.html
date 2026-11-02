@@ -2341,8 +2341,14 @@ html>body{padding:0}</style>
       parts.push('<g id="models">');
       let cursor = width - right;
       svgMeasure.font = '500 ' + f(12 * k) + 'px ' + svgFont;
-      [...entries].reverse().forEach(entry => {
-        const label = clipText(displayName(entry), 30); const labelWidth = svgMeasure.measureText(label).width;
+      /* In a figure cell the key names the models by what tells them apart ("model_0", not
+         "hbdimer / hbdimer_model_0.cif"), and each name is cut to its share of the width: at 8 pt two
+         full names ran off the cell's left edge, taking the first swatch with them. */
+      const names = fit ? distinguishingNames(entries.map(displayName)) : entries.map(entry => clipText(displayName(entry), 30));
+      const share = (width - right - 4 * k) / entries.length - 34 * k;
+      const keyLabels = names.map(name => (fit ? truncateToWidth(svgMeasure, name, Math.max(24 * k, share)) : name));
+      [...entries].reverse().forEach((entry, reverseIndex) => {
+        const label = keyLabels[entries.length - 1 - reverseIndex]; const labelWidth = svgMeasure.measureText(label).width;
         cursor -= labelWidth; parts.push(text(cursor, keyY, label, 12, 'start', 500));
         cursor -= 18 * k; parts.push('<rect x="' + f(cursor) + '" y="' + f(keyY - 10 * k) + '" width="' + f(12 * k) + '" height="' + f(12 * k) + '" rx="' + f(2 * k) + '" fill="' + entry.color + '"/>'); cursor -= 16 * k;
       });
@@ -3712,10 +3718,11 @@ html>body{padding:0}</style>
     return record && /^#[0-9a-f]{6}$/i.test(record.color || '') ? record.color : null;
   }
 
-  /* One point as a reader names it: residue, number and chain, then the atom — "HIS57 · B NE2". */
+  /* One point as a reader names it: residue, number with its insertion code and chain, then the atom —
+     "HIS57 · B NE2", "ALA10A · A CA". Without the code a distance from 10A to 10B read as ALA10 to ALA10. */
   function measurementPointText(reference) {
     const atom = resolvePoint(reference);
-    return (atom && atom.resn ? atom.resn : 'RES') + reference.resi + (reference.chain ? ' · ' + reference.chain : '') + ' ' + (reference.atom || 'atom');
+    return (atom && atom.resn ? atom.resn : 'RES') + residueNumber(reference) + (reference.chain ? ' · ' + reference.chain : '') + ' ' + (reference.atom || 'atom');
   }
 
   /* The atoms a measurement joins — "HIS57 · B NE2 ↔ SER195 · C OG", "→" between the points of an
@@ -4441,7 +4448,9 @@ html>body{padding:0}</style>
         const point = record.points[index];
         if (!point) { cells.push('', '', '', '', ''); continue; }
         const entry = entryById(point.entryId); const atom = resolvePoint(point);
-        cells.push(entry ? displayName(entry) : '', point.chain || '', point.resi, atom && atom.resn ? atom.resn : '', point.atom || '');
+        /* `resi` carries the insertion code ("10A"), so the columns stay as they were and 10A and 10B
+           are not both 10. */
+        cells.push(entry ? displayName(entry) : '', point.chain || '', residueNumber(point), atom && atom.resn ? atom.resn : '', point.atom || '');
       }
       const value = measurementValue(record);
       cells.push(value === null ? '' : value.toFixed(3), record.type === 'angle' ? '°' : 'Å', record.text || '');
@@ -6602,12 +6611,21 @@ html>body{padding:0}</style>
     positionEffect = spotlightResidues.length ? state.positionEffect || null : null; renderPositionEffect();
     renderLabelList(); renderSelectionList(); renderMeasurementList(); renderAnnotationList(); renderDomainList(); renderPositionState(); renderSavedViews(); renderList(); renderSequenceSoon();
     applyStyle();
+    /* A scene restore's step also holds the display it replaced (31, sceneDisplayState). */
+    if (state.display) applySceneDisplay(state.display);
+  }
+  /* The state the opposite stack takes: the records, and the display too when the step carries one,
+     so redo of an undone scene restore puts the scene's settings back as well as its records. */
+  function undoCounterSnapshot(item) {
+    const state = snapshotRecords();
+    if (item.state && item.state.display) state.display = sceneDisplayState();
+    return state;
   }
 
   function undo() {
     const item = undoStack.pop();
     if (!item) { updateStatus('Nothing to undo'); return; }
-    redoStack.push({ what: item.what, state: snapshotRecords() });
+    redoStack.push({ what: item.what, state: undoCounterSnapshot(item) });
     restoreRecords(item.state); renderHistoryButtons();
     updateStatus('Undid ' + item.what + (undoStack.length ? ' · ' + undoStack.length + ' more' : ''));
   }
@@ -6615,7 +6633,7 @@ html>body{padding:0}</style>
   function redo() {
     const item = redoStack.pop();
     if (!item) { updateStatus('Nothing to redo'); return; }
-    undoStack.push({ what: item.what, state: snapshotRecords() });
+    undoStack.push({ what: item.what, state: undoCounterSnapshot(item) });
     restoreRecords(item.state); renderHistoryButtons();
     updateStatus('Redid ' + item.what);
   }
@@ -7296,7 +7314,8 @@ html>body{padding:0}</style>
     if (typeof JSZip === 'undefined') { announce('The ZIP reader did not load. Refresh the page and try again.', 'error'); return false; }
     const snapshot = await readSessionZip(await JSZip.loadAsync(file));
     if (!snapshot) { announce('That ZIP is not a session file', 'error'); return false; }
-    await restoreSession(snapshot);
+    const restored = await restoreSession(snapshot);
+    if (!restored) { updateStatus('Session not opened · the page is kept as it was'); return false; }
     return true;
   }
 
@@ -7330,9 +7349,52 @@ html>body{padding:0}</style>
   function dismissSessionBanner() {
     root.querySelector('#gpv-session-banner').hidden = true;
   }
+  /* The page's own work, as Clear all counts it. */
+  function sessionPageWork() {
+    return labelRecords.length + selectionRecords.length + measurementRecords.length + annotationRecords.length + domainRecords.length + savedViews.length + spotlightResidues.length;
+  }
+  /* Everything Clear all removes, without its question (the session asked its own): the models, their
+     records and panels, and the analyses made on them. The undo history goes too — its steps name
+     models that are no longer on the page, and undoing into them would only take the session's records
+     away. Chain colours and the export settings stay; the session's scene sets its own. */
+  function sessionEmptyPage() {
+    stopCycle(); stopMotion();
+    dismissCanvasText(); cancelMeasureTo(false); setBoxSelectMode(false);
+    if (annotationActive) toggleAnnotating(false);
+    if (measurementActive) toggleMeasurement();
+    viewer.removeAllModels(); viewer.removeAllLabels(); viewer.removeAllShapes();
+    comparePanels.forEach(destroyPanelViewer);
+    releaseExportViewer();
+    structures = []; activeId = null; selectedResidue = null;
+    clearHistory();
+    labelRecords = []; selectionRecords = []; measurementRecords = []; measurementDraft = []; annotationRecords = []; annotationDraft = [];
+    spotlightResidues = []; positionEffect = null; renderPositionEffect(); renderPositionState();
+    domainRecords = []; domainVersion += 1;
+    residueData = null; renderDataState();
+    savedViews = [];
+    confidenceAssets = []; interactionResults = null; alignmentResults = []; interfaceResults = null; renderInterfaceResults();
+    pendingScene = null;
+    root.querySelector('#gpv-residue').textContent = idleResidueText;
+    root.querySelector('#gpv-side-by-side').checked = false;
+    clearComparePanels();
+    resetAnalyses();
+    renderAlignmentResults();
+    renderLabelList(); renderSelectionList(); renderMeasurementList(); renderAnnotationList(); renderDomainList(); renderSavedViews();
+  }
+
+  /* A session file is a whole workspace: it replaces the page — models, records, views, settings —
+     rather than adding its models beside the page's and pinning its records on whichever page model
+     had the same file name (before 2.52.0 a session of run A opened over run B labelled run B). With
+     anything on the page it asks first; Cancel keeps the page. Returns what it restored, or null. */
   async function restoreSession(saved) {
+    const open = structures.length; const work = sessionPageWork();
+    if (open || work) {
+      const what = open ? 'the ' + (open === 1 ? 'model' : open + ' models') + ' and the work on this page' : 'the work on this page';
+      if (!confirm('Replace ' + what + ' with the session? Cancel keeps the page.')) return null;
+    }
     const done = setBusy('Restoring session…');
     try {
+      if (open || work) sessionEmptyPage();
       saved.files.forEach(file => {
         const entry = addStructure(uniqueModelName(file.name, file.collection), file.text, file.format, file.sourcePath, file.collection);
         if (file.fetchId) entry.fetchId = file.fetchId;
@@ -7341,7 +7403,10 @@ html>body{padding:0}</style>
       });
       renderList(); applyStyle();
       await applyScene(saved.scene);
-      announce('Session restored · ' + saved.files.length + ' model' + (saved.files.length === 1 ? '' : 's') + ' from ' + new Date(saved.savedAt).toLocaleTimeString());
+      /* What is on the page now, which is what the session held. */
+      const message = 'Session restored · ' + structures.length + ' model' + (structures.length === 1 ? '' : 's') + ' from ' + new Date(saved.savedAt).toLocaleTimeString() + (open ? ' · replaced the ' + (open === 1 ? 'model that was open' : open + ' models that were open') : '');
+      announce(message);
+      return { models: structures.length, message };
     } finally { done(); }
   }
 
@@ -8480,11 +8545,13 @@ html>body{padding:0}</style>
 
   /* Rows: chain A residues (top to bottom); columns: chain B residues (left to right).
      Closer pairs are darker. With `figure` the map gets margins, ticks, titles and a scale. */
-  function drawContactMap(canvas, figure = false, scale = 1) {
+  /* `cellScale` sizes the residue cells on its own when given (the composite fits the grid to its
+     cell and keeps the text at the figure's size); otherwise text and cells share `scale`. */
+  function drawContactMap(canvas, figure = false, scale = 1, cellScale = scale) {
     if (!contactResult) return;
     const { rowA, rowB, pairs, cutoff, chainA, chainB, symmetric, view } = contactResult;
     const n = rowA.residues.length; const m = rowB.residues.length;
-    const cell = contactCell(canvas) * scale;
+    const cell = contactCell(canvas) * cellScale;
     const margin = figure ? { left: 72 * scale, top: 54 * scale, right: 24 * scale, bottom: 64 * scale } : { left: 0, top: 0, right: 0, bottom: 0 };
     canvas.width = Math.round(m * cell + margin.left + margin.right); canvas.height = Math.round(n * cell + margin.top + margin.bottom);
     const context = canvas.getContext('2d');
@@ -8703,10 +8770,10 @@ html>body{padding:0}</style>
     const mode = root.querySelector('#gpv-color-mode').value;
     const shown = displayedEntries().filter(entry => entry.model);
     const format = imageFormat();
-    if (format === 'jpeg' || format === 'webp') push('warn', imageFormats[format].label + ' is lossy and carries no resolution field: fine for slides, not for a figure a journal will print. Save PNG, TIFF or PDF instead.', { label: 'Use PNG', action: () => { root.querySelector('#gpv-image-format').value = 'png'; root.querySelector('#gpv-image-format').dispatchEvent(new Event('change', { bubbles: true })); } });
+    if (format === 'jpeg' || format === 'webp') push('warn', imageFormats[format].label + ' is lossy and carries no resolution field: fine for slides, not for a figure a journal will print. Save PNG, TIFF or PDF instead.', { label: 'Use PNG', action: () => { root.querySelector('#gpv-image-format').value = 'png'; root.querySelector('#gpv-image-format').dispatchEvent(new Event('change', { bubbles: true })); updateStatus('Image format set to PNG'); } });
     else if (format === 'pdf') push('ok', 'PDF at the physical page size; the text in it is part of the image, so keep the SVG if an editor needs to retype a label.');
     if (plan.dpi) push('ok', 'Print size ' + plan.mm + ' × ' + Math.round(plan.heightMm) + ' mm at ' + plan.dpi + ' dpi (' + plan.width + ' × ' + plan.height + ' px), written into the PNG and TIFF.');
-    else push('warn', 'Pixel export: the file carries no physical size. Choose a print width and 300 dpi so the journal sees the figure at the size you intend.', { label: 'Use print size', action: () => { root.querySelector('#gpv-export-mode').value = 'print'; root.querySelector('#gpv-export-mode').dispatchEvent(new Event('change', { bubbles: true })); } });
+    else push('warn', 'Pixel export: the file carries no physical size. Choose a print width and 300 dpi so the journal sees the figure at the size you intend.', { label: 'Use print size', action: () => { root.querySelector('#gpv-export-mode').value = 'print'; root.querySelector('#gpv-export-mode').dispatchEvent(new Event('change', { bubbles: true })); const print = exportDimensions(); updateStatus('Exports set to print size · ' + print.mm + ' mm wide at ' + print.dpi + ' dpi, text ' + print.points + ' pt'); } });
     if (plan.dpi && plan.dpi < 300) push('warn', plan.dpi + ' dpi is below the 300 dpi most journals require for images.');
     if (plan.points) push(plan.points >= 7 ? 'ok' : 'info', 'Text ' + plan.points + ' pt at the printed width' + (plan.points < 7 ? ' — 7 pt is the common minimum; check the journal guide.' : '.'));
     if (['chain', 'entity', 'domain'].includes(mode)) {
@@ -8715,11 +8782,11 @@ html>body{padding:0}</style>
     }
     if (legendItems('figure') !== null) {
       if (root.querySelector('#gpv-export-legend').checked) push('ok', 'The colour legend is drawn on exports.');
-      else push('warn', 'The colours need a key: the legend is switched off for exports.', { label: 'Draw legend', action: () => { root.querySelector('#gpv-export-legend').checked = true; root.querySelector('#gpv-export-legend').dispatchEvent(new Event('change', { bubbles: true })); } });
+      else push('warn', 'The colours need a key: the legend is switched off for exports.', { label: 'Draw legend', action: () => { root.querySelector('#gpv-export-legend').checked = true; root.querySelector('#gpv-export-legend').dispatchEvent(new Event('change', { bubbles: true })); updateStatus('The colour legend is now drawn on exports'); } });
     }
     const scaleBar = Number(root.querySelector('#gpv-scale-bar').value) || 0;
     const projection = root.querySelector('#gpv-projection').value;
-    if (scaleBar && projection !== 'orthographic') push('warn', 'A scale bar is only exact in orthographic projection; in perspective its length depends on depth.', { label: 'Switch to orthographic', action: () => { root.querySelector('#gpv-projection').value = 'orthographic'; applyAppearance(); } });
+    if (scaleBar && projection !== 'orthographic') push('warn', 'A scale bar is only exact in orthographic projection; in perspective its length depends on depth.', { label: 'Switch to orthographic', action: () => { root.querySelector('#gpv-projection').value = 'orthographic'; applyAppearance(); updateStatus('Projection set to orthographic · the scale bar is exact at every depth'); } });
     else if (scaleBar) push('ok', scaleBar + ' Å scale bar in orthographic projection.');
     if (measurementRecords.length && projection !== 'orthographic') push('info', 'Distances and angles are drawn in perspective; the numbers are exact, but orthographic projection keeps their lengths comparable across a panel.');
     if (shown.length > 1 && !alignmentResults.length) push('warn', shown.length + ' models are shown without superposition. Run Align visible, or state in the legend that the coordinates are as predicted.');
@@ -8765,6 +8832,8 @@ html>body{padding:0}</style>
      the legend off left it ticking "The colour legend is drawn on exports" until some other setting
      changed. */
   ['#gpv-export-legend', '#gpv-scale-bar'].forEach(selector => root.querySelector(selector).addEventListener('change', () => renderPublicationChecks()));
+  /* The title rule too: "No figure title yet" stayed after a title was typed, until another setting changed. */
+  root.querySelector('#gpv-project-title').addEventListener('input', () => renderPublicationChecks());
   /* ---------- Composite figure ----------
      The 3D view and the confidence panels a paper puts beside it — PAE heatmap, pLDDT profile,
      contact map — stitched into one lettered figure at the chosen print size. Each panel is
@@ -8829,6 +8898,50 @@ html>body{padding:0}</style>
     return { canvas, caption: 'Predicted aligned error, ' + n + ' × ' + n + ' tokens, 0 (dark) to ' + maximum.toFixed(1) + ' Å' };
   }
 
+  /* The caption strip under a row of panels, as the figure builder lays it out (35): the letter in bold
+     at 1.3 × the text size, the caption at the text size wrapped onto up to three lines, the strip as
+     tall as the longest caption needs. The text size is the one chosen for print — before 2.52.0 the
+     composite, comparison and per-model figures sized it from the cell, 3–5 pt at 85 mm. */
+  function figureCaptionLayout(captions, cellWidth, fontPx) {
+    const inset = Math.round(cellWidth * 0.025);
+    furnitureMeasure.font = '700 ' + Math.round(fontPx * 1.3) + 'px ' + figureFont();
+    const letterWidth = furnitureMeasure.measureText('W').width + fontPx * 0.8;
+    const width = Math.max(fontPx * 3, cellWidth - inset * 2 - letterWidth);
+    furnitureMeasure.font = '500 ' + fontPx + 'px ' + figureFont();
+    const cut = [];
+    const lines = captions.map((caption, index) => {
+      const wrapped = wrapText(furnitureMeasure, caption, width).map(line => truncateToWidth(furnitureMeasure, line, width));
+      if (wrapped.length <= 3) return wrapped.length ? wrapped : [''];
+      cut.push(String.fromCharCode(65 + index));
+      return [wrapped[0], wrapped[1], truncateToWidth(furnitureMeasure, wrapped.slice(2).join(' '), width)];
+    });
+    const most = Math.max(1, ...lines.map(item => item.length));
+    return { fontPx, inset, letterWidth, width, lines, height: Math.round(fontPx * (0.9 + 1.3 * most)), cut };
+  }
+  function figureCaptionsCutNote(layout) {
+    return layout.cut.length ? ' · caption' + (layout.cut.length === 1 ? ' of panel ' : 's of panels ') + layout.cut.join(', ') + ' shortened to fit three lines' : '';
+  }
+  /* (x, top) is the left edge of the cell and the top of its caption strip. */
+  function drawFigureCaption(context, layout, index, x, top, palette) {
+    const first = top + Math.round(layout.fontPx * 1.1); const step = Math.round(layout.fontPx * 1.3);
+    context.save(); context.fillStyle = palette.ink; context.textBaseline = 'middle'; context.textAlign = 'left';
+    context.font = '700 ' + Math.round(layout.fontPx * 1.3) + 'px ' + figureFont();
+    context.fillText(String.fromCharCode(65 + index), x + layout.inset, first);
+    context.font = '500 ' + layout.fontPx + 'px ' + figureFont();
+    layout.lines[index].forEach((line, lineIndex) => context.fillText(line, x + layout.inset + layout.letterWidth, first + lineIndex * step));
+    context.restore();
+  }
+  function svgFigureCaption(layout, index, x, top, palette) {
+    const first = top + Math.round(layout.fontPx * 1.1); const step = Math.round(layout.fontPx * 1.3);
+    const text = (tx, ty, size, weight, value) => '<text x="' + f(tx) + '" y="' + f(ty) + '" dominant-baseline="central" font-family="' + svgFont + '" font-size="' + f(size) + '" font-weight="' + weight + '" fill="' + palette.ink + '">' + svgEscape(value) + '</text>';
+    return [text(x + layout.inset, first, Math.round(layout.fontPx * 1.3), 700, String.fromCharCode(65 + index)), ...layout.lines[index].map((line, lineIndex) => text(x + layout.inset + layout.letterWidth, first + lineIndex * step, layout.fontPx, 500, line))].join('\n');
+  }
+  /* The text size of a print figure in pixels: the chosen points at the figure's dpi, or the screen
+     export's 12 px scaled with its width. */
+  function figureTextPx(plan) {
+    return Math.max(10, Math.round(plan.dpi ? plan.points / 72 * plan.dpi : 12 * figureScale(plan)));
+  }
+
   async function downloadCompositeFigure() {
     const entry = activeEntry(); if (!entry || !entry.model) { announce('Show a model first', 'error'); return; }
     const button = root.querySelector('#gpv-composite');
@@ -8847,71 +8960,87 @@ html>body{padding:0}</style>
     const rows = Math.ceil(count / columns);
     const cell = Math.max(300, Math.floor(requested.width / columns));
     const cellHeight = Math.round(cell / (requested.width / requested.height));
-    const captionHeight = Math.round(Math.max(28, cell * 0.08));
     const palette = figurePalette();
     const done = setBusy('Rendering composite…'); button.disabled = true; button.textContent = 'Rendering…';
     await afterPaint();
     try {
       const panels = [];
-      /* The panel is a fraction of the figure width, so text and legend scale down with it. */
-      const panelPlan = { ...requested, width: cell, height: cellHeight, textScale: (requested.textScale || 1) * cell / requested.width };
+      /* Every panel's text at the figure's text size: the 3D panel keeps the figure's textScale (its
+         legend and labels were halved at two columns), and the charts are laid out at the size of the
+         box they are drawn into, with their text at that size — drawn 1:1 (`natural`), never shrunk to
+         fit. A chart that cannot hold its text in the cell makes its row taller instead. */
+      const panelPlan = { ...requested, width: cell, height: cellHeight, mm: requested.mm ? requested.mm / columns : undefined, fixedText: true };
       const uri = await withLegend(await renderPublicationImage(null, panelPlan), panelPlan);
       /* "coloured by pLDDT confidence", not "plddt": only a leading capital that starts a word is lowered. */
-      panels.push({ image: await loadImage(uri), caption: displayName(entry) + (root.querySelector('#gpv-color-mode').value !== 'structure' ? ', coloured by ' + root.querySelector('#gpv-color-mode').selectedOptions[0].textContent.replace(/^[A-Z](?=[a-z])/, letter => letter.toLowerCase()) : '') });
-      /* The charts are laid out at the size of the box they are drawn into, with their text at the
-         figure's text size — 11 px labels on a 1200-unit chart shrunk into the cell printed at 1 pt. */
+      panels.push({ image: await loadImage(uri), whole: true, caption: displayName(entry) + (root.querySelector('#gpv-color-mode').value !== 'structure' ? ', coloured by ' + root.querySelector('#gpv-color-mode').selectedOptions[0].textContent.replace(/^[A-Z](?=[a-z])/, letter => letter.toLowerCase()) : '') });
       const pad = Math.round(cell * 0.03); const box = { width: cell - 2 * pad, height: cellHeight - 2 * pad };
       const labelPx = requested.dpi ? requested.points / 72 * requested.dpi : 12 * figureScale(requested);
       const fit = { ...box, scale: labelPx / 11 };
-      if (wanted.pae) { const pae = drawPaePanel(entry, Math.min(box.height, box.width - Math.round(labelPx * 4.6)), Math.round(labelPx), palette); panels.push({ image: pae.canvas, caption: pae.caption }); }
+      const inner = Math.round(labelPx * 0.4);
+      if (wanted.pae) { const pae = drawPaePanel(entry, Math.min(box.height, box.width - Math.round(labelPx * 4.6)), Math.round(labelPx), palette); panels.push({ image: pae.canvas, natural: true, caption: pae.caption }); }
       if (wanted.profile) {
         const profile = plddtProfileSvg(fit);
-        if (profile) { const image = await loadImage('data:image/svg+xml;charset=utf-8,' + encodeURIComponent(profile.svg)); panels.push({ image, caption: 'Per-residue pLDDT' + (displayedEntries().filter(item => item.scores.length).length > 1 ? ' of the displayed models' : ''), aspect: profile.width / profile.height }); }
+        if (profile) { const image = await loadImage('data:image/svg+xml;charset=utf-8,' + encodeURIComponent(profile.svg)); panels.push({ image, natural: true, caption: 'Per-residue pLDDT' + (displayedEntries().filter(item => item.scores.length).length > 1 ? ' of the displayed models' : ''), aspect: profile.width / profile.height }); }
       }
-      if (wanted.contacts) { const canvas = document.createElement('canvas'); drawContactMap(canvas, true, Math.max(1, Math.round(cell / 600 * 2))); panels.push({ image: canvas, caption: contactCaption() }); }
+      if (wanted.contacts) {
+        /* Ticks and titles at the text size (11-unit ticks, as the profile's), the grid sized to the
+           width that is left — up to square, the row growing to hold it: a map squeezed into the cell's
+           height left its title no room at all at 8 pt. */
+        const canvas = document.createElement('canvas'); const textScale = labelPx / 11;
+        const n = contactResult.rowA.residues.length; const m = contactResult.rowB.residues.length;
+        const gridWidth = Math.max(20, box.width - 96 * textScale); const gridHeight = Math.max(gridWidth, box.height - 118 * textScale);
+        const side = Math.min(gridWidth / m, gridHeight / n);
+        drawContactMap(canvas, true, textScale, side / contactCell(canvas));
+        panels.push({ image: canvas, natural: true, caption: contactCaption() });
+      }
       if (wanted.rmsf) {
         const profile = rmsfProfileSvg(fit);
-        if (profile) { const image = await loadImage('data:image/svg+xml;charset=utf-8,' + encodeURIComponent(profile.svg)); panels.push({ image, caption: 'Per-residue Cα RMSF across ' + ensembleSpread.count + ' aligned models' }); }
+        if (profile) { const image = await loadImage('data:image/svg+xml;charset=utf-8,' + encodeURIComponent(profile.svg)); panels.push({ image, natural: true, caption: 'Per-residue Cα RMSF across ' + ensembleSpread.count + ' aligned models' }); }
       }
       if (wanted.matrix) {
-        const scale = figureScale(panelPlan); const pad = Math.round(16 * scale); const side = Math.min(cell, cellHeight) - pad * 2;
-        const canvasM = document.createElement('canvas'); const metrics = rmsdMatrixMetrics(side, scale); canvasM.width = metrics.width + pad * 2; canvasM.height = metrics.height + pad * 2;
+        /* Model names at the text size (10-unit labels); a matrix too short for its values takes the width. */
+        const scale = labelPx / 10; const n = rmsdMatrix.names.length;
+        const side = Math.min(box.width - inner * 2, Math.max(box.height - inner * 2, Math.round(labelPx * (4 + 2.5 * n))));
+        const canvasM = document.createElement('canvas'); const metrics = rmsdMatrixMetrics(side, scale); canvasM.width = metrics.width + inner * 2; canvasM.height = metrics.height + inner * 2;
         const contextM = canvasM.getContext('2d'); contextM.fillStyle = palette.paper; contextM.fillRect(0, 0, canvasM.width, canvasM.height);
-        drawRmsdMatrix(contextM, pad, pad, side, scale, palette);
-        panels.push({ image: canvasM, caption: 'Pairwise Cα RMSD between ' + rmsdMatrix.names.length + ' models' + (rmsdMatrix.fitRegion ? ', fitted on ' + rmsdMatrix.fitRegion : '') + (rmsdMatrix.byPosition ? ', identical chains matched by position' : '') });
+        drawRmsdMatrix(contextM, inner, inner, side, scale, palette);
+        panels.push({ image: canvasM, natural: true, caption: 'Pairwise Cα RMSD between ' + n + ' models' + (rmsdMatrix.fitRegion ? ', fitted on ' + rmsdMatrix.fitRegion : '') + (rmsdMatrix.byPosition ? ', identical chains matched by position' : '') });
       }
       if (wanted.architecture) {
-        const model = architectureModel(entry); const scale = figureScale(panelPlan); const pad = Math.round(16 * scale);
-        const canvasA = document.createElement('canvas'); canvasA.width = cell; canvasA.height = architectureHeight(model, scale) + pad * 2;
+        const model = architectureModel(entry); const scale = labelPx / 11;
+        const canvasA = document.createElement('canvas'); canvasA.width = box.width; canvasA.height = architectureHeight(model, scale) + inner * 2;
         const contextA = canvasA.getContext('2d'); contextA.fillStyle = palette.paper; contextA.fillRect(0, 0, canvasA.width, canvasA.height);
-        drawArchitecture(contextA, pad, pad, cell - pad * 2, model, scale, palette);
-        panels.push({ image: canvasA, caption: 'Domain architecture (' + (model.source === 'pae' ? 'PAE domains, heuristic' : 'annotated domains') + ')' });
+        drawArchitecture(contextA, 0, inner, box.width, model, scale, palette);
+        panels.push({ image: canvasA, natural: true, caption: 'Domain architecture (' + (model.source === 'pae' ? 'PAE domains, heuristic' : 'annotated domains') + ')' });
       }
+      const captions = figureCaptionLayout(panels.map(panel => panel.caption), cell, figureTextPx(requested));
+      /* Each row as tall as the cell, or as its tallest chart drawn at its own size. */
+      const drawnSize = panel => { const k = panel.natural ? Math.min(1, box.width / panel.image.width) : 1; return { w: panel.image.width * k, h: panel.image.height * k }; };
+      const rowHeights = Array.from({ length: rows }, (_, row) => Math.max(cellHeight, ...panels.slice(row * columns, row * columns + columns).filter(panel => panel.natural).map(panel => Math.ceil(drawnSize(panel).h) + 2 * pad)));
+      const rowTops = rowHeights.map((_, row) => rowHeights.slice(0, row).reduce((sum, value) => sum + value + captions.height, 0));
+      const grown = rowHeights.some(value => value > cellHeight);
       const canvas = document.createElement('canvas');
-      canvas.width = columns * cell; canvas.height = rows * (cellHeight + captionHeight);
+      canvas.width = columns * cell; canvas.height = rowHeights.reduce((sum, value) => sum + value + captions.height, 0);
       const context = canvas.getContext('2d');
       context.fillStyle = palette.paper; context.fillRect(0, 0, canvas.width, canvas.height);
       panels.forEach((panel, index) => {
-        const x = (index % columns) * cell; const y = Math.floor(index / columns) * (cellHeight + captionHeight);
-        const pad = Math.round(cell * 0.03); const boxW = cell - 2 * pad; const boxH = cellHeight - 2 * pad;
-        const ratio = panel.image.width / panel.image.height; let w = boxW; let h = w / ratio; if (h > boxH) { h = boxH; w = h * ratio; }
-        context.drawImage(panel.image, x + pad + (boxW - w) / 2, y + pad + (boxH - h) / 2, w, h);
-        context.fillStyle = palette.ink; context.textBaseline = 'middle'; context.textAlign = 'left';
-        context.font = '700 ' + Math.round(captionHeight * 0.5) + 'px ' + figureFont();
-        context.fillText(String.fromCharCode(65 + index), x + pad, y + cellHeight + captionHeight / 2);
-        context.font = '400 ' + Math.round(captionHeight * 0.36) + 'px ' + figureFont();
-        context.fillText(truncateToWidth(context, panel.caption, cell - pad * 2 - Math.round(captionHeight * 0.9)), x + pad + Math.round(captionHeight * 0.9), y + cellHeight + captionHeight / 2);
+        const row = Math.floor(index / columns); const x = (index % columns) * cell; const y = rowTops[row]; const rowHeight = rowHeights[row];
+        if (panel.whole) context.drawImage(panel.image, x, y + (rowHeight - cellHeight) / 2, cell, cellHeight);
+        else if (panel.natural) { const { w, h } = drawnSize(panel); context.drawImage(panel.image, x + pad + (box.width - w) / 2, y + pad + (rowHeight - 2 * pad - h) / 2, w, h); }
+        else {
+          const boxH = rowHeight - 2 * pad; const ratio = panel.image.width / panel.image.height; let w = box.width; let h = w / ratio; if (h > boxH) { h = boxH; w = h * ratio; }
+          context.drawImage(panel.image, x + pad + (box.width - w) / 2, y + pad + (boxH - h) / 2, w, h);
+        }
+        drawFigureCaption(context, captions, index, x, y + rowHeight, palette);
       });
-      downloadBlob(await pngWithDpi(canvas.toDataURL('image/png'), requested.dpi), 'image/png', exportFileName('protein-composite-' + panels.length + '-panels', requested, 'png'));
-      announce('Composite figure downloaded · ' + panels.length + ' panels · ' + canvas.width + ' × ' + canvas.height + (requested.dpi ? ' at ' + requested.dpi + ' dpi' : ''));
+      downloadBlob(await pngWithDpi(canvas.toDataURL('image/png'), requested.dpi), 'image/png', exportFileName('protein-composite-' + panels.length + '-panel' + (panels.length === 1 ? '' : 's'), requested, 'png'));
+      announce('Composite figure downloaded · ' + panels.length + ' panel' + (panels.length === 1 ? '' : 's') + ' · ' + canvas.width + ' × ' + canvas.height + (requested.dpi ? ' at ' + requested.dpi + ' dpi' : '') + exportCapText(requested) + (grown ? ' · rows made taller to keep the text at ' + (requested.dpi ? requested.points + ' pt' : 'its size') : '') + figureCaptionsCutNote(captions));
     } catch (error) {
       announce('Could not render the composite figure: ' + error.message, 'error');
     } finally {
       releaseExportViewer(); done(); button.textContent = 'Download composite figure'; button.disabled = structures.length === 0;
     }
   }
-
-
   /* ---------- MSA conservation ----------
      AlphaFold 3 archives carry the unpaired MSA per entity as .a3m. The query is the first
      record; uppercase letters are match columns, lowercase letters insertions (dropped), '-'
@@ -10682,29 +10811,10 @@ html>body{padding:0}</style>
     }
   }
 
-  async function applyScene(scene) {
-    if (!scene || scene.type !== 'protein-viewer-scene') return;
-    /* A restore replaces every record, so it is one undo step: ⌘Z puts back the labels, measurements,
-       selections and views it replaced. Before 2.52.0 it emptied the history instead, and the work it
-       wrote over was gone. A page with nothing to lose (a share link opening) takes no step. */
-    if (labelRecords.length + selectionRecords.length + measurementRecords.length + annotationRecords.length + domainRecords.length + savedViews.length + spotlightResidues.length) remember('scene restore');
-    const byName = new Map(structures.map(entry => [entry.name, entry]));
-    let hashWarnings = 0;
-    for (const modelRecord of scene.models || []) {
-      const entry = byName.get(modelRecord.name);
-      if (!entry) continue;
-      entry.visible = modelRecord.visible !== false;
-      if (/^#[0-9a-f]{6}$/i.test(modelRecord.color || '')) entry.color = modelRecord.color;
-      if (typeof modelRecord.label === 'string') entry.label = modelRecord.label.trim().slice(0, 120);
-      entry.hiddenChains = Array.isArray(modelRecord.hiddenChains) ? modelRecord.hiddenChains.map(String).slice(0, 200) : [];
-      entry.fadedChains = Array.isArray(modelRecord.fadedChains) ? modelRecord.fadedChains.map(String).slice(0, 200) : [];
-      entry.faded = modelRecord.faded === true;
-      if (modelRecord.sha256) {
-        const actual = entry.hash || await sha256(entry.text);
-        if (actual && actual !== modelRecord.sha256) hashWarnings += 1;
-      }
-    }
-    const settings = scene.settings || {};
+  /* A scene's display settings, read as untrusted input: each control takes only a value it offers.
+     Shared by applyScene and by undoing a scene restore (sceneDisplayState / applySceneDisplay). */
+  function applySceneSettings(settings) {
+    settings = settings && typeof settings === 'object' ? settings : {};
     if (['overlay', 'single'].includes(settings.viewMode)) root.querySelector('#gpv-view-mode').value = settings.viewMode;
     if (['cartoon', 'stick', 'sphere', 'line'].includes(settings.representation)) root.querySelector('#gpv-style').value = settings.representation;
     if (['structure', 'chain', 'entity', 'plddt', 'deviation', 'fromresidue', 'agreement', 'domain', 'annotated', 'data', 'charge', 'hydrophobicity', 'restype', 'amino', 'ss', 'spectrum', 'element'].includes(settings.colorMode)) root.querySelector('#gpv-color-mode').value = settings.colorMode;
@@ -10733,6 +10843,71 @@ html>body{padding:0}</style>
     if (['none', 'translucent', 'opaque'].includes(settings.surface)) root.querySelector('#gpv-surface').value = settings.surface;
     if (['transparent', 'white', 'dark', 'custom'].includes(settings.background)) root.querySelector('#gpv-background').value = settings.background;
     if (/^#[0-9a-f]{6}$/i.test(settings.backgroundColor || '')) root.querySelector('#gpv-background-color').value = settings.backgroundColor;
+  }
+
+  /* What a scene restore replaces besides the records: the settings, the provenance (the title names
+     the exports) and each model's colour, name, visibility and hidden chains. Kept on the 'scene
+     restore' undo step; undo puts it back, redo the scene's. */
+  function sceneDisplayState() {
+    return {
+      settings: sceneSettings(), provenance: provenanceValues(),
+      models: structures.map(entry => ({ id: entry.id, visible: entry.visible, color: entry.color, label: entry.label || '', hiddenChains: [...(entry.hiddenChains || [])], fadedChains: [...(entry.fadedChains || [])] }))
+    };
+  }
+  function applySceneDisplay(display) {
+    if (!display || typeof display !== 'object') return;
+    (display.models || []).forEach(item => {
+      const entry = entryById(item.id); if (!entry) return;
+      entry.visible = item.visible !== false; entry.color = item.color || entry.color; entry.label = item.label || '';
+      entry.hiddenChains = [...(item.hiddenChains || [])]; entry.fadedChains = [...(item.fadedChains || [])];
+    });
+    const settings = display.settings || {};
+    applySceneSettings(settings);
+    root.querySelector('#gpv-all-labels').checked = settings.allResidueLabels === true;
+    const active = structures.find(entry => entry.name === settings.activeModel); if (active) activeId = active.id;
+    const provenance = display.provenance || {};
+    ['title', 'source', 'method', 'notes'].forEach(key => { root.querySelector('#gpv-project-' + key).value = provenance[key] || ''; });
+    applyModelOrder(); renderList(); applyAppearance(); applyStyle();
+    if (settings.camera && typeof viewer.setView === 'function') viewer.setView(settings.camera);
+    viewer.render();
+  }
+
+  async function applyScene(scene) {
+    if (!scene || scene.type !== 'protein-viewer-scene') return;
+    /* A restore replaces every record, so it is one undo step: ⌘Z puts back the labels, measurements,
+       selections and views it replaced. Before 2.52.0 it emptied the history instead, and the work it
+       wrote over was gone. A page with nothing to lose (a share link opening) takes no step. */
+    if (labelRecords.length + selectionRecords.length + measurementRecords.length + annotationRecords.length + domainRecords.length + savedViews.length + spotlightResidues.length) {
+      remember('scene restore');
+      /* The step also holds the display the scene is about to replace — colour scheme, representation,
+         background, projection, title, model colours, camera — so ⌘Z gives back the page as it looked,
+         not the old labels in the scene's style (05 reads `display` on undo and redo). */
+      undoStack[undoStack.length - 1].state.display = sceneDisplayState();
+    }
+    const byName = new Map(structures.map(entry => [entry.name, entry]));
+    /* Records are matched to the page's models by name; one whose model is not open is dropped, and the
+       status says how many were, rather than "Scene restored" over half a scene. */
+    const absent = name => !byName.has(name);
+    const unmatched = [...(scene.labels || []), ...(scene.selections || [])].filter(record => record && absent(record.model)).length
+      + [...(scene.measurements || []), ...(scene.annotations || [])].filter(record => record && (record.points || []).some(point => point && absent(point.model))).length
+      + (scene.domains || []).filter(record => record && record.scope !== 'all' && absent(record.model)).length;
+    let hashWarnings = 0;
+    for (const modelRecord of scene.models || []) {
+      const entry = byName.get(modelRecord.name);
+      if (!entry) continue;
+      entry.visible = modelRecord.visible !== false;
+      if (/^#[0-9a-f]{6}$/i.test(modelRecord.color || '')) entry.color = modelRecord.color;
+      if (typeof modelRecord.label === 'string') entry.label = modelRecord.label.trim().slice(0, 120);
+      entry.hiddenChains = Array.isArray(modelRecord.hiddenChains) ? modelRecord.hiddenChains.map(String).slice(0, 200) : [];
+      entry.fadedChains = Array.isArray(modelRecord.fadedChains) ? modelRecord.fadedChains.map(String).slice(0, 200) : [];
+      entry.faded = modelRecord.faded === true;
+      if (modelRecord.sha256) {
+        const actual = entry.hash || await sha256(entry.text);
+        if (actual && actual !== modelRecord.sha256) hashWarnings += 1;
+      }
+    }
+    const settings = scene.settings || {};
+    applySceneSettings(settings);
     const active = byName.get(settings.activeModel);
     if (active) activeId = active.id;
     const reference = byName.get(settings.referenceModel);
@@ -10815,7 +10990,7 @@ html>body{padding:0}</style>
     if (settings.camera && typeof viewer.setView === 'function') viewer.setView(settings.camera);
     viewer.render();
     pendingScene = null;
-    updateStatus('Scene restored' + (hashWarnings ? ' · warning: ' + hashWarnings + ' file hash mismatch' + (hashWarnings === 1 ? '' : 'es') : ''));
+    updateStatus('Scene restored' + (unmatched ? ' · ' + unmatched + ' record' + (unmatched === 1 ? '' : 's') + ' matched no model on this page' : '') + (hashWarnings ? ' · warning: ' + hashWarnings + ' file hash mismatch' + (hashWarnings === 1 ? '' : 'es') : ''));
   }
 
   function nextPaint() {
@@ -10854,7 +11029,7 @@ html>body{padding:0}</style>
        current one, and only confidence files read now may be reported as attached. */
     const wasEmpty = structures.length === 0;
     const assetsBefore = confidenceAssets.length;
-    let firstNew = null; let restoredSession = false;
+    let firstNew = null; let restoredSession = false; let sessionDeclined = false;
     stopCycle(); stopMotion();
     /* An armed Measure to… was armed among the models already open: the next click may land on one
        this import adds, and must open its card rather than measure into it. */
@@ -10877,7 +11052,13 @@ html>body{padding:0}</style>
           const zip = await JSZip.loadAsync(file);
           if (zip.file('session.json')) {
             const snapshot = await readSessionZip(zip);
-            if (snapshot) { await restoreSession(snapshot); loaded += snapshot.files.length; restoredSession = true; continue; }
+            /* A session replaces the page (12): it asks first when there is anything to replace, and
+               Cancel keeps the page and skips the archive. */
+            if (snapshot) {
+              const restored = await restoreSession(snapshot);
+              if (restored) { loaded += restored.models; restoredSession = restored.message; } else sessionDeclined = true;
+              continue;
+            }
           }
           importedArchive = true;
           const members = Object.values(zip.files);
@@ -10903,6 +11084,9 @@ html>body{padding:0}</style>
               if (memberIndex === 0) {
                 renderList(); applyStyle();
                 const active = activeEntry(); if (active && active.model) { viewer.zoomTo({ model: active.model.getID() }); viewer.render(); }
+                /* The restyle ends in updateStatus('Ready'), which read "Ready" for seconds while the
+                   rest of the archive was still being read. */
+                updateStatus('Loading ' + file.name + '…');
               }
               if (memberIndex % 5 === 4) await nextPaint();
             } catch (error) { skipped += 1; failures.push(member.name + ': ' + error.message); }
@@ -10976,7 +11160,9 @@ html>body{padding:0}</style>
       /* Only this import's confidence files count: the session-wide list made every later import, a
          failed one included, end "· confidence attached". */
       const showing = loaded && firstNew && !restoredSession && structures.includes(firstNew) ? ' · showing ' + displayName(firstNew) : '';
-      const note = loaded ? 'Loaded ' + loaded + ' model' + (loaded === 1 ? '' : 's') + ' from ' + files.length + ' source' + (files.length === 1 ? '' : 's') + (added ? ' · ' + added : '') + showing + (attachedNow ? ' · confidence attached' : '')
+      const note = restoredSession && files.length === 1 ? restoredSession
+        : sessionDeclined && !loaded ? 'Session not opened · the page is kept as it was'
+        : loaded ? 'Loaded ' + loaded + ' model' + (loaded === 1 ? '' : 's') + ' from ' + files.length + ' source' + (files.length === 1 ? '' : 's') + (added ? ' · ' + added : '') + showing + (attachedNow ? ' · confidence attached' : '')
         : added || (pendingScene ? 'Scene loaded; now add its matching structure files' : newAssets.length ? (attachedNow ? 'Confidence data attached to the open models' : 'Confidence data loaded; add matching structures') : 'No supported structures found');
       updateStatus(note + (deferredPae ? ' · skipped ' + deferredPae + ' large PAE files for performance' : '') + (skipped ? ' · ' + skipped + ' skipped' : ''));
     }
@@ -11154,6 +11340,13 @@ html>body{padding:0}</style>
     if (!plan.capped) return '';
     if (plan.dpi) return ' · rendered at ' + plan.dpi + ' dpi, the most ' + (plan.gpuLimited ? 'this GPU allows' : 'a browser page handles (24 megapixels)') + ' for ' + plan.mm + ' mm';
     return plan.gpuLimited ? ' · size capped at the most this GPU can render' : ' · size capped for browser stability';
+  }
+
+  /* The same note with the dpi that was asked for, for figures whose status does not otherwise name it
+     (the builder, the composite): "600 dpi asked · rendered at 142 dpi, the most this GPU allows…". */
+  function exportCapText(plan) {
+    if (!plan.capped) return '';
+    return (plan.dpi && plan.requestedDpi ? ' · ' + plan.requestedDpi + ' dpi asked' : '') + exportCapNote(plan);
   }
 
   /* 3Dmol draws its canvas at the page's pixel ratio, doubled below 2 for its antialiasing — so on an
@@ -11516,6 +11709,9 @@ html>body{padding:0}</style>
        on screen only. Printed on a figure, the note would be a key to nothing, and the checklist would
        ask for a legend the colours do not need. */
     if (mode === 'agreement' && !ensembleSpread) return kind === 'screen' ? { title: 'Cα RMSF', items: [['#9ca3af', 'align first', 'Grey until models are aligned — Compare → Align visible']] } : null;
+    /* Deviation before an alignment is the same case: every residue grey, and a printed key would read
+       the grey as "unmatched". */
+    if (mode === 'deviation' && !alignmentResults.length) return kind === 'screen' ? { title: 'Cα deviation', items: [['#9ca3af', 'align first', 'Grey until models are aligned — Compare → Align visible']] } : null;
     if (mode === 'plddt' && !displayedEntries().some(entry => entry.model && entry.scores.length)) {
       if (kind !== 'screen') return null;
       const shownNow = displayedEntries().filter(entry => entry.model);
@@ -11650,7 +11846,9 @@ html>body{padding:0}</style>
      width it has when even the floor is too wide, and the bar is lifted clear when the two
      rectangles still meet. The width the legend is given travels with the layout as
      legendAvailable, so the canvas and the SVG drawer wrap it the same way. */
-  function furnitureLayout(width, height, scale, bar, palette, wanted = legendWanted()) {
+  /* `fixedText`: wrap but never shrink — the composite's 3D panel, whose legend must print at the
+     figure's text size like every other label in it. */
+  function furnitureLayout(width, height, scale, bar, palette, wanted = legendWanted(), fixedText = false) {
     const margin = Math.round(24 * scale);
     const place = legendPlacement();
     const available = place.vertical ? Math.max(1, width * 0.45) : width - margin * 2;
@@ -11658,7 +11856,7 @@ html>body{padding:0}</style>
     if (wanted) {
       metrics = legendMetrics(furnitureMeasure, legendScale, 'figure', place.vertical);
       if (metrics && metrics.width > available) {
-        legendScale = Math.max(scale * 0.55, scale * available / metrics.width);
+        legendScale = fixedText ? scale : Math.max(scale * 0.55, scale * available / metrics.width);
         metrics = legendMetrics(furnitureMeasure, legendScale, 'figure', place.vertical, available);
       }
     }
@@ -11682,8 +11880,8 @@ html>body{padding:0}</style>
     }
     return { legendX, legendY, legendScale, legendAvailable: available, barLift, vertical: place.vertical, position: place.value };
   }
-  function drawFurniture(context, width, height, scale, bar, palette, wanted = legendWanted()) {
-    const layout = furnitureLayout(width, height, scale, bar, palette, wanted);
+  function drawFurniture(context, width, height, scale, bar, palette, wanted = legendWanted(), fixedText = false) {
+    const layout = furnitureLayout(width, height, scale, bar, palette, wanted, fixedText);
     if (wanted) drawPlddtLegend(context, layout.legendX, layout.legendY, layout.legendScale, palette, 'figure', false, layout.vertical, layout.legendAvailable);
     if (bar) { context.save(); context.translate(0, -layout.barLift); drawScaleBar(context, bar, scale, palette); context.restore(); }
     return layout;
@@ -11709,7 +11907,7 @@ html>body{padding:0}</style>
     const canvas = document.createElement('canvas'); canvas.width = width; canvas.height = height;
     const context = canvas.getContext('2d');
     context.drawImage(imageValue, 0, 0, width, height);
-    if (legendWanted() || bar) drawFurniture(context, width, height, figureScale(plan), bar, figurePalette());
+    if (legendWanted() || bar) drawFurniture(context, width, height, figureScale(plan), bar, figurePalette(), legendWanted(), plan.fixedText === true);
     return canvas.toDataURL('image/png');
   }
 
@@ -12148,21 +12346,48 @@ html>body{padding:0}</style>
     }
   }
 
-  async function downloadComparisonSvg() {
-    const panes = comparisonPanes();
-    if (panes.length < 2) { announce('Turn on the synchronized multi-view with at least one panel first', 'error'); return; }
-    const button = root.querySelector('#gpv-compare-svg');
+  /* One layout for the comparison and per-model figures, PNG and SVG. The comparison keeps the chosen
+     size per panel; the per-model figure (`fitWidth`) is the chosen width overall, as the builder is —
+     before 2.52.0 it was N × 85 mm wide and named "…-85mm-…". Captions, letters and the footer's legend
+     and title are at the chosen text size, not a fraction of the cell. */
+  function panelFigureCaption(pane) {
+    const score = mean(pane.entry.scores);
+    return displayName(pane.entry) + (score === null ? '' : ' · mean pLDDT ' + score.toFixed(1));
+  }
+  function panelFigureLayout(panes, fitWidth = false) {
     const requested = exportDimensions();
     const columns = panelColumns(panes.length); const rows = Math.ceil(panes.length / columns);
     let cellWidth = requested.width; let cellHeight = requested.height;
+    if (fitWidth) { cellWidth = Math.floor(requested.width / columns); cellHeight = Math.max(1, Math.floor(cellWidth * requested.height / Math.max(1, requested.width))); }
     const maxPixels = 24000000;
     if (cellWidth * cellHeight * panes.length > maxPixels) {
       const correction = Math.sqrt(maxPixels / (cellWidth * cellHeight * panes.length));
       cellWidth = Math.floor(cellWidth * correction); cellHeight = Math.floor(cellHeight * correction);
     }
-    const captionHeight = Math.round(cellHeight * 0.09); const palette = figurePalette();
-    const footer = legendWanted('comparison') || provenanceValues().title ? captionHeight : 0;
-    const width = columns * cellWidth; const height = rows * (cellHeight + captionHeight) + footer;
+    const fontPx = figureTextPx(requested); const textScale = figureScale(requested);
+    const cellPlan = { width: cellWidth, height: cellHeight, textScale, dpi: requested.dpi, points: requested.points, mm: requested.mm ? requested.mm * cellWidth / requested.width : undefined };
+    const captions = figureCaptionLayout(panes.map(panelFigureCaption), cellWidth, fontPx);
+    const width = columns * cellWidth; const inset = Math.round(cellWidth * 0.025);
+    const title = provenanceValues().title;
+    const legend = legendWanted('comparison') ? legendMetrics(furnitureMeasure, textScale, 'comparison', false, width - inset * 2) : null;
+    const footer = legend || title ? Math.round((legend ? legend.height : fontPx * 1.3) + fontPx * 1.2) : 0;
+    const height = rows * (cellHeight + captions.height) + footer;
+    /* The centre line of the footer's last row; a legend that wrapped stacks its rows above it. */
+    const footerY = height - Math.round(fontPx * 0.6) - (legend ? legend.swatch : Math.round(fontPx * 0.65));
+    return { requested, columns, rows, cellWidth, cellHeight, cellPlan, captions, fontPx, textScale, inset, title, legend, footer, footerY, width, height };
+  }
+  /* "W × H at D dpi (M mm wide)": the whole figure, which for a comparison is columns × the chosen size. */
+  function panelFigureSize(layout) {
+    const plan = layout.requested;
+    return layout.width + ' × ' + layout.height + (plan.dpi ? ' at ' + plan.dpi + ' dpi (' + Math.round(layout.width / plan.dpi * 25.4) + ' mm wide)' : '') + exportCapText(plan) + figureCaptionsCutNote(layout.captions);
+  }
+
+  async function downloadComparisonSvg() {
+    const panes = comparisonPanes();
+    if (panes.length < 2) { announce('Turn on the synchronized multi-view with at least one panel first', 'error'); return; }
+    const button = root.querySelector('#gpv-compare-svg');
+    const layout = panelFigureLayout(panes); const palette = figurePalette();
+    const { columns, cellWidth, cellHeight, captions, width, height } = layout;
     const done = setBusy('Rendering comparison SVG…');
     button.disabled = true; button.textContent = 'Rendering…';
     await afterPaint();
@@ -12172,25 +12397,22 @@ html>body{padding:0}</style>
       for (let index = 0; index < panes.length; index += 1) {
         button.textContent = 'Rendering ' + (index + 1) + ' / ' + panes.length + '…';
         await afterPaint();
-        const uri = await renderEntryImage(panes[index].entry, panes[index].camera, { width: cellWidth, height: cellHeight }, false);
-        const overlay = overlaySvg(exportViewer, new Set([panes[index].entry.id]), { width: cellWidth, height: cellHeight }, false);
-        const x = (index % columns) * cellWidth; const y = Math.floor(index / columns) * (cellHeight + captionHeight);
+        const uri = await renderEntryImage(panes[index].entry, panes[index].camera, layout.cellPlan, false);
+        const overlay = overlaySvg(exportViewer, new Set([panes[index].entry.id]), layout.cellPlan, false);
+        const x = (index % columns) * cellWidth; const y = Math.floor(index / columns) * (cellHeight + captions.height);
         parts.push(svgImage(uri, x, y, cellWidth, cellHeight));
         parts.push('<g transform="translate(' + f(x) + ' ' + f(y) + ')">' + overlay + '</g>');
-        const score = mean(panes[index].entry.scores);
-        parts.push(caption(x + cellWidth * 0.025, y + cellHeight + captionHeight / 2, captionHeight * 0.46, 700, String.fromCharCode(65 + index)));
-        parts.push(caption(x + cellWidth * 0.08, y + cellHeight + captionHeight / 2, captionHeight * 0.34, 500, displayName(panes[index].entry) + (score === null ? '' : ' · mean pLDDT ' + score.toFixed(1))));
+        parts.push(svgFigureCaption(captions, index, x, y + cellHeight, palette));
       }
-      if (footer) {
-        const y = height - footer / 2; const scale = captionHeight / 40; let used = 0;
+      if (layout.footer) {
+        let used = 0;
         /* The footer band is as wide as the figure, so that is the legend's room — it wraps rather than running past the last panel. */
-        if (legendWanted('comparison')) { const legend = svgLegend(cellWidth * 0.025, y, scale, palette, 'comparison', false, width - cellWidth * 0.05); parts.push(legend.markup); used = legend.width + cellWidth * 0.06; }
-        const title = provenanceValues().title;
-        if (title) parts.push(caption(cellWidth * 0.025 + used, y, captionHeight * 0.36, 600, title));
+        if (layout.legend) { const legend = svgLegend(layout.inset, layout.footerY, layout.textScale, palette, 'comparison', false, width - layout.inset * 2); parts.push(legend.markup); used = legend.width + layout.fontPx * 1.5; }
+        if (layout.title) { svgMeasure.font = '600 ' + layout.fontPx + 'px ' + svgFont; parts.push(caption(layout.inset + used, layout.footerY, layout.fontPx, 600, truncateToWidth(svgMeasure, layout.title, Math.max(layout.fontPx, width - used - layout.inset * 2)))); }
       }
       const svg = svgDocument(width, height, palette.paper, parts.join('\n'));
       downloadBlob(svg, 'image/svg+xml', 'protein-comparison-' + panes.length + '-panels.svg');
-      announce('Comparison SVG downloaded · ' + panes.length + ' panels · vector captions');
+      announce('Comparison SVG downloaded · ' + panes.length + ' panels · ' + panelFigureSize(layout) + ' · vector captions');
     } catch (error) {
       announce('Could not build the comparison SVG: ' + error.message, 'error');
     } finally {
@@ -12228,60 +12450,44 @@ html>body{padding:0}</style>
     if (failures.length) showImportErrors(failures.map(name => name + ': could not be read'));
     const camera = typeof viewer.getView === 'function' ? viewer.getView() : null;
     await renderPanelFigure(ready.map(entry => ({ entry, camera })), root.querySelector('#gpv-model-panels'), {
-      idle: 'Download one panel per model', noun: 'Per-model figure', filename: exportFileName('protein-models-' + ready.length + '-panels', exportDimensions(), 'png'),
+      idle: 'Download one panel per model', noun: 'Per-model figure', fitWidth: true, filename: exportFileName('protein-models-' + ready.length + '-panels', exportDimensions(), 'png'),
       disabledAfter: () => structures.length < 2
     });
   }
 
   async function renderPanelFigure(panes, button, options) {
-    const requested = exportDimensions();
-    const columns = panelColumns(panes.length); const rows = Math.ceil(panes.length / columns);
-    let cellWidth = requested.width; let cellHeight = requested.height;
-    const maxPixels = 24000000;
-    if (cellWidth * cellHeight * panes.length > maxPixels) {
-      const correction = Math.sqrt(maxPixels / (cellWidth * cellHeight * panes.length));
-      cellWidth = Math.floor(cellWidth * correction); cellHeight = Math.floor(cellHeight * correction);
-    }
-    const captionHeight = Math.round(cellHeight * 0.09);
+    const layout = panelFigureLayout(panes, options.fitWidth === true);
+    const { requested, columns, cellWidth, cellHeight, captions } = layout;
     const palette = figurePalette();
-    const footer = legendWanted('comparison') || provenanceValues().title ? captionHeight : 0;
     const done = setBusy('Rendering comparison…');
     button.disabled = true; button.textContent = 'Rendering…';
     await afterPaint();
     try {
       const canvas = document.createElement('canvas');
-      canvas.width = columns * cellWidth; canvas.height = rows * (cellHeight + captionHeight) + footer;
+      canvas.width = layout.width; canvas.height = layout.height;
       const context = canvas.getContext('2d');
       context.fillStyle = palette.paper; context.fillRect(0, 0, canvas.width, canvas.height);
-      if (footer) {
-        const y = canvas.height - footer / 2; const scale = captionHeight / 40;
+      if (layout.footer) {
         let used = 0;
         /* The footer band is as wide as the figure, so that is the legend's room — it wraps rather than running past the last panel. */
-        if (legendWanted('comparison')) used = drawPlddtLegend(context, Math.round(cellWidth * 0.025), y, scale, palette, 'comparison', false, false, canvas.width - Math.round(cellWidth * 0.05)) + Math.round(cellWidth * 0.06);
-        const title = provenanceValues().title;
-        if (title) {
-          context.fillStyle = palette.ink; context.textBaseline = 'middle'; context.font = '600 ' + Math.round(captionHeight * 0.36) + 'px ' + figureFont();
-          context.fillText(truncateToWidth(context, title, canvas.width - used - Math.round(cellWidth * 0.05)), Math.round(cellWidth * 0.025) + used, y);
+        if (layout.legend) used = drawPlddtLegend(context, layout.inset, layout.footerY, layout.textScale, palette, 'comparison', false, false, canvas.width - layout.inset * 2) + layout.fontPx * 1.5;
+        if (layout.title) {
+          context.fillStyle = palette.ink; context.textBaseline = 'middle'; context.textAlign = 'left'; context.font = '600 ' + layout.fontPx + 'px ' + figureFont();
+          context.fillText(truncateToWidth(context, layout.title, Math.max(layout.fontPx, canvas.width - used - layout.inset * 2)), layout.inset + used, layout.footerY);
         }
       }
       for (let index = 0; index < panes.length; index += 1) {
         button.textContent = 'Rendering ' + (index + 1) + ' / ' + panes.length + '…';
         await afterPaint();
-        const uri = await renderEntryImage(panes[index].entry, panes[index].camera, { width: cellWidth, height: cellHeight });
+        const uri = await renderEntryImage(panes[index].entry, panes[index].camera, layout.cellPlan);
         const imageValue = await loadImage(uri);
-        const x = (index % columns) * cellWidth; const y = Math.floor(index / columns) * (cellHeight + captionHeight);
+        const x = (index % columns) * cellWidth; const y = Math.floor(index / columns) * (cellHeight + captions.height);
         context.drawImage(imageValue, x, y, cellWidth, cellHeight);
-        context.fillStyle = palette.ink; context.textBaseline = 'middle';
-        context.font = '700 ' + Math.round(captionHeight * 0.46) + 'px ' + figureFont();
-        context.fillText(String.fromCharCode(65 + index), x + Math.round(cellWidth * 0.025), y + cellHeight + captionHeight / 2);
-        const score = mean(panes[index].entry.scores);
-        context.font = '500 ' + Math.round(captionHeight * 0.34) + 'px ' + figureFont();
-        const caption = displayName(panes[index].entry) + (score === null ? '' : ' · mean pLDDT ' + score.toFixed(1));
-        context.fillText(truncateToWidth(context, caption, cellWidth * 0.9), x + Math.round(cellWidth * 0.08), y + cellHeight + captionHeight / 2);
+        drawFigureCaption(context, captions, index, x, y + cellHeight, palette);
       }
       const uri = canvas.toDataURL('image/png');
       downloadBlob(await pngWithDpi(uri, requested.dpi), 'image/png', options.filename);
-      announce(options.noun + ' downloaded · ' + panes.length + ' panels · ' + canvas.width + ' × ' + canvas.height + (requested.dpi ? ' at ' + requested.dpi + ' dpi' : ''));
+      announce(options.noun + ' downloaded · ' + panes.length + ' panels · ' + panelFigureSize(layout));
     } catch (error) {
       announce('Could not render the figure: ' + error.message, 'error');
     } finally {
@@ -12411,7 +12617,7 @@ html>body{padding:0}</style>
     if (!savedViews.length) { estimate.textContent = 'Save a view above to start a figure.'; return; }
     if (!panels.length) { estimate.textContent = 'No view is ticked.'; return; }
     const layout = figureLayout(panels.length, panels);
-    estimate.textContent = panels.length + ' panel' + (panels.length === 1 ? '' : 's') + ' · ' + layout.columns + ' column' + (layout.columns === 1 ? '' : 's') + ' · ' + layout.width + ' × ' + layout.height + ' px' + (layout.requested.dpi ? ' · ' + layout.requested.mm + ' mm wide at ' + layout.requested.dpi + ' dpi · text ' + layout.requested.points + ' pt' : '') + ' · each panel ' + layout.cellWidth + ' × ' + layout.cellHeight + ' px' + (layout.architecture ? ' · architecture row ' + layout.architectureRow + ' px' : layout.options.architecture ? ' · no domains for an architecture row' : '') + shortenedCaptionsNote(layout);
+    estimate.textContent = panels.length + ' panel' + (panels.length === 1 ? '' : 's') + ' · ' + layout.columns + ' column' + (layout.columns === 1 ? '' : 's') + ' · ' + layout.width + ' × ' + layout.height + ' px' + (layout.requested.dpi ? ' · ' + layout.requested.mm + ' mm wide at ' + layout.requested.dpi + ' dpi · text ' + layout.requested.points + ' pt' : '') + exportCapText(layout.requested) + ' · each panel ' + layout.cellWidth + ' × ' + layout.cellHeight + ' px' + (layout.architecture ? ' · architecture row ' + layout.architectureRow + ' px' : layout.options.architecture ? ' · no domains for an architecture row' : '') + shortenedCaptionsNote(layout);
   }
   async function downloadFigure(kind) {
     const panels = figurePanelsSelected();
@@ -12463,7 +12669,7 @@ html>body{padding:0}</style>
       const stem = 'protein-figure-' + panels.length + '-panel' + (panels.length === 1 ? '' : 's');
       if (kind === 'png') downloadBlob(await pngWithDpi(canvas.toDataURL('image/png'), layout.requested.dpi), 'image/png', exportFileName(stem, layout.requested, 'png'));
       else downloadBlob(svgDocument(layout.width, layout.height, palette.paper, parts.join('\n')), 'image/svg+xml', stem + '.svg');
-      outcome = ['Figure ' + kind.toUpperCase() + ' downloaded · ' + panels.length + ' panel' + (panels.length === 1 ? '' : 's') + ' · ' + layout.width + ' × ' + layout.height + ' px' + (layout.requested.dpi ? ' · ' + layout.requested.mm + ' mm wide at ' + layout.requested.dpi + ' dpi' : '') + shortenedCaptionsNote(layout)];
+      outcome = ['Figure ' + kind.toUpperCase() + ' downloaded · ' + panels.length + ' panel' + (panels.length === 1 ? '' : 's') + ' · ' + layout.width + ' × ' + layout.height + ' px' + (layout.requested.dpi ? ' · ' + layout.requested.mm + ' mm wide at ' + layout.requested.dpi + ' dpi' : '') + exportCapText(layout.requested) + shortenedCaptionsNote(layout)];
     } catch (error) {
       outcome = ['Could not render the figure: ' + error.message, 'error'];
     } finally {
@@ -12510,8 +12716,9 @@ html>body{padding:0}</style>
       if (!Array.isArray(matrix) || !limit) return sum;
       const side = Math.min(matrix.length, limit); return sum + side * side * 5;
     }, 0);
-    const libraryBytes = root.querySelector('#gpv-report-offline').checked ? 1500000 : 0;
-    const bytes = chosen.reduce((sum, entry) => sum + entry.text.length, 0) + paeBytes + libraryBytes;
+    const libraryBytes = root.querySelector('#gpv-report-offline').checked ? reportLibraryBytes() : 0;
+    /* Model text is embedded as JSON, which writes each line break as two characters. */
+    const bytes = chosen.reduce((sum, entry) => sum + entry.text.length + (entry.text.match(/\n/g) || []).length, 0) + paeBytes + libraryBytes + reportShellSize();
     label.textContent = chosen.length + ' model' + (chosen.length === 1 ? '' : 's') + ' · roughly ' + formatBytes(bytes)
       + (paeBytes ? ' (PAE ' + formatBytes(paeBytes) + ')' : '')
       + (bytes > 40 * 1024 * 1024 ? ' — large enough to be slow to open; narrow the selection or compact the PAE.' : '');
@@ -12590,10 +12797,38 @@ html>body{padding:0}</style>
     return shapes;
   }
 
+  /* methodsSubject's rule: a method record or a PDB fetch is experimental; pLDDT or a predictor's
+     confidence files make a prediction. */
+  function reportPredicted(entry) {
+    const experimental = Boolean(entry.experimentalMethod || entry.collection === 'RCSB PDB');
+    return !experimental && Boolean(entry.scores.length || (entry.confidence && Object.keys(entry.confidence).length));
+  }
+
   function reportPanelNames() {
     const primary = activeEntry();
     if (!root.querySelector('#gpv-side-by-side').checked || !comparePanels.length) return primary ? [primary.name] : [];
     return [primary ? primary.name : null, ...panelNames()].filter(Boolean);
+  }
+
+  /* The online report loads the pinned build from the CDN with the viewer's own Subresource Integrity
+     hash, so a substituted file is refused there as it is here. */
+  function reportLibraryTag() {
+    const tag = document.querySelector('script[src*="3Dmol"]');
+    const integrity = tag ? tag.getAttribute('integrity') : null; const crossorigin = tag ? tag.getAttribute('crossorigin') : null;
+    const attribute = (name, value) => (value && /^[\w+/=. -]+$/.test(value) ? ' ' + name + "='" + value + "'" : '');
+    return "<script src='https://cdnjs.cloudflare.com/ajax/libs/3Dmol/2.4.2/3Dmol-min.js'" + attribute('integrity', integrity) + attribute('crossorigin', integrity ? crossorigin || 'anonymous' : null) + "><\/script>";
+  }
+  /* What Embed 3Dmol.js adds: the library as this page loaded it (Resource Timing), else the size of
+     the pinned 2.4.2 build. The estimate added 1.5 MB, about three times the 513 KB file. */
+  function reportLibraryBytes() {
+    const timing = typeof performance !== 'undefined' && performance.getEntriesByType ? performance.getEntriesByType('resource').find(item => /3Dmol[^/]*\.js/i.test(item.name) && item.decodedBodySize > 0) : null;
+    return timing ? timing.decodedBodySize : 513564;
+  }
+  /* The page around the data — styles, controls, the report's own script — measured once. */
+  let reportShellBytes = 0;
+  function reportShellSize() {
+    if (!reportShellBytes) reportShellBytes = reportTemplate({ domains: '', chainColors: '', residueThemes: JSON.stringify(residueThemeTables()), spectrumRamp: spectrumRampColor.toString(), residueData: '', heteroMode: '', title: '', structures: '', views: '', metadata: '', initial: '', library: '' }).length;
+    return reportShellBytes;
   }
 
   /* Offline reports inline the pinned 3Dmol build. The bytes are fetched from the
@@ -12619,7 +12854,7 @@ html>body{padding:0}</style>
   async function downloadReport() {
     const chosen = reportEntries();
     if (!chosen.length) { announce('Load a model before building a report', 'error'); return; }
-    let library = "<script src='https://cdnjs.cloudflare.com/ajax/libs/3Dmol/2.4.2/3Dmol-min.js'><\/script>";
+    let library = reportLibraryTag();
     if (root.querySelector('#gpv-report-offline').checked) {
       const done = setBusy('Embedding 3Dmol.js…');
       try { library = await embeddedLibraryTag(); }
@@ -12661,6 +12896,9 @@ html>body{padding:0}</style>
       representation: root.querySelector('#gpv-style').value,
       colorMode: root.querySelector('#gpv-color-mode').value,
       aligned: exported.some(entry => Array.isArray(entry.coords)),
+      /* The caution about predictions only when the report holds one, by the methods text's rule (28):
+         a crystal structure alone was introduced as a prediction. */
+      predicted: chosen.some(reportPredicted),
       screenText: annotationRecords.filter(record => record.type === 'screen').map(record => ({ text: record.text, color: record.color, size: record.size, corner: record.corner, dx: record.dx || 0, dy: record.dy || 0 })),
       seconds: Number(root.querySelector('#gpv-video-length').value) || 5,
       generated: new Date().toISOString().slice(0, 10),
@@ -12775,7 +13013,7 @@ let timer = 0, spinning = false, syncing = false, syncFrame = 0, focused = 0, re
 const title = el('project-title');
 if (metadata.title) { title.hidden = false; title.textContent = metadata.title; }
 el('project-meta').textContent = [metadata.source, metadata.method, metadata.notes].filter(Boolean).join(' · ');
-el('generated').textContent = 'Interactive report generated by Protein Structure Viewer ' + initial.version + ' on ' + initial.generated + '. Predicted structures are predictions, not experimental determinations.' + (initial.aligned ? ' Superposed models are shown in their aligned positions.' : '');
+el('generated').textContent = 'Interactive report generated by Protein Structure Viewer ' + initial.version + ' on ' + initial.generated + '.' + (initial.predicted ? ' Predicted structures are predictions, not experimental determinations.' : '') + (initial.aligned ? ' Superposed models are shown in their aligned positions.' : '');
 const guided = el('guided'), guidedWrap = el('guided-wrap');
 if (!savedViews.length) guidedWrap.hidden = true;
 savedViews.forEach((v, i) => { const o = document.createElement('option'); o.value = i; o.textContent = String.fromCharCode(65 + i) + ' · ' + v.name; guided.append(o); });
@@ -12902,7 +13140,7 @@ function show(pane, preserveView) {
   if (oldView) pane.viewer.setView(oldView); else pane.viewer.zoomTo();
   pane.viewer.render();
   lastViews.set(pane, pane.viewer.getView());
-  pane.plddt = s.hasConfidence ? mean(m.selectedAtoms({}).filter(a => (a.atom === 'CA' || (a.atom === "C1'" && !a.hetflag)) && Number.isFinite(Number(a.b))).map(a => Number(a.b))) : null;
+  pane.plddt = s.hasConfidence ? mean(m.selectedAtoms({}).filter(a => !a.hetflag && (a.atom === 'CA' || a.atom === "C1'") && Number.isFinite(Number(a.b))).map(a => Number(a.b))) : null;
   const c = s.confidence || {};
   pane.stats.textContent = (pane.plddt === null ? 'pLDDT —' : 'pLDDT ' + pane.plddt.toFixed(1)) + (Number.isFinite(Number(c.iptm)) ? ' · ipTM ' + metric(c.iptm, 2) : Number.isFinite(Number(c.ptm)) ? ' · pTM ' + metric(c.ptm, 2) : '');
   if (panes[focused] === pane) describe(pane);

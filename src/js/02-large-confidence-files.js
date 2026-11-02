@@ -391,8 +391,14 @@
       parts.push('<g id="models">');
       let cursor = width - right;
       svgMeasure.font = '500 ' + f(12 * k) + 'px ' + svgFont;
-      [...entries].reverse().forEach(entry => {
-        const label = clipText(displayName(entry), 30); const labelWidth = svgMeasure.measureText(label).width;
+      /* In a figure cell the key names the models by what tells them apart ("model_0", not
+         "hbdimer / hbdimer_model_0.cif"), and each name is cut to its share of the width: at 8 pt two
+         full names ran off the cell's left edge, taking the first swatch with them. */
+      const names = fit ? distinguishingNames(entries.map(displayName)) : entries.map(entry => clipText(displayName(entry), 30));
+      const share = (width - right - 4 * k) / entries.length - 34 * k;
+      const keyLabels = names.map(name => (fit ? truncateToWidth(svgMeasure, name, Math.max(24 * k, share)) : name));
+      [...entries].reverse().forEach((entry, reverseIndex) => {
+        const label = keyLabels[entries.length - 1 - reverseIndex]; const labelWidth = svgMeasure.measureText(label).width;
         cursor -= labelWidth; parts.push(text(cursor, keyY, label, 12, 'start', 500));
         cursor -= 18 * k; parts.push('<rect x="' + f(cursor) + '" y="' + f(keyY - 10 * k) + '" width="' + f(12 * k) + '" height="' + f(12 * k) + '" rx="' + f(2 * k) + '" fill="' + entry.color + '"/>'); cursor -= 16 * k;
       });

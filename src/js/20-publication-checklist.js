@@ -9,10 +9,10 @@
     const mode = root.querySelector('#gpv-color-mode').value;
     const shown = displayedEntries().filter(entry => entry.model);
     const format = imageFormat();
-    if (format === 'jpeg' || format === 'webp') push('warn', imageFormats[format].label + ' is lossy and carries no resolution field: fine for slides, not for a figure a journal will print. Save PNG, TIFF or PDF instead.', { label: 'Use PNG', action: () => { root.querySelector('#gpv-image-format').value = 'png'; root.querySelector('#gpv-image-format').dispatchEvent(new Event('change', { bubbles: true })); } });
+    if (format === 'jpeg' || format === 'webp') push('warn', imageFormats[format].label + ' is lossy and carries no resolution field: fine for slides, not for a figure a journal will print. Save PNG, TIFF or PDF instead.', { label: 'Use PNG', action: () => { root.querySelector('#gpv-image-format').value = 'png'; root.querySelector('#gpv-image-format').dispatchEvent(new Event('change', { bubbles: true })); updateStatus('Image format set to PNG'); } });
     else if (format === 'pdf') push('ok', 'PDF at the physical page size; the text in it is part of the image, so keep the SVG if an editor needs to retype a label.');
     if (plan.dpi) push('ok', 'Print size ' + plan.mm + ' × ' + Math.round(plan.heightMm) + ' mm at ' + plan.dpi + ' dpi (' + plan.width + ' × ' + plan.height + ' px), written into the PNG and TIFF.');
-    else push('warn', 'Pixel export: the file carries no physical size. Choose a print width and 300 dpi so the journal sees the figure at the size you intend.', { label: 'Use print size', action: () => { root.querySelector('#gpv-export-mode').value = 'print'; root.querySelector('#gpv-export-mode').dispatchEvent(new Event('change', { bubbles: true })); } });
+    else push('warn', 'Pixel export: the file carries no physical size. Choose a print width and 300 dpi so the journal sees the figure at the size you intend.', { label: 'Use print size', action: () => { root.querySelector('#gpv-export-mode').value = 'print'; root.querySelector('#gpv-export-mode').dispatchEvent(new Event('change', { bubbles: true })); const print = exportDimensions(); updateStatus('Exports set to print size · ' + print.mm + ' mm wide at ' + print.dpi + ' dpi, text ' + print.points + ' pt'); } });
     if (plan.dpi && plan.dpi < 300) push('warn', plan.dpi + ' dpi is below the 300 dpi most journals require for images.');
     if (plan.points) push(plan.points >= 7 ? 'ok' : 'info', 'Text ' + plan.points + ' pt at the printed width' + (plan.points < 7 ? ' — 7 pt is the common minimum; check the journal guide.' : '.'));
     if (['chain', 'entity', 'domain'].includes(mode)) {
@@ -21,11 +21,11 @@
     }
     if (legendItems('figure') !== null) {
       if (root.querySelector('#gpv-export-legend').checked) push('ok', 'The colour legend is drawn on exports.');
-      else push('warn', 'The colours need a key: the legend is switched off for exports.', { label: 'Draw legend', action: () => { root.querySelector('#gpv-export-legend').checked = true; root.querySelector('#gpv-export-legend').dispatchEvent(new Event('change', { bubbles: true })); } });
+      else push('warn', 'The colours need a key: the legend is switched off for exports.', { label: 'Draw legend', action: () => { root.querySelector('#gpv-export-legend').checked = true; root.querySelector('#gpv-export-legend').dispatchEvent(new Event('change', { bubbles: true })); updateStatus('The colour legend is now drawn on exports'); } });
     }
     const scaleBar = Number(root.querySelector('#gpv-scale-bar').value) || 0;
     const projection = root.querySelector('#gpv-projection').value;
-    if (scaleBar && projection !== 'orthographic') push('warn', 'A scale bar is only exact in orthographic projection; in perspective its length depends on depth.', { label: 'Switch to orthographic', action: () => { root.querySelector('#gpv-projection').value = 'orthographic'; applyAppearance(); } });
+    if (scaleBar && projection !== 'orthographic') push('warn', 'A scale bar is only exact in orthographic projection; in perspective its length depends on depth.', { label: 'Switch to orthographic', action: () => { root.querySelector('#gpv-projection').value = 'orthographic'; applyAppearance(); updateStatus('Projection set to orthographic · the scale bar is exact at every depth'); } });
     else if (scaleBar) push('ok', scaleBar + ' Å scale bar in orthographic projection.');
     if (measurementRecords.length && projection !== 'orthographic') push('info', 'Distances and angles are drawn in perspective; the numbers are exact, but orthographic projection keeps their lengths comparable across a panel.');
     if (shown.length > 1 && !alignmentResults.length) push('warn', shown.length + ' models are shown without superposition. Run Align visible, or state in the legend that the coordinates are as predicted.');
@@ -71,3 +71,5 @@
      the legend off left it ticking "The colour legend is drawn on exports" until some other setting
      changed. */
   ['#gpv-export-legend', '#gpv-scale-bar'].forEach(selector => root.querySelector(selector).addEventListener('change', () => renderPublicationChecks()));
+  /* The title rule too: "No figure title yet" stayed after a title was typed, until another setting changed. */
+  root.querySelector('#gpv-project-title').addEventListener('input', () => renderPublicationChecks());
