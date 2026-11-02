@@ -65,12 +65,21 @@
     positionEffect = spotlightResidues.length ? state.positionEffect || null : null; renderPositionEffect();
     renderLabelList(); renderSelectionList(); renderMeasurementList(); renderAnnotationList(); renderDomainList(); renderPositionState(); renderSavedViews(); renderList(); renderSequenceSoon();
     applyStyle();
+    /* A scene restore's step also holds the display it replaced (31, sceneDisplayState). */
+    if (state.display) applySceneDisplay(state.display);
+  }
+  /* The state the opposite stack takes: the records, and the display too when the step carries one,
+     so redo of an undone scene restore puts the scene's settings back as well as its records. */
+  function undoCounterSnapshot(item) {
+    const state = snapshotRecords();
+    if (item.state && item.state.display) state.display = sceneDisplayState();
+    return state;
   }
 
   function undo() {
     const item = undoStack.pop();
     if (!item) { updateStatus('Nothing to undo'); return; }
-    redoStack.push({ what: item.what, state: snapshotRecords() });
+    redoStack.push({ what: item.what, state: undoCounterSnapshot(item) });
     restoreRecords(item.state); renderHistoryButtons();
     updateStatus('Undid ' + item.what + (undoStack.length ? ' · ' + undoStack.length + ' more' : ''));
   }
@@ -78,7 +87,7 @@
   function redo() {
     const item = redoStack.pop();
     if (!item) { updateStatus('Nothing to redo'); return; }
-    undoStack.push({ what: item.what, state: snapshotRecords() });
+    undoStack.push({ what: item.what, state: undoCounterSnapshot(item) });
     restoreRecords(item.state); renderHistoryButtons();
     updateStatus('Redid ' + item.what);
   }

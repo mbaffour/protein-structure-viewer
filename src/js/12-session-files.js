@@ -54,7 +54,8 @@
     if (typeof JSZip === 'undefined') { announce('The ZIP reader did not load. Refresh the page and try again.', 'error'); return false; }
     const snapshot = await readSessionZip(await JSZip.loadAsync(file));
     if (!snapshot) { announce('That ZIP is not a session file', 'error'); return false; }
-    await restoreSession(snapshot);
+    const restored = await restoreSession(snapshot);
+    if (!restored) { updateStatus('Session not opened · the page is kept as it was'); return false; }
     return true;
   }
 
@@ -88,9 +89,52 @@
   function dismissSessionBanner() {
     root.querySelector('#gpv-session-banner').hidden = true;
   }
+  /* The page's own work, as Clear all counts it. */
+  function sessionPageWork() {
+    return labelRecords.length + selectionRecords.length + measurementRecords.length + annotationRecords.length + domainRecords.length + savedViews.length + spotlightResidues.length;
+  }
+  /* Everything Clear all removes, without its question (the session asked its own): the models, their
+     records and panels, and the analyses made on them. The undo history goes too — its steps name
+     models that are no longer on the page, and undoing into them would only take the session's records
+     away. Chain colours and the export settings stay; the session's scene sets its own. */
+  function sessionEmptyPage() {
+    stopCycle(); stopMotion();
+    dismissCanvasText(); cancelMeasureTo(false); setBoxSelectMode(false);
+    if (annotationActive) toggleAnnotating(false);
+    if (measurementActive) toggleMeasurement();
+    viewer.removeAllModels(); viewer.removeAllLabels(); viewer.removeAllShapes();
+    comparePanels.forEach(destroyPanelViewer);
+    releaseExportViewer();
+    structures = []; activeId = null; selectedResidue = null;
+    clearHistory();
+    labelRecords = []; selectionRecords = []; measurementRecords = []; measurementDraft = []; annotationRecords = []; annotationDraft = [];
+    spotlightResidues = []; positionEffect = null; renderPositionEffect(); renderPositionState();
+    domainRecords = []; domainVersion += 1;
+    residueData = null; renderDataState();
+    savedViews = [];
+    confidenceAssets = []; interactionResults = null; alignmentResults = []; interfaceResults = null; renderInterfaceResults();
+    pendingScene = null;
+    root.querySelector('#gpv-residue').textContent = idleResidueText;
+    root.querySelector('#gpv-side-by-side').checked = false;
+    clearComparePanels();
+    resetAnalyses();
+    renderAlignmentResults();
+    renderLabelList(); renderSelectionList(); renderMeasurementList(); renderAnnotationList(); renderDomainList(); renderSavedViews();
+  }
+
+  /* A session file is a whole workspace: it replaces the page — models, records, views, settings —
+     rather than adding its models beside the page's and pinning its records on whichever page model
+     had the same file name (before 2.52.0 a session of run A opened over run B labelled run B). With
+     anything on the page it asks first; Cancel keeps the page. Returns what it restored, or null. */
   async function restoreSession(saved) {
+    const open = structures.length; const work = sessionPageWork();
+    if (open || work) {
+      const what = open ? 'the ' + (open === 1 ? 'model' : open + ' models') + ' and the work on this page' : 'the work on this page';
+      if (!confirm('Replace ' + what + ' with the session? Cancel keeps the page.')) return null;
+    }
     const done = setBusy('Restoring session…');
     try {
+      if (open || work) sessionEmptyPage();
       saved.files.forEach(file => {
         const entry = addStructure(uniqueModelName(file.name, file.collection), file.text, file.format, file.sourcePath, file.collection);
         if (file.fetchId) entry.fetchId = file.fetchId;
@@ -99,7 +143,10 @@
       });
       renderList(); applyStyle();
       await applyScene(saved.scene);
-      announce('Session restored · ' + saved.files.length + ' model' + (saved.files.length === 1 ? '' : 's') + ' from ' + new Date(saved.savedAt).toLocaleTimeString());
+      /* What is on the page now, which is what the session held. */
+      const message = 'Session restored · ' + structures.length + ' model' + (structures.length === 1 ? '' : 's') + ' from ' + new Date(saved.savedAt).toLocaleTimeString() + (open ? ' · replaced the ' + (open === 1 ? 'model that was open' : open + ' models that were open') : '');
+      announce(message);
+      return { models: structures.length, message };
     } finally { done(); }
   }
 

@@ -245,7 +245,8 @@ Notes on the colour schemes:
   matched residue of the reference once you have used *Align visible* (Compare tab): under 1 Å blue,
   1–2 Å green, 2–4 Å yellow, 4–8 Å orange, 8 Å and above red; residues the alignment did not match
   are grey. The reference model shows its mean deviation across the aligned models. Before an
-  alignment everything is grey and the status line says so.
+  alignment everything is grey: the status line and the legend under the viewport say to align first,
+  and, as for model agreement, that note is screen-only — an export prints no band key over grey.
 - **Distance from selected residue** colours every residue of the selected residue's model by the
   distance of its closest heavy atom to that residue (the `min_heavy_distance` of the card's
   *Distances CSV*): ≤4 Å dark blue, 4–6 Å blue, 6–10 Å light blue, 10–20 Å pale blue, over 20 Å light
@@ -529,7 +530,9 @@ instead of moving anything.
 Hovering a row draws that measurement's line thicker on the view (never in an export).
 **Copy measurements** copies every measurement as tab-separated text, and **Download measurements CSV**
 writes the same table — `type`, then `model`, `chain`, `resi`, `resn` and `atom` for each of three points
-(the third empty for a distance), `value`, `unit` and `text` — one row per measurement.
+(the third empty for a distance), `value`, `unit` and `text` — one row per measurement. A residue with
+an insertion code keeps it in `resi` (`10A`), as the row and the figure legend name it
+(`ALA10A · A CA ↔ ALA10B · A CA`).
 
 **Figure annotations.** Pick a tool, press **Start drawing**, and click atoms in the main viewer:
 an **arrow** or **line** joins two clicked atoms, a **residue marker** drops a translucent sphere on
@@ -1028,7 +1031,8 @@ SVG** is unchanged: raster molecule, vector labels, legend and scale bar.
 
 **Comparison figure.** With the synchronized multi-view on, **Download comparison PNG** renders every
 panel at the chosen size and stitches them into one lettered figure with each model's name and mean
-pLDDT in a caption strip. The total is capped at roughly 24 megapixels, so six panels at a large
+pLDDT in a caption strip at the chosen text size; the whole figure is therefore columns × the chosen
+width, which the status states (*2008 × 860 at 300 dpi (170 mm wide)*). The total is capped at roughly 24 megapixels, so six panels at a large
 size come out smaller per panel than one. With *pLDDT legend on exports* ticked and confidence
 colouring active, the four-band legend is drawn onto both kinds of PNG, and the comparison figure gets
 a footer with the legend and your project title.
@@ -1107,9 +1111,11 @@ residue and pLDDT, click to zoom that panel to the residue.
 
 Two controls govern size and portability. **PAE in report** keeps the heatmaps at full detail (up to
 400 × 400), compacts them to 200 × 200, or omits them; the size estimate updates as you switch.
-**Embed 3Dmol.js for offline use** inlines the rendering library — about 1.5 MB — after re-checking it
-against the page's integrity hash, so the report opens with no network at all. Leave it off when the
-recipient will be online and you want the smallest file.
+**Embed 3Dmol.js for offline use** inlines the rendering library — about 500 KB, which the size
+estimate counts — after re-checking it against the page's integrity hash, so the report opens with no
+network at all. Leave it off when the recipient will be online and you want the smallest file; the
+report then loads 3Dmol.js from the CDN with the same integrity hash the viewer uses. The report's
+header calls its models predictions only when it holds a predicted one.
 
 **Provenance.** Fill in the figure title, model source, method and version, and notes. These travel
 into the report header, the caption export, and the scene manifest.
@@ -1139,7 +1145,12 @@ for a mixture or anything else. Only sentences that apply to the current scene a
 coordinate text), every confidence matrix as binary floats, the current alignment, labels, selections,
 measurements, annotations, named domains, per-residue data, saved views, provenance and every setting.
 **Open session file** — or dropping the ZIP onto the page, or choosing it with *Add structures* —
-restores all of it, on any computer, with no other files. It is the way to stop work and continue
+restores all of it, on any computer, with no other files. A session is a whole workspace, so it
+*replaces* the page: with models or work on the page it first asks *Replace the … and the work on this
+page with the session? Cancel keeps the page.*, and the status then counts the models on the page.
+Replacing cannot be undone (the models it replaced are gone). Scene JSON is the opposite: it carries
+records for the models you already have and applies them to the page's models by file name. It is the
+way to stop work and continue
 later, to move between machines, or to give a colleague the exact state behind a figure. The file
 name starts with the figure title when one is set. Compared with the two other ways of keeping work:
 the browser autosave is automatic but stays on this machine and skips coordinates over 80 MB and PAE
@@ -1223,7 +1234,10 @@ model, the **pLDDT profile** of the displayed models, and the **contact or dista
 been computed in the Compare tab. Each panel is rendered fresh at output resolution, never scaled up
 from the screen, and carries a caption; the file carries its resolution. The pLDDT and RMSF profiles
 are laid out at the size of their cell with their axis text at the chosen point size, and the PAE
-heatmap has a colour bar from 0 to its maximum in Å. Choose one, two or three
+heatmap has a colour bar from 0 to its maximum in Å. Every caption, panel letter, panel A's legend and
+the labels of the contact map, RMSD matrix and architecture bar print at the chosen text size; captions
+wrap onto up to three lines, and a chart that cannot hold its text in its cell makes its row taller
+(the status says so) rather than shrinking the text. Choose one, two or three
 columns. Panels that are not available for the current model are greyed out with the reason in their
 tooltip. The result is the confidence figure most AlphaFold papers need, assembled in one step; open
 it in Illustrator or Inkscape for the final layout if the journal needs a different arrangement.
@@ -1237,8 +1251,9 @@ entity or domain colours that are not colour-blind safe; a colour scheme whose l
 off; a scale bar in perspective projection, where its length depends on depth; several models shown
 without superposition; a pLDDT cut that hides residues; a dark or custom background; many chains
 without an outline; no figure title. Warnings have a one-click fix where one exists (use print size,
-use Okabe–Ito, draw legend, switch to orthographic). The list refreshes as you change settings — the
-legend switch and the scale bar included — and
+use Okabe–Ito, draw legend, switch to orthographic), and the status line says what each one set. The
+list refreshes as you change settings — the legend switch, the scale bar and the title field
+included — and
 the badge on the heading reads *ready* when no warning remains. It is a checklist, not a judge:
 notes are suggestions, and a warning you have a reason to ignore can be ignored.
 
@@ -1266,9 +1281,10 @@ submit. Every setting can still be changed afterwards; once one is, the select g
 journal…*, since the figure no longer follows that guide.
 
 **One panel per model (Publish).** Renders every shown model — or, when one model is shown,
-every model of the current run — from the camera of the main view into one lettered figure at
-the chosen size, with the model name and mean pLDDT under each panel and the resolution written
-into the PNG. This is the "five models, identically framed" figure that a reviewer asks for
+every model of the current run — from the camera of the main view into one lettered figure of
+the chosen width (the panels share it, as in the figure builder; the status gives the width in mm),
+with the model name and mean pLDDT under each panel at the chosen text size and the resolution
+written into the PNG. This is the "five models, identically framed" figure that a reviewer asks for
 first. Align the models first if you want superposed frames rather than the raw coordinates.
 
 ## Reproducible scenes
@@ -1280,9 +1296,12 @@ measurements, saved views, comparison and alignment settings, and your provenanc
 To restore one, load the structure files first, then pick the scene JSON under **Restore scene JSON**
 (or just drop the JSON in with the files — it is applied once structures are present). Hashes are
 recomputed on restore, and the status line warns if any file no longer matches the one the scene was
-saved from. A restore replaces the labels, selections, measurements, annotations and saved views on
-the page, so it is one undo step: <kbd>Ctrl</kbd>/<kbd>⌘</kbd>+<kbd>Z</kbd> (*Undid scene restore*)
-brings back what it replaced. The same holds for the autosaved session's **Restore** and for a session file.
+saved from. Records whose model is not on the page are dropped, and the status says how many
+(*Scene restored · 2 records matched no model on this page*). A restore replaces the labels,
+selections, measurements, annotations and saved views on the page, so it is one undo step:
+<kbd>Ctrl</kbd>/<kbd>⌘</kbd>+<kbd>Z</kbd> (*Undid scene restore*) brings back what it replaced — the
+colour scheme, representation, background, projection, title, model colours and camera included — and
+redo puts the scene back. A session file is different: it replaces the whole page (see *Session files*).
 
 The manifest is what you archive alongside a figure so the scene can be rebuilt later. It is not a
 substitute for keeping the coordinate files.

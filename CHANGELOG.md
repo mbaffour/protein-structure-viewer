@@ -185,7 +185,8 @@ All notable changes to this project are recorded here.
   cap also keeps a print figure's width now; it kept the dpi and printed the figure smaller.
 - **Restoring a scene emptied the undo history** — Restore scene JSON, the autosaved session's *Restore*
   and a session file alike — so the labels, measurements and views it replaced could not be got back.
-  A restore is now one undo step: ⌘Z says *Undid scene restore* and brings them back.
+  A scene restore is now one undo step: ⌘Z says *Undid scene restore* and brings them back. (A session
+  file opened over other work now replaces the page after asking first; see below.)
 - **The methods text called every structure predicted**, a crystal structure included. It now begins
   *Experimental structure (PDB 5CHA) was inspected…*, *Predicted structures…* or *Structures…* from
   what is shown, and says how the distances and angles in the figure were measured (between Cα atoms
@@ -224,6 +225,44 @@ All notable changes to this project are recorded here.
   changed; in the composite figure the pLDDT profile was a 1200-unit chart shrunk into its cell (tick
   labels about 1 pt) — it and the RMSF profile are now laid out at the cell's size with text at the
   chosen point size — the PAE panel gains a colour bar, and its caption says "pLDDT", not "plddt".
+- **A session file opened over other work added its models beside the page's and put its records on
+  the wrong model**: a session of run A opened over a different `model.pdb` (run B) arrived as
+  `model.pdb (2)`, and its rename, labels and measurements were matched by file name to run B, while
+  the status said "1 model" of two. A session is a whole workspace, so it now replaces the page — asking
+  first whenever there is a model or work on it (*Cancel keeps the page*) — and the status counts the
+  models on the page afterwards. Scene JSON still applies its records to the page's models by name, and
+  now says how many matched no model there.
+- **Undoing a scene restore kept the scene's look**: the old labels came back in the scene's colour
+  scheme, representation, background and title. The undo step now holds the display it replaced —
+  settings, title, model colours and names, camera — and puts it back; redo puts the scene's back.
+- **The composite, comparison and per-model figures printed their text at 2–5 pt** whatever the text
+  size: captions, panel letters, panel A's legend, the contact map, the RMSD matrix and the architecture
+  bar were sized from the cell (captions 3.4 pt at 85 mm, 8 pt chosen). They now print at the chosen
+  point size, captions wrapping onto three lines as in the figure builder; a chart that cannot hold its
+  text in its cell makes its row taller and the status says so. *Download one panel per model* is now
+  the chosen width overall — two models at 85 mm made a 170 mm figure named `…-85mm-300dpi.png` — and
+  the comparison figure, which keeps the chosen size per panel, states its whole width.
+- **A measurement between insertion-code residues was named without the codes** — `ALA10 · A CA ↔
+  ALA10 · A CA`, a residue measured to itself — in its row, its editor, the figure legend and the
+  measurements CSV. All name `ALA10A` and `ALA10B`; the CSV and *Copy measurements* write `10A` in
+  `resi`, keeping their columns.
+- **Cα deviation before an alignment printed its band key on exports**, *unmatched* included, over a
+  model drawn all grey, and the checklist ticked the legend. Like model agreement, it is now a note on
+  screen (*Grey until models are aligned*), not printed and not asked for.
+- **The shared report**: a crystal structure's report said *Predicted structures are predictions*; the
+  sentence now appears only when the report holds a predicted model, by the methods text's rule. The
+  online report loads 3Dmol.js with the viewer's own integrity hash, and the size estimate counts the
+  library at its real size (about 500 KB, not 1.5 MB — 1.8 MB estimated for a 960 KB file) and the page
+  around the data. The report's mean pLDDT no longer averages in a calcium ion named CA.
+- **Publish, round two**: under a GPU limit the figure builder's estimate and status and the composite's
+  status gave the lowered dpi without saying it was lowered; they now say *600 dpi asked · rendered at
+  142 dpi, the most this GPU allows*, as the single figure does. The composite said *1 panels*; the
+  pLDDT profile's model key in the composite ran off the cell's left edge — it names the models by what
+  tells them apart (`model_0`, `model_1`) and cuts each name to its share. The publication checklist
+  kept *No figure title yet* after a title was typed, and *Use print size*, *Draw legend* and *Switch to
+  orthographic* said nothing; the title now updates it and each fix says what it set. Opening a
+  predictor ZIP read *Ready* for seconds while it was still being read; it reads *Loading* until the
+  import's own message.
 - **An armed *Measure to…* survived an import**, so the first click on the model just loaded measured
   into it. Loading a file now cancels it, and the click opens that residue's card.
 - **Sequence spectrum was grey in the HTML report**, which asked 3Dmol for a colour scheme it does not

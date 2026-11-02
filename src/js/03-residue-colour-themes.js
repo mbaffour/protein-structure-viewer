@@ -1044,10 +1044,11 @@
     return record && /^#[0-9a-f]{6}$/i.test(record.color || '') ? record.color : null;
   }
 
-  /* One point as a reader names it: residue, number and chain, then the atom — "HIS57 · B NE2". */
+  /* One point as a reader names it: residue, number with its insertion code and chain, then the atom —
+     "HIS57 · B NE2", "ALA10A · A CA". Without the code a distance from 10A to 10B read as ALA10 to ALA10. */
   function measurementPointText(reference) {
     const atom = resolvePoint(reference);
-    return (atom && atom.resn ? atom.resn : 'RES') + reference.resi + (reference.chain ? ' · ' + reference.chain : '') + ' ' + (reference.atom || 'atom');
+    return (atom && atom.resn ? atom.resn : 'RES') + residueNumber(reference) + (reference.chain ? ' · ' + reference.chain : '') + ' ' + (reference.atom || 'atom');
   }
 
   /* The atoms a measurement joins — "HIS57 · B NE2 ↔ SER195 · C OG", "→" between the points of an

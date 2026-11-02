@@ -619,7 +619,9 @@
         const point = record.points[index];
         if (!point) { cells.push('', '', '', '', ''); continue; }
         const entry = entryById(point.entryId); const atom = resolvePoint(point);
-        cells.push(entry ? displayName(entry) : '', point.chain || '', point.resi, atom && atom.resn ? atom.resn : '', point.atom || '');
+        /* `resi` carries the insertion code ("10A"), so the columns stay as they were and 10A and 10B
+           are not both 10. */
+        cells.push(entry ? displayName(entry) : '', point.chain || '', residueNumber(point), atom && atom.resn ? atom.resn : '', point.atom || '');
       }
       const value = measurementValue(record);
       cells.push(value === null ? '' : value.toFixed(3), record.type === 'angle' ? '°' : 'Å', record.text || '');

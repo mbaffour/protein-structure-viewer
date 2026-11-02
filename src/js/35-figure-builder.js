@@ -101,7 +101,7 @@
     if (!savedViews.length) { estimate.textContent = 'Save a view above to start a figure.'; return; }
     if (!panels.length) { estimate.textContent = 'No view is ticked.'; return; }
     const layout = figureLayout(panels.length, panels);
-    estimate.textContent = panels.length + ' panel' + (panels.length === 1 ? '' : 's') + ' · ' + layout.columns + ' column' + (layout.columns === 1 ? '' : 's') + ' · ' + layout.width + ' × ' + layout.height + ' px' + (layout.requested.dpi ? ' · ' + layout.requested.mm + ' mm wide at ' + layout.requested.dpi + ' dpi · text ' + layout.requested.points + ' pt' : '') + ' · each panel ' + layout.cellWidth + ' × ' + layout.cellHeight + ' px' + (layout.architecture ? ' · architecture row ' + layout.architectureRow + ' px' : layout.options.architecture ? ' · no domains for an architecture row' : '') + shortenedCaptionsNote(layout);
+    estimate.textContent = panels.length + ' panel' + (panels.length === 1 ? '' : 's') + ' · ' + layout.columns + ' column' + (layout.columns === 1 ? '' : 's') + ' · ' + layout.width + ' × ' + layout.height + ' px' + (layout.requested.dpi ? ' · ' + layout.requested.mm + ' mm wide at ' + layout.requested.dpi + ' dpi · text ' + layout.requested.points + ' pt' : '') + exportCapText(layout.requested) + ' · each panel ' + layout.cellWidth + ' × ' + layout.cellHeight + ' px' + (layout.architecture ? ' · architecture row ' + layout.architectureRow + ' px' : layout.options.architecture ? ' · no domains for an architecture row' : '') + shortenedCaptionsNote(layout);
   }
   async function downloadFigure(kind) {
     const panels = figurePanelsSelected();
@@ -153,7 +153,7 @@
       const stem = 'protein-figure-' + panels.length + '-panel' + (panels.length === 1 ? '' : 's');
       if (kind === 'png') downloadBlob(await pngWithDpi(canvas.toDataURL('image/png'), layout.requested.dpi), 'image/png', exportFileName(stem, layout.requested, 'png'));
       else downloadBlob(svgDocument(layout.width, layout.height, palette.paper, parts.join('\n')), 'image/svg+xml', stem + '.svg');
-      outcome = ['Figure ' + kind.toUpperCase() + ' downloaded · ' + panels.length + ' panel' + (panels.length === 1 ? '' : 's') + ' · ' + layout.width + ' × ' + layout.height + ' px' + (layout.requested.dpi ? ' · ' + layout.requested.mm + ' mm wide at ' + layout.requested.dpi + ' dpi' : '') + shortenedCaptionsNote(layout)];
+      outcome = ['Figure ' + kind.toUpperCase() + ' downloaded · ' + panels.length + ' panel' + (panels.length === 1 ? '' : 's') + ' · ' + layout.width + ' × ' + layout.height + ' px' + (layout.requested.dpi ? ' · ' + layout.requested.mm + ' mm wide at ' + layout.requested.dpi + ' dpi' : '') + exportCapText(layout.requested) + shortenedCaptionsNote(layout)];
     } catch (error) {
       outcome = ['Could not render the figure: ' + error.message, 'error'];
     } finally {
@@ -200,8 +200,9 @@
       if (!Array.isArray(matrix) || !limit) return sum;
       const side = Math.min(matrix.length, limit); return sum + side * side * 5;
     }, 0);
-    const libraryBytes = root.querySelector('#gpv-report-offline').checked ? 1500000 : 0;
-    const bytes = chosen.reduce((sum, entry) => sum + entry.text.length, 0) + paeBytes + libraryBytes;
+    const libraryBytes = root.querySelector('#gpv-report-offline').checked ? reportLibraryBytes() : 0;
+    /* Model text is embedded as JSON, which writes each line break as two characters. */
+    const bytes = chosen.reduce((sum, entry) => sum + entry.text.length + (entry.text.match(/\n/g) || []).length, 0) + paeBytes + libraryBytes + reportShellSize();
     label.textContent = chosen.length + ' model' + (chosen.length === 1 ? '' : 's') + ' · roughly ' + formatBytes(bytes)
       + (paeBytes ? ' (PAE ' + formatBytes(paeBytes) + ')' : '')
       + (bytes > 40 * 1024 * 1024 ? ' — large enough to be slow to open; narrow the selection or compact the PAE.' : '');
@@ -280,10 +281,38 @@
     return shapes;
   }
 
+  /* methodsSubject's rule: a method record or a PDB fetch is experimental; pLDDT or a predictor's
+     confidence files make a prediction. */
+  function reportPredicted(entry) {
+    const experimental = Boolean(entry.experimentalMethod || entry.collection === 'RCSB PDB');
+    return !experimental && Boolean(entry.scores.length || (entry.confidence && Object.keys(entry.confidence).length));
+  }
+
   function reportPanelNames() {
     const primary = activeEntry();
     if (!root.querySelector('#gpv-side-by-side').checked || !comparePanels.length) return primary ? [primary.name] : [];
     return [primary ? primary.name : null, ...panelNames()].filter(Boolean);
+  }
+
+  /* The online report loads the pinned build from the CDN with the viewer's own Subresource Integrity
+     hash, so a substituted file is refused there as it is here. */
+  function reportLibraryTag() {
+    const tag = document.querySelector('script[src*="3Dmol"]');
+    const integrity = tag ? tag.getAttribute('integrity') : null; const crossorigin = tag ? tag.getAttribute('crossorigin') : null;
+    const attribute = (name, value) => (value && /^[\w+/=. -]+$/.test(value) ? ' ' + name + "='" + value + "'" : '');
+    return "<script src='https://cdnjs.cloudflare.com/ajax/libs/3Dmol/2.4.2/3Dmol-min.js'" + attribute('integrity', integrity) + attribute('crossorigin', integrity ? crossorigin || 'anonymous' : null) + "><\/script>";
+  }
+  /* What Embed 3Dmol.js adds: the library as this page loaded it (Resource Timing), else the size of
+     the pinned 2.4.2 build. The estimate added 1.5 MB, about three times the 513 KB file. */
+  function reportLibraryBytes() {
+    const timing = typeof performance !== 'undefined' && performance.getEntriesByType ? performance.getEntriesByType('resource').find(item => /3Dmol[^/]*\.js/i.test(item.name) && item.decodedBodySize > 0) : null;
+    return timing ? timing.decodedBodySize : 513564;
+  }
+  /* The page around the data — styles, controls, the report's own script — measured once. */
+  let reportShellBytes = 0;
+  function reportShellSize() {
+    if (!reportShellBytes) reportShellBytes = reportTemplate({ domains: '', chainColors: '', residueThemes: JSON.stringify(residueThemeTables()), spectrumRamp: spectrumRampColor.toString(), residueData: '', heteroMode: '', title: '', structures: '', views: '', metadata: '', initial: '', library: '' }).length;
+    return reportShellBytes;
   }
 
   /* Offline reports inline the pinned 3Dmol build. The bytes are fetched from the
@@ -309,7 +338,7 @@
   async function downloadReport() {
     const chosen = reportEntries();
     if (!chosen.length) { announce('Load a model before building a report', 'error'); return; }
-    let library = "<script src='https://cdnjs.cloudflare.com/ajax/libs/3Dmol/2.4.2/3Dmol-min.js'><\/script>";
+    let library = reportLibraryTag();
     if (root.querySelector('#gpv-report-offline').checked) {
       const done = setBusy('Embedding 3Dmol.js…');
       try { library = await embeddedLibraryTag(); }
@@ -351,6 +380,9 @@
       representation: root.querySelector('#gpv-style').value,
       colorMode: root.querySelector('#gpv-color-mode').value,
       aligned: exported.some(entry => Array.isArray(entry.coords)),
+      /* The caution about predictions only when the report holds one, by the methods text's rule (28):
+         a crystal structure alone was introduced as a prediction. */
+      predicted: chosen.some(reportPredicted),
       screenText: annotationRecords.filter(record => record.type === 'screen').map(record => ({ text: record.text, color: record.color, size: record.size, corner: record.corner, dx: record.dx || 0, dy: record.dy || 0 })),
       seconds: Number(root.querySelector('#gpv-video-length').value) || 5,
       generated: new Date().toISOString().slice(0, 10),
@@ -465,7 +497,7 @@ let timer = 0, spinning = false, syncing = false, syncFrame = 0, focused = 0, re
 const title = el('project-title');
 if (metadata.title) { title.hidden = false; title.textContent = metadata.title; }
 el('project-meta').textContent = [metadata.source, metadata.method, metadata.notes].filter(Boolean).join(' · ');
-el('generated').textContent = 'Interactive report generated by Protein Structure Viewer ' + initial.version + ' on ' + initial.generated + '. Predicted structures are predictions, not experimental determinations.' + (initial.aligned ? ' Superposed models are shown in their aligned positions.' : '');
+el('generated').textContent = 'Interactive report generated by Protein Structure Viewer ' + initial.version + ' on ' + initial.generated + '.' + (initial.predicted ? ' Predicted structures are predictions, not experimental determinations.' : '') + (initial.aligned ? ' Superposed models are shown in their aligned positions.' : '');
 const guided = el('guided'), guidedWrap = el('guided-wrap');
 if (!savedViews.length) guidedWrap.hidden = true;
 savedViews.forEach((v, i) => { const o = document.createElement('option'); o.value = i; o.textContent = String.fromCharCode(65 + i) + ' · ' + v.name; guided.append(o); });
@@ -592,7 +624,7 @@ function show(pane, preserveView) {
   if (oldView) pane.viewer.setView(oldView); else pane.viewer.zoomTo();
   pane.viewer.render();
   lastViews.set(pane, pane.viewer.getView());
-  pane.plddt = s.hasConfidence ? mean(m.selectedAtoms({}).filter(a => (a.atom === 'CA' || (a.atom === "C1'" && !a.hetflag)) && Number.isFinite(Number(a.b))).map(a => Number(a.b))) : null;
+  pane.plddt = s.hasConfidence ? mean(m.selectedAtoms({}).filter(a => !a.hetflag && (a.atom === 'CA' || a.atom === "C1'") && Number.isFinite(Number(a.b))).map(a => Number(a.b))) : null;
   const c = s.confidence || {};
   pane.stats.textContent = (pane.plddt === null ? 'pLDDT —' : 'pLDDT ' + pane.plddt.toFixed(1)) + (Number.isFinite(Number(c.iptm)) ? ' · ipTM ' + metric(c.iptm, 2) : Number.isFinite(Number(c.ptm)) ? ' · pTM ' + metric(c.ptm, 2) : '');
   if (panes[focused] === pane) describe(pane);
