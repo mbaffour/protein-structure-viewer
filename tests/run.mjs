@@ -4484,7 +4484,6 @@ const cha = async () => {
   return chaPage;
 };
 const freshTap = async (fresh, x, y) => { await fresh.mouse.move(x, y); await fresh.mouse.down(); await fresh.waitForTimeout(60); await fresh.mouse.up(); };
-const freshStatus = async fresh => ((await fresh.locator('#gpv-state').textContent()) || '').trim();
 const freshFocusStage = fresh => fresh.evaluate(() => document.querySelector('#gpv-stage').focus({ preventScroll: true }));
 const freshSteps = fresh => fresh.evaluate(() => window.__viewerDebug.rememberedSteps());
 const freshMeasures = fresh => fresh.evaluate(() => JSON.parse(JSON.stringify(window.__viewerDebug.measurementRecords())));
