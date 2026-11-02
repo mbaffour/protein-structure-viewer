@@ -95,18 +95,28 @@
   });
   root.querySelector('#gpv-projection').addEventListener('change', applyAppearance);
   root.querySelector('#gpv-outline').addEventListener('change', applyAppearance);
+  /* While a journal preset sets the controls below, their change events are its own, not hand edits. */
+  let applyingJournal = false;
   root.querySelector('#gpv-journal').addEventListener('change', event => {
     const [mm, dpi, points] = String(event.target.value || '').split('|').map(Number);
     if (!mm) return;
+    applyingJournal = true;
     const set = (selector, value) => { const control = root.querySelector(selector); if ([...control.options].some(option => option.value === String(value))) control.value = String(value); control.dispatchEvent(new Event('change', { bubbles: true })); };
     set('#gpv-export-mode', 'print');
     const width = root.querySelector('#gpv-print-width');
     if ([...width.options].some(option => option.value === String(mm))) set('#gpv-print-width', mm);
     else { root.querySelector('#gpv-print-custom').value = String(mm); set('#gpv-print-width', 'custom'); root.querySelector('#gpv-print-custom').dispatchEvent(new Event('change', { bubbles: true })); }
     set('#gpv-print-dpi', dpi); set('#gpv-print-text', points); set('#gpv-figure-font', 'Arial, Helvetica, sans-serif');
+    applyingJournal = false;
     updateExportEstimate();
     announce(event.target.selectedOptions[0].textContent + ' · ' + mm + ' mm at ' + dpi + ' dpi, ' + points + ' pt Arial');
   });
+  /* A hand edit to anything a preset set means the figure no longer follows that journal's guide, so
+     the select stops naming it. */
+  ['#gpv-export-mode', '#gpv-print-width', '#gpv-print-custom', '#gpv-print-dpi', '#gpv-print-text', '#gpv-figure-font'].forEach(selector => root.querySelector(selector).addEventListener('change', () => {
+    const journal = root.querySelector('#gpv-journal');
+    if (!applyingJournal && journal.value) journal.value = '';
+  }));
   root.querySelector('#gpv-fog').addEventListener('change', applyAppearance);
   root.querySelector('#gpv-background').addEventListener('change', applyAppearance);
   root.querySelector('#gpv-background-color').addEventListener('input', applyAppearance);
@@ -255,18 +265,26 @@
   root.querySelector('#gpv-label-text').addEventListener('keydown', event => { if (event.key === 'Enter') addOrEditLabel(); });
   root.querySelector('#gpv-all-labels').addEventListener('change', () => rebuildOverlays());
   root.querySelector('#gpv-labels-separate').addEventListener('click', () => {
-    remember('separate labels');
-    const result = separateLabels();
+    /* A dry run first: a press that would leave every offset as it is (a second press at the same
+       camera) moves nothing, says so and takes no undo step that would undo nothing. */
+    const preview = separateLabels({ write: false });
     /* Without a projection there is no way to know which boxes overlap; saying so beats moving
        labels on a guess. */
-    if (!result) { announce('Cannot measure the label positions yet — render the view first', 'error'); return; }
+    if (!preview) { announce('Cannot measure the label positions yet — render the view first', 'error'); return; }
+    const count = (number, one) => number + ' ' + one + (number === 1 ? '' : 's');
+    const still = remaining => (remaining ? ' · ' + count(remaining, 'pair') + ' still overlap' : '');
+    if (!preview.changed) {
+      if (preview.blocked) announce('The labels still overlapping are ones you placed by hand — drag them, or Reset a row first');
+      else if (preview.remaining) announce('Nothing more to move' + still(preview.remaining) + ' — zoom in, or drag them apart');
+      else announce('Labels already clear of each other');
+      return;
+    }
+    remember('separate labels');
+    const result = separateLabels();
     renderLabelList(); renderMeasurementList(); rebuildOverlays();
     /* "3 labels moved apart" as it has always read; measurement text it moved is counted beside them. */
-    const count = (number, one) => number + ' ' + one + (number === 1 ? '' : 's');
-    const movedLabels = result.movedLabels || 0; const movedMeasurements = result.movedMeasurements || 0;
-    if (result.moved) announce((movedLabels && movedMeasurements ? count(movedLabels, 'label') + ' and ' + count(movedMeasurements, 'measurement') : movedMeasurements ? count(movedMeasurements, 'measurement') : count(movedLabels, 'label')) + ' moved apart');
-    else if (result.blocked) announce('The labels still overlapping are ones you placed by hand — drag them, or Reset a row first');
-    else announce('Labels already clear of each other');
+    const movedLabels = result.changedLabels || 0; const movedMeasurements = result.changedMeasurements || 0;
+    announce((movedLabels && movedMeasurements ? count(movedLabels, 'label') + ' and ' + count(movedMeasurements, 'measurement') : movedMeasurements ? count(movedMeasurements, 'measurement') : count(movedLabels, 'label')) + ' moved apart' + still(result.remaining));
   });
   root.querySelector('#gpv-clear-labels').addEventListener('click', () => {
     if (labelRecords.length) remember('clearing labels');
@@ -327,7 +345,7 @@
   root.querySelector('#gpv-color-mode').addEventListener('change', () => {
     const mode = root.querySelector('#gpv-color-mode').value;
     if (mode === 'deviation' && !alignmentResults.length) announce('Deviation colouring stays grey until you align: Compare → Align visible');
-    if (mode === 'fromresidue' && !distanceColourTarget()) announce('Click a residue first — distance colouring stays grey until a residue is selected');
+    if (mode === 'fromresidue' && !distanceColourTarget()) announce(distanceColourHint + ' — distance colouring stays grey until a residue is selected');
   });
   root.querySelector('#gpv-interface-run').addEventListener('click', analyseInterfaces);
   root.querySelector('#gpv-interface-csv').addEventListener('click', downloadInterfaceCsv);

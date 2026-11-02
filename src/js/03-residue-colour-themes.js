@@ -34,6 +34,26 @@
     return '#d1d5db';
   }
 
+  /* Sequence spectrum: each chain runs from blue at its N-terminus to red at its C-terminus, by the
+     residue's place in the chain — the cells of the sequence strip, so the view and the strip are
+     painted from one table. 3Dmol has no colour scheme called "spectrum"; asked for one it drew the
+     model grey and warned once per atom. */
+  function spectrumRampColor(t) {
+    const hue = 240 * (1 - Math.max(0, Math.min(1, t))); const saturation = 0.85; const lightness = 0.5;
+    const chroma = (1 - Math.abs(2 * lightness - 1)) * saturation; const x = chroma * (1 - Math.abs((hue / 60) % 2 - 1)); const m = lightness - chroma / 2;
+    const [r, g, b] = hue < 60 ? [chroma, x, 0] : hue < 120 ? [x, chroma, 0] : hue < 180 ? [0, chroma, x] : [0, x, chroma];
+    return '#' + [r, g, b].map(channel => Math.round((channel + m) * 255).toString(16).padStart(2, '0')).join('');
+  }
+
+  function spectrumColor(entry, atom) {
+    if (!entry.spectrumCache || entry.spectrumCache.atoms !== entry.atoms) {
+      const map = new Map();
+      residueRows(entry).forEach(row => row.residues.forEach((residue, index) => map.set(row.chain + '|' + residue.resi + '|' + insertionCodeOf(residue), spectrumRampColor(row.residues.length > 1 ? index / (row.residues.length - 1) : 0.5))));
+      entry.spectrumCache = { atoms: entry.atoms, map };
+    }
+    return entry.spectrumCache.map.get((atom.chain || '') + '|' + atom.resi + '|' + insertionCodeOf(atom)) || entry.color;
+  }
+
   const residueLegends = {
     charge: () => ({ title: 'Charge', items: Object.values(chargeColors).map(([color, label]) => [color, label]) }),
     hydrophobicity: () => ({ title: 'Kyte–Doolittle', items: [[hydrophobicityColor(-4.5), '−4.5 hydrophilic'], [hydrophobicityColor(-2), '−2'], [hydrophobicityColor(0), '0'], [hydrophobicityColor(2), '+2'], [hydrophobicityColor(4.5), '+4.5 hydrophobic']] }),
@@ -91,7 +111,7 @@
     if (mode === 'annotated') return { colorfunc: atom => annotatedColor(entry, atom) };
     if (mode === 'data') return { colorfunc: atom => dataColor(entry, atom) };
     if (residueModes.includes(mode)) return { colorfunc: atom => residueColor(mode, atom) };
-    if (mode === 'spectrum') return { colorscheme: 'spectrum' };
+    if (mode === 'spectrum') return { colorfunc: atom => spectrumColor(entry, atom) };
     if (mode === 'element') return { colorscheme: 'default' };
     return { color: entry.color };
   }

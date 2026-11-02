@@ -548,6 +548,11 @@ await step('a journal preset sets width, resolution, text size and font', async 
   if (values.mode !== 'print' || values.width !== 'custom' || values.custom !== '183' || values.dpi !== '300' || values.pt !== '7' || !/Arial/.test(values.font)) throw new Error(JSON.stringify(values));
   await page.selectOption('#gpv-journal', '85|300|7'); await page.waitForTimeout(300);
   if ((await page.inputValue('#gpv-print-width')) !== '85') throw new Error('85 mm should pick the built-in single column');
+  if (!(await page.inputValue('#gpv-journal'))) throw new Error('the journal select let go of the preset it just applied');
+  /* A hand edit after the preset means the figure no longer follows that journal's guide. */
+  await page.selectOption('#gpv-print-dpi', '600'); await page.waitForTimeout(150);
+  if ((await page.inputValue('#gpv-journal')) !== '') throw new Error('after a hand edit the journal select still names ' + (await page.inputValue('#gpv-journal')));
+  await page.selectOption('#gpv-print-dpi', '300');
   await page.selectOption('#gpv-export-mode', 'pixels'); await page.waitForTimeout(200);
 });
 await step('a journal width that is not one of the listed widths survives a reload', async () => {
@@ -3405,7 +3410,11 @@ await step('colour, Dashed and Show value from the row and the editor reach the 
     await one('the row\'s Show value', () => page.locator(rowSelector + ' label:has-text("Show value") input').uncheck(), now => (now.showValue === false ? null : 'showValue ' + now.showValue));
     const plain = await page.evaluate(id => window.__viewerDebug.measurementLabelText(window.__viewerDebug.measurementRecords().find(item => item.id === id)), record.id);
     if (plain !== 'H-bond') throw new Error('with Show value off the label reads "' + plain + '"');
+    /* The row's own controls keep the keyboard focus after each edit, and a focused row marks its
+       measurement as a hovered one does; the mark goes once neither the pointer nor the focus is on it. */
     await page.mouse.move(5, 5); await page.waitForTimeout(150);
+    if ((await page.evaluate(() => window.__viewerDebug.measurementHover())) !== record.id) throw new Error('the row holding the focus does not mark its measurement');
+    await focusStage(); await page.waitForTimeout(150);
     if ((await page.evaluate(() => window.__viewerDebug.measurementHover())) !== null) throw new Error('leaving the row left the measurement marked');
     /* The editor shows what the row set, and changes it back. */
     await openMeasurementEditor(record.id);
@@ -4330,6 +4339,560 @@ await step('every residue can be labelled', async () => {
   await page.uncheck('#gpv-all-labels'); await page.waitForTimeout(600);
 });
 
+/* ---- Stress loop, round 1, batch 2: text on the canvas, the card, measurements, the keyboard ----
+   The steps on α-chymotrypsin (5CHA) share a page of their own, opened by the first of them and
+   closed after the last: its 3 719 atoms are past the size at which a click is searched coarse
+   first, a Go to zooms far enough in perspective for the depth of a label to matter, and its
+   catalytic triad gives side-chain atoms with a published distance (His57 NE2–Ser195 OG 3.02 Å).
+   Each step puts the page back to nothing open, nothing active and nothing selected. */
+let chaPage = null;
+const cha = async () => {
+  if (chaPage && !chaPage.isClosed()) return chaPage;
+  chaPage = await freshViewer([join(here, 'fixtures', 'experimental', '5cha.cif')]);
+  await chaPage.waitForTimeout(800);
+  return chaPage;
+};
+const freshTap = async (fresh, x, y) => { await fresh.mouse.move(x, y); await fresh.mouse.down(); await fresh.waitForTimeout(60); await fresh.mouse.up(); };
+const freshStatus = async fresh => ((await fresh.locator('#gpv-state').textContent()) || '').trim();
+const freshFocusStage = fresh => fresh.evaluate(() => document.querySelector('#gpv-stage').focus({ preventScroll: true }));
+const freshSteps = fresh => fresh.evaluate(() => window.__viewerDebug.rememberedSteps());
+const freshMeasures = fresh => fresh.evaluate(() => JSON.parse(JSON.stringify(window.__viewerDebug.measurementRecords())));
+/* Esc until nothing is armed, open, active or selected, and no mode is on. */
+const chaQuiet = async fresh => {
+  for (let index = 0; index < 5; index += 1) {
+    const busy = await fresh.evaluate(() => { const d = window.__viewerDebug; return Boolean(d.measureFrom() || d.labelEditor() || d.activeText() || d.selectedResidue() || /Stop/.test(document.querySelector('#gpv-measure').textContent) || /Stop/.test(document.querySelector('#gpv-annotate').textContent)); });
+    if (!busy) return;
+    await freshFocusStage(fresh); await fresh.keyboard.press('Escape'); await fresh.waitForTimeout(150);
+  }
+};
+/* Everything a step made on the 5CHA page, cleared with the panel's own buttons. */
+const chaClear = async fresh => {
+  await chaQuiet(fresh);
+  await fresh.click('[data-gpv-tab="annotate"]'); await fresh.waitForTimeout(100);
+  for (const selector of ['#gpv-clear-labels', '#gpv-clear-measurements', '#gpv-clear-annotations', '#gpv-clear-selections']) {
+    if (!(await fresh.isDisabled(selector))) { await fresh.click(selector); await fresh.waitForTimeout(150); }
+  }
+};
+/* Viewport coordinates of a named atom of 5CHA where the page projects it now. */
+const chaAtom = async (fresh, chain, resi, name) => {
+  await fresh.locator('#gpv-stage').scrollIntoViewIfNeeded(); await fresh.waitForTimeout(100);
+  return fresh.evaluate(([chain, resi, name]) => {
+    const d = window.__viewerDebug; const entry = d.entries()[0];
+    const atom = entry.atoms.find(item => (item.chain || '') === chain && item.resi === resi && item.atom === name);
+    if (!atom) return null;
+    const s = d.viewer.modelToScreen({ x: atom.x, y: atom.y, z: atom.z });
+    return { x: s.x - scrollX, y: s.y - scrollY, pageX: s.x, pageY: s.y };
+  }, [chain, resi, name]);
+};
+/* The catalytic triad framed on the stage: His57 and Asp102 of chain B, Ser195 of chain C (each
+   number is in one chain only). Go to one residue zooms so close that the other two leave the view. */
+const chaFrameTriad = async fresh => {
+  await fresh.evaluate(() => { const v = window.__viewerDebug.viewer; v.zoomTo({ resi: [57, 102, 195] }); v.render(); });
+  await fresh.waitForTimeout(300);
+};
+/* Where on the stage a piece of text with these words is hit, found the way a pointer finds it:
+   labelHitAt over a grid of the stage. */
+const textOnStage = async (fresh, words) => {
+  await fresh.locator('#gpv-stage').scrollIntoViewIfNeeded(); await fresh.waitForTimeout(100);
+  return fresh.evaluate(words => {
+    const d = window.__viewerDebug; const rect = document.querySelector('#gpv-stage').getBoundingClientRect();
+    for (let y = rect.top + 6; y < rect.bottom - 6; y += 5) {
+      for (let x = rect.left + 6; x < rect.right - 6; x += 5) {
+        const hit = d.labelHitAt(x + scrollX, y + scrollY);
+        if (hit && String(hit.record.text || '') === words) return { x, y, kind: hit.kind };
+      }
+    }
+    return null;
+  }, words);
+};
+
+await step('in perspective after Go to, five arrow presses move a label 40 px and a 100 px drag moves it 100 px; the dragged label becomes the active one, and Delete removes it', async () => {
+  const fresh = await cha();
+  await chaClear(fresh);
+  await fresh.click('[data-gpv-tab="appearance"]');
+  const startProjection = await fresh.inputValue('#gpv-projection');
+  try {
+    if (startProjection !== 'perspective') { await fresh.selectOption('#gpv-projection', 'perspective'); await fresh.waitForTimeout(400); }
+    await freshGoTo(fresh, 'B:102');
+    await freshFocusStage(fresh); await fresh.keyboard.press('l'); await fresh.waitForTimeout(300);
+    await fresh.keyboard.type('Depth'); await fresh.keyboard.press('Enter'); await fresh.waitForTimeout(300);
+    await fresh.locator('#gpv-stage').scrollIntoViewIfNeeded(); await fresh.waitForTimeout(150);
+    const box = () => fresh.evaluate(() => { const d = window.__viewerDebug; const label = d.labelRecords().find(item => item.text === 'Depth'); const b = label && d.labelScreenBox(label); return b ? { x: b.x - scrollX, y: b.y - scrollY } : null; });
+    /* The point of the step: after Go to, the label is not at the depth of the model centre, where
+       pixels per ångström used to be measured. Measured here from the projection itself: one ångström
+       along the camera's right axis, at the label and at the centre. */
+    const scales = await fresh.evaluate(() => {
+      const d = window.__viewerDebug; const v = d.viewer; const label = d.labelRecords().find(item => item.text === 'Depth');
+      const q = v.getView(); const x = -q[4], y = -q[5], z = -q[6], w = q[7];
+      const ix = w, iy = z, iz = -y, iw = -x;
+      const right = { x: ix * w - iw * x - iy * z + iz * y, y: iy * w - iw * y - iz * x + ix * z, z: iz * w - iw * z - ix * y + iy * x };
+      const at = point => { const a = v.modelToScreen(point); const b = v.modelToScreen({ x: point.x + right.x, y: point.y + right.y, z: point.z + right.z }); return Math.hypot(b.x - a.x, b.y - a.y); };
+      return { centre: at(d.sceneCentre()), own: at(d.labelPosition(label)) };
+    });
+    if (!(scales.own > 0 && Math.abs(scales.own / scales.centre - 1) > 0.15)) throw new Error('the label sits at the depth of the model centre (' + JSON.stringify(scales) + '), so this view cannot tell the two apart');
+    const active = await fresh.evaluate(() => window.__viewerDebug.activeText());
+    if (!active || active.kind !== 'label') throw new Error('the label just added is not active: ' + JSON.stringify(active));
+    const start = await box();
+    await freshFocusStage(fresh);
+    for (let index = 0; index < 5; index += 1) { await fresh.keyboard.press('ArrowRight'); await fresh.waitForTimeout(80); }
+    const pressed = await box();
+    const keyed = pressed.x - start.x;
+    if (!(Math.abs(keyed - 40) <= 1)) throw new Error('five arrow presses moved the label ' + keyed.toFixed(1) + ' px, not 40 (' + scales.own.toFixed(1) + ' px/Å at the label, ' + scales.centre.toFixed(1) + ' at the centre)');
+    await freshFocusStage(fresh); await fresh.keyboard.press('Escape'); await fresh.waitForTimeout(150);
+    if (await fresh.evaluate(() => window.__viewerDebug.activeText())) throw new Error('Esc did not let go of the label');
+    await fresh.mouse.move(pressed.x, pressed.y); await fresh.mouse.down();
+    for (let index = 1; index <= 10; index += 1) { await fresh.mouse.move(pressed.x + index * 10, pressed.y); await fresh.waitForTimeout(30); }
+    await fresh.mouse.up(); await fresh.waitForTimeout(300);
+    const dragged = await box();
+    const pulled = dragged.x - pressed.x;
+    if (!(Math.abs(pulled - 100) <= 2)) throw new Error('a 100 px drag moved the label ' + pulled.toFixed(1) + ' px');
+    const after = await fresh.evaluate(() => window.__viewerDebug.activeText());
+    if (!after || after.kind !== 'label') throw new Error('the dragged label is not the active one: ' + JSON.stringify(after));
+    await freshFocusStage(fresh); await fresh.keyboard.press('Delete'); await fresh.waitForTimeout(250);
+    if (await fresh.evaluate(() => window.__viewerDebug.labelRecords().some(item => item.text === 'Depth'))) throw new Error('Delete right after the drag left the label');
+    console.log('       ' + scales.own.toFixed(1) + ' px/Å at the label, ' + scales.centre.toFixed(1) + ' at the model centre · arrows ' + keyed.toFixed(1) + ' px · drag ' + pulled.toFixed(1) + ' px · Delete took the dragged label');
+  } finally {
+    await chaClear(fresh);
+    await fresh.click('[data-gpv-tab="appearance"]');
+    if ((await fresh.inputValue('#gpv-projection')) !== startProjection) { await fresh.selectOption('#gpv-projection', startProjection); await fresh.waitForTimeout(300); }
+  }
+});
+await step('on 5CHA in stick style a click reaches a side-chain atom: His57 NE2 to Ser195 OG measures 3.02 Å, and the editor puts a measurement between other atoms back on them after Cα–Cα', async () => {
+  const fresh = await cha();
+  await chaClear(fresh);
+  await fresh.click('[data-gpv-tab="appearance"]');
+  const startStyle = await fresh.inputValue('#gpv-style');
+  try {
+    await fresh.selectOption('#gpv-style', 'stick'); await fresh.waitForTimeout(600);
+    await chaFrameTriad(fresh);
+    const picks = [];
+    for (const [chain, resi, name] of [['B', 57, 'NE2'], ['C', 195, 'OG'], ['B', 102, 'OD1']]) {
+      const at = await chaAtom(fresh, chain, resi, name);
+      const hit = await fresh.evaluate(([x, y]) => { const h = window.__viewerDebug.pickAtomAt(x, y); return h ? h.atom.chain + h.atom.resi + ' ' + h.atom.atom : null; }, [at.pageX, at.pageY]);
+      if (hit !== chain + resi + ' ' + name) throw new Error('a click on ' + chain + resi + ' ' + name + ' picks ' + hit);
+      picks.push(hit);
+    }
+    await fresh.click('[data-gpv-tab="annotate"]'); await fresh.click('#gpv-measure'); await fresh.waitForTimeout(200);
+    const ne2 = await chaAtom(fresh, 'B', 57, 'NE2'); await freshTap(fresh, ne2.x, ne2.y); await fresh.waitForTimeout(300);
+    const og = await chaAtom(fresh, 'C', 195, 'OG'); await freshTap(fresh, og.x, og.y); await fresh.waitForTimeout(400);
+    /* A second pair that is neither the residues' closest atoms (ND1–OD1) nor their Cα atoms. */
+    await freshTap(fresh, ne2.x, ne2.y); await fresh.waitForTimeout(300);
+    const od2 = await chaAtom(fresh, 'B', 102, 'OD2'); await freshTap(fresh, od2.x, od2.y); await fresh.waitForTimeout(400);
+    await fresh.click('#gpv-measure'); await fresh.waitForTimeout(200);
+    const records = await freshMeasures(fresh);
+    if (records.length !== 2) throw new Error('four clicks in measurement mode made ' + records.length + ' measurements');
+    const other = records[1].points.map(point => point.chain + point.resi + ' ' + point.atom).join(' ↔ ');
+    if (other !== 'B57 NE2 ↔ B102 OD2') throw new Error('the second two clicks measured ' + other);
+    const atoms = records[0].points.map(point => point.chain + point.resi + ' ' + point.atom).join(' ↔ ');
+    if (atoms !== 'B57 NE2 ↔ C195 OG') throw new Error('the two clicks measured ' + atoms);
+    const value = await fresh.evaluate(() => window.__viewerDebug.measurementLabelText(window.__viewerDebug.measurementRecords()[0]));
+    if (value !== '3.02 Å') throw new Error('His57 NE2–Ser195 OG reads ' + value + ', published 3.02 Å');
+    /* The atoms as measured stay one choice of the editor's Atoms after Cα–Cα is chosen. */
+    await fresh.locator('#gpv-stage').scrollIntoViewIfNeeded(); await fresh.waitForTimeout(100);
+    const spot = await fresh.evaluate(() => { const d = window.__viewerDebug; const b = d.measurementScreenBox(d.measurementRecords()[1]); return b ? { x: b.x - scrollX, y: b.y - scrollY } : null; });
+    await freshTap(fresh, spot.x, spot.y); await fresh.waitForTimeout(350);
+    const options = () => fresh.evaluate(() => [...document.querySelectorAll('#gpv-measure-editor-pair option')].map(option => option.value));
+    if (!(await options()).includes('measured')) throw new Error('the editor does not offer the atoms as measured: ' + (await options()).join(', '));
+    await fresh.selectOption('#gpv-measure-editor-pair', 'ca'); await fresh.waitForTimeout(250);
+    const ca = (await freshMeasures(fresh))[1].points.map(point => point.atom).join('–');
+    if (ca !== 'CA–CA') throw new Error('Cα–Cα left the atoms at ' + ca);
+    if (!(await options()).includes('measured')) throw new Error('after Cα–Cα the atoms as measured are no longer offered: ' + (await options()).join(', '));
+    await fresh.selectOption('#gpv-measure-editor-pair', 'measured'); await fresh.waitForTimeout(250);
+    const back = (await freshMeasures(fresh))[1].points.map(point => point.chain + point.resi + ' ' + point.atom).join(' ↔ ');
+    if (back !== 'B57 NE2 ↔ B102 OD2') throw new Error('as measured put the measurement on ' + back);
+    console.log('       picked ' + picks.join(', ') + ' · measured ' + atoms + ' ' + value + ' · ' + other + ': Cα–Cα and back to the atoms as measured');
+  } finally {
+    await chaClear(fresh);
+    await fresh.click('[data-gpv-tab="appearance"]'); await fresh.selectOption('#gpv-style', startStyle); await fresh.waitForTimeout(400);
+  }
+});
+await step('Go to with the card open closes it, and opening the card drops an armed Measure to… and says so', async () => {
+  const fresh = await cha();
+  await chaClear(fresh);
+  try {
+    await freshGoTo(fresh, 'B:57');
+    await freshFocusStage(fresh); await fresh.keyboard.press('l'); await fresh.waitForTimeout(300);
+    if (!(await fresh.locator('#gpv-label-editor').isVisible())) throw new Error('L did not open the card at His57');
+    await freshGoTo(fresh, 'C:195');
+    const selected = await fresh.evaluate(() => window.__viewerDebug.selectedResidue());
+    if (!selected || selected.chain !== 'C' || selected.resi !== 195) throw new Error('Go to C:195 selected ' + JSON.stringify(selected));
+    if (await fresh.locator('#gpv-label-editor').isVisible()) throw new Error('the card stayed open at HIS57 after Go to C:195: ' + (await fresh.locator('#gpv-label-editor .gpv-label-editor-residue').textContent()));
+    await freshGoTo(fresh, 'B:57');
+    await freshFocusStage(fresh); await fresh.keyboard.press('m'); await fresh.waitForTimeout(200);
+    if (!(await fresh.evaluate(() => window.__viewerDebug.measureFrom()))) throw new Error('M did not arm Measure to…');
+    await freshFocusStage(fresh); await fresh.keyboard.press('l'); await fresh.waitForTimeout(300);
+    const state = await fresh.evaluate(() => ({ armed: window.__viewerDebug.measureFrom(), crosshair: document.querySelector('#gpv-stage').classList.contains('is-measuring-to'), card: Boolean(window.__viewerDebug.labelEditor()) }));
+    if (!state.card) throw new Error('L did not open the card');
+    if (state.armed || state.crosshair) throw new Error('Measure to… stayed armed behind the card: ' + JSON.stringify(state));
+    const said = await freshStatus(fresh);
+    if (!/^Measure to… cancelled/.test(said)) throw new Error('opening the card said: ' + said);
+    console.log('       Go to closed the card · "' + said + '"');
+  } finally { await chaClear(fresh); }
+});
+await step('Measure all leaves out a contact already measured and says how many, a second press adds nothing, and Highlight pressed twice adds no second set', async () => {
+  const fresh = await cha();
+  await chaClear(fresh);
+  try {
+    await freshGoTo(fresh, 'B:57');
+    await freshFocusStage(fresh); await fresh.keyboard.press('l'); await fresh.waitForTimeout(300);
+    await fresh.click('#gpv-label-editor-contacts'); await fresh.waitForTimeout(300);
+    const rows = await fresh.locator('#gpv-residue-contacts-rows .gpv-residue-contact').count();
+    if (rows < 3) throw new Error('His57 lists ' + rows + ' contacts');
+    await fresh.locator('#gpv-residue-contacts-rows .gpv-residue-contact[data-resi="102"]').click(); await fresh.waitForTimeout(250);
+    await fresh.click('#gpv-residue-contacts-measure-all'); await fresh.waitForTimeout(300);
+    const records = await freshMeasures(fresh);
+    const keys = records.map(record => record.points.map(point => point.chain + point.resi + point.atom).sort().join('|'));
+    if (new Set(keys).size !== keys.length) throw new Error('a pair is measured twice: ' + keys.filter((key, index) => keys.indexOf(key) !== index).join(', '));
+    if (records.length !== rows) throw new Error(records.length + ' measurements for ' + rows + ' contacts');
+    const said = await freshStatus(fresh);
+    if (!/1 already measured/.test(said)) throw new Error('Measure all said: ' + said);
+    const steps = await freshSteps(fresh);
+    await fresh.click('#gpv-residue-contacts-measure-all'); await fresh.waitForTimeout(300);
+    if ((await freshMeasures(fresh)).length !== rows) throw new Error('a second Measure all added ' + ((await freshMeasures(fresh)).length - rows));
+    if ((await freshSteps(fresh)) !== steps) throw new Error('a second Measure all that added nothing took an undo step');
+    if (!/already measured/.test(await freshStatus(fresh))) throw new Error('a second Measure all said: ' + (await freshStatus(fresh)));
+    await fresh.click('#gpv-residue-contacts-highlight'); await fresh.waitForTimeout(300);
+    const highlighted = await fresh.evaluate(() => window.__viewerDebug.selectionRecords().length);
+    const before = await freshSteps(fresh);
+    await fresh.click('#gpv-residue-contacts-highlight'); await fresh.waitForTimeout(300);
+    const again = await fresh.evaluate(() => window.__viewerDebug.selectionRecords().length);
+    if (again !== highlighted) throw new Error('Highlight pressed twice made ' + again + ' selection rows, not ' + highlighted);
+    if ((await freshSteps(fresh)) !== before) throw new Error('a Highlight that added nothing took an undo step');
+    console.log('       ' + rows + ' contacts · "' + said + '" · Highlight twice: ' + again + ' rows');
+  } finally { await chaClear(fresh); }
+});
+await step('the contacts list shows the peptide bond tag whole and writes Cα (Gly193 · C), Within is held to 2–12 Å in its field, and Go to reads B57', async () => {
+  const fresh = await cha();
+  await chaClear(fresh);
+  const startCutoff = await fresh.inputValue('#gpv-near-cutoff');
+  try {
+    await fresh.click('[data-gpv-tab="annotate"]'); await fresh.fill('#gpv-near-cutoff', '8'); await fresh.press('#gpv-near-cutoff', 'Tab'); await fresh.waitForTimeout(150);
+    await freshGoTo(fresh, 'B57');
+    const selected = await fresh.evaluate(() => window.__viewerDebug.selectedResidue());
+    if (!selected || selected.chain !== 'B' || selected.resi !== 57) throw new Error('Go to B57 selected ' + JSON.stringify(selected) + ' · ' + (await freshStatus(fresh)));
+    await freshFocusStage(fresh); await fresh.keyboard.press('l'); await fresh.waitForTimeout(300);
+    await fresh.click('#gpv-label-editor-contacts'); await fresh.waitForTimeout(300);
+    const cells = await fresh.evaluate(() => [...document.querySelectorAll('#gpv-residue-contacts-rows .gpv-residue-contact')].map(button => {
+      const name = button.querySelector('.gpv-contact-name'); const bond = button.querySelector('.gpv-contact-bond');
+      const box = name.getBoundingClientRect(); const tag = bond && bond.getBoundingClientRect();
+      return { atoms: button.dataset.atoms, shown: button.querySelector('.gpv-contact-atoms').textContent, bond: bond ? bond.textContent : '', clipped: Boolean(bond) && (tag.right > box.right + 0.5 || name.scrollWidth > name.clientWidth + 0.5) };
+    }));
+    const tagged = cells.filter(cell => cell.bond === 'peptide bond');
+    if (tagged.length < 2) throw new Error('His57 has ' + tagged.length + ' rows tagged "peptide bond"');
+    if (tagged.some(cell => cell.clipped)) throw new Error('the peptide bond tag is cut off in its cell');
+    await chaQuiet(fresh);
+    /* A glycine has no side chain, so its closest approaches run through its Cα. */
+    await freshGoTo(fresh, 'C:193');
+    await freshFocusStage(fresh); await fresh.keyboard.press('l'); await fresh.waitForTimeout(300);
+    await fresh.click('#gpv-label-editor-contacts'); await fresh.waitForTimeout(300);
+    const glycine = await fresh.evaluate(() => [...document.querySelectorAll('#gpv-residue-contacts-rows .gpv-residue-contact')].map(button => ({ atoms: button.dataset.atoms, shown: button.querySelector('.gpv-contact-atoms').textContent })));
+    const alpha = glycine.filter(cell => /(^|–)CA(–|$)/.test(cell.atoms));
+    if (!alpha.length) throw new Error('no contact of Gly193 is closest at a Cα: ' + glycine.map(cell => cell.atoms).join(', '));
+    if (alpha.some(cell => /CA/.test(cell.shown) || !/Cα/.test(cell.shown))) throw new Error('a closest pair through a Cα reads ' + alpha.map(cell => cell.shown).join(', '));
+    await chaQuiet(fresh);
+    for (const [typed, held] of [['15', '12'], ['1', '2']]) {
+      await fresh.fill('#gpv-near-cutoff', typed); await fresh.press('#gpv-near-cutoff', 'Tab'); await fresh.waitForTimeout(150);
+      const field = await fresh.inputValue('#gpv-near-cutoff');
+      if (field !== held) throw new Error('Within ' + typed + ' Å is left reading ' + field + ' while the count is made at ' + held);
+    }
+    console.log('       ' + tagged.length + ' peptide bond tags whole · ' + alpha.length + ' Cα pairs written Cα · Within 15 → 12, 1 → 2 · B57 is HIS57 · B');
+  } finally {
+    await chaClear(fresh);
+    await fresh.click('[data-gpv-tab="annotate"]'); await fresh.fill('#gpv-near-cutoff', startCutoff); await fresh.press('#gpv-near-cutoff', 'Tab');
+  }
+});
+await step('Separate labels pressed again with nothing to move says so and takes no undo step, and a press that leaves overlaps says how many', async () => {
+  const fresh = await cha();
+  await chaClear(fresh);
+  try {
+    for (let resi = 50; resi < 66; resi += 1) {
+      await freshGoTo(fresh, 'B:' + resi);
+      await freshFocusStage(fresh); await fresh.keyboard.press('l'); await fresh.waitForTimeout(150);
+      await fresh.keyboard.press('Enter'); await fresh.waitForTimeout(120);
+    }
+    await chaQuiet(fresh);
+    await freshFocusStage(fresh); await fresh.keyboard.press('f'); await fresh.waitForTimeout(500);
+    const labels = await fresh.evaluate(() => window.__viewerDebug.labelRecords().length);
+    if (labels !== 16) throw new Error(labels + ' labels, not 16');
+    const offsets = () => fresh.evaluate(() => JSON.stringify(window.__viewerDebug.labelRecords().map(label => label.offset || null)));
+    let steps = await freshSteps(fresh);
+    await fresh.click('#gpv-labels-separate'); await fresh.waitForTimeout(400);
+    const first = await freshStatus(fresh);
+    if (!/moved apart/.test(first)) throw new Error('the first press said: ' + first);
+    if ((await freshSteps(fresh)) - steps !== 1) throw new Error('the first press took ' + ((await freshSteps(fresh)) - steps) + ' undo steps');
+    const placed = await offsets();
+    const left = await fresh.evaluate(() => { const r = window.__viewerDebug.separateLabels({ write: false }); return r ? r.remaining : null; });
+    if (left && !new RegExp(left + ' pairs? still overlap').test(first)) throw new Error(left + ' pairs still overlap, and the press said: ' + first);
+    steps = await freshSteps(fresh);
+    await fresh.click('#gpv-labels-separate'); await fresh.waitForTimeout(400);
+    const second = await freshStatus(fresh);
+    if ((await offsets()) !== placed) throw new Error('the second press moved labels');
+    if ((await freshSteps(fresh)) !== steps) throw new Error('a second press that moved nothing took an undo step');
+    if (/moved apart/.test(second)) throw new Error('a second press that moved nothing said: ' + second);
+    console.log('       16 labels · first press "' + first + '" · second press "' + second + '"');
+  } finally { await chaClear(fresh); }
+});
+await step('while measuring, a click on a label over an atom picks the atom instead of being swallowed', async () => {
+  const fresh = await cha();
+  await chaClear(fresh);
+  try {
+    await freshGoTo(fresh, 'B:57');
+    await freshFocusStage(fresh); await fresh.keyboard.press('l'); await fresh.waitForTimeout(250);
+    await fresh.keyboard.press('Enter'); await fresh.waitForTimeout(200);
+    await chaQuiet(fresh);
+    const at = await chaAtom(fresh, 'B', 57, 'CA');
+    const covered = await fresh.evaluate(([x, y]) => { const hit = window.__viewerDebug.labelHitAt(x, y); return hit ? hit.kind : null; }, [at.pageX, at.pageY]);
+    if (covered !== 'label') throw new Error('His57\'s label does not cover its Cα (' + covered + '), so this step proves nothing');
+    await fresh.click('[data-gpv-tab="annotate"]'); await fresh.click('#gpv-measure'); await fresh.waitForTimeout(200);
+    await freshTap(fresh, at.x, at.y); await fresh.waitForTimeout(300);
+    const state = ((await fresh.locator('#gpv-measure-state').textContent()) || '').trim();
+    if (!/^Selected 1 of 2 atoms/.test(state)) throw new Error('a click on the label over His57\'s Cα while measuring left: ' + state);
+    console.log('       a click on the label counted for the measurement: ' + state);
+  } finally { await chaClear(fresh); }
+});
+await step('the canvas editor empties an arrow\'s text as its row does, and keeps a callout\'s text and says why', async () => {
+  const fresh = await cha();
+  await chaClear(fresh);
+  const startType = await fresh.inputValue('#gpv-annotation-type');
+  const startText = await fresh.inputValue('#gpv-annotation-text');
+  try {
+    await chaFrameTriad(fresh);
+    const draw = async (type, text, points) => {
+      await fresh.click('[data-gpv-tab="annotate"]');
+      await fresh.selectOption('#gpv-annotation-type', type); await fresh.fill('#gpv-annotation-text', text);
+      await fresh.click('#gpv-annotate'); await fresh.waitForTimeout(150);
+      for (const [chain, resi] of points) { const at = await chaAtom(fresh, chain, resi, 'CA'); await freshTap(fresh, at.x, at.y); await fresh.waitForTimeout(250); }
+      await fresh.click('#gpv-annotate'); await fresh.waitForTimeout(150);
+    };
+    const rowTexts = () => fresh.locator('#gpv-annotation-list .gpv-entry input[type="text"]').evaluateAll(inputs => inputs.map(input => input.value));
+    const empty = async words => {
+      const spot = await textOnStage(fresh, words);
+      if (!spot) throw new Error('"' + words + '" is not on the stage');
+      await freshTap(fresh, spot.x, spot.y); await fresh.waitForTimeout(300);
+      if (!(await fresh.locator('#gpv-label-editor').isVisible())) throw new Error('a click on "' + words + '" opened no editor');
+      await fresh.fill('#gpv-label-editor-text', ''); await fresh.press('#gpv-label-editor-text', 'Enter'); await fresh.waitForTimeout(250);
+    };
+    await draw('arrow', 'arrow words', [['B', 57], ['C', 195]]);
+    await empty('arrow words');
+    const arrow = await rowTexts();
+    if (arrow[0] !== '') throw new Error('an empty commit left the arrow reading ' + JSON.stringify(arrow));
+    const saidArrow = await freshStatus(fresh);
+    if (saidArrow !== 'Arrow text removed') throw new Error('the empty commit said: ' + saidArrow);
+    await draw('callout', 'callout words', [['B', 102]]);
+    await empty('callout words');
+    const callout = await rowTexts();
+    if (callout[1] !== 'callout words') throw new Error('an empty commit changed the callout to ' + JSON.stringify(callout));
+    const saidCallout = await freshStatus(fresh);
+    if (!/keeps its text/.test(saidCallout)) throw new Error('the kept callout text was not explained: ' + saidCallout);
+    console.log('       arrow: "' + saidArrow + '" · callout: "' + saidCallout + '"');
+  } finally {
+    await chaClear(fresh);
+    await fresh.selectOption('#gpv-annotation-type', startType); await fresh.fill('#gpv-annotation-text', startText);
+  }
+});
+await step('measurement text says what it is in the status and the undo history, its row keeps the focus and names its Remove, and Default takes its colour back in one undo step', async () => {
+  const fresh = await cha();
+  await chaClear(fresh);
+  try {
+    await freshGoTo(fresh, 'B:57');
+    await freshFocusStage(fresh); await fresh.keyboard.press('l'); await fresh.waitForTimeout(250);
+    await fresh.click('#gpv-label-editor-contacts'); await fresh.waitForTimeout(250);
+    await fresh.locator('#gpv-residue-contacts-rows .gpv-residue-contact[data-resi="102"]').click(); await fresh.waitForTimeout(250);
+    await chaQuiet(fresh);
+    const record = (await freshMeasures(fresh))[0];
+    const row = fresh.locator('#gpv-measurement-list .gpv-entry').first();
+    const remove = (await row.locator('button:has-text("Remove")').getAttribute('aria-label')) || '';
+    if (!/^Remove the measurement HIS57 · B CA ↔ ASP102 · B CA/.test(remove)) throw new Error('the row\'s Remove is named "' + remove + '"');
+    /* Default: a colour, then back to none, one step. */
+    await row.locator('input[type="color"]').evaluate(input => { input.value = '#00aa00'; input.dispatchEvent(new Event('input', { bubbles: true })); input.dispatchEvent(new Event('change', { bubbles: true })); });
+    await fresh.waitForTimeout(150);
+    if ((await freshMeasures(fresh))[0].color !== '#00aa00') throw new Error('the row\'s colour did not reach the record');
+    let steps = await freshSteps(fresh);
+    await fresh.locator('#gpv-measurement-list .gpv-entry').first().locator('button:has-text("Default")').click(); await fresh.waitForTimeout(200);
+    if ((await freshMeasures(fresh))[0].color) throw new Error('Default left the colour ' + (await freshMeasures(fresh))[0].color);
+    if ((await freshSteps(fresh)) - steps !== 1) throw new Error('Default took ' + ((await freshSteps(fresh)) - steps) + ' undo steps');
+    if (!(await fresh.locator('#gpv-measurement-list .gpv-entry').first().locator('button:has-text("Default")').isDisabled())) throw new Error('Default stays enabled with the default colour');
+    /* Enter in the row's text and Space on Dashed keep the focus on that control. */
+    const text = fresh.locator('#gpv-measurement-list .gpv-entry').first().locator('input[type="text"]');
+    await text.fill('H-bond'); await text.press('Enter'); await fresh.waitForTimeout(200);
+    const focusText = await fresh.evaluate(() => { const a = document.activeElement; return a && a.matches('#gpv-measurement-list input[type="text"]') ? a.value : a ? a.tagName + '#' + a.id : null; });
+    if (focusText !== 'H-bond') throw new Error('after Enter in the row the focus is on ' + focusText);
+    const dashed = fresh.locator('#gpv-measurement-list .gpv-entry').first().locator('input[data-control="dashed"]');
+    await dashed.focus(); await fresh.keyboard.press('Space'); await fresh.waitForTimeout(200);
+    const focusBox = await fresh.evaluate(() => { const a = document.activeElement; return a ? a.dataset.control || a.tagName : null; });
+    if (focusBox !== 'dashed') throw new Error('after Space on Dashed the focus is on ' + focusBox);
+    /* The text's own words for what happened to it. */
+    await fresh.locator('#gpv-stage').scrollIntoViewIfNeeded(); await fresh.waitForTimeout(100);
+    const label = await fresh.evaluate(id => { const d = window.__viewerDebug; const b = d.measurementScreenBox(d.measurementRecords().find(item => item.id === id)); return { x: b.x - scrollX, y: b.y - scrollY }; }, record.id);
+    await fresh.mouse.move(label.x, label.y); await fresh.mouse.down(); await fresh.mouse.move(label.x + 20, label.y + 10, { steps: 4 }); await fresh.mouse.up(); await fresh.waitForTimeout(250);
+    const dragged = await freshStatus(fresh);
+    if (!/^Measurement text moved/.test(dragged)) throw new Error('dragging the measurement said: ' + dragged);
+    await freshFocusStage(fresh); await fresh.keyboard.press('ArrowRight'); await fresh.waitForTimeout(150);
+    const nudged = await freshStatus(fresh);
+    if (!/^Measurement text moved/.test(nudged)) throw new Error('an arrow press said: ' + nudged);
+    await fresh.keyboard.press('Control+z'); await fresh.waitForTimeout(250);
+    const undone = await freshStatus(fresh);
+    if (!/^Undid measurement text move/.test(undone)) throw new Error('undoing the arrow press said: ' + undone);
+    await fresh.locator('#gpv-measurement-list .gpv-entry').first().locator('button:has-text("Select")').click(); await fresh.waitForTimeout(150);
+    await freshFocusStage(fresh); await fresh.keyboard.press('Escape'); await fresh.waitForTimeout(150);
+    const letGoSaid = await freshStatus(fresh);
+    if (letGoSaid !== 'No measurement selected') throw new Error('Esc on the active measurement said: ' + letGoSaid);
+    await fresh.locator('#gpv-measurement-list .gpv-entry').first().locator('button:has-text("Show")').click(); await fresh.waitForTimeout(200);
+    if (!/^Centred on /.test(await freshStatus(fresh))) throw new Error('Show said: ' + (await freshStatus(fresh)));
+    steps = await freshSteps(fresh);
+    await fresh.locator('#gpv-measurement-list .gpv-entry').first().locator('button:has-text("Remove")').click(); await fresh.waitForTimeout(200);
+    if ((await freshStatus(fresh)) !== 'Measurement removed') throw new Error('the row\'s Remove said: ' + (await freshStatus(fresh)));
+    console.log('       "' + dragged.split(' · ')[0] + '" · "' + undone.split(' · ')[0] + '" · "' + letGoSaid + '" · focus kept on the text and Dashed · Default one step');
+  } finally { await chaClear(fresh); }
+});
+await step('with nothing loaded, Start measuring says to load a model and Clear measurements is greyed out', async () => {
+  const fresh = await freshViewer();
+  try {
+    await fresh.click('[data-gpv-tab="annotate"]'); await fresh.waitForTimeout(150);
+    if (!(await fresh.isDisabled('#gpv-clear-measurements'))) throw new Error('Clear measurements is enabled on an empty page');
+    await fresh.click('#gpv-measure'); await fresh.waitForTimeout(200);
+    const button = ((await fresh.locator('#gpv-measure').textContent()) || '').trim();
+    if (button !== 'Start measuring') throw new Error('with nothing loaded the button turned to ' + button);
+    const said = await freshStatus(fresh);
+    if (!/^Load a model first/.test(said)) throw new Error('Start measuring with nothing loaded said: ' + said);
+  } finally { await fresh.close(); }
+});
+await step('the 5CHA page closes', async () => { if (chaPage && !chaPage.isClosed()) await chaPage.close(); chaPage = null; });
+
+/* ---- Appearance and the keyboard on the main page ---- */
+await step('Sequence spectrum colours each chain blue at its N-terminus to red at its C-terminus, the strip\'s letters the same, with no console warning', async () => {
+  const startMode = await page.inputValue('#gpv-color-mode');
+  const startTab = await page.evaluate(() => (document.querySelector('[data-gpv-tab][aria-selected="true"]') || {}).dataset.gpvTab || 'annotate');
+  const warnings = [];
+  const listen = message => { if (message.type() === 'warning' && /colorscheme/i.test(message.text())) warnings.push(message.text()); };
+  page.on('console', listen);
+  const letters = page.locator('#gpv-sequence-text');
+  const wasOpen = await letters.evaluate(details => details.open);
+  try {
+    await tab('appearance'); await page.selectOption('#gpv-color-mode', 'spectrum'); await page.waitForTimeout(600);
+    if (!wasOpen) { await page.click('#gpv-sequence-text summary'); await page.waitForTimeout(500); }
+    const seen = await page.evaluate(() => {
+      const d = window.__viewerDebug; const entry = d.activeEntry();
+      const options = d.colorOptions(entry);
+      if (typeof options.colorfunc !== 'function') return { error: 'no colour function: ' + JSON.stringify(options) };
+      const chain = [...new Set(entry.atoms.filter(atom => atom.atom === 'CA').map(atom => atom.chain || ''))].sort()[0];
+      const alpha = entry.atoms.filter(atom => atom.atom === 'CA' && (atom.chain || '') === chain).sort((a, b) => a.resi - b.resi);
+      const first = options.colorfunc(alpha[0]); const last = options.colorfunc(alpha[alpha.length - 1]);
+      const hex = value => { const m = String(value).match(/\d+/g); return m ? '#' + m.slice(0, 3).map(n => Number(n).toString(16).padStart(2, '0')).join('') : value; };
+      const spans = [...document.querySelectorAll('#gpv-sequence-letters .gpv-seq-block')[0].querySelectorAll('.gpv-aa')];
+      return { chain, first, last, letterFirst: hex(spans[0].style.background), letterLast: hex(spans[spans.length - 1].style.background), title: document.querySelector('#gpv-sequence-title').textContent };
+    });
+    if (seen.error) throw new Error(seen.error);
+    const rgb = value => [1, 3, 5].map(offset => parseInt(value.slice(offset, offset + 2), 16));
+    const [r1, , b1] = rgb(seen.first); const [r2, , b2] = rgb(seen.last);
+    if (!(b1 > r1 + 100 && r2 > b2 + 100)) throw new Error('chain ' + seen.chain + ' runs ' + seen.first + ' → ' + seen.last + ', not blue to red');
+    if (seen.letterFirst !== seen.first || seen.letterLast !== seen.last) throw new Error('the strip letters read ' + seen.letterFirst + ' → ' + seen.letterLast + ', the model ' + seen.first + ' → ' + seen.last);
+    if (!/sequence spectrum/.test(seen.title)) throw new Error('the strip title reads ' + seen.title);
+    if (warnings.length) throw new Error(warnings.length + ' console warnings: ' + warnings[0]);
+    console.log('       chain ' + seen.chain + ' ' + seen.first + ' → ' + seen.last + ' on the model and the letters · no warnings');
+  } finally {
+    page.off('console', listen);
+    if (!wasOpen && (await letters.evaluate(details => details.open))) { await page.click('#gpv-sequence-text summary'); await page.waitForTimeout(200); }
+    await tab('appearance'); await page.selectOption('#gpv-color-mode', startMode); await page.waitForTimeout(400);
+    await tab(startTab);
+  }
+});
+/* The fixture's twin chains sit one behind the other at the starting orientation (see the canvas steps
+   above): a step that taps a residue turns the view 90° about X first and back after. */
+const turnView = async back => { await focusStage(); await page.keyboard.press(back ? 'Shift+x' : 'x'); await page.waitForTimeout(400); };
+await step('under distance colouring, selecting a residue replaces "Click a residue first" with the residue the colours are measured from', async () => {
+  await clearSelection(); await turnView(false);
+  const startMode = await page.inputValue('#gpv-color-mode');
+  const startTab = await page.evaluate(() => (document.querySelector('[data-gpv-tab][aria-selected="true"]') || {}).dataset.gpvTab || 'annotate');
+  try {
+    await tab('appearance'); await page.selectOption('#gpv-color-mode', 'fromresidue'); await page.waitForTimeout(400);
+    if (!/^Click a residue first/.test(await statusNow())) throw new Error('choosing the mode said: ' + (await statusNow()));
+    const target = await canvasResidue();
+    if (!target) throw new Error('no residue on screen to tap');
+    await tap(target.x, target.y); await page.waitForTimeout(500);
+    const said = await statusNow();
+    if (said !== 'Coloured by distance from ' + target.text) throw new Error('after a click on ' + target.text + ' the status reads: ' + said);
+    console.log('       "' + said + '"');
+  } finally {
+    await clearSelection(); await turnView(true);
+    await tab('appearance'); await page.selectOption('#gpv-color-mode', startMode); await page.waitForTimeout(400);
+    await tab(startTab);
+  }
+});
+await step('in the light theme, accent-coloured text reads at 4.5:1: the selected tab, the current model\'s row and the card\'s count of nearby residues', async () => {
+  const startTheme = await page.evaluate(() => document.documentElement.dataset.theme || '');
+  await turnView(false);
+  try {
+    await page.evaluate(() => { document.documentElement.dataset.theme = 'light'; });
+    await page.waitForTimeout(200);
+    const target = await canvasResidue();
+    if (!target) throw new Error('no residue on screen to tap');
+    await tap(target.x, target.y); await page.waitForTimeout(400);
+    const ratios = await page.evaluate(() => {
+      const parse = value => { const m = String(value).match(/[\d.]+/g).map(Number); return { r: m[0], g: m[1], b: m[2], a: m.length > 3 ? m[3] : 1 }; };
+      const lum = ({ r, g, b }) => { const f = x => { x /= 255; return x <= 0.03928 ? x / 12.92 : Math.pow((x + 0.055) / 1.055, 2.4); }; return 0.2126 * f(r) + 0.7152 * f(g) + 0.0722 * f(b); };
+      const back = element => { for (let e = element; e; e = e.parentElement) { const c = parse(getComputedStyle(e).backgroundColor); if (c.a > 0.5) return c; } return { r: 255, g: 255, b: 255, a: 1 }; };
+      const ratio = element => { if (!element) return null; const a = lum(parse(getComputedStyle(element).color)); const b = lum(back(element)); return (Math.max(a, b) + 0.05) / (Math.min(a, b) + 0.05); };
+      return { tab: ratio(document.querySelector('[data-gpv-tab][aria-selected="true"]')), model: ratio(document.querySelector('#gpv-list .gpv-entry.is-active')), near: ratio(document.querySelector('#gpv-residue-card-near')) };
+    });
+    const low = Object.entries(ratios).filter(([, value]) => value !== null && value < 4.5);
+    if (low.length) throw new Error('below 4.5:1 in the light theme: ' + low.map(([name, value]) => name + ' ' + value.toFixed(2)).join(', '));
+    if (ratios.tab === null || ratios.near === null) throw new Error('nothing to measure: ' + JSON.stringify(ratios));
+    console.log('       ' + Object.entries(ratios).map(([name, value]) => name + ' ' + (value === null ? '—' : value.toFixed(2) + ':1')).join(' · '));
+  } finally {
+    await letGo(); await clearSelection(); await turnView(true);
+    await page.evaluate(theme => { if (theme) document.documentElement.dataset.theme = theme; else delete document.documentElement.dataset.theme; }, startTheme);
+  }
+});
+await step('one spelling of colour, the built figure\'s buttons named apart from the view\'s, and Backspace in the help', async () => {
+  const words = await page.evaluate(() => ({
+    scheme: document.querySelector('#gpv-color-mode').closest('label').firstChild.textContent.trim(),
+    highlight: document.querySelector('#gpv-selection-color').closest('label').firstChild.textContent.trim(),
+    builtPng: document.querySelector('#gpv-contact-sheet').textContent.trim(),
+    builtSvg: document.querySelector('#gpv-builder-svg').textContent.trim(),
+    viewPng: document.querySelector('#gpv-image').textContent.trim(),
+    viewSvg: document.querySelector('#gpv-svg').textContent.trim(),
+    help: document.querySelector('#gpv-help') ? document.querySelector('#gpv-help').textContent : document.body.textContent
+  }));
+  if (words.scheme !== 'Colour scheme' || words.highlight !== 'Highlight colour') throw new Error('labels read "' + words.scheme + '" and "' + words.highlight + '"');
+  if (words.builtPng === words.viewPng || words.builtSvg === words.viewSvg) throw new Error('two buttons share a name: ' + JSON.stringify(words));
+  if (!/Backspace/.test(words.help)) throw new Error('the help does not mention Backspace');
+});
+await step('the sequence letters are reached from the keyboard: one Tab stop per chain, the arrows walk the letters without changing the model, Enter picks the residue', async () => {
+  await clearSelection();
+  const startModel = await page.inputValue('#gpv-current');
+  const letters = page.locator('#gpv-sequence-text');
+  const wasOpen = await letters.evaluate(details => details.open);
+  try {
+    if (!wasOpen) { await page.click('#gpv-sequence-text summary'); await page.waitForTimeout(500); }
+    const stops = await page.evaluate(() => [...document.querySelectorAll('#gpv-sequence-letters .gpv-seq-block')].map(block => block.querySelectorAll('.gpv-aa[tabindex="0"]').length));
+    if (!stops.length || stops.some(count => count !== 1)) throw new Error('Tab stops per chain: ' + stops.join(', '));
+    const first = page.locator('#gpv-sequence-letters .gpv-seq-block').first().locator('.gpv-aa').first();
+    await first.focus();
+    await page.keyboard.press('ArrowRight'); await page.keyboard.press('ArrowRight'); await page.waitForTimeout(200);
+    const focused = await page.evaluate(() => { const a = document.activeElement; const all = [...a.closest('.gpv-seq-block').querySelectorAll('.gpv-aa')]; return { index: all.indexOf(a), resi: Number(a.dataset.resi) }; });
+    if (focused.index !== 2) throw new Error('two ArrowRight presses put the focus on letter ' + focused.index);
+    if ((await page.inputValue('#gpv-current')) !== startModel) throw new Error('the arrows on a letter also changed the model');
+    await page.keyboard.press('Enter'); await page.waitForTimeout(400);
+    const picked = await selectedNow();
+    if (!picked || picked.resi !== focused.resi) throw new Error('Enter on residue ' + focused.resi + ' selected ' + JSON.stringify(picked));
+    console.log('       ' + stops.length + ' chains, one Tab stop each · → → then Enter picked residue ' + picked.resi);
+  } finally {
+    await letGo(); await clearSelection();
+    if (!wasOpen && (await letters.evaluate(details => details.open))) { await page.click('#gpv-sequence-text summary'); await page.waitForTimeout(200); }
+  }
+});
+await step('a per-residue table says how many rows it could not read', async () => {
+  const fresh = await freshViewer([models[0]]);
+  try {
+    await fresh.click('[data-gpv-tab="annotate"]'); await fresh.waitForTimeout(150);
+    await fresh.fill('#gpv-data-text', 'resi,value\n1,0.5\n2,0.7\n10A,0.9\n3,n/a\n4,1.1');
+    await fresh.click('#gpv-data-apply'); await fresh.waitForTimeout(400);
+    const said = await freshStatus(fresh);
+    if (!/^[^·]*: 3 values .* · 2 rows skipped/.test(said)) throw new Error('loading 5 rows with 2 unreadable said: ' + said);
+  } finally { await fresh.close(); }
+});
+
 group('confidence');
 await tab('confidence');
 await step('the metrics table has a row per model', async () => {
@@ -4694,6 +5257,13 @@ await step('a figure template saves the whole presentation and puts it back over
   /* A template is presentation only: nothing about the data may be in the stored record. */
   if (/camera|savedViews|models|View 1/.test(JSON.stringify(stored))) throw new Error('the stored template carries data: ' + JSON.stringify(stored));
 
+  /* Delete asks first: a template is not in the undo history. No keeps it, Yes deletes it. */
+  let asked = '';
+  page.once('dialog', dialog => { asked = dialog.message(); dialog.dismiss(); });
+  await page.click('#gpv-template-delete'); await page.waitForTimeout(300);
+  if (!/Delete the figure template "Main figures"/.test(asked)) throw new Error('Delete did not ask first: ' + JSON.stringify(asked));
+  if ((await page.locator('#gpv-template-list option').allTextContents()).join('|') === 'No templates yet') throw new Error('answering No deleted the template anyway');
+  page.once('dialog', dialog => dialog.accept());
   await page.click('#gpv-template-delete'); await page.waitForTimeout(300);
   const options = await page.locator('#gpv-template-list option').allTextContents();
   if (options.length !== 1 || options[0] !== 'No templates yet') throw new Error('template list after delete: ' + options.join('|'));

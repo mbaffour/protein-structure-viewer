@@ -102,7 +102,7 @@ Anything the viewer cannot interpret is skipped and reported in the red notice b
 | <kbd>M</kbd> | *Measure to…*: the distance from the selected residue to the next residue you click — Cα–Cα, or the closest heavy atoms when the residue card's *Measure* choice says *closest atoms* |
 | <kbd>Enter</kbd> / <kbd>Esc</kbd> | In the label editor: add or update the label / close it without changes |
 | <kbd>←</kbd> <kbd>→</kbd> <kbd>↑</kbd> <kbd>↓</kbd> | Move the active label 8 px (<kbd>Shift</kbd>: 1 px) |
-| <kbd>Delete</kbd> | Remove the active label |
+| <kbd>Delete</kbd> / <kbd>Backspace</kbd> | Remove the active label (or the active measurement or annotation text) |
 | <kbd>Shift</kbd> + drag | Draw a box over the model: the residues inside are highlighted, and the popover labels them all (<kbd>Enter</kbd>) or keeps the highlight (<kbd>Esc</kbd>) |
 | <kbd>C</kbd> | Start or pause automatic cycling |
 | <kbd>F</kbd> | Fit every panel to what it displays |
@@ -234,10 +234,12 @@ Notes on the colour schemes:
   Annotate highlight colour, the same in either interface theme so an export does not depend on it),
   and other models, ligands and water are grey.
   Click a residue first — with nothing selected everything is grey and the status says *Click a residue
-  first*; selecting another residue recolours at once. The sequence strip follows, the legend names the
+  first*, until a click answers it with *Coloured by distance from GLU57 · B*; selecting another residue recolours at once. The sequence strip follows, the legend names the
   residue (`Distance from GLU57 · B`), and the methods text gains a sentence defining the bands. Scenes,
   sessions and share links keep the scheme, but not the selection (they never have), so a restored
   scene or a saved view is grey until you click the residue again.
+- **Sequence spectrum** runs each chain from blue at its N-terminus to red at its C-terminus, by the
+  residue's place in the chain; the sequence strip and its letters are painted from the same colours.
 - **Residue charge**, **Hydrophobicity (Kyte–Doolittle)**, **Residue type**, **Amino acid** and
   **Secondary structure** colour by what the residue is rather than by model or confidence. Charge:
   Lys and Arg blue, His light blue (partial), Asp, Glu and nucleotides red, everything else grey.
@@ -270,15 +272,15 @@ sessions.
 the nearest atom within a few pixels, so a click on a cartoon ribbon lands on the closest Cα.
 Hovering shows the nearest residue in the status bar without clicking.
 
-**Go to.** Type a residue in the *Go to* field — `B:45`, `45B`, or plain `45` for any chain — and
-press **Go** or <kbd>Enter</kbd>. An insertion code follows the number: `H:100A`, or `100A` when the
+**Go to.** Type a residue in the *Go to* field — `B:45`, `B45` (as the card and the labels write
+`HIS57 · B`), `45B`, or plain `45` for any chain — and press **Go** or <kbd>Enter</kbd>. An insertion code follows the number: `H:100A`, or `100A` when the
 model has a residue 100A and no chain A (otherwise `100A` still means chain A); a plain `100` is the
 residue without one. A chain is matched as typed, ignoring case only when no chain has exactly that
 name. Residues told apart only by an insertion code — 100, 100A, 100B in Kabat-numbered antibodies —
 are separate cells in the sequence strip and keep their own labels, card and marker; a scene, session
 or share link records the code (`"icode": "A"`) only where there is one. The residue is selected as if clicked (the label field fills in, and
 a drawing or measurement in progress takes it as a point), the camera zooms to it, and the strip
-marks it.
+marks it. A residue card left open at another residue closes, as it does for a click on the view.
 
 **Sequence strip.** Under the viewer, each chain of the displayed model is drawn as a row of residues
 coloured by pLDDT (or by chain, when that colouring is on), with residue numbers along the bottom.
@@ -296,7 +298,10 @@ remembered. Very large sets show the first twenty-four rows.
 sequence, fifty residues a line in blocks of ten with the first residue number of each line in the
 gutter. Every letter is a chip in the current colour scheme, so charge, hydrophobicity or pLDDT can be
 read residue by residue; hidden low-confidence residues are faded. Click a letter to select that
-residue (the label field fills in), and **Copy** puts the chain's sequence on the clipboard. The strip
+residue (the label field fills in), and **Copy** puts the chain's sequence on the clipboard. The
+letters are the strip's keyboard way in: each chain is one <kbd>Tab</kbd> stop, the arrow keys walk the
+letters (↑ ↓ a line of fifty, <kbd>Home</kbd> and <kbd>End</kbd> the ends) without stepping through the
+models, and <kbd>Enter</kbd> or <kbd>Space</kbd> picks the residue as a click does. The strip
 cells also print their letters when the window is wide enough for them. *Download FASTA* in the Models
 tab writes the same sequences to a file.
 
@@ -325,7 +330,8 @@ loop) is the one 3Dmol assigned to the Cα, and is left out for a model whose fi
 neighbour count is the proximity tool's own count for that residue (see *Nearby residues* below) —
 residues with any heavy atom within its *Within (Å)* cutoff, 4.5 Å unless you change it — so the card
 and **Highlight nearby residues** always agree; changing the cutoff recounts an open card and its
-contacts list. Nothing on the card is saved. The card never runs past the bottom of the view: when it
+contacts list. The cutoff runs from 2 to 12 Å: a value outside that is set to the nearest end, in the
+field as well as in the count. Nothing on the card is saved. The card never runs past the bottom of the view: when it
 is taller than the view (a phone, five or six panels), it scrolls. It closes when its residue is no
 longer drawn — its model or chain hidden, or cut by *Low confidence*.
 
@@ -350,7 +356,8 @@ when the residues come closer than their Cα atoms do, the closest heavy-atom ap
 apart are both one click each. Clicking the same residue again measures nothing and keeps waiting;
 <kbd>Esc</kbd> cancels. The button is unavailable while measurement mode or drawing is on, whose
 clicks are already spoken for, and turning either on (or *Drag to select*) drops a waiting
-*Measure to…*.
+*Measure to…*. So does opening a card (<kbd>L</kbd>, or a click on a label): the status says *Measure
+to… cancelled*, and the crosshair goes.
 
 **Distances from this residue.** The card's **Distances CSV** button downloads the residue against
 every other residue of its model — `chain, resi, resn, ca_distance, min_heavy_distance`, the Cα–Cα
@@ -366,14 +373,17 @@ nearest first by closest heavy-atom distance, with the two atoms (this residue's
 Cα–Cα distance: `ARG59 · B   2.87 Å  NH1–OD1   Cα 9.42 Å`. Every row names its chain, the residue's own
 included. About nine rows show, then the list scrolls. Hover a row (or Tab to it) and a temporary
 label names that residue on the view — never a record, never exported. Click a row to measure it as an
-ordinary measurement (the list stays open); **Measure all** measures every row in one undo step;
+ordinary measurement (the list stays open); **Measure all** measures every row in one undo step,
+leaving out a contact already measured between the same two atoms (`10 measurements … · 10 new · 1
+already measured`) — pressed again it adds nothing and says so;
 **Highlight** makes exactly the selection *Highlight nearby residues* would make for this residue (one
-record per chain, in the highlight colour, one undo step); **Copy** puts the rows on the clipboard as
+record per chain, in the highlight colour, one undo step; a chain already highlighted with the same
+residues in the same colour is not added again); **Copy** puts the rows on the clipboard as
 tab-separated text (where the browser refuses the clipboard, here and for *Copy measurements* and *Copy
 residue list*, the text appears selected in a read-only box under the view, ready for
 <kbd>Ctrl</kbd>/<kbd>⌘</kbd>+<kbd>C</kbd>, and **Done** closes it) (`residue, chain, resi, resn, closest_distance, closest_atoms, bond, ca_distance`,
 Å to three decimals). Residues covalently joined to this one are listed too, in their place, but
-tagged *peptide bond* (closest atoms C–N within 1.9 Å) or *disulfide* (SG–SG of two cysteines within
+tagged *peptide bond* (closest atoms C–N within 1.9 Å; the tag drops under the name when the cell is narrow) or *disulfide* (SG–SG of two cysteines within
 2.3 Å) — decided by geometry, so insertion codes and chain breaks do not mislead it — and the `bond`
 column says which. The list is worked out when you open it and forgotten when the card closes; nothing
 about it is saved.
@@ -386,10 +396,11 @@ measurement. The status then names the atoms: `HIS57 · B — SER195 · C: NE2�
 remembered with your other preferences. A click on the *Contact and distance map* always measures
 Cα–Cα, because the map is a Cα map.
 
-The label you have just added, edited or clicked is the *active* label, outlined in the accent colour
+The label you have just added, edited, clicked or dragged is the *active* label, outlined in the accent colour
 on screen (never in an export). The arrow keys move it 8 px at a time (<kbd>Shift</kbd>: 1 px),
-<kbd>Delete</kbd> removes it, and <kbd>Esc</kbd> lets go of it — after which ← and → step through the
-models again. Each row of the label list also has ← → ↑ ↓ buttons that move the label 12 px per press
+<kbd>Delete</kbd> (or <kbd>Backspace</kbd>) removes it, and <kbd>Esc</kbd> lets go of it — after which ← and → step through the
+models again. The text moves by the pixels asked at any zoom and in either projection: in perspective
+the step is measured at the label's own depth, so after *Go to* a 100 px drag is still 100 px. Each row of the label list also has ← → ↑ ↓ buttons that move the label 12 px per press
 and **Select**, which makes it the active label. On a touchscreen, tap a residue to label it and tap
 a label to edit it; use the row arrows to move it, since a finger drag turns the model.
 
@@ -433,7 +444,9 @@ a chain column is optional; header names such as `resi`, `residue`, `position`, 
 dataset a name, a colour scale (viridis for sequential values, blue–white–red centred on zero for
 signed ones such as ΔΔG, white–red for densities), and a scope (this model, every model from the
 same source, every model). **Colour by data** paints the values; the legend shows five steps of the
-scale with their values; residues without a value are grey; the sequence strip follows. Datasets are
+scale with their values; residues without a value are grey; the sequence strip follows. A row whose
+residue number or value is not a number (an insertion-coded `100A`, `n/a`) is left out, and the
+announcement counts them: `… · 2 rows skipped`. Datasets are
 stored in scene JSON and share links. A CSV dropped together with the structures is read as
 per-residue data when it is not an AlphaFold ranking file.
 
@@ -449,7 +462,8 @@ list** puts `A:HIS87, A:LEU91, …` on the clipboard for a methods section.
 in the chosen colour, and the hits are listed by chain and position. Unknown residues are `X`.
 
 **Measurements.** Choose distance (two atoms) or angle (three atoms), press **Start measuring**, and
-click the atoms in the viewport — or use *Measure to…*, `M`, a contact on the residue card or a click on
+click the atoms in the viewport — side-chain atoms too, in a model of any size: on a large model the
+click is searched among the Cα atoms first and then among every atom of the residues near the pointer — or use *Measure to…*, `M`, a contact on the residue card or a click on
 the contact and distance map. Values update as coordinates change — so aligning models updates the
 distances between them. <kbd>Esc</kbd> leaves measurement mode.
 
@@ -459,15 +473,19 @@ head line names it — `Distance · HIS57 · B NE2 ↔ SER195 · C OG · 3.02 Å
 that are written before the value, so the label reads `H-bond · 3.02 Å` (empty the field and it reads the
 value alone again). **Name the atoms** puts `HIS57 · B NE2 ↔ SER195 · C OG` into the field for you;
 <kbd>Enter</kbd> or **Update** keeps it. **Show value** hides the number when the words say enough, the
-colour picker colours the line and the text together, **Dashed** makes the line solid or dashed again, and
+colour picker colours the line and the text together (**Default** beside it puts back the crimson line
+and plain ink text), **Dashed** makes the line solid or dashed again, and
 for a distance between two residues the **Atoms** choice joins their Cα atoms or their closest pair of
-heavy atoms — the same record, its text and colour kept, the value and head line following. **Remove**
+heavy atoms — the same record, its text and colour kept, the value and head line following. A
+measurement first made between other atoms keeps *as measured* in that choice, so the atoms you clicked
+can be chosen again (for this session; a scene saves the atoms it is on). **Remove**
 deletes it. Drag the text to move it (a thin leader line in the measurement's colour leads back to the
 line once it has moved), or click **Select** in its row and use the arrow keys — 8 px a press, 1 px with
 <kbd>Shift</kbd> — and <kbd>Delete</kbd> to remove it; <kbd>Esc</kbd> lets go. Every change is one undo
 step.
 
-Each measurement has a row in *Measurements*: its text field, the atoms and value it joins, a colour,
+Each measurement has a row in *Measurements*: its text field, the atoms and value it joins, a colour
+and its **Default**,
 **Dashed**, **Show value**, **Show** (centres the view on it without changing the zoom), **Reset** (puts
 the text back where it started), **Remove**, and the arrow buttons and **Select** a label row has.
 Hovering a row draws that measurement's line thicker on the view (never in an export).
@@ -481,7 +499,11 @@ one atom, and a **text callout** places your text on a leader line pointing away
 Choose colour, size, dashed style, and optional label text before you click. A residue clicked on the
 sequence strip or in the sequence letters counts as an atom click while drawing or measuring, so an
 arrow between residue 16 and residue 112 needs no hunting in three dimensions. **Screen text** adds a
-corner title (for panel letters or captions) that stays put while the model rotates. Annotations are
+corner title (for panel letters or captions) that stays put while the model rotates. While drawing
+or measuring (or with *Measure to…* armed), a click on a label or other text over an atom goes to the
+atom, as it would with no text there. On the canvas, emptying an arrow's, a line's or a marker's text
+and pressing <kbd>Enter</kbd> removes the text, as its row does; a callout and a corner title keep
+theirs (remove them from their row). Annotations are
 anchored to atoms, so they follow rotation and alignment, and they are drawn into publication and
 comparison PNGs, comparison panels, and the shared report. Remove any one from the list, or clear
 them all. <kbd>Esc</kbd> stops drawing.
@@ -785,7 +807,9 @@ each label's box is measured at the current framing and the ones that cover each
 the screen, the reference model's label keeping its place. *Make site figure* does the same again for the
 close-up, because the framing decides which labels collide. **Separate labels**, beside *Clear labels*,
 runs the pass over every label on screen whenever you want it — after turning the model, say — and reports
-`3 labels moved apart` or `Labels already clear of each other`. Measurement text takes part as well: a
+`3 labels moved apart` or `Labels already clear of each other` — with `· 4 pairs still overlap` when it
+could not clear them all. A press that would leave every label where it is (pressed again at the same
+camera) says *Nothing more to move* and takes no undo step. Measurement text takes part as well: a
 measurement's value sitting on a residue label is moved off it like a label (`2 labels and 1 measurement
 moved apart`), and the button is available whenever there are labels or measurements to separate. The nudge is an ordinary offset: it keeps
 its leader line, **Reset** puts the label back, and ⌘Z undoes it. A label you have dragged yourself is
@@ -883,7 +907,7 @@ panel*. The viewer's own colour mode is put back afterwards, exactly as the came
 The panels are ticked as the *only* panels of the figure builder, in two columns — three with the
 deviation panel — with letters, captions and a legend on each, and the Publish tab opens at the
 builder, so the next press is
-**Download figure PNG** or **Download figure SVG**. The screen goes back to what it was — solid, never
+**Download built figure PNG** or **Download built figure SVG**. The screen goes back to what it was — solid, never
 left faded — the panels keep their own emphasis, and the whole press is a single ⌘Z. If several
 positions are compared the figure covers all of them: the close-up frames every site and their shared
 neighbourhood, the panel is named **Sites** and captioned with the set readout, and the overview reads
@@ -984,10 +1008,10 @@ view with an include switch, its panel letter, an editable caption and move up/d
 letters follow the order of the included views, and the saved-views list, *Download captions* and the
 views ZIP use the same letters (a view left out of the figure shows —). Choose **Panel columns** (Auto picks a near-square
 grid, or 1 to 4), the **Captions** style (name and caption, name only, caption only, none), and
-whether each panel carries its **legend and scale bar**. **Download figure PNG** renders every
+whether each panel carries its **legend and scale bar**. **Download built figure PNG** renders every
 ticked view from its own camera, colour scheme, model selection and background at the same text
 size, puts the letter and caption in a strip under each cell, and writes the resolution into the
-file; **Download figure SVG** does the same with vector captions, labels, legends and scale bars.
+file; **Download built figure SVG** does the same with vector captions, labels, legends and scale bars.
 The cells share the aspect ratio set under *Output* and are sized so the whole figure is exactly the
 chosen figure width: a 178 mm double-column figure stays 178 mm whether it holds two panels or six,
 and the estimate line gives the pixel size of the figure and of each panel before you render. The
@@ -1002,7 +1026,8 @@ width, aspect, resolution and text size (and the pixel size and scale for pixel 
 format, the legend switch, the legend position and the scale bar are stored together in this
 browser. Pick a template from **Saved templates** and press **Apply**, and every one of those
 controls goes back to it, with a line saying what changed at a glance — `Template "Main figures"
-applied · 2 columns · 178 mm at 300 dpi`. **Delete** forgets one. A template carries presentation
+applied · 2 columns · 178 mm at 300 dpi`. **Delete** forgets one, after asking — a template is not
+part of the undo history. A template carries presentation
 only — never the ticked views, the models, the camera, the colours or any file name — so one saved
 for an earlier project is safe to apply here: it changes how the figure is drawn, never what is in
 it. Up to 20 are kept, listed by name; saving a name that already exists replaces it and says
@@ -1171,7 +1196,8 @@ inside the renderer.
 the text size and Arial from that journal's figure guide: Nature 89 / 183 mm, Science 55 / 121 /
 184 mm, Cell Press 85 / 114 / 174 mm, PNAS 87 / 178 mm, PLOS 190 mm, eLife 85 / 170 mm. Guides
 change; treat the preset as a starting point and check the current instructions before you
-submit. Every setting can still be changed afterwards.
+submit. Every setting can still be changed afterwards; once one is, the select goes back to *Choose a
+journal…*, since the figure no longer follows that guide.
 
 **One panel per model (Publish).** Renders every shown model — or, when one model is shown,
 every model of the current run — from the camera of the main view into one lettered figure at

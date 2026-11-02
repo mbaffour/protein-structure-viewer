@@ -150,7 +150,7 @@
     const chain = target.atom.chain || '';
     const atom = residueAlphaCarbon(entry, chain, target.atom.resi, insertionCodeOf(target.atom)) || target.atom;
     /* The model is named only when there is more than one to tell apart. */
-    host.querySelector('.gpv-label-editor-residue').textContent = (atom.resn || 'RES') + residueNumber(atom) + (chain ? ' · chain ' + chain : '') + (structures.length > 1 ? ' · ' + displayName(entry) : '');
+    host.querySelector('.gpv-label-editor-residue').textContent = residueName(atom, 'prose') + (structures.length > 1 ? ' · ' + displayName(entry) : '');
     const { parts, nearText } = residueCardFacts(entry, atom);
     /* The line reads exactly as before — the count is a link only in how it behaves. */
     facts.replaceChildren();
@@ -387,7 +387,7 @@
     const name = labelEditorDefaultText(result.origin);
     downloadBlob(lines.join('\n'), 'text/csv', 'distances-from-' + (chain ? chain + '-' : '') + result.origin.resi + '.csv');
     const nearest = result.rows[0];
-    updateStatus('Distances from ' + name + ' · ' + plural(result.rows.length, 'residue') + ' · nearest ' + (nearest.resn || 'RES') + nearest.resi + (nearest.chain ? ' · ' + nearest.chain : '') + ' at ' + nearest.ca.toFixed(2) + ' Å (Cα–Cα)');
+    updateStatus('Distances from ' + name + ' · ' + plural(result.rows.length, 'residue') + ' · nearest ' + residueName(nearest) + ' at ' + nearest.ca.toFixed(2) + ' Å (Cα–Cα)');
   }
 
   /* The marker naming the selected residue on the main viewer: `GLU57 · B · pLDDT 94.8`, smaller
@@ -508,6 +508,12 @@
   /* The card's count and its contacts list use Annotate → Within (Å). A new cutoff is a new answer,
      so an open card works both out again rather than keep the old count. */
   root.querySelector('#gpv-near-cutoff').addEventListener('change', () => {
+    /* The field says the distance everything is counted at: a value outside 2–12 Å is the nearest
+       end of the range, written back, as the contact map's cutoff is — not left in the field while the
+       card silently counts at another. */
+    const field = root.querySelector('#gpv-near-cutoff');
+    const cutoff = Math.min(12, Math.max(2, Number(field.value) || 4.5));
+    if (field.value !== String(cutoff)) { field.value = String(cutoff); updateStatus('Within is ' + cutoff + ' Å — it runs from 2 to 12 Å'); }
     const editor = labelEditor; const host = labelEditorHost;
     if (!editor || !host || host.hidden || textWithoutResidue(editor)) return;
     const open = contactsPanelOpen();
@@ -552,7 +558,7 @@
   }
 
   function contactRowName(row) {
-    return (row.resn || 'RES') + row.resi + (row.chain ? ' · ' + row.chain : '');
+    return residueName(row);
   }
 
   function renderResidueContacts() {
@@ -577,7 +583,8 @@
       button.append(
         name,
         part('gpv-contact-closest', row.closest === null ? '—' : row.closest.toFixed(2) + ' Å'),
-        part('gpv-contact-atoms', row.atomA && row.atomB ? row.atomA + '–' + row.atomB : ''),
+        /* Cα as the Cα column and the status line write it; the raw names stay in data-atoms and the copy. */
+        part('gpv-contact-atoms', row.atomA && row.atomB ? [row.atomA, row.atomB].map(name => (name === 'CA' ? 'Cα' : name)).join('–') : ''),
         part('gpv-contact-ca', row.ca === null ? '' : 'Cα ' + row.ca.toFixed(2) + ' Å')
       );
       button.title = 'Measure to ' + contactRowName(row) + (bondText ? ' (' + bondText + ')' : '') + ' (' + (measureAtoms === 'closest' ? 'closest atoms' : 'Cα–Cα') + ')';
@@ -618,17 +625,29 @@
     updateStatus(labelEditorDefaultText(made.first) + ' — ' + made.summary);
   }
 
+  /* The two atoms a distance joins, in either order, so the same pair measured twice is recognised. */
+  function measuredPairKey(record) {
+    if (record.type !== 'distance' || record.points.length !== 2) return null;
+    return record.points.map(point => [point.entryId, point.chain || '', point.resi, insertionCodeOf(point), point.atom || ''].join('|')).sort().join(' ↔ ');
+  }
+
   /* Every contact as a measurement, in one undo step: the step is taken once, then every record is
-     added, so one ⌘Z takes the whole list back. */
+     added, so one ⌘Z takes the whole list back. A contact already measured between the same two atoms
+     — a row clicked first, an earlier Measure all — is not drawn a second time on top of itself. */
   function measureAllContacts() {
     const live = liveContacts(); if (!live || !live.found.rows || !live.found.rows.length) return;
     const { picked, found } = live;
     const made = found.rows.map(row => residuePairMeasurement(picked.entry, picked, picked.entry, row, measureAtoms)).filter(Boolean);
     if (!made.length) { updateStatus('No atoms of the contacts are loaded to measure to'); return; }
+    const measured = new Set(measurementRecords.map(measuredPairKey).filter(Boolean));
+    const fresh = made.filter(item => { const key = measuredPairKey(item.record); if (measured.has(key)) return false; measured.add(key); return true; });
+    const already = made.length - fresh.length;
+    const how = '(' + (measureAtoms === 'closest' ? 'closest atoms' : 'Cα–Cα') + ')';
+    if (!fresh.length) { updateStatus('All ' + plural(made.length, 'contact') + ' of ' + picked.name + ' are already measured ' + how + ' · nothing added'); return; }
     remember('contact measurements');
-    made.forEach(item => measurementRecords.push(item.record));
+    fresh.forEach(item => measurementRecords.push(item.record));
     renderMeasurementList(); rebuildOverlays();
-    updateStatus(plural(made.length, 'measurement') + ' from ' + picked.name + ' to its contacts within ' + found.cutoff + ' Å (' + (measureAtoms === 'closest' ? 'closest atoms' : 'Cα–Cα') + ') · one undo step');
+    updateStatus(plural(fresh.length, 'measurement') + ' from ' + picked.name + ' to its contacts within ' + found.cutoff + ' Å ' + how + (already ? ' · ' + fresh.length + ' new · ' + already + ' already measured' : '') + ' · one undo step');
   }
 
   /* What Highlight nearby residues makes for this residue (10): the same residues, the same records. */

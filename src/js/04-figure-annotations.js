@@ -113,21 +113,45 @@
     return record.type === 'screen' || record.type === 'callout' || Boolean(record.text);
   }
 
+  /* A list rebuilt by an edit made in one of its rows puts the keyboard focus back on the same control
+     of the same row — or, when that row has gone, of the row now in its place — instead of dropping it
+     on the page. Controls say which they are with data-control, rows which record with data-row-id. */
+  function rememberListFocus(list) {
+    const focused = document.activeElement;
+    if (!(focused instanceof Element) || !list.contains(focused) || !focused.dataset.control) return null;
+    const row = focused.closest('.gpv-entry');
+    return { id: row ? row.dataset.rowId : null, index: [...list.children].indexOf(row), control: focused.dataset.control };
+  }
+
+  function restoreListFocus(list, kept) {
+    if (!kept) return;
+    const rows = [...list.children];
+    const row = rows.find(item => item.dataset.rowId === kept.id) || rows[Math.min(kept.index, rows.length - 1)];
+    const control = row && row.querySelector('[data-control="' + kept.control + '"]');
+    if (control && !control.disabled) control.focus({ preventScroll: true });
+  }
+
   function renderAnnotationList() {
-    const list = root.querySelector('#gpv-annotation-list'); list.replaceChildren();
+    const list = root.querySelector('#gpv-annotation-list');
+    const kept = rememberListFocus(list);
+    list.replaceChildren();
     annotationRecords.forEach(record => {
-      const row = document.createElement('div'); row.className = 'gpv-entry';
+      const row = document.createElement('div'); row.className = 'gpv-entry'; row.dataset.rowId = String(record.id);
       const swatch = document.createElement('i'); swatch.className = 'gpv-swatch'; swatch.style.background = record.color;
       const copy = document.createElement('span'); copy.className = 'gpv-edit-copy';
       const text = document.createElement('input'); text.className = 'form-control'; text.type = 'text'; text.maxLength = 160;
       text.value = record.text || ''; text.placeholder = record.type === 'screen' ? 'Title text' : record.type === 'callout' ? 'Callout text' : 'Optional label';
       text.setAttribute('aria-label', 'Text for this ' + (record.type === 'screen' ? 'screen text' : annotationTools[record.type].label.toLowerCase()));
-      text.addEventListener('change', () => {
+      text.dataset.control = 'text';
+      const commit = () => {
         const value = text.value.trim();
         if (!value && (record.type === 'screen')) { text.value = record.text; return; }
+        if (value === (record.text || '')) return;
         remember('annotation text'); record.text = value; renderAnnotationList(); rebuildOverlays(); updateStatus('Annotation text updated');
-      });
-      text.addEventListener('keydown', event => { if (event.key === 'Enter') { event.preventDefault(); text.blur(); } });
+      };
+      text.addEventListener('change', commit);
+      /* Enter commits where the field is, so the rebuilt row gets the focus back. */
+      text.addEventListener('keydown', event => { if (event.key === 'Enter') { event.preventDefault(); commit(); } });
       const where = document.createElement('span'); where.className = 'gpv-entry-source text-small';
       where.textContent = record.type === 'screen' ? 'Screen text · ' + record.corner.replace('-', ' ') : annotationTools[record.type].label + ' · ' + record.points.map(pointName).join(' → ');
       copy.append(text, where);
@@ -155,15 +179,17 @@
           distance.addEventListener('change', () => { remember('leader length'); record.distance = Math.max(2, Math.min(60, Number(distance.value) || 8)); rebuildOverlays(); });
           nudge.append(distance);
         }
-        const reset = document.createElement('button'); reset.className = 'btn btn-ghost'; reset.type = 'button'; reset.textContent = 'Reset'; reset.title = 'Put the label back where it started';
+        const reset = document.createElement('button'); reset.className = 'btn btn-ghost'; reset.type = 'button'; reset.textContent = 'Reset'; reset.title = 'Put the label back where it started'; reset.dataset.control = 'reset';
         reset.addEventListener('click', () => { remember('label reset'); record.offset = { x: 0, y: 0, z: 0 }; record.dx = 0; record.dy = 0; record.distance = null; renderAnnotationList(); rebuildOverlays(); });
         nudge.append(reset);
         row.append(nudge);
       }
       const remove = document.createElement('button'); remove.className = 'btn btn-ghost'; remove.type = 'button'; remove.textContent = 'Remove';
+      remove.dataset.control = 'remove'; remove.setAttribute('aria-label', 'Remove the ' + annotationSummary(record));
       remove.addEventListener('click', () => { remember('annotation removal'); annotationRecords = annotationRecords.filter(item => item.id !== record.id); renderAnnotationList(); rebuildOverlays(); updateStatus('Annotation removed'); });
       row.append(remove); list.append(row);
     });
+    restoreListFocus(list, kept);
   }
 
   function annotationPrompt() {
@@ -278,20 +304,43 @@
     list.addEventListener('focusout', event => { if (!list.contains(event.relatedTarget)) setMeasurementHover(list.matches(':hover') ? measurementHover : null); });
   }
 
+  /* Back to the colour every measurement has always had: the crimson line and the plain ink label. */
+  function setMeasurementDefaultColour(record) {
+    if (!measurementColor(record)) return;
+    remember('measurement colour');
+    delete record.color;
+    measurementChanged(record);
+    updateStatus('Measurement colour back to the default');
+  }
+
+  /* A small Default beside a measurement's colour well, in its row and in the editor. */
+  function measurementDefaultButton(id) {
+    const button = document.createElement('button'); button.type = 'button'; button.className = 'btn btn-ghost gpv-colour-default'; button.textContent = 'Default';
+    if (id) button.id = id;
+    button.title = 'Back to the default colour: a crimson line and plain ink text';
+    return button;
+  }
+
   function renderMeasurementList() {
-    const list = root.querySelector('#gpv-measurement-list'); list.replaceChildren();
+    const list = root.querySelector('#gpv-measurement-list');
+    const kept = rememberListFocus(list);
+    list.replaceChildren();
     watchMeasurementHover(list);
     if (measurementHover !== null && !measurementRecords.some(record => record.id === measurementHover)) measurementHover = null;
-    ['#gpv-measurements-copy', '#gpv-measurements-csv'].forEach(selector => { const button = root.querySelector(selector); if (button) button.disabled = !measurementRecords.length; });
+    ['#gpv-measurements-copy', '#gpv-measurements-csv', '#gpv-clear-measurements'].forEach(selector => { const button = root.querySelector(selector); if (button) button.disabled = !measurementRecords.length; });
     updateSeparateLabelsButton();
     measurementRecords.forEach(record => {
-      const row = document.createElement('div'); row.className = 'gpv-entry';
+      const row = document.createElement('div'); row.className = 'gpv-entry'; row.dataset.rowId = String(record.id);
+      const named = measurementAtomsText(record);
       const copy = document.createElement('span'); copy.className = 'gpv-edit-copy';
       const text = document.createElement('input'); text.className = 'form-control'; text.type = 'text'; text.maxLength = 120;
-      text.value = record.text || ''; text.placeholder = 'Text (optional)';
-      text.setAttribute('aria-label', 'Text for the measurement ' + measurementAtomsText(record));
-      text.addEventListener('change', () => { if (setMeasurementText(record, text.value)) { measurementChanged(record); updateStatus('Measurement text updated'); } });
-      text.addEventListener('keydown', event => { if (event.key === 'Enter') { event.preventDefault(); text.blur(); } });
+      text.value = record.text || ''; text.placeholder = 'Text (optional)'; text.dataset.control = 'text';
+      text.setAttribute('aria-label', 'Text for the measurement ' + named);
+      const commit = () => { if (setMeasurementText(record, text.value)) { measurementChanged(record); updateStatus('Measurement text updated'); } };
+      text.addEventListener('change', commit);
+      /* Enter commits where the field is: the row is rebuilt around it and the focus comes back to it,
+         rather than a blur committing after the focus has already gone to the page. */
+      text.addEventListener('keydown', event => { if (event.key === 'Enter') { event.preventDefault(); commit(); } });
       /* The one element of the row with this class: what it names ends in the value, which the
          regression suite reads off the end of it. */
       const where = document.createElement('span'); where.className = 'gpv-entry-name gpv-entry-source text-small';
@@ -299,13 +348,17 @@
       copy.append(text, where);
       const tools = document.createElement('span'); tools.className = 'gpv-edit-tools';
       const color = document.createElement('input'); color.className = 'form-control form-control-color'; color.type = 'color';
-      color.value = measurementColor(record) || '#e11d48'; color.setAttribute('aria-label', 'Measurement colour');
+      color.value = measurementColor(record) || '#e11d48'; color.setAttribute('aria-label', 'Measurement colour'); color.dataset.control = 'color';
       color.title = 'Colour of the line and the label';
-      color.addEventListener('input', () => { if (!color.dataset.remembered) { remember('measurement colour'); color.dataset.remembered = '1'; } record.color = color.value; measurementChanged(record, false); });
+      const colourDefault = measurementDefaultButton(null); colourDefault.dataset.control = 'default';
+      colourDefault.disabled = !measurementColor(record);
+      colourDefault.setAttribute('aria-label', 'Default colour for the measurement ' + named);
+      colourDefault.addEventListener('click', () => setMeasurementDefaultColour(record));
+      color.addEventListener('input', () => { if (!color.dataset.remembered) { remember('measurement colour'); color.dataset.remembered = '1'; } record.color = color.value; colourDefault.disabled = false; measurementChanged(record, false); });
       color.addEventListener('change', () => { delete color.dataset.remembered; });
       const toggle = (name, field, what, title) => {
         const wrap = document.createElement('label'); wrap.className = 'form-check gpv-check text-small'; wrap.title = title;
-        const box = document.createElement('input'); box.type = 'checkbox'; box.className = 'form-check-input'; box.checked = record[field] !== false;
+        const box = document.createElement('input'); box.type = 'checkbox'; box.className = 'form-check-input'; box.checked = record[field] !== false; box.dataset.control = field;
         box.addEventListener('change', () => setMeasurementFlag(record, field, box.checked, what));
         const words = document.createElement('span'); words.className = 'form-check-label'; words.textContent = name;
         wrap.append(box, words);
@@ -313,25 +366,26 @@
       };
       const dashed = toggle('Dashed', 'dashed', 'measurement dashed', 'Draw the line dashed, as measurements always have been, or solid');
       const value = toggle('Show value', 'showValue', 'measurement value', 'Write the distance or angle after the text; with no text the value is always written');
-      const show = document.createElement('button'); show.className = 'btn btn-ghost'; show.type = 'button'; show.textContent = 'Show';
+      const show = document.createElement('button'); show.className = 'btn btn-ghost'; show.type = 'button'; show.textContent = 'Show'; show.dataset.control = 'show';
       show.title = 'Centre the view on this measurement without changing the zoom';
-      show.addEventListener('click', () => centreOnMeasurement(record));
-      const reset = document.createElement('button'); reset.className = 'btn btn-ghost'; reset.type = 'button'; reset.textContent = 'Reset';
+      show.addEventListener('click', () => { centreOnMeasurement(record); updateStatus('Centred on ' + measurementRowText(record)); });
+      const reset = document.createElement('button'); reset.className = 'btn btn-ghost'; reset.type = 'button'; reset.textContent = 'Reset'; reset.dataset.control = 'reset';
       reset.title = 'Put the text back where it started'; reset.disabled = labelOffsetLength(record) === 0;
       reset.addEventListener('click', () => { remember('measurement position'); record.offset = null; delete record.autoPlaced; measurementChanged(record); updateStatus('Measurement text put back in place'); });
-      const remove = document.createElement('button'); remove.className = 'btn btn-ghost'; remove.type = 'button'; remove.textContent = 'Remove';
-      remove.addEventListener('click', () => { remember('measurement removal'); measurementRecords = measurementRecords.filter(item => item.id !== record.id); renderMeasurementList(); rebuildOverlays(); });
-      tools.append(color, dashed, value, show, reset, remove);
+      const remove = document.createElement('button'); remove.className = 'btn btn-ghost'; remove.type = 'button'; remove.textContent = 'Remove'; remove.dataset.control = 'remove';
+      remove.setAttribute('aria-label', 'Remove the measurement ' + named);
+      remove.addEventListener('click', () => { remember('measurement removal'); measurementRecords = measurementRecords.filter(item => item.id !== record.id); renderMeasurementList(); rebuildOverlays(); updateStatus('Measurement removed'); });
+      tools.append(color, colourDefault, dashed, value, show, reset, remove);
       /* The arrows and Select, as a label row has them: the way to move the text without a mouse. */
       const nudge = document.createElement('span'); nudge.className = 'gpv-nudge';
       nudge.setAttribute('role', 'group'); nudge.setAttribute('aria-label', 'Move the measurement text');
-      [['←', 'Move the text left', -12, 0], ['→', 'Move the text right', 12, 0], ['↑', 'Move the text up', 0, -12], ['↓', 'Move the text down', 0, 12]].forEach(([glyph, title, dx, dy]) => {
+      [['←', 'Move the text left', -12, 0, 'left'], ['→', 'Move the text right', 12, 0, 'right'], ['↑', 'Move the text up', 0, -12, 'up'], ['↓', 'Move the text down', 0, 12, 'down']].forEach(([glyph, title, dx, dy, direction]) => {
         const button = document.createElement('button'); button.className = 'btn btn-ghost'; button.type = 'button'; button.textContent = glyph;
-        button.setAttribute('aria-label', title); button.title = title;
-        button.addEventListener('click', () => { remember('label nudge'); nudgeCanvasText({ kind: 'measurement', record }, dx, dy); reset.disabled = false; rebuildOverlays(); });
+        button.setAttribute('aria-label', title); button.title = title; button.dataset.control = direction;
+        button.addEventListener('click', () => { remember('measurement text move'); nudgeCanvasText({ kind: 'measurement', record }, dx, dy); reset.disabled = false; rebuildOverlays(); updateStatus('Measurement text moved ' + direction); });
         nudge.append(button);
       });
-      const select = document.createElement('button'); select.className = 'btn btn-ghost'; select.type = 'button'; select.textContent = 'Select';
+      const select = document.createElement('button'); select.className = 'btn btn-ghost'; select.type = 'button'; select.textContent = 'Select'; select.dataset.control = 'select';
       select.title = 'Make this the active text: the arrow keys move it (Shift for 1 px), Delete removes the measurement, Esc lets go';
       select.setAttribute('aria-label', 'Select this measurement to move its text with the arrow keys');
       select.addEventListener('click', () => {
@@ -343,6 +397,7 @@
       row.dataset.measurementId = String(record.id);
       row.append(copy, tools, nudge); list.append(row);
     });
+    restoreListFocus(list, kept);
   }
 
   /* ---- The editor's measurement row ----
@@ -373,15 +428,17 @@
       if (!color.dataset.remembered) { remember('measurement colour'); color.dataset.remembered = '1'; }
       record.color = color.value; rebuildOverlays();
     });
-    color.addEventListener('change', () => { delete color.dataset.remembered; const record = editorMeasurement(); if (record) renderMeasurementList(); });
+    color.addEventListener('change', () => { delete color.dataset.remembered; const record = editorMeasurement(); if (record) measurementChanged(record); });
+    const colourDefault = measurementDefaultButton('gpv-measure-editor-color-default');
+    colourDefault.addEventListener('click', () => { const record = editorMeasurement(); if (record) setMeasurementDefaultColour(record); });
     const dashed = check('gpv-measure-editor-dashed', 'Dashed', 'Draw the line dashed, or solid');
     dashed.box.addEventListener('change', () => { const record = editorMeasurement(); if (record) setMeasurementFlag(record, 'dashed', dashed.box.checked, 'measurement dashed'); });
     const pair = document.createElement('label'); pair.className = 'gpv-measure-editor-pair text-small'; pair.id = 'gpv-measure-editor-pair-wrap';
     pair.title = 'Which atoms of the two residues the distance joins: their Cα atoms, or their closest pair of heavy atoms';
     const select = document.createElement('select'); select.className = 'form-select'; select.id = 'gpv-measure-editor-pair';
-    select.addEventListener('change', () => { const record = editorMeasurement(); if (record && select.value !== 'measured') repointMeasurement(record, select.value); });
+    select.addEventListener('change', () => { const record = editorMeasurement(); if (record) repointMeasurement(record, select.value); });
     pair.append('Atoms ', select);
-    row.append(atoms, value.wrap, color, dashed.wrap, pair);
+    row.append(atoms, value.wrap, color, colourDefault, dashed.wrap, pair);
     return row;
   }
 
@@ -413,17 +470,26 @@
     return { entryA, entryB, residueA, residueB, nearest, state };
   }
 
-  /* The same two residues joined by other atoms: their Cα atoms, or their closest heavy-atom pair.
-     The record keeps its id, its text, its offset and its colour — only the atoms change. */
+  /* The same two residues joined by other atoms: their Cα atoms, their closest heavy-atom pair, or —
+     for a measurement first made between other atoms — the atoms it was made between, which the
+     record keeps in memory (`measured`, never saved in a scene) once it is first re-pointed, so the
+     choice is not one-way. The record keeps its id, its text, its offset and its colour — only the
+     atoms change. */
   function repointMeasurement(record, choice) {
     const pair = measurementPairState(record);
     if (!pair || pair.state === choice) return;
-    let first = null; let second = null;
-    if (choice === 'closest' && pair.nearest) { first = pair.nearest.a; second = pair.nearest.b; }
-    if (choice === 'ca') { first = residueAlphaCarbon(pair.entryA, pair.residueA.chain, pair.residueA.resi, pair.residueA.icode); second = residueAlphaCarbon(pair.entryB, pair.residueB.chain, pair.residueB.resi, pair.residueB.icode); }
-    if (!first || !second) { updateStatus('Those atoms are not loaded'); return; }
+    let points = null;
+    if (choice === 'measured') points = Array.isArray(record.measured) && record.measured.length === 2 ? record.measured.map(point => ({ ...point })) : null;
+    else {
+      let first = null; let second = null;
+      if (choice === 'closest' && pair.nearest) { first = pair.nearest.a; second = pair.nearest.b; }
+      if (choice === 'ca') { first = residueAlphaCarbon(pair.entryA, pair.residueA.chain, pair.residueA.resi, pair.residueA.icode); second = residueAlphaCarbon(pair.entryB, pair.residueB.chain, pair.residueB.resi, pair.residueB.icode); }
+      if (first && second) points = [atomReference(pair.entryA, first), atomReference(pair.entryB, second)];
+    }
+    if (!points || points.some(point => !resolvePoint(point))) { updateStatus('Those atoms are not loaded'); return; }
     remember('measurement atoms');
-    record.points = [atomReference(pair.entryA, first), atomReference(pair.entryB, second)];
+    if (pair.state === 'measured' && !record.measured) record.measured = record.points.map(point => ({ ...point }));
+    record.points = points;
     measurementChanged(record);
     updateStatus('Measurement now joins ' + measurementAtomsText(record) + ' · ' + measurementText(record));
   }
@@ -445,13 +511,14 @@
     const color = host.querySelector('#gpv-measure-editor-color');
     const wanted = measurementColor(record) || '#e11d48';
     if (color.value !== wanted) color.value = wanted;
+    host.querySelector('#gpv-measure-editor-color-default').disabled = !measurementColor(record);
     const pair = measurementPairState(record);
     const wrap = host.querySelector('#gpv-measure-editor-pair-wrap');
     const select = host.querySelector('#gpv-measure-editor-pair');
     wrap.hidden = !pair;
     if (!pair) return;
     const options = [['ca', 'Cα–Cα'], ['closest', 'closest atoms']];
-    if (pair.state === 'measured') options.push(['measured', 'as measured']);
+    if (pair.state === 'measured' || Array.isArray(record.measured)) options.push(['measured', 'as measured']);
     select.replaceChildren(...options.map(([value, text]) => new Option(text, value)));
     select.value = pair.state;
   }
@@ -521,11 +588,51 @@
     return entry.coarseCache.list;
   }
 
+  /* Every atom of a residue, keyed chain|resi|icode, for the refining pass below. Cached on the atoms
+     array it indexes, as the other per-model caches are. */
+  function residueAtomIndex(entry) {
+    if (!entry.residueIndexCache || entry.residueIndexCache.atoms !== entry.atoms) {
+      const map = new Map();
+      entry.atoms.forEach(atom => {
+        const key = (atom.chain || '') + '|' + atom.resi + '|' + insertionCodeOf(atom);
+        if (!map.has(key)) map.set(key, []);
+        map.get(key).push(atom);
+      });
+      entry.residueIndexCache = { atoms: entry.atoms, map };
+    }
+    return entry.residueIndexCache.map;
+  }
+
+  /* A large model is searched coarse first — its Cα, P and hetero atoms — and then refined: every
+     atom of each residue whose coarse atom is near the pointer is tried too, so a click on a side
+     chain lands on that atom (in stick style, while measuring or drawing) rather than on the nearest
+     Cα. "Near" is 24 px plus the 8 Å a side chain can reach from its Cα, at the residue's own depth:
+     after Go to a histidine's NE2 is a couple of hundred pixels from its Cα. The hover readout keeps
+     the coarse pass alone. */
+  function refinedAtoms(entry, pageX, pageY) {
+    const coarse = coarseAtoms(entry);
+    const index = residueAtomIndex(entry);
+    const view = viewer.getView();
+    const right = screenAxisInModelSpace(view, { x: 1, y: 0, z: 0 });
+    const reach = 8;
+    const atoms = [...coarse];
+    coarse.forEach(atom => {
+      if (atom.hetflag) return;
+      const screen = viewer.modelToScreen({ x: atom.x, y: atom.y, z: atom.z });
+      if (!screen) return;
+      const edge = viewer.modelToScreen({ x: atom.x + right.x * reach, y: atom.y + right.y * reach, z: atom.z + right.z * reach });
+      const radius = 24 + (edge ? Math.hypot(edge.x - screen.x, edge.y - screen.y) : 0);
+      if (Math.hypot(screen.x - pageX, screen.y - pageY) > radius) return;
+      (index.get((atom.chain || '') + '|' + atom.resi + '|' + insertionCodeOf(atom)) || []).forEach(item => { if (item !== atom) atoms.push(item); });
+    });
+    return atoms;
+  }
+
   function pickAtomAt(pageX, pageY, coarse = false) {
     if (typeof viewer.modelToScreen !== 'function') return null;
     let best = null; let bestDistance = 14;
     displayedEntries().filter(entry => entry.model).forEach(entry => {
-      const candidates = coarse || entry.atoms.length > 3000 ? coarseAtoms(entry) : entry.atoms;
+      const candidates = coarse ? coarseAtoms(entry) : entry.atoms.length > 3000 ? refinedAtoms(entry, pageX, pageY) : entry.atoms;
       candidates.forEach(atom => {
         const screen = viewer.modelToScreen({ x: atom.x, y: atom.y, z: atom.z });
         if (!screen) return;
@@ -543,6 +650,17 @@
      a corner title — so the figure survives a camera move. Touch is left alone: on a touchscreen a
      drag rotates the model. */
   const labelMeasure = document.createElement('canvas').getContext('2d');
+  /* Where a piece of text attached to the structure is drawn, in model space: a label at its residue
+     plus its offset, a measurement's text at its midpoint or vertex plus its offset, a callout at the
+     end of its leader, other annotation text at its midpoint. Null when its atoms are not loaded. */
+  function canvasTextPoint(kind, record) {
+    if (kind === 'label') return labelPosition(record);
+    if (kind === 'measurement') { const anchor = measurementAnchor(null, record); return anchor ? shiftBy(anchor, record.offset) : null; }
+    if (kind !== 'annotation' || !record.points || !record.points.length) return null;
+    const points = record.points.map(resolvePoint); if (points.some(point => !point)) return null;
+    return record.type === 'callout' ? calloutAnchor(points[0], record) : shiftBy(points.length > 1 ? midpoint(points[0], points[1]) : points[0], record.offset);
+  }
+
   function draggableLabels() {
     const shown = new Set(displayedEntries().map(entry => entry.id));
     const byId = entriesById();
@@ -562,16 +680,13 @@
         return;
       }
       if (!record.points.every(point => shown.has(point.entryId))) return;
-      const points = record.points.map(resolvePoint); if (points.some(point => !point)) return;
-      const position = record.type === 'callout'
-        ? calloutAnchor(points[0], record)
-        : shiftBy(points.length > 1 ? midpoint(points[0], points[1]) : points[0], record.offset);
+      const position = canvasTextPoint('annotation', record); if (!position) return;
       items.push({ kind: 'annotation', record, position, text: record.text || pointName(record.points[0]), size: 13 * record.size });
     });
     measurementRecords.forEach(record => {
       if (!record.points.every(point => shown.has(point.entryId))) return;
-      const points = record.points.map(resolvePoint); if (points.some(point => !point)) return;
-      items.push({ kind: 'measurement', record, position: shiftBy(measurementAnchor(points, record), record.offset), text: measurementLabelText(record), size: 12 });
+      const position = canvasTextPoint('measurement', record); if (!position) return;
+      items.push({ kind: 'measurement', record, position, text: measurementLabelText(record), size: 12 });
     });
     return items;
   }
@@ -644,7 +759,7 @@
     if (typeof viewer.modelToScreen !== 'function') return null;
     const perAngstrom = pixelsPerAngstrom(viewer);
     if (!perAngstrom) return null;
-    return { project: point => viewer.modelToScreen(point), perAngstrom, view: typeof viewer.getView === 'function' ? viewer.getView() : [0, 0, 0, 0, 0, 0, 0, 1], scale: 1 };
+    return { project: point => viewer.modelToScreen(point), perAngstrom, perAngstromAt: point => pixelsPerAngstrom(viewer, point) || perAngstrom, view: typeof viewer.getView === 'function' ? viewer.getView() : [0, 0, 0, 0, 0, 0, 0, 1], scale: 1 };
   }
 
   /* The projection of one figure panel: the export viewer as the panel's camera has left it, and
@@ -657,7 +772,7 @@
     const perAngstrom = pixelsPerAngstrom(target);
     if (!perAngstrom) return null;
     const height = dimensions && dimensions.height > 0 ? dimensions.height : 0;
-    return { project: point => target.modelToScreen(point), perAngstrom, view: target.getView(), scale: overlayScale(dimensions), frameHeight: height };
+    return { project: point => target.modelToScreen(point), perAngstrom, perAngstromAt: point => pixelsPerAngstrom(target, point) || perAngstrom, view: target.getView(), scale: overlayScale(dimensions), frameHeight: height };
   }
 
   /* What a separation pass moves and avoids: every shown residue label and every shown measurement's
@@ -707,7 +822,7 @@
       shift: 0
     }));
     const placed = new Map();
-    if (items.length < 2) return { moved: 0, movedLabels: 0, movedMeasurements: 0, blocked: 0, overlapping: false, placed, items: [] };
+    if (items.length < 2) return { moved: 0, movedLabels: 0, movedMeasurements: 0, changed: 0, changedLabels: 0, changedMeasurements: 0, remaining: 0, blocked: 0, overlapping: false, placed, items: [] };
     items.sort((a, b) => a.order - b.order);
     /* Which labels cover each other is a question about the current framing, and an offset this
        routine wrote at some earlier one is this run's to recompute rather than to build on: starting
@@ -715,15 +830,21 @@
        keeps the cap a real bound on how far a label can end up from its residue — and is what lets a
        panel place a label for print without inheriting the screen's answer. */
     items.forEach(item => {
+      /* What the record holds before this run, to tell a press that changes nothing from one that does. */
+      item.before = item.record.offset || null;
+      item.wasAuto = Boolean(item.movable && item.record.autoPlaced);
       item.base = item.movable && item.record.autoPlaced ? null : item.record.offset || null;
       if (write && item.movable && item.record.autoPlaced) { item.record.offset = null; delete item.record.autoPlaced; }
+      /* Pixels per ångström at the label's own depth: in perspective a shift worked out in pixels at
+         the model centre would put a label nearer the camera too far down, and one behind too little. */
+      item.perAngstrom = (projection.perAngstromAt && projection.perAngstromAt(shiftBy(item.anchor, item.base))) || projection.perAngstrom;
     });
     const up = screenAxisInModelSpace(projection.view, { x: 0, y: 1, z: 0 });
     /* Screen y grows downward, the model-space "up" axis does not: the same sign convention the drag
        uses, so a separated label and a dragged one mean the same thing by their offset. */
     const offsetFor = item => {
       const base = item.base || { x: 0, y: 0, z: 0 };
-      const step = item.shift / projection.perAngstrom;
+      const step = item.shift / item.perAngstrom;
       return { x: base.x - up.x * step, y: base.y - up.y * step, z: base.z - up.z * step };
     };
     const positionFor = item => shiftBy(item.anchor, offsetFor(item));
@@ -768,6 +889,19 @@
       }
       if (!collided) break;
     }
+    /* The pairs still covering each other where the run leaves them, measured as the passes measure. */
+    const finalBoxes = items.map(item => labelBoxAt(projection, item, positionFor(item)));
+    let remaining = 0;
+    for (let i = 0; i < finalBoxes.length; i += 1) {
+      for (let j = i + 1; j < finalBoxes.length; j += 1) {
+        const a = finalBoxes[i]; const b = finalBoxes[j];
+        if (a && b && Math.abs(b.x - a.x) < a.halfWidth + b.halfWidth + padding && Math.abs(b.y - a.y) < a.halfHeight + b.halfHeight + padding) remaining += 1;
+      }
+    }
+    /* Which records end up with an offset other than the one they had: a second press at the same
+       camera recomputes the same shifts, and is no move at all. */
+    const sameOffset = (a, b) => (labelOffsetLength({ offset: a }) === 0 && labelOffsetLength({ offset: b }) === 0) || (Boolean(a) && Boolean(b) && ['x', 'y', 'z'].every(axis => Math.abs((a[axis] || 0) - (b[axis] || 0)) < 1e-6));
+    const changedItems = items.filter(item => !sameOffset(item.before, item.shift ? offsetFor(item) : item.wasAuto ? null : item.before));
     items.forEach(item => {
       placed.set(item.record, positionFor(item));
       if (!write || !item.shift) return;
@@ -776,7 +910,8 @@
     });
     const moved = items.filter(item => item.shift !== 0);
     const movedMeasurements = moved.filter(item => item.kind === 'measurement').length;
-    return { moved: moved.length, movedLabels: moved.length - movedMeasurements, movedMeasurements, blocked, overlapping, placed, items };
+    const changedMeasurements = changedItems.filter(item => item.kind === 'measurement').length;
+    return { moved: moved.length, movedLabels: moved.length - movedMeasurements, movedMeasurements, changed: changedItems.length, changedLabels: changedItems.length - changedMeasurements, changedMeasurements, remaining, blocked, overlapping, placed, items };
   }
 
   /* Returns null when the view cannot be projected yet, so the caller can say so rather than guess. */
@@ -823,7 +958,7 @@
 
   let labelDrag = null;
   function startLabelDrag(item, event) {
-    labelDrag = { item, x: event.pageX, y: event.pageY, perAngstrom: pixelsPerAngstrom(viewer) || 20, moved: false };
+    labelDrag = { item, x: event.pageX, y: event.pageY, moved: false };
     root.querySelector('#gpv-stage').style.cursor = 'grabbing';
   }
   function moveLabelDrag(event) {
@@ -832,21 +967,35 @@
     if (!dx && !dy) return;
     /* The undo step is taken on the first real move, not on the press: a press that only opens the
        editor has changed nothing and must leave no empty step behind. */
-    if (!drag.moved) remember('label position');
+    if (!drag.moved) remember(drag.item.kind === 'measurement' ? 'measurement text move' : drag.item.kind === 'label' ? 'label position' : 'annotation text move');
     drag.x = event.pageX; drag.y = event.pageY; drag.moved = true;
-    nudgeCanvasText(drag.item, dx, dy, drag.perAngstrom);
+    nudgeCanvasText(drag.item, dx, dy);
     rebuildOverlays();
   }
-  /* A press on a piece of text that never moved was a click on it: that opens the editor for it.
-     A cancelled pointer (no event) is not a click, and while drawing or measuring a click on text
-     does what it always did — nothing — so those modes behave exactly as before. */
+  /* A press on a piece of text that never moved was a click on it: that opens the editor for it —
+     unless measuring, drawing or an armed Measure to… is waiting for an atom, when the click goes to
+     the atom under the text, as it would with no text there (and the status says so when there is no
+     atom under it). A cancelled pointer (no event) is not a click. Text that was dragged becomes the
+     active text, so the arrow keys and Delete act on it next. */
   function endLabelDrag(event) {
     const drag = labelDrag; labelDrag = null;
     root.querySelector('#gpv-stage').style.cursor = '';
     if (!drag) return;
     renderCanvasTextLists(drag.item.kind);
-    if (drag.moved) updateStatus('Label moved · drag it again, or Reset in its row to put it back');
-    else if (event && !annotationActive && !measurementActive) openLabelEditorForItem(drag.item);
+    if (drag.moved) {
+      setActiveText(drag.item.kind, drag.item.record);
+      const noun = canvasTextNoun(drag.item.kind);
+      updateStatus(noun.charAt(0).toUpperCase() + noun.slice(1) + (drag.item.kind === 'measurement' ? ' text' : '') + ' moved · arrow keys nudge it, Delete removes it, Reset in its row puts it back');
+      return;
+    }
+    if (!event) return;
+    if (annotationActive || measurementActive || measureFrom) {
+      const hit = pickAtomAt(event.pageX, event.pageY);
+      if (hit) handleAtomClick(hit.entry, hit.atom);
+      else updateStatus('That click landed on text, not an atom — click an atom beside the text');
+      return;
+    }
+    openLabelEditorForItem(drag.item);
   }
 
   let pointerStart = null;
@@ -950,6 +1099,8 @@
   }
 
   function toggleMeasurement() {
+    /* Nothing to click with nothing loaded; Start drawing is disabled then, and this says why. */
+    if (!measurementActive && !structures.length) { updateStatus('Load a model first — then Start measuring and click its atoms'); return; }
     measurementActive = !measurementActive; measurementDraft = [];
     if (measurementActive && annotationActive) toggleAnnotating(false);
     if (measurementActive && boxSelectMode) setBoxSelectMode(false);

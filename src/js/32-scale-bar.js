@@ -12,10 +12,13 @@
     return centre;
   }
 
-  /* Pixels per ångström along the screen's horizontal axis at the model centre. */
-  function pixelsPerAngstrom(target) {
+  /* Pixels per ångström along the screen's horizontal axis at the model centre — or, given a point,
+     at that point. In perspective the two differ by the point's depth: a label in front of the centre
+     is drawn larger and moves further per ångström, so text being moved by a given number of pixels
+     is measured at its own anchor (04a, 04), while the scale bar keeps the centre. */
+  function pixelsPerAngstrom(target, at = null) {
     if (!target || typeof target.modelToScreen !== 'function' || typeof target.getView !== 'function') return null;
-    const centre = sceneCentre(); if (!centre) return null;
+    const centre = at && Number.isFinite(at.x) && Number.isFinite(at.y) && Number.isFinite(at.z) ? at : sceneCentre(); if (!centre) return null;
     const axis = screenAxisInModelSpace(target.getView(), { x: 1, y: 0, z: 0 });
     const a = target.modelToScreen(centre); const b = target.modelToScreen({ x: centre.x + axis.x, y: centre.y + axis.y, z: centre.z + axis.z });
     if (!a || !b) return null;

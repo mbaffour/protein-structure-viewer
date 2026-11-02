@@ -16,12 +16,14 @@
   }
   const formatDataValue = value => Math.abs(value) >= 100 ? value.toFixed(0) : Math.abs(value) >= 10 ? value.toFixed(1) : value.toFixed(2);
 
+  /* A row whose residue number or value is not a number — an insertion-coded 100A, a blank, "n/a" —
+     is left out, and counted, so the status can say how many were. */
   function parseResidueRows(rows) {
-    const values = new Map(); const byResi = new Map();
-    rows.forEach(row => { const chain = String(row[0] || '').trim(); const resi = Number(row[1]); const value = Number(row[2]); if (!Number.isFinite(resi) || !Number.isFinite(value)) return; if (chain) values.set(chain + '|' + resi, value); else byResi.set(resi, value); });
+    const values = new Map(); const byResi = new Map(); let skipped = 0;
+    rows.forEach(row => { const chain = String(row[0] || '').trim(); const resi = Number(row[1]); const value = Number(row[2]); if (!Number.isFinite(resi) || !Number.isFinite(value)) { skipped += 1; return; } if (chain) values.set(chain + '|' + resi, value); else byResi.set(resi, value); });
     const all = [...values.values(), ...byResi.values()];
     if (!all.length) return null;
-    return { values, byResi, min: Math.min(...all), max: Math.max(...all), count: all.length };
+    return { values, byResi, min: Math.min(...all), max: Math.max(...all), count: all.length, skipped };
   }
 
   /* CSV/TSV with a residue column and a numeric value column; chain optional. Header
@@ -75,7 +77,7 @@
     residueData = { ...table, name, scale: root.querySelector('#gpv-data-scale').value, scope: root.querySelector('#gpv-data-scope').value, entryId: entry.id };
     root.querySelector('#gpv-data-name').value = name;
     renderDataState(); applyStyle();
-    announce(name + ': ' + table.count + ' values from ' + formatDataValue(table.min) + ' to ' + formatDataValue(table.max) + (table.values.size ? '' : ' (no chain column — applied to every chain)'));
+    announce(name + ': ' + table.count + ' values from ' + formatDataValue(table.min) + ' to ' + formatDataValue(table.max) + (table.values.size ? '' : ' (no chain column — applied to every chain)') + (table.skipped ? ' · ' + plural(table.skipped, 'row') + ' skipped (residue number or value not a number)' : ''));
   }
 
   function renderDataState() {

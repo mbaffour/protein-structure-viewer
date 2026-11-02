@@ -58,12 +58,13 @@
     if (mode === 'annotated') return annotatedColor(entry, atom);
     if (mode === 'data') return dataColor(entry, atom);
     if (residueModes.includes(mode)) return residueColor(mode, atom);
+    if (mode === 'spectrum') return spectrumColor(entry, atom);
     return entry.scores.length ? plddtColor(Number(atom.b || 0)) : entry.color;
   }
 
   function describeResidue(entry, atom) {
     const confidence = entry.scores.length && Number.isFinite(Number(atom.b)) ? ' · pLDDT ' + Number(atom.b).toFixed(1) : '';
-    return (atom.resn || 'RES') + residueNumber(atom) + (atom.chain ? ' · chain ' + atom.chain : '') + confidence;
+    return residueName(atom, 'prose') + confidence;
   }
 
   function drawSequenceRow(canvas, entry, row) {
@@ -220,7 +221,7 @@
     const multi = entries.length > 1;
     const total = planned.reduce((sum, item) => sum + item.row.residues.length, 0);
     const mode = root.querySelector('#gpv-color-mode').value;
-    const colourNote = mode === 'chain' ? ' · coloured by chain' : mode === 'entity' ? ' · coloured by entity' : mode === 'deviation' ? ' · coloured by Cα deviation' : mode === 'fromresidue' ? distanceColourStripNote() : mode === 'agreement' ? ' · coloured by model agreement (Cα RMSF)' : mode === 'domain' ? ' · coloured by PAE domains' : mode === 'annotated' ? ' · coloured by annotated domains' : mode === 'data' ? ' · coloured by ' + (residueData ? residueData.name : 'per-residue data') : residueModes.includes(mode) ? ' · coloured by ' + ({ charge: 'residue charge', hydrophobicity: 'hydrophobicity', restype: 'residue type', amino: 'amino acid', ss: 'secondary structure' })[mode] : entries.some(entry => entry.scores.length) ? ' · coloured by pLDDT' : '';
+    const colourNote = mode === 'chain' ? ' · coloured by chain' : mode === 'entity' ? ' · coloured by entity' : mode === 'deviation' ? ' · coloured by Cα deviation' : mode === 'fromresidue' ? distanceColourStripNote() : mode === 'agreement' ? ' · coloured by model agreement (Cα RMSF)' : mode === 'domain' ? ' · coloured by PAE domains' : mode === 'annotated' ? ' · coloured by annotated domains' : mode === 'data' ? ' · coloured by ' + (residueData ? residueData.name : 'per-residue data') : residueModes.includes(mode) ? ' · coloured by ' + ({ charge: 'residue charge', hydrophobicity: 'hydrophobicity', restype: 'residue type', amino: 'amino acid', ss: 'secondary structure' })[mode] : mode === 'spectrum' ? ' · coloured N→C as a sequence spectrum' : entries.some(entry => entry.scores.length) ? ' · coloured by pLDDT' : '';
     const chainNote = planned.length > shown.length ? ' · first ' + shown.length + ' of ' + planned.length + ' rows' : '';
     const cut = hideBelow();
     const cutNote = cut && entries.some(entry => entry.scores.length) ? ' · pLDDT below ' + cut + ' hidden' : '';
@@ -275,6 +276,19 @@
       });
       head.append(title, meta, copy);
       const pre = document.createElement('pre'); pre.className = 'gpv-seq-lines';
+      /* The letters are the strip's keyboard way in: one stop per chain (a roving tabindex), the arrow
+         keys walk the letters (↑ ↓ a line of fifty), Home and End the ends, Enter or Space picks the
+         residue as a click does. The key goes no further, so ← → never also step the models. */
+      pre.addEventListener('keydown', event => {
+        const letters = [...pre.querySelectorAll('.gpv-aa')]; const index = letters.indexOf(event.target);
+        if (index < 0) return;
+        if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); event.target.click(); return; }
+        const moves = { ArrowRight: 1, ArrowLeft: -1, ArrowDown: 50, ArrowUp: -50, Home: -index, End: letters.length - 1 - index };
+        if (!(event.key in moves) || event.ctrlKey || event.metaKey || event.altKey) return;
+        event.preventDefault();
+        const next = letters[Math.max(0, Math.min(letters.length - 1, index + moves[event.key]))];
+        event.target.tabIndex = -1; next.tabIndex = 0; next.focus();
+      });
       const threshold = entry.scores.length ? hideBelow() : 0;
       for (let start = 0; start < row.residues.length; start += 50) {
         const line = document.createElement('div'); line.className = 'gpv-seq-line';
@@ -288,6 +302,8 @@
           span.style.color = /^#[0-9a-f]{6}$/i.test(fill) && hexLuminance(fill) > 0.5 ? '#111827' : '#ffffff';
           if (threshold && Number(atom.b) < threshold) span.classList.add('is-hidden');
           span.title = describeResidue(entry, atom);
+          span.setAttribute('role', 'button'); span.setAttribute('aria-label', span.title);
+          span.tabIndex = start === 0 && offset === 0 ? 0 : -1;
           span.dataset.resi = String(atom.resi);
           span.addEventListener('click', () => pickSequenceResidue(entry, atom));
           line.append(span);

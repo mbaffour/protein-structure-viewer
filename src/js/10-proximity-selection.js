@@ -43,17 +43,22 @@
     nearbyResult = result;
     root.querySelector('#gpv-near-copy').disabled = !result.residues.length;
     if (!result.residues.length) { updateStatus('No residues within ' + result.cutoff + ' Å of the target'); return; }
-    remember('nearby residues');
     const byChain = new Map();
     result.residues.forEach(item => { if (!byChain.has(item.chain)) byChain.set(item.chain, []); byChain.get(item.chain).push(item.resi); });
     const color = root.querySelector('#gpv-selection-color').value;
-    byChain.forEach((residues, chain) => selectionRecords.push({ id: nextAnnotationId++, entryId: result.entry.id, chain, residues, action: 'highlight', color }));
+    /* A second press with nothing changed would stack identical rows on the first; a chain already
+       highlighted with exactly these residues in this colour is left as it is. */
+    const same = (record, chain, residues) => record.entryId === result.entry.id && record.action === 'highlight' && (record.chain || '') === chain && record.color === color && record.residues.length === residues.length && record.residues.every((resi, index) => resi === residues[index]);
+    const wanted = [...byChain].filter(([chain, residues]) => !selectionRecords.some(record => same(record, chain, residues)));
+    if (!wanted.length) { updateStatus('Those ' + plural(result.residues.length, 'residue') + ' within ' + result.cutoff + ' Å are already highlighted on ' + displayName(result.entry)); return; }
+    remember('nearby residues');
+    wanted.forEach(([chain, residues]) => selectionRecords.push({ id: nextAnnotationId++, entryId: result.entry.id, chain, residues, action: 'highlight', color }));
     renderSelectionList(); applyStyle();
     updateStatus(result.residues.length + ' residue' + (result.residues.length === 1 ? '' : 's') + ' within ' + result.cutoff + ' Å highlighted on ' + displayName(result.entry) + ' · Copy residue list for the methods');
   }
 
   function nearbyListText() {
     if (!nearbyResult || !nearbyResult.residues) return '';
-    return nearbyResult.residues.map(item => (item.chain ? item.chain + ':' : '') + item.resn + item.resi).join(', ');
+    return nearbyResult.residues.map(item => residueName(item, 'list')).join(', ');
   }
 

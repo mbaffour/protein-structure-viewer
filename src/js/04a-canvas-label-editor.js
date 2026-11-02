@@ -83,18 +83,22 @@
      screen pixels with y growing downward. Text attached to the structure keeps a model-space
      offset, so the screen step is turned into ångström along the camera's own right and up axes;
      a corner title keeps screen pixels. Callers take their own undo step: a drag takes one for the
-     whole gesture, a key press one per press. */
-  function nudgeCanvasText(item, dxScreen, dyScreen, perAngstrom = pixelsPerAngstrom(viewer) || 20) {
+     whole gesture, a key press one per press. The pixels per ångström are measured at the text's own
+     anchor, every move: in perspective a label nearer the camera than the model centre moves further
+     per ångström than one behind it, and measured at the centre an arrow press or a drag after Go to
+     moved the text half the distance asked. */
+  function nudgeCanvasText(item, dxScreen, dyScreen, perAngstrom = null) {
     const record = item.record;
     if (item.kind === 'screen') {
       record.dx = (record.dx || 0) + dxScreen;
       record.dy = (record.dy || 0) + dyScreen;
       return;
     }
+    const scale = perAngstrom || pixelsPerAngstrom(viewer, canvasTextPoint(item.kind, record)) || pixelsPerAngstrom(viewer) || 20;
     const view = typeof viewer.getView === 'function' ? viewer.getView() : [0, 0, 0, 0, 0, 0, 0, 1];
     const right = screenAxisInModelSpace(view, { x: 1, y: 0, z: 0 });
     const up = screenAxisInModelSpace(view, { x: 0, y: 1, z: 0 });
-    const step = 1 / perAngstrom;
+    const step = 1 / scale;
     const offset = record.offset || { x: 0, y: 0, z: 0 };
     record.offset = {
       x: offset.x + (right.x * dxScreen - up.x * dyScreen) * step,
@@ -161,8 +165,19 @@
     return Boolean(labelEditorHost && target instanceof Node && labelEditorHost.contains(target));
   }
 
+  /* One residue, one spelling, in three forms: 'short' — "GLU57 · B" — on the canvas (a label's
+     default text, the marker, the contacts list, the distance key); 'prose' — "GLU57 · chain B" —
+     where a line of text names it (the card's head, the hover readout); 'list' — "B:GLU57" — in a
+     list copied for a methods section. The number carries its insertion code. */
+  function residueName(atom, form = 'short') {
+    const name = (atom.resn || 'RES') + residueNumber(atom);
+    const chain = atom.chain || '';
+    if (form === 'list') return (chain ? chain + ':' : '') + name;
+    return name + (chain ? (form === 'prose' ? ' · chain ' : ' · ') + chain : '');
+  }
+
   function labelEditorDefaultText(atom) {
-    return (atom.resn || 'RES') + residueNumber(atom) + (atom.chain ? ' · ' + atom.chain : '');
+    return residueName(atom);
   }
 
   function locationText(chain, resi) {
@@ -187,7 +202,7 @@
       const label = item.record;
       const entry = entryById(label.entryId);
       const atom = { chain: label.chain, resi: label.resi, icode: insertionCodeOf(label), resn: label.resn, b: label.b, x: label.x, y: label.y, z: label.z, atom: label.atom };
-      openLabelEditor({ kind: 'label', entryId: label.entryId, atom, key: label.key, record: label }, label.text, entry ? describeResidue(entry, atom) : (label.resn || 'RES') + label.resi);
+      openLabelEditor({ kind: 'label', entryId: label.entryId, atom, key: label.key, record: label }, label.text, entry ? describeResidue(entry, atom) : residueName(atom, 'prose'));
     } else if (item.kind === 'measurement') {
       openLabelEditor({ kind: 'measurement', id: item.record.id }, String(item.record.text || ''), measurementEditorHead(item.record));
     } else {
@@ -196,7 +211,7 @@
     setActiveText(item.kind, item.record);
   }
 
-  /* L: the residue already selected — by a click, the strip, Go to or the arrow keys of the strip —
+  /* L: the residue already selected — by a click, the strip, its letters, or Go to —
      gets the editor without another click. */
   function openLabelEditorForSelection() {
     if (!selectedResidue) { updateStatus('Select a residue first — click it in the viewer or the sequence strip — then press L to label it'); return; }
@@ -207,6 +222,10 @@
 
   function openLabelEditor(target, text, residueLine) {
     const host = labelEditorElement();
+    /* An armed Measure to… and an open card are never both waiting: the card's own Measure to… closes
+       it before arming, and opening a card (L, a click on text) drops the arm and says so — otherwise
+       the crosshair stayed on behind the card and its Esc closed the card alone. */
+    const disarmed = cancelMeasureTo(false);
     labelEditor = target;
     const residue = host.querySelector('.gpv-label-editor-residue');
     /* Annotation text belongs to no one residue, so its editor has no residue line. */
@@ -231,6 +250,7 @@
     input.focus({ preventScroll: true });
     input.select();
     if (!labelEditorFrame) labelEditorFrame = requestAnimationFrame(followLabelEditor);
+    if (disarmed) updateStatus('Measure to… cancelled · the card is open' + (residueLine ? ' at ' + residueLine : ''));
   }
 
   /* There is no render event to listen to, and the camera moves under the editor through 3Dmol's
@@ -326,7 +346,8 @@
     /* A measurement's text may be emptied: the label then reads the value alone, as it always did. */
     if (editor.kind === 'measurement') { commitMeasurementText(text); return; }
     /* An empty commit is a cancel: a label of nothing is never created, and an existing label is
-       removed with Remove, not by emptying it. */
+       removed with Remove, not by emptying it. Annotation text has rules of its own. */
+    if (!text && editor.kind === 'annotation' && labelEditorRecord()) { commitEmptyAnnotationText(labelEditorRecord()); return; }
     if (!text) { closeLabelEditor(true); return; }
     if (editor.kind === 'new') {
       const entry = entryById(editor.entryId);
@@ -369,6 +390,24 @@
     setActiveText(editor.textKind || 'annotation', record);
   }
 
+  /* An emptied field on annotation text: an arrow's, a line's or a marker's text is optional, and an
+     empty commit takes it away, as the row does. A callout and a corner title are their text, so they
+     keep it, and the status says how to remove them instead. */
+  function commitEmptyAnnotationText(record) {
+    if (record.type === 'callout' || record.type === 'screen') {
+      closeLabelEditor(true);
+      updateStatus((record.type === 'screen' ? 'Screen text' : 'A callout') + ' keeps its text — type new words, or Remove it from its row in Annotate');
+      return;
+    }
+    if (record.text) {
+      remember('annotation text');
+      record.text = '';
+      renderAnnotationList(); rebuildOverlays();
+      updateStatus(annotationTools[record.type].label + ' text removed');
+    }
+    closeLabelEditor(true);
+  }
+
   function removeFromLabelEditor() {
     if (labelEditor && labelEditor.kind === 'measurement') { removeMeasurementFromEditor(); return; }
     const record = labelEditor && labelEditor.kind === 'label' ? labelEditorRecord() : null;
@@ -389,13 +428,25 @@
     activeText = null;
   }
 
+  /* What a piece of canvas text is called in the status line and the undo history. */
+  function canvasTextNoun(kind) {
+    return kind === 'measurement' ? 'measurement' : kind === 'label' ? 'label' : 'annotation text';
+  }
+
+  /* The undo step a move of that text takes: "Undid measurement text move". */
+  function canvasTextMoveStep(kind) {
+    return kind === 'measurement' ? 'measurement text move' : kind === 'label' ? 'label nudge' : 'annotation text move';
+  }
+
   function nudgeActiveText(dx, dy, repeat) {
     const resolved = activeCanvasText(); if (!resolved) return;
     /* Holding an arrow key is one move, not sixty undo steps. */
-    if (!repeat) remember('label nudge');
+    if (!repeat) remember(canvasTextMoveStep(resolved.kind));
     nudgeCanvasText(resolved, dx, dy);
     renderCanvasTextLists(resolved.kind);
     rebuildOverlays();
+    const noun = canvasTextNoun(resolved.kind);
+    updateStatus(noun.charAt(0).toUpperCase() + noun.slice(1) + (resolved.kind === 'measurement' ? ' text' : '') + ' moved · arrow keys move it, Shift for 1 px, Esc lets go');
   }
 
   function removeActiveText() {
@@ -429,7 +480,7 @@
       /* An armed Measure to… is the most passing state of all, so Esc drops it before anything else. */
       if (cancelMeasureTo(true)) return true;
       if (labelEditor) { closeLabelEditor(true); return true; }
-      if (activeText) { clearActiveText(); updateStatus('No label selected'); return true; }
+      if (activeText) { const kind = activeText.kind; clearActiveText(); updateStatus('No ' + canvasTextNoun(kind) + ' selected'); return true; }
       /* Then the selected residue and its marker — but only when no mode or full screen is waiting
          for this Esc: a residue is selected by nearly every click, and Esc must still leave Drag to
          select, full screen, measuring and drawing in one press, as it always has. */

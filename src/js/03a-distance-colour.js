@@ -13,6 +13,8 @@
   const distanceFromResidueBands = [[4, '#1e3a8a', '≤4 Å'], [6, '#2563eb', '4–6 Å'], [10, '#60a5fa', '6–10 Å'], [20, '#bfdbfe', '10–20 Å'], [Infinity, '#d1d5db', '>20 Å']];
   const distanceFromResidueGrey = '#9ca3af';
   const distanceFromResidueSelf = '#f97316';
+  /* What choosing the mode with nothing selected says (41); a selection replaces it. */
+  const distanceColourHint = 'Click a residue first';
   /* { key, atoms, values } for the last residue coloured from: chain|resi → closest heavy-atom
      distance. One residue against a model is a single pass over its atoms, but colouring asks once
      per atom per viewer, panel and export, so the pass is made once per residue. */
@@ -33,10 +35,10 @@
     if (!picked) return null;
     const entry = entryById(picked.entryId);
     if (!entry) return null;
-    const residue = (picked.resn || 'RES') + picked.resi;
+    const residue = (picked.resn || 'RES') + residueNumber(picked);
     return {
       entry, chain: picked.chain || '', resi: picked.resi,
-      short: residue + (picked.chain ? ' · ' + picked.chain : ''),
+      short: residueName(picked),
       long: residue + (picked.chain ? ' of chain ' + picked.chain : '') + (structures.length > 1 ? ' in ' + displayName(entry) : '')
     };
   }
@@ -78,7 +80,8 @@
 
   /* Called whenever the selected residue changes (selectResidue, clearSelectedResidue). Deferred to
      after the click that changed it, so the restyle never runs in the middle of a click handler, and
-     the status line that click wrote is kept rather than replaced by applyStyle's "Ready". */
+     the status line that click wrote is kept rather than replaced by applyStyle's "Ready" — except the
+     "Click a residue first" hint the mode itself put up, which a residue now selected answers. */
   function distanceColourSelectionChanged() {
     if (root.querySelector('#gpv-color-mode').value !== 'fromresidue') return;
     if (distanceRecolourTimer || distanceColourKey() === distanceColourDrawn) return;
@@ -87,7 +90,8 @@
       if (root.querySelector('#gpv-color-mode').value !== 'fromresidue' || distanceColourKey() === distanceColourDrawn) return;
       const state = root.querySelector('#gpv-state'); const said = state.textContent;
       applyStyle();
-      state.textContent = said;
+      const target = distanceColourTarget();
+      state.textContent = target && said.startsWith(distanceColourHint) ? 'Coloured by distance from ' + target.short : said;
     }, 0);
   }
 

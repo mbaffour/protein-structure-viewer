@@ -107,6 +107,68 @@ All notable changes to this project are recorded here.
 - **Stepping to a model from an overlay switched to one at a time without a word**, and a fetched
   structure did the same. A fetch now keeps the View mode; Current model, ← →, Previous/Next and cycling
   still show one model, but say so in the status line, and the mode is saved as a preference.
+- **Dragging or nudging text in perspective moved it the wrong distance.** After *Go to* a 100 px drag
+  moved a label 49 px and five arrow presses 20 px instead of 40, and a callout far from the model centre
+  overshot, because pixels per ångström were measured at the model centre. They are now measured at the
+  text's own anchor for the drag, the arrow keys, the row arrows and *Separate labels* (on screen and at
+  print size), so text moves by the pixels asked at any zoom.
+- **Side-chain atoms could not be clicked on a model over 3 000 atoms** (5CHA): a click on His57 NE2
+  picked nothing and one on Ser195 OG picked another residue's Cα, so measurement mode and drawing only
+  ever took Cα atoms or water. The click is still searched among the Cα atoms first, then among every atom
+  of the residues near the pointer; NE2 to OG now measures the published 3.02 Å.
+- **Sequence spectrum drew every model grey** and logged a warning per atom (3Dmol has no scheme of that
+  name). Each chain now runs blue at its N-terminus to red at its C-terminus, and the sequence strip and
+  its letters, which kept the model colour, are painted from the same colours.
+- **The residue card and Measure to…**: opening the card (<kbd>L</kbd>) left an armed *Measure to…* on
+  behind it, and <kbd>Esc</kbd> in the card closed the card and left the crosshair; opening the card now
+  drops the arm and says so. *Go to* with the card open left it naming the old residue, and its
+  <kbd>Enter</kbd> labelled that one; *Go to* now closes it. (Removing the armed residue's model already
+  cancels the arm since the model-removal fix above.)
+- **Measure all and Highlight made duplicates**: a contact clicked first and then *Measure all* drew that
+  pair twice, text on text, and every press of the card's *Highlight* added another set of rows. *Measure
+  all* now leaves out a pair already measured between the same atoms and says *N new · M already
+  measured*; a press with nothing new, or a *Highlight* of residues already highlighted in that colour,
+  adds nothing and takes no undo step.
+- **While measuring, drawing or with Measure to… armed, a click on text over an atom was swallowed**:
+  the press started a drag of the text that did nothing. A click without a drag now goes to the atom
+  under the text, and the status says so when there is none.
+- **Separate labels pressed again announced the same move and took an undo step that undid nothing.** A
+  press that would leave every offset as it is now says *Nothing more to move* (or that labels are
+  already clear) and takes no step, and a press that leaves boxes overlapping says how many pairs remain.
+- **"As measured" could not be chosen again** once a measurement made between other atoms was re-pointed
+  to Cα–Cα or the closest atoms; the clicked atoms are now kept for that record (in memory only, not in
+  scenes) and stay one choice of *Atoms*.
+- **The canvas editor could not empty an arrow's, a line's or a marker's text** (the row could): an empty
+  commit now removes the text; a callout or a corner title keeps its text and the status says how to
+  remove it instead.
+- **Under distance colouring the status kept saying "Click a residue first"** after a residue was clicked
+  and the model coloured; it now says *Coloured by distance from SER14 · D*.
+- **Light theme: accent-coloured text read below 4.5:1** — the selected tab (2.9:1), the current model's
+  name in the Models list (2.5:1) and the card's count of nearby residues. Text in the accent now takes a
+  darker blue (`--accent-ink`, `#0b6bcb`) in the light theme; fills and rings keep the accent, and the
+  dark theme is unchanged.
+- **Measurement text and rows**: dragging measurement text said *Label moved*, <kbd>Esc</kbd> on it *No
+  label selected*, and undoing its arrow move *Undid label nudge*; they now name the measurement (and
+  annotation text its own), and an arrow move, the row arrows, *Show* and the row's *Remove* say what they
+  did. Enter in a row's text, and its *Dashed* or *Show value*, rebuilt the list and dropped the keyboard
+  focus on the page; it now comes back to the same control (annotation rows too), and every measurement
+  and annotation *Remove* is named for screen readers (*Remove the measurement HIS57 · B NE2 ↔ …*). A
+  label just dragged is now the active one, so the arrows and <kbd>Delete</kbd> act on it. The measurement
+  colour had no way back to the default: a **Default** button beside it, in the row and in the editor, puts
+  back the crimson line in one undo step.
+- **Small things in the card and Annotate**: the *peptide bond* tag in the contacts list was cut to
+  "peptide bon…" (it now wraps under the name) and the atoms column wrote `CA` beside a `Cα` column (it
+  writes Cα); *Within (Å)* kept 15 or 1 in its field while the card counted at 12 or 2 Å (it is now set
+  to the nearest end); *Clear measurements* was enabled and *Start measuring* turned on with nothing
+  loaded (Clear is greyed out until there is a measurement, and Start says to load a model); *Go to*
+  rejected `B57`, the way the card writes a residue (it now reads a chain name then a number).
+- **Polish**: one way of spelling a residue in the card, its contacts, the marker, the hover readout and
+  *Copy residue list* (`HIS57 · B`, `HIS57 · chain B`, `B:HIS57`); *Colour scheme* and *Highlight colour*
+  spelt as everywhere else; the figure builder's buttons are *Download built figure PNG/SVG*, no longer
+  named like the view's; the sequence letters can be reached and walked from the keyboard (one Tab stop
+  per chain, arrows, Enter); the help lists <kbd>Backspace</kbd> beside <kbd>Delete</kbd>; deleting a
+  figure template asks first; a hand edit after a journal preset sets the journal select back to *Choose
+  a journal…*; a per-residue table says how many rows it could not read (`· 2 rows skipped`).
 
 ## 2.51.0
 
