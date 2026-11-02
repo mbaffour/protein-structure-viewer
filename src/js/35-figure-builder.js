@@ -33,22 +33,33 @@
     const cellWidth = Math.floor(requested.width / columns);
     const cellHeight = Math.max(1, Math.floor(cellWidth * requested.height / Math.max(1, requested.width)));
     const fontPx = Math.max(10, Math.round(requested.dpi ? requested.points / 72 * requested.dpi : 12 * figureScale(requested)));
-    /* Captions wrap onto a second line when they do not fit beside the letter; the strip is as
-       tall as the longest caption in the figure needs, so every row lines up. */
+    /* Captions wrap onto up to three lines when they do not fit beside the letter; the strip is as
+       tall as the longest caption in the figure needs, so every row lines up. Past three the last
+       line ends in an ellipsis and `cut` marks it, so the estimate and the status can say so — Make
+       site figure writes captions that long itself. */
     const inset = Math.round(cellWidth * 0.025);
     furnitureMeasure.font = '700 ' + Math.round(fontPx * 1.3) + 'px ' + figureFont();
     const letterWidth = options.letters ? furnitureMeasure.measureText('W').width + fontPx * 0.8 : 0;
     const captionWidth = cellWidth - inset - letterWidth - fontPx;
     furnitureMeasure.font = '500 ' + fontPx + 'px ' + figureFont();
-    const captionLines = view => { const wrapped = wrapText(furnitureMeasure, builderCaption(view, options), captionWidth); return wrapped.length > 2 ? [wrapped[0], truncateToWidth(furnitureMeasure, wrapped.slice(1).join(' '), captionWidth)] : wrapped; };
+    const captionLines = view => {
+      const wrapped = wrapText(furnitureMeasure, builderCaption(view, options), captionWidth);
+      if (wrapped.length <= 3) return wrapped;
+      const kept = [wrapped[0], wrapped[1], truncateToWidth(furnitureMeasure, wrapped.slice(2).join(' '), captionWidth)]; kept.cut = true;
+      return kept;
+    };
     const lines = Math.max(1, ...panels.map(view => captionLines(view).length));
+    const shortened = panels.filter(view => captionLines(view).cut).map(panelLetter);
     const captionHeight = options.letters || options.captions !== 'none' ? Math.round(fontPx * (0.9 + 1.3 * lines)) : Math.round(fontPx * 0.5);
     const cellPlan = { width: cellWidth, height: cellHeight, dpi: requested.dpi, points: requested.points, textScale: requested.textScale, mm: requested.mm ? requested.mm / columns : undefined };
     /* The optional architecture row spans the figure width under the panels and reads the
        domains of the model on screen. */
     const scale = figureScale(cellPlan); const architecture = options.architecture ? architectureModel(activeEntry()) : null;
     const architectureRow = architecture ? architectureHeight(architecture, scale) + Math.round(24 * scale) : 0;
-    return { requested, options, columns, rows, cellWidth, cellHeight, fontPx, inset, letterWidth, captionWidth, captionLines, lines, captionHeight, architecture, architectureRow, scale, width: columns * cellWidth, height: rows * (cellHeight + captionHeight) + architectureRow, cellPlan };
+    return { requested, options, columns, rows, cellWidth, cellHeight, fontPx, inset, letterWidth, captionWidth, captionLines, lines, captionHeight, architecture, architectureRow, scale, width: columns * cellWidth, height: rows * (cellHeight + captionHeight) + architectureRow, cellPlan, shortened };
+  }
+  function shortenedCaptionsNote(layout) {
+    return layout.shortened.length ? ' · caption' + (layout.shortened.length === 1 ? ' of panel ' : 's of panels ') + layout.shortened.join(', ') + ' shortened to fit three lines' : '';
   }
   function builderCaption(view, options) {
     const name = String(view.name || ''); const caption = String(view.caption || '');
@@ -81,7 +92,7 @@
     if (!savedViews.length) { estimate.textContent = 'Save a view above to start a figure.'; return; }
     if (!panels.length) { estimate.textContent = 'No view is ticked.'; return; }
     const layout = figureLayout(panels.length, panels);
-    estimate.textContent = panels.length + ' panel' + (panels.length === 1 ? '' : 's') + ' · ' + layout.columns + ' column' + (layout.columns === 1 ? '' : 's') + ' · ' + layout.width + ' × ' + layout.height + ' px' + (layout.requested.dpi ? ' · ' + layout.requested.mm + ' mm wide at ' + layout.requested.dpi + ' dpi · text ' + layout.requested.points + ' pt' : '') + ' · each panel ' + layout.cellWidth + ' × ' + layout.cellHeight + ' px' + (layout.architecture ? ' · architecture row ' + layout.architectureRow + ' px' : layout.options.architecture ? ' · no domains for an architecture row' : '');
+    estimate.textContent = panels.length + ' panel' + (panels.length === 1 ? '' : 's') + ' · ' + layout.columns + ' column' + (layout.columns === 1 ? '' : 's') + ' · ' + layout.width + ' × ' + layout.height + ' px' + (layout.requested.dpi ? ' · ' + layout.requested.mm + ' mm wide at ' + layout.requested.dpi + ' dpi · text ' + layout.requested.points + ' pt' : '') + ' · each panel ' + layout.cellWidth + ' × ' + layout.cellHeight + ' px' + (layout.architecture ? ' · architecture row ' + layout.architectureRow + ' px' : layout.options.architecture ? ' · no domains for an architecture row' : '') + shortenedCaptionsNote(layout);
   }
   async function downloadFigure(kind) {
     const panels = figurePanelsSelected();
@@ -90,6 +101,9 @@
     const layout = figureLayout(panels.length, panels); const options = layout.options; const palette = figurePalette();
     const done = setBusy('Rendering figure…'); button.disabled = true; button.textContent = 'Rendering…'; await afterPaint();
     const restore = captureViewState();
+    /* Said last, after the on-screen view is back: putting it back restyles the models, whose status
+       line ('Ready') would otherwise replace what was written. */
+    let outcome = null;
     const canvas = kind === 'png' ? document.createElement('canvas') : null; let context = null;
     if (canvas) { canvas.width = layout.width; canvas.height = layout.height; context = canvas.getContext('2d'); context.fillStyle = palette.paper; context.fillRect(0, 0, canvas.width, canvas.height); }
     const parts = []; const scale = figureScale(layout.cellPlan);
@@ -130,11 +144,12 @@
       const stem = 'protein-figure-' + panels.length + '-panel' + (panels.length === 1 ? '' : 's');
       if (kind === 'png') downloadBlob(await pngWithDpi(canvas.toDataURL('image/png'), layout.requested.dpi), 'image/png', exportFileName(stem, layout.requested, 'png'));
       else downloadBlob(svgDocument(layout.width, layout.height, palette.paper, parts.join('\n')), 'image/svg+xml', stem + '.svg');
-      announce('Figure ' + kind.toUpperCase() + ' downloaded · ' + panels.length + ' panel' + (panels.length === 1 ? '' : 's') + ' · ' + layout.width + ' × ' + layout.height + ' px' + (layout.requested.dpi ? ' · ' + layout.requested.mm + ' mm wide at ' + layout.requested.dpi + ' dpi' : ''));
+      outcome = ['Figure ' + kind.toUpperCase() + ' downloaded · ' + panels.length + ' panel' + (panels.length === 1 ? '' : 's') + ' · ' + layout.width + ' × ' + layout.height + ' px' + (layout.requested.dpi ? ' · ' + layout.requested.mm + ' mm wide at ' + layout.requested.dpi + ' dpi' : '') + shortenedCaptionsNote(layout)];
     } catch (error) {
-      announce('Could not render the figure: ' + error.message, 'error');
+      outcome = ['Could not render the figure: ' + error.message, 'error'];
     } finally {
       releaseExportViewer(); applyViewState(restore, { panels: false }); done(); button.textContent = idle; renderFigureBuilder();
+      if (outcome) announce(...outcome);
     }
   }
   function downloadContactSheet() { return downloadFigure('png'); }

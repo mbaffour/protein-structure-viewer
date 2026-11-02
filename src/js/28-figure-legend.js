@@ -62,7 +62,10 @@
     if (root.querySelector('#gpv-side-by-side').checked && comparePanels.length) sentences.push('Panels share one orientation' + (root.querySelector('#gpv-sync-mode').value === 'full' ? ' and zoom' : '') + '.');
     const shownIds = new Set(shown.map(entry => entry.id));
     const labels = labelRecords.filter(label => shownIds.has(label.entryId));
-    if (labels.length) sentences.push('Labelled residues: ' + labels.map(label => label.text).join(', ') + '.');
+    /* A renamed label names its residue too — "Catalytic Ser (SER195 · C)" — so the reader can find it;
+       a label that already reads as its residue is not repeated, and a domain label names a domain. */
+    const labelResidue = label => (label.resn || 'RES') + label.resi + (label.icode || '') + (label.chain ? ' · ' + label.chain : '');
+    if (labels.length) sentences.push('Labelled residues: ' + labels.map(label => label.text + (label.kind === 'domain' || label.text === labelResidue(label) ? '' : ' (' + labelResidue(label) + ')')).join(', ') + '.');
     spotlightResidues.forEach(spot => {
       const sentence = positionSentence(spot); if (sentence) sentences.push(sentence);
       const effect = positionEffectLegend(spot); if (effect) sentences.push(effect);
@@ -89,6 +92,28 @@
     catch (error) { field.focus(); field.select(); announce('Figure legend written — copy it from the field'); }
   }
 
+  /* The PDB code a model came with: the identifier it was fetched by, the mmCIF entry id, the PDB
+     HEADER's id columns, or a file named after it (5cha.cif). */
+  function pdbCodeOf(entry) {
+    if (entry.fetchId && /^[0-9][a-z0-9]{3}$/i.test(entry.fetchId)) return entry.fetchId.toUpperCase();
+    const text = String(entry.text || '').slice(0, 20000);
+    const found = text.match(/^_entry\.id\s+'?([0-9][a-z0-9]{3})'?\s*$/im) || text.match(/^HEADER.{56}([0-9][A-Z0-9]{3})/m) || String(entry.name || '').match(/^([0-9][a-z0-9]{3})(?:\.|$)/i);
+    return found ? found[1].toUpperCase() : null;
+  }
+  /* What the methods say was inspected. A crystal structure is not a prediction: experimental models
+     (a method record, or fetched from the PDB) are named with their codes, predicted ones (pLDDT read,
+     or a predictor's confidence files) as predicted, and anything mixed or unknown as structures. */
+  function methodsSubject(shown) {
+    const experimental = entry => Boolean(entry.experimentalMethod || entry.collection === 'RCSB PDB');
+    const predicted = entry => !experimental(entry) && Boolean(entry.scores.length || (entry.confidence && Object.keys(entry.confidence).length));
+    if (shown.length && shown.every(experimental)) {
+      const codes = [...new Set(shown.map(pdbCodeOf).filter(Boolean))];
+      return 'Experimental structure' + (shown.length === 1 ? '' : 's') + (codes.length ? ' (PDB ' + codes.join(', ') + ')' : '') + (shown.length === 1 ? ' was' : ' were');
+    }
+    if (shown.length && shown.every(predicted)) return 'Predicted structure' + (shown.length === 1 ? ' was' : 's were');
+    return 'Structure' + (shown.length === 1 ? ' was' : 's were');
+  }
+
   /* A methods paragraph in the past tense, stating the definitions behind every number the
      viewer can show, so a paper's Methods section describes what was actually computed. */
   function methodsText() {
@@ -96,7 +121,7 @@
     const first = shown[0] || structures.find(entry => entry.model) || null;
     const mode = root.querySelector('#gpv-color-mode').value;
     const sentences = [];
-    sentences.push('Predicted structures were inspected in Protein Structure Viewer ' + viewerVersion + ' (Awuah, 2026; github.com/mbaffour/protein-structure-viewer), a browser application built on 3Dmol.js 2.4.2 (Rego & Koes, 2015).');
+    sentences.push(methodsSubject(shown) + ' inspected in Protein Structure Viewer ' + viewerVersion + ' (Awuah, 2026; github.com/mbaffour/protein-structure-viewer), a browser application built on 3Dmol.js 2.4.2 (Rego & Koes, 2015).');
     if (shown.some(entry => entry.scores.length)) sentences.push('Per-residue pLDDT was read from the B-factor column of the model files and mean pLDDT was calculated over Cα atoms (C1′ for nucleotides)' + (shown.some(entry => entry.confidence && entry.confidence.pae) ? '; predicted aligned error (PAE) matrices were read from the accompanying confidence files' : '') + '.');
     if (alignmentResults.length) {
       const bySequence = alignmentResults[0].method !== 'chain/residue IDs';
@@ -108,6 +133,20 @@
     if (ensembleSpread) sentences.push('Model agreement was expressed per residue as the Cα root-mean-square fluctuation about the mean Cα position across the ' + ensembleSpread.count + ' superposed models, for residues present in at least two models; each model\'s residues were matched to the reference (' + ensembleSpread.models[0] + ') through the residue pairing used for its superposition, and values are reported in the reference\'s residue numbering.');
     /* The contact or distance map's sentence (19): the contact rule, or the Cα–Cα scale of the All distances view. */
     const contactSentence = contactMethodsSentence(); if (contactSentence) sentences.push(contactSentence);
+    /* The legend quotes each measurement's value; this says what it was measured between. */
+    const shownIds = new Set(shown.map(entry => entry.id));
+    const measured = measurementRecords.filter(record => record.points.every(point => shownIds.has(point.entryId)));
+    if (measured.length) {
+      const distances = measured.filter(record => record.type === 'distance'); const angles = measured.length - distances.length;
+      const alpha = distances.filter(record => record.points.every(point => point.atom === 'CA')).length;
+      const named = 'the specific atoms named in the figure legend (for two residues, the closest pair of heavy atoms where that was chosen)';
+      const tail = ', in Å, from the model coordinates without fitting or averaging.';
+      const plural = distances.length === 1 ? 'The distance shown was' : 'The ' + distances.length + ' distances shown were';
+      if (distances.length && alpha === distances.length) sentences.push(plural + ' measured between Cα atoms' + tail);
+      else if (distances.length && !alpha) sentences.push(plural + ' measured between ' + named + tail);
+      else if (distances.length) sentences.push('Of the ' + distances.length + ' distances shown, ' + alpha + (alpha === 1 ? ' was' : ' were') + ' measured between Cα atoms and ' + (distances.length - alpha) + ' between ' + named + tail);
+      if (angles) sentences.push((angles === 1 ? 'The angle' : 'The ' + angles + ' angles') + ' shown ' + (angles === 1 ? 'was' : 'were') + ' measured at the middle of the three atoms named in the figure legend, in degrees.');
+    }
     if (residueData && residueData.msa && root.querySelector('#gpv-color-mode').value === 'data') sentences.push('Per-residue ' + (residueData.msa.metric === 'depth' ? 'alignment coverage (number of sequences with a residue at the column)' : residueData.msa.metric === 'identity' ? 'identity to the query (fraction of aligned sequences sharing the query residue)' : 'conservation, defined as 1 − H/log₂20 with H the Shannon entropy of the amino-acid distribution at the column (gaps excluded' + (residueData.msa.weighted ? '; sequences weighted with the position-based scheme of Henikoff & Henikoff, 1994' : '; sequences unweighted') + '),') + ' was computed from the unpaired multiple sequence alignment written by AlphaFold 3 (' + residueData.msa.sequences.join(' and ') + ' sequences) and mapped onto the chains whose sequence matches the query.');
     const domains = first && first.domains;
     if (domains && domains.domains.length) sentences.push('Domains were derived from the PAE matrix by greedy agglomeration of ten-residue segments: the pair with the lowest mean inter-segment PAE was merged while that mean stayed below ' + domains.cutoff + ' Å; groups of fewer than twenty residues were absorbed into the nearest domain when within twice the cutoff and otherwise left unassigned. This segmentation is a heuristic and differs from the graph clustering used by the AlphaFold Protein Structure Database.');

@@ -67,3 +67,7 @@
   }
 
 
+  /* The rules read these two controls live, but nothing else they touch re-renders the list: switching
+     the legend off left it ticking "The colour legend is drawn on exports" until some other setting
+     changed. */
+  ['#gpv-export-legend', '#gpv-scale-bar'].forEach(selector => root.querySelector(selector).addEventListener('change', () => renderPublicationChecks()));

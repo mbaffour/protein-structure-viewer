@@ -52,23 +52,33 @@
   /* The RMSF profile: per-residue Cα spread across the aligned models, one panel per chain,
      the agreement bands as stripes behind the trace so the reader sees at a glance which
      stretches the models agree on. The ensemble figure's companion to the pLDDT profile. */
-  function rmsfProfileSvg() {
+  /* `fit` lays it out for a composite cell, as plddtProfileSvg's does: no title or band key (the
+     caption and the stripes carry them), text at the figure's size. */
+  function rmsfProfileSvg(fit = null) {
     if (!ensembleSpread || !ensembleSpread.values.size) return null;
     const byChain = new Map();
     ensembleSpread.values.forEach((value, tag) => { const [chain, resi] = tag.split('|'); if (!byChain.has(chain)) byChain.set(chain, []); byChain.get(chain).push({ resi: Number(resi), value }); });
     const chains = [...byChain.keys()].sort(compareChains).slice(0, 12);
     if (!chains.length) return null;
-    const width = 1200; const left = 72; const right = 30; const top = 64; const rowHeight = 170; const gap = 40; const bottom = 40;
-    const height = top + chains.length * rowHeight + (chains.length - 1) * gap + bottom;
+    let k = 1; let width = 1200; let left = 72; let right = 30; let top = 64; let rowHeight = 170; let gap = 40; let bottom = 40; let axisLabel = 52;
+    if (fit) {
+      left = 50; right = 12; top = 24; gap = 30; bottom = 26; axisLabel = 40;
+      k = Math.min(fit.scale, fit.height / (top + bottom + (chains.length - 1) * gap + chains.length * 40));
+      [left, right, top, gap, bottom, axisLabel] = [left, right, top, gap, bottom, axisLabel].map(value => value * k);
+      width = fit.width; rowHeight = (fit.height - top - bottom - (chains.length - 1) * gap) / chains.length;
+    }
+    const height = fit ? fit.height : top + chains.length * rowHeight + (chains.length - 1) * gap + bottom;
     const ink = '#111827'; const muted = '#6b7280'; const grid = '#e5e7eb';
     const ceiling = Math.max(1, Math.ceil(ensembleSpread.max * 1.05 * 2) / 2);
     const parts = [];
-    const text = (x, y, value, size, anchor = 'start', weight = 400, fill = ink, extra = '') => '<text x="' + f(x) + '" y="' + f(y) + '" font-family="' + svgFont + '" font-size="' + size + '" font-weight="' + weight + '" text-anchor="' + anchor + '" fill="' + fill + '"' + extra + '>' + svgEscape(value) + '</text>';
-    parts.push('<g id="title">' + text(left, 32, (provenanceValues().title ? provenanceValues().title + ' · ' : '') + 'Per-residue Cα RMSF across ' + ensembleSpread.count + ' models', 20, 'start', 600) + '</g>');
-    parts.push('<g id="bands">');
-    let cursor = width - right; svgMeasure.font = '500 12px ' + svgFont;
-    [...agreementBands].reverse().forEach(([, color, label]) => { const labelWidth = svgMeasure.measureText(label).width; cursor -= labelWidth; parts.push(text(cursor, 34, label, 12, 'start', 500)); cursor -= 18; parts.push('<rect x="' + f(cursor) + '" y="24" width="12" height="12" rx="2" fill="' + color + '"/>'); cursor -= 16; });
-    parts.push('</g>');
+    const text = (x, y, value, size, anchor = 'start', weight = 400, fill = ink, extra = '') => '<text x="' + f(x) + '" y="' + f(y) + '" font-family="' + svgFont + '" font-size="' + f(size * k) + '" font-weight="' + weight + '" text-anchor="' + anchor + '" fill="' + fill + '"' + extra + '>' + svgEscape(value) + '</text>';
+    if (!fit) parts.push('<g id="title">' + text(left, 32, (provenanceValues().title ? provenanceValues().title + ' · ' : '') + 'Per-residue Cα RMSF across ' + ensembleSpread.count + ' models', 20, 'start', 600) + '</g>');
+    if (!fit) {
+      parts.push('<g id="bands">');
+      let cursor = width - right; svgMeasure.font = '500 12px ' + svgFont;
+      [...agreementBands].reverse().forEach(([, color, label]) => { const labelWidth = svgMeasure.measureText(label).width; cursor -= labelWidth; parts.push(text(cursor, 34, label, 12, 'start', 500)); cursor -= 18; parts.push('<rect x="' + f(cursor) + '" y="24" width="12" height="12" rx="2" fill="' + color + '"/>'); cursor -= 16; });
+      parts.push('</g>');
+    }
     const plotWidth = width - left - right;
     chains.forEach((chain, index) => {
       const y0 = top + index * (rowHeight + gap);
@@ -82,19 +92,20 @@
       const tickStep = ceiling <= 2 ? 0.5 : ceiling <= 5 ? 1 : ceiling <= 12 ? 2 : 5;
       for (let value = 0; value <= ceiling + 1e-9; value += tickStep) {
         parts.push('<line x1="' + f(left) + '" x2="' + f(left + plotWidth) + '" y1="' + f(y(value)) + '" y2="' + f(y(value)) + '" stroke="' + grid + '"/>');
-        parts.push(text(left - 8, y(value) + 4, String(Math.round(value * 10) / 10), 11, 'end', 400, muted));
+        parts.push(text(left - 8 * k, y(value) + 4 * k, String(Math.round(value * 10) / 10), 11, 'end', 400, muted));
       }
-      const step = [10, 20, 25, 50, 100, 200, 250, 500, 1000].find(candidate => (maxResi - minResi) / candidate <= 14) || 1000;
+      const most = fit ? Math.max(3, Math.min(14, Math.floor(plotWidth / (40 * k)))) : 14;
+      const step = [10, 20, 25, 50, 100, 200, 250, 500, 1000].find(candidate => (maxResi - minResi) / candidate <= most) || 1000;
       for (let resi = Math.ceil(minResi / step) * step; resi <= maxResi; resi += step) {
-        parts.push('<line x1="' + f(x(resi)) + '" x2="' + f(x(resi)) + '" y1="' + f(y0 + rowHeight) + '" y2="' + f(y0 + rowHeight + 4) + '" stroke="' + muted + '"/>');
-        parts.push(text(x(resi), y0 + rowHeight + 17, String(resi), 11, 'middle', 400, muted));
+        parts.push('<line x1="' + f(x(resi)) + '" x2="' + f(x(resi)) + '" y1="' + f(y0 + rowHeight) + '" y2="' + f(y0 + rowHeight + 4 * k) + '" stroke="' + muted + '"/>');
+        parts.push(text(x(resi), y0 + rowHeight + 17 * k, String(resi), 11, 'middle', 400, muted));
       }
       parts.push('<rect x="' + f(left) + '" y="' + f(y0) + '" width="' + f(plotWidth) + '" height="' + f(rowHeight) + '" fill="none" stroke="' + muted + '"/>');
-      parts.push(text(left, y0 - 8, chain ? 'Chain ' + chain : 'Chain —', 13, 'start', 600));
-      parts.push(text(left - 52, y0 + rowHeight / 2, 'RMSF (Å)', 11, 'middle', 400, muted, ' transform="rotate(-90 ' + f(left - 52) + ' ' + f(y0 + rowHeight / 2) + ')"'));
+      parts.push(text(left, y0 - 8 * k, chain ? 'Chain ' + chain : 'Chain —', fit ? 11 : 13, 'start', 600));
+      parts.push(text(left - axisLabel, y0 + rowHeight / 2, 'RMSF (Å)', 11, 'middle', 400, muted, ' transform="rotate(-90 ' + f(left - axisLabel) + ' ' + f(y0 + rowHeight / 2) + ')"'));
       const d = residues.map((item, position) => (position ? 'L' : 'M') + f(x(item.resi)) + ' ' + f(y(item.value))).join(' ');
       parts.push('<path d="' + d + ' L' + f(x(maxResi)) + ' ' + f(y(0)) + ' L' + f(x(minResi)) + ' ' + f(y(0)) + ' Z" fill="' + ink + '" fill-opacity="0.08"/>');
-      parts.push('<path d="' + d + '" fill="none" stroke="' + ink + '" stroke-width="1.8" stroke-linejoin="round"/>');
+      parts.push('<path d="' + d + '" fill="none" stroke="' + ink + '" stroke-width="' + f(1.8 * k) + '" stroke-linejoin="round"/>');
       parts.push('</g>');
     });
     return { svg: svgDocument(width, height, '#ffffff', parts.join('\n')), width, height };

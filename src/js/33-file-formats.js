@@ -115,18 +115,18 @@
   async function downloadPublicationImage() {
     const key = imageFormat(); const format = imageFormats[key];
     const button = root.querySelector('#gpv-image');
-    const plan = exportDimensions();
-    if (plan.width * plan.height > 6000000) toast('Rendering ' + plan.width + ' × ' + plan.height + ' — this can take a while and the page will not respond meanwhile.');
+    const planned = exportDimensions();
+    if (planned.width * planned.height > 6000000) toast('Rendering ' + planned.width + ' × ' + planned.height + ' — this can take a while and the page will not respond meanwhile.');
     const done = setBusy('Rendering ' + format.label + '…');
     button.dataset.busy = '1'; button.disabled = true; button.textContent = 'Rendering…';
     await afterPaint();
     try {
-      const uri = await withLegend(await renderPublicationImage(null, plan), plan);
-      const size = plan.width + ' × ' + plan.height + (plan.dpi ? ' at ' + plan.dpi + ' dpi (' + plan.mm + ' mm wide)' : '');
+      const { plan, uri } = await renderFittedFigure(planned);
+      const size = plan.width + ' × ' + plan.height + (plan.dpi ? ' at ' + plan.dpi + ' dpi (' + plan.mm + ' mm wide)' : '') + exportCapNote(plan);
       if (key === 'png') {
         const blob = await pngWithDpi(uri, plan.dpi);
         downloadBlob(blob, 'image/png', exportFileName('protein-publication', plan, 'png'));
-        announce('Figure PNG downloaded · ' + size + (plan.capped ? ' · size capped for browser stability' : ''));
+        announce('Figure PNG downloaded · ' + size);
       } else if (key === 'tiff') {
         const blob = await tiffFromImage(uri, plan.dpi || 96);
         downloadBlob(blob, 'image/tiff', exportFileName('protein-publication', plan, 'tiff'));

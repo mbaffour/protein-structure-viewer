@@ -24,9 +24,12 @@
     root.querySelector('#gpv-composite').disabled = structures.length === 0;
   }
 
-  function drawPaePanel(entry, size) {
+  /* The heatmap with a colour bar beside it when `font` (its label size in pixels) is given: a PAE
+     panel with no key left the reader to guess what dark meant. */
+  function drawPaePanel(entry, size, font = 0, palette = figurePalette()) {
     const matrix = entry.confidence.pae; const n = matrix.length;
-    const canvas = document.createElement('canvas'); canvas.width = size; canvas.height = size;
+    const barWidth = font ? Math.round(font * 0.9) : 0; const barArea = font ? Math.round(font * 4.6) : 0;
+    const canvas = document.createElement('canvas'); canvas.width = size + barArea; canvas.height = size;
     const context = canvas.getContext('2d'); const image = context.createImageData(size, size);
     const maximum = finiteNumber(entry.confidence.paeMaximum) || matrixMaximum(matrix);
     for (let y = 0; y < size; y += 1) {
@@ -46,6 +49,16 @@
       context.beginPath(); context.moveTo(position, 0); context.lineTo(position, size); context.moveTo(0, position); context.lineTo(size, position); context.stroke();
     }
     context.globalAlpha = 1;
+    if (font) {
+      context.fillStyle = palette.paper; context.fillRect(size, 0, barArea, size);
+      const x = size + Math.round(font * 0.7); const top = Math.round(font * 1.8); const bottom = size - Math.round(font * 0.8); const span = bottom - top;
+      for (let row = 0; row < span; row += 1) { const color = paeColor(maximum * (1 - row / Math.max(1, span - 1)), maximum); context.fillStyle = 'rgb(' + color[0] + ',' + color[1] + ',' + color[2] + ')'; context.fillRect(x, top + row, barWidth, 1); }
+      context.strokeStyle = palette.ink; context.lineWidth = Math.max(1, font / 14); context.strokeRect(x, top, barWidth, span);
+      context.fillStyle = palette.ink; context.font = '500 ' + font + 'px ' + figureFont(); context.textBaseline = 'middle'; context.textAlign = 'left';
+      context.fillText(maximum.toFixed(0), x + barWidth + Math.round(font * 0.3), top);
+      context.fillText('0', x + barWidth + Math.round(font * 0.3), bottom);
+      context.fillText('Å', x, Math.round(font * 0.8));
+    }
     return { canvas, caption: 'Predicted aligned error, ' + n + ' × ' + n + ' tokens, 0 (dark) to ' + maximum.toFixed(1) + ' Å' };
   }
 
@@ -76,15 +89,21 @@
       /* The panel is a fraction of the figure width, so text and legend scale down with it. */
       const panelPlan = { ...requested, width: cell, height: cellHeight, textScale: (requested.textScale || 1) * cell / requested.width };
       const uri = await withLegend(await renderPublicationImage(null, panelPlan), panelPlan);
-      panels.push({ image: await loadImage(uri), caption: displayName(entry) + (root.querySelector('#gpv-color-mode').value !== 'structure' ? ', coloured by ' + root.querySelector('#gpv-color-mode').selectedOptions[0].textContent.toLowerCase() : '') });
-      if (wanted.pae) { const pae = drawPaePanel(entry, Math.min(cell, cellHeight)); panels.push({ image: pae.canvas, caption: pae.caption }); }
+      /* "coloured by pLDDT confidence", not "plddt": only a leading capital that starts a word is lowered. */
+      panels.push({ image: await loadImage(uri), caption: displayName(entry) + (root.querySelector('#gpv-color-mode').value !== 'structure' ? ', coloured by ' + root.querySelector('#gpv-color-mode').selectedOptions[0].textContent.replace(/^[A-Z](?=[a-z])/, letter => letter.toLowerCase()) : '') });
+      /* The charts are laid out at the size of the box they are drawn into, with their text at the
+         figure's text size — 11 px labels on a 1200-unit chart shrunk into the cell printed at 1 pt. */
+      const pad = Math.round(cell * 0.03); const box = { width: cell - 2 * pad, height: cellHeight - 2 * pad };
+      const labelPx = requested.dpi ? requested.points / 72 * requested.dpi : 12 * figureScale(requested);
+      const fit = { ...box, scale: labelPx / 11 };
+      if (wanted.pae) { const pae = drawPaePanel(entry, Math.min(box.height, box.width - Math.round(labelPx * 4.6)), Math.round(labelPx), palette); panels.push({ image: pae.canvas, caption: pae.caption }); }
       if (wanted.profile) {
-        const profile = plddtProfileSvg();
+        const profile = plddtProfileSvg(fit);
         if (profile) { const image = await loadImage('data:image/svg+xml;charset=utf-8,' + encodeURIComponent(profile.svg)); panels.push({ image, caption: 'Per-residue pLDDT' + (displayedEntries().filter(item => item.scores.length).length > 1 ? ' of the displayed models' : ''), aspect: profile.width / profile.height }); }
       }
       if (wanted.contacts) { const canvas = document.createElement('canvas'); drawContactMap(canvas, true, Math.max(1, Math.round(cell / 600 * 2))); panels.push({ image: canvas, caption: contactCaption() }); }
       if (wanted.rmsf) {
-        const profile = rmsfProfileSvg();
+        const profile = rmsfProfileSvg(fit);
         if (profile) { const image = await loadImage('data:image/svg+xml;charset=utf-8,' + encodeURIComponent(profile.svg)); panels.push({ image, caption: 'Per-residue Cα RMSF across ' + ensembleSpread.count + ' aligned models' }); }
       }
       if (wanted.matrix) {

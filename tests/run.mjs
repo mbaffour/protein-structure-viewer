@@ -400,8 +400,8 @@ const group = name => console.log('\n' + name);
 const pdbAtom = (record, serial, name, resn, chain, resi, [x, y, z], element, icode = ' ', b = 80) =>
   record.padEnd(6) + String(serial).padStart(5) + ' ' + (name.length < 4 ? ' ' + name.padEnd(3) : name) + ' ' + resn.padStart(3) + ' ' + chain + String(resi).padStart(4) + icode + '   '
   + x.toFixed(3).padStart(8) + y.toFixed(3).padStart(8) + z.toFixed(3).padStart(8) + '  1.00' + b.toFixed(2).padStart(6) + '          ' + element.padStart(2);
-const freshViewer = async (files = []) => {
-  const fresh = await browser.newPage({ viewport: { width: 1280, height: 1000 } });
+const freshViewer = async (files = [], pageOptions = {}) => {
+  const fresh = await browser.newPage({ viewport: { width: 1280, height: 1000 }, ...pageOptions });
   fresh.on('pageerror', error => noteError('FRESH PAGEERROR: ' + error.message));
   fresh.on('console', message => { if (message.type() === 'error' && !/favicon|404/.test(message.text())) noteError('fresh page: ' + message.text()); });
   await fresh.goto(base + '/index.html?debug=1'); await fresh.waitForTimeout(2000);
@@ -409,6 +409,20 @@ const freshViewer = async (files = []) => {
   return fresh;
 };
 
+/* Helpers for the steps on pages of their own (stress loop, round 1, batch 2). */
+const experimentalFile = name => join(here, 'fixtures', 'experimental', name);
+const pngSize = bytes => ({ width: bytes.readUInt32BE(16), height: bytes.readUInt32BE(20), dpi: bytes.indexOf('pHYs') > 0 ? Math.round(bytes.readUInt32BE(bytes.indexOf('pHYs') + 4) * 0.0254) : null });
+const freshDownload = async (fresh, selector, timeout = 120000) => {
+  const download = fresh.waitForEvent('download', { timeout });
+  await fresh.click(selector);
+  return readFile(await (await download).path());
+};
+const freshStatus = async fresh => ((await fresh.locator('#gpv-state').textContent()) || '').trim();
+const printPlan = async (fresh, width, dpi, points = '8') => {
+  await fresh.click('[data-gpv-tab="publish"]');
+  await fresh.selectOption('#gpv-export-mode', 'print'); await fresh.selectOption('#gpv-print-width', width); await fresh.selectOption('#gpv-print-dpi', dpi); await fresh.selectOption('#gpv-print-text', points);
+  await fresh.waitForTimeout(300);
+};
 await page.goto(base + '/index.html?debug=1'); /* ?debug=1 exposes window.__viewerDebug, a read-only hook used to check colours */
 await page.waitForTimeout(2500);
 
@@ -1796,6 +1810,123 @@ await step('a third synchronized panel follows a drag on the primary', async () 
   await page.uncheck('#gpv-side-by-side'); await page.waitForTimeout(600);
 });
 await step('coordinates restore', async () => { await page.click('#gpv-restore'); await page.waitForTimeout(800); });
+
+/* ---- Stress loop, round 1, batch 2: loading, models and Compare (2.52.0) ----
+   On pages of their own: each loads, removes or hides models. */
+const freshText = async (fresh, selector) => ((await fresh.locator(selector).textContent()) || '').trim();
+await step('an import shows what it loaded: the first new model is current, its confidence note is its own, a second copy is "name (2)"', async () => {
+  /* A zip opened beside a loaded model switched to One at a time and left the old model current, so the
+     new ones were loaded out of sight; every later import ended "· confidence attached", a failed one
+     included; and a second copy was "Individual files › model_a.pdb", read twice in the model menus. */
+  const fresh = await freshViewer([models[0]]);
+  try {
+    const shown = () => fresh.evaluate(() => ({ mode: document.querySelector('#gpv-view-mode').value, current: (window.__viewerDebug.activeEntry() || {}).name, shown: window.__viewerDebug.displayedEntries().map(entry => entry.name) }));
+    const modeBefore = (await shown()).mode;
+    await fresh.setInputFiles('#gpv-files', [join(here, 'fixtures', 'predictors', 'boltz_results_hbdimer.zip')]); await fresh.waitForTimeout(3000);
+    let state = await shown(); let status = await freshStatus(fresh);
+    if (state.mode !== modeBefore || state.current !== 'hbdimer / hbdimer_model_0.cif' || !state.shown.includes('hbdimer / hbdimer_model_0.cif')) throw new Error('after the zip: ' + JSON.stringify(state) + ' (mode before ' + modeBefore + ')');
+    if (!/^Loaded 2 models from 1 source · showing hbdimer \/ hbdimer_model_0\.cif · confidence attached$/.test(status)) throw new Error('zip status: ' + status);
+    /* One at a time: the new model is the one shown. */
+    await fresh.selectOption('#gpv-view-mode', 'single'); await fresh.waitForTimeout(300);
+    await fresh.setInputFiles('#gpv-files', [models[0]]); await fresh.waitForTimeout(2000);
+    state = await shown(); status = await freshStatus(fresh);
+    if (state.shown.join() !== 'model_a.pdb (2)') throw new Error('second copy: ' + JSON.stringify(state));
+    if (!/^Loaded 1 model from 1 source · showing model_a\.pdb \(2\)$/.test(status)) throw new Error('second copy status: ' + status);
+    const options = await fresh.evaluate(() => [...document.querySelectorAll('#gpv-current option')].map(option => option.textContent));
+    if (!options.includes('Individual files › model_a.pdb (2)') || options.some(text => /›.*›/.test(text))) throw new Error('model menu: ' + JSON.stringify(options));
+    await fresh.setInputFiles('#gpv-files', { name: 'broken.pdb', mimeType: 'text/plain', buffer: Buffer.from('REMARK nothing to read here\nEND\n') }); await fresh.waitForTimeout(1500);
+    status = await freshStatus(fresh);
+    if (status !== 'No supported structures found · 1 skipped') throw new Error('failed import status: ' + status);
+    console.log('       zip → current hbdimer_model_0 · copy → model_a.pdb (2) · failed → ' + status);
+  } finally { await fresh.close(); }
+});
+await step('a file of ligands and ions has no pLDDT and says it has no polymer chains', async () => {
+  /* A header-less PDB is read as a prediction, but this one has no polymer, and its calcium ion — atom
+     name CA — was taken for a Cα: "Mean pLDDT 20.0" over a table with a header and no rows. */
+  const lines = [];
+  for (let index = 0; index < 6; index += 1) lines.push(pdbAtom('HETATM', index + 1, 'C' + (index + 1), 'LIG', 'A', 1, [index * 1.4, 0, 0], 'C', ' ', 20));
+  lines.push(pdbAtom('HETATM', 7, 'CA', 'CA', 'A', 2, [3, 3, 0], 'CA', ' ', 20), 'END');
+  const file = join(work, 'ligands_only.pdb'); await writeFile(file, lines.join('\n') + '\n');
+  const fresh = await freshViewer([file]);
+  try {
+    const state = await fresh.evaluate(() => ({ confidence: document.querySelector('#gpv-confidence').textContent, scores: window.__viewerDebug.entries()[0].scores.length, tableHidden: document.querySelector('#gpv-chain-rows').closest('table').hidden, summary: document.querySelector('#gpv-assembly-summary').textContent }));
+    if (state.scores || state.confidence !== 'Mean pLDDT —') throw new Error('scored as pLDDT: ' + JSON.stringify(state));
+    if (!state.tableHidden || state.summary !== 'No polymer chains (ligands and ions only).') throw new Error('composition: ' + JSON.stringify(state));
+    await fresh.click('[data-gpv-tab="appearance"]'); await fresh.selectOption('#gpv-color-mode', 'plddt'); await fresh.waitForTimeout(300);
+    const legend = await freshText(fresh, '#gpv-plddt-legend');
+    if (!/No pLDDT in ligands_only\.pdb — drawn in the model colour/.test(legend)) throw new Error('pLDDT legend: ' + legend);
+  } finally { await fresh.close(); }
+});
+await step('Align visible, Restore and the matrix wait for two shown models; an unrelated pair aligns with a caution; the table follows renames and hides', async () => {
+  const fresh = await freshViewer([experimentalFile('5cha.cif')]);
+  try {
+    const buttons = () => fresh.evaluate(() => ({ align: document.querySelector('#gpv-align').disabled, restore: document.querySelector('#gpv-restore').disabled, matrix: document.querySelector('#gpv-rmsd-matrix-run').disabled }));
+    let state = await buttons();
+    if (!state.align || !state.restore || !state.matrix) throw new Error('one model: ' + JSON.stringify(state));
+    /* Keys for colours that are not on the model say why instead. */
+    await fresh.click('[data-gpv-tab="appearance"]'); await fresh.selectOption('#gpv-color-mode', 'plddt'); await fresh.waitForTimeout(300);
+    let legend = await freshText(fresh, '#gpv-plddt-legend');
+    if (!/No pLDDT in 5cha\.cif \(experimental\) — drawn in the model colour/.test(legend)) throw new Error('pLDDT legend on 5CHA: ' + legend);
+    await fresh.selectOption('#gpv-color-mode', 'agreement'); await fresh.waitForTimeout(300);
+    legend = await freshText(fresh, '#gpv-plddt-legend');
+    if (!/Grey until models are aligned — Compare → Align visible/.test(legend)) throw new Error('agreement legend before aligning: ' + legend);
+    await fresh.selectOption('#gpv-color-mode', 'structure');
+    await fresh.click('[data-gpv-tab="models"]'); await fresh.setInputFiles('#gpv-files', [experimentalFile('1brs.cif')]); await fresh.waitForTimeout(2500);
+    await fresh.selectOption('#gpv-view-mode', 'overlay'); await fresh.waitForTimeout(300);
+    state = await buttons();
+    if (state.align || !state.restore) throw new Error('two models, nothing aligned: ' + JSON.stringify(state));
+    await fresh.click('[data-gpv-tab="compare"]'); await fresh.selectOption('#gpv-reference', { label: 'Individual files › 5cha.cif' });
+    await fresh.click('#gpv-align'); await fresh.waitForTimeout(4000);
+    const status = await freshStatus(fresh);
+    if (!/^Aligned 1 model · .* · caution: low identity \/ large RMSD — these models may not be comparable \(1brs\.cif\)$/.test(status)) throw new Error('status: ' + status);
+    if ((await buttons()).restore) throw new Error('Restore coordinates disabled after an alignment');
+    const row = () => fresh.evaluate(() => { const tr = document.querySelector('#gpv-alignment-results tr'); return { name: tr.querySelector('th').textContent, text: tr.textContent, opacity: tr.style.opacity }; });
+    if (!/low identity \/ large RMSD/.test((await row()).text)) throw new Error('row: ' + (await row()).text);
+    await fresh.click('[data-gpv-tab="models"]');
+    await fresh.click('#gpv-list [aria-label="Rename 1brs.cif"]'); await fresh.keyboard.type('Barnase–barstar'); await fresh.keyboard.press('Enter'); await fresh.waitForTimeout(300);
+    if ((await row()).name !== 'Barnase–barstar') throw new Error('after a rename the row reads ' + (await row()).name);
+    await fresh.uncheck('#gpv-list [aria-label="Show 1brs.cif"]'); await fresh.waitForTimeout(300);
+    const hidden = await row();
+    if (hidden.opacity !== '0.5' || !/hidden since — Align visible to update/.test(hidden.text)) throw new Error('after hiding: ' + JSON.stringify(hidden));
+    await fresh.click('[data-gpv-tab="compare"]'); await fresh.click('#gpv-restore'); await fresh.waitForTimeout(500);
+    if (!(await buttons()).restore) throw new Error('Restore coordinates still enabled with nothing superposed');
+    console.log('       ' + status.replace(/^Aligned 1 model · /, ''));
+  } finally { await fresh.close(); }
+});
+await step('in the multi-view ← → drive the primary panel; a removed model takes its panel; Add panel stops when every model has one', async () => {
+  const fresh = await freshViewer([models[0], models[1], models[2]]);
+  try {
+    await fresh.click('[data-gpv-tab="compare"]'); await fresh.check('#gpv-side-by-side'); await fresh.waitForTimeout(1200);
+    await fresh.click('#gpv-add-panel'); await fresh.waitForTimeout(1200);
+    const badges = () => fresh.evaluate(() => [...document.querySelectorAll('.gpv-view-label')].filter(label => !label.hidden).map(label => label.textContent));
+    if ((await badges()).join() !== 'model_a.pdb,model_b.pdb,model_c.pdb') throw new Error('setup panels: ' + (await badges()).join());
+    const add = await fresh.evaluate(() => ({ disabled: document.querySelector('#gpv-add-panel').disabled, title: document.querySelector('#gpv-add-panel').title }));
+    if (!add.disabled || add.title !== 'Every loaded model already has a panel') throw new Error('Add panel with every model in a panel: ' + JSON.stringify(add));
+    await fresh.evaluate(() => document.querySelector('#gpv-stage').focus({ preventScroll: true })); await fresh.keyboard.press('ArrowRight'); await fresh.waitForTimeout(800);
+    const after = await fresh.evaluate(() => ({ current: document.querySelector('#gpv-current').value, left: document.querySelector('#gpv-left-model').value, badge: document.querySelector('#gpv-left-label').textContent, mode: document.querySelector('#gpv-view-mode').value }));
+    if (after.current !== after.left || after.badge !== 'model_b.pdb' || !/^Showing model_b\.pdb in the primary panel$/.test(await freshStatus(fresh))) throw new Error('→ in the multi-view: ' + JSON.stringify(after) + ' · ' + await freshStatus(fresh));
+    await fresh.click('[data-gpv-tab="models"]');
+    await fresh.locator('#gpv-list .gpv-entry', { hasText: 'model_c.pdb' }).locator('button', { hasText: 'Remove' }).click(); await fresh.waitForTimeout(800);
+    const status = await freshStatus(fresh);
+    if (!/^Removed model_c\.pdb · its panel closed$/.test(status) || (await badges()).includes('model_c.pdb') || (await badges()).length !== 2) throw new Error('after removing model_c: ' + status + ' · ' + (await badges()).join());
+    console.log('       → primary ' + after.badge + ' · ' + status);
+  } finally { await fresh.close(); }
+});
+await step('Hide all says so on the stage and in the status, and Cycle waits for a shown model', async () => {
+  const fresh = await freshViewer([models[0], models[1]]);
+  try {
+    await fresh.click('#gpv-hide-all'); await fresh.waitForTimeout(400);
+    const state = await fresh.evaluate(() => ({ hint: Boolean(document.querySelector('#gpv-stage-hidden')) && !document.querySelector('#gpv-stage-hidden').hidden, cycle: document.querySelector('#gpv-cycle').disabled }));
+    const status = await freshStatus(fresh);
+    if (!state.hint || !state.cycle || status !== 'All models are hidden · Show all brings them back') throw new Error(JSON.stringify(state) + ' · ' + status);
+    await fresh.click('#gpv-stage-hidden button'); await fresh.waitForTimeout(400);
+    const shown = await fresh.evaluate(() => ({ shown: window.__viewerDebug.displayedEntries().length, hint: document.querySelector('#gpv-stage-hidden').hidden, cycle: document.querySelector('#gpv-cycle').disabled }));
+    if (!shown.shown || !shown.hint || shown.cycle) throw new Error('after Show all: ' + JSON.stringify(shown));
+  } finally { await fresh.close(); }
+});
+/* Five pages opened and closed in a row: put the main page back in front, as after the report, so its
+   animation frames (the hover readout runs on them) are not held back as a background page's. */
+await page.bringToFront();
 
 group('annotate');
 await tab('annotate');
@@ -4568,8 +4699,9 @@ await step('the figure builder composes the ticked views into one lettered figur
   const pngDownload = page.waitForEvent('download', { timeout: 300000 }); await page.click('#gpv-contact-sheet');
   const png = await readFile(await (await pngDownload).path());
   const width = png.readUInt32BE(16); const height = png.readUInt32BE(20);
-  /* Three 700 px cells in one row at the 3:2 aspect: 466 px of image plus a caption strip of about 79 px. */
-  if (width !== 2100 || height < 500 || height > 620 || !png.includes('pHYs')) throw new Error('figure PNG ' + width + ' × ' + height + (png.includes('pHYs') ? '' : ' without dpi'));
+  /* Three 700 px cells in one row at the 3:2 aspect: 466 px of image plus a caption strip of up to
+     three lines (about 158 px at 8 pt; captions wrapped onto two lines before 2.52.0). */
+  if (width !== 2100 || height < 500 || height > 640 || !png.includes('pHYs')) throw new Error('figure PNG ' + width + ' × ' + height + (png.includes('pHYs') ? '' : ' without dpi'));
   const svgDownload = page.waitForEvent('download', { timeout: 300000 }); await page.click('#gpv-builder-svg');
   const svg = await readFile(await (await svgDownload).path(), 'utf8');
   const images = (svg.match(/<image /g) || []).length;
@@ -4799,6 +4931,162 @@ await step('an HTML report downloads', async () => {
   await tab('appearance'); await page.selectOption('#gpv-outline', 'none'); await page.uncheck('#gpv-fog');
   await tab('models'); await page.locator('#gpv-chain-rows input[aria-label="Fade chain B"]').uncheck(); await page.waitForTimeout(300);
 });
+
+/* ---- Stress loop, round 1, batch 2: exports, publish and scenes (2.52.0) ----
+   Each on a page of its own, so nothing here depends on, or leaves anything for, the main page. */
+for (const deviceScaleFactor of [1, 2]) {
+  await step('with no legend or scale bar a print PNG is the planned size, not twice it (device pixel ratio ' + deviceScaleFactor + ')', async () => {
+    /* 3Dmol draws its canvas at twice the page's pixel ratio below 2, and before this fix only a figure
+       with a legend or a scale bar was drawn back to the plan: an 85 mm, 300 dpi PNG came out
+       2008 × 1338 px with 300 dpi written in it, so it printed 170 mm wide. */
+    const fresh = await freshViewer([experimentalFile('5cha.cif')], { deviceScaleFactor });
+    try {
+      await printPlan(fresh, '85', '300');
+      await fresh.uncheck('#gpv-export-legend'); await fresh.selectOption('#gpv-scale-bar', '0'); await fresh.waitForTimeout(200);
+      const ratio = await fresh.evaluate(() => window.devicePixelRatio);
+      if (ratio !== deviceScaleFactor) throw new Error('setup: devicePixelRatio ' + ratio);
+      const png = pngSize(await freshDownload(fresh, '#gpv-image'));
+      if (png.width !== 1004 || png.height !== 669 || png.dpi !== 300) throw new Error('PNG ' + png.width + ' × ' + png.height + ' at ' + png.dpi + ' dpi for an 85 mm, 300 dpi plan of 1004 × 669');
+      if (deviceScaleFactor === 1) {
+        /* The PDF page is the image at the plan's dpi, so it doubled too — and its status contradicted itself. */
+        await fresh.selectOption('#gpv-image-format', 'pdf'); await fresh.waitForTimeout(200);
+        const pdf = (await freshDownload(fresh, '#gpv-image', 180000)).toString('latin1');
+        const box = (pdf.match(/MediaBox \[0 0 ([\d.]+) ([\d.]+)\]/) || []).slice(1).map(Number);
+        if (Math.abs(box[0] / 72 * 25.4 - 85) > 0.5) throw new Error('PDF page ' + (box[0] / 72 * 25.4).toFixed(1) + ' mm wide for an 85 mm figure');
+        if (!/page 85 × 57 mm/.test(await freshStatus(fresh))) throw new Error('PDF status: ' + await freshStatus(fresh));
+      }
+      console.log('       ' + png.width + ' × ' + png.height + ' at ' + png.dpi + ' dpi, device pixel ratio ' + ratio);
+    } finally { await fresh.close(); }
+  });
+}
+await step('a print figure past the GPU’s canvas limit is rendered at the most it allows, at the stated width, and says so', async () => {
+  /* 178 mm at 600 dpi is a 4205 px plan and an 8410 px canvas: past the 8192 px a software renderer
+     or an integrated GPU allows, the PNG came out black with only the labels, and the status said
+     "downloaded". The limit is lowered through the debug hook so CI never asks for an 8 000 px render. */
+  const fresh = await freshViewer([experimentalFile('5cha.cif')]);
+  try {
+    await fresh.evaluate(() => window.__viewerDebug.setExportGpuLimit(2000));
+    await printPlan(fresh, '178', '600');
+    const plan = await fresh.evaluate(() => window.__viewerDebug.exportDimensions());
+    const ratio = await fresh.evaluate(() => (window.devicePixelRatio < 2 ? window.devicePixelRatio * 2 : window.devicePixelRatio));
+    if (!plan.gpuLimited || Math.max(plan.width, plan.height) * ratio > 2000) throw new Error('plan not fitted to the limit: ' + JSON.stringify(plan));
+    const estimate = (await fresh.locator('#gpv-export-estimate').textContent()) || '';
+    if (!new RegExp('at ' + plan.dpi + ' dpi.*600 dpi asked · rendered at ' + plan.dpi + ' dpi, the most this GPU allows for 178 mm').test(estimate)) throw new Error('estimate: ' + estimate);
+    const png = pngSize(await freshDownload(fresh, '#gpv-image'));
+    const status = await freshStatus(fresh);
+    if (png.width !== plan.width || png.height !== plan.height || png.dpi !== plan.dpi) throw new Error('PNG ' + JSON.stringify(png) + ' for plan ' + plan.width + ' × ' + plan.height + ' at ' + plan.dpi + ' dpi');
+    /* The physical width is kept: the dpi written is the one the pixels have. */
+    if (Math.abs(png.width / png.dpi * 25.4 - 178) > 1) throw new Error('prints ' + (png.width / png.dpi * 25.4).toFixed(1) + ' mm wide, not 178');
+    if (!new RegExp('Figure PNG downloaded · ' + plan.width + ' × ' + plan.height + ' at ' + plan.dpi + ' dpi \\(178 mm wide\\) · rendered at ' + plan.dpi + ' dpi, the most this GPU allows for 178 mm').test(status)) throw new Error('status: ' + status);
+    console.log('       limit 2000 px · ' + png.width + ' × ' + png.height + ' at ' + png.dpi + ' dpi · ' + status.replace(/^.*· rendered/, 'rendered'));
+  } finally { await fresh.close(); }
+});
+await step('the builder and the views ZIP leave their result on the status line, and a caption past three lines is reported cut', async () => {
+  /* Both put the on-screen view back after rendering, and that restyle reset the status to "Ready". */
+  const fresh = await freshViewer([models[0]]);
+  try {
+    await printPlan(fresh, '85', '300');
+    await fresh.fill('#gpv-view-name', 'Overview'); await fresh.fill('#gpv-view-caption', 'A caption written the way Make site figure writes them, long enough that three lines of the caption strip cannot hold it at this width, so the end of it has to be cut with an ellipsis and the figure has to say so');
+    await fresh.click('#gpv-save-view'); await fresh.waitForTimeout(300);
+    const estimate = (await fresh.locator('#gpv-builder-estimate').textContent()) || '';
+    if (!/caption of panel A shortened to fit three lines/.test(estimate)) throw new Error('builder estimate: ' + estimate);
+    const svg = (await freshDownload(fresh, '#gpv-builder-svg')).toString('utf8');
+    const captionLines = [...svg.matchAll(/<text [^>]*font-weight="500"[^>]*>([^<]*)<\/text>/g)].map(match => match[1]);
+    if (captionLines.length !== 3 || !captionLines[2].endsWith('…')) throw new Error('caption lines: ' + JSON.stringify(captionLines));
+    let status = await freshStatus(fresh);
+    if (!/^Figure SVG downloaded · 1 panel · .* · caption of panel A shortened to fit three lines$/.test(status)) throw new Error('builder SVG status: ' + status);
+    await freshDownload(fresh, '#gpv-contact-sheet'); status = await freshStatus(fresh);
+    if (!/^Figure PNG downloaded · 1 panel/.test(status)) throw new Error('builder PNG status: ' + status);
+    await freshDownload(fresh, '#gpv-views-zip'); status = await freshStatus(fresh);
+    if (!/^1 view exported · .* · 1004 × 669 at 300 dpi$/.test(status)) throw new Error('views ZIP status: ' + status);
+    console.log('       ' + captionLines.length + ' caption lines · ' + status);
+  } finally { await fresh.close(); }
+});
+await step('restoring a scene is one undo step that gives back the work it replaced', async () => {
+  /* It used to empty the undo history: the views, labels and measurements it wrote over were gone. */
+  const fresh = await freshViewer([models[0]]);
+  try {
+    const name = basename(models[0]);
+    const scene = { type: 'protein-viewer-scene', schemaVersion: 1, models: [{ name }], settings: {}, labels: [{ model: name, chain: 'A', resi: 5, atom: 'CA', text: 'From the scene' }] };
+    await fresh.click('[data-gpv-tab="publish"]');
+    await fresh.fill('#gpv-view-name', 'Before the restore'); await fresh.click('#gpv-save-view'); await fresh.waitForTimeout(300);
+    const before = await fresh.evaluate(() => ({ depth: window.__viewerDebug.undoDepth(), views: window.__viewerDebug.savedViews().length }));
+    await fresh.setInputFiles('#gpv-load-scene', { name: 'scene.json', mimeType: 'application/json', buffer: Buffer.from(JSON.stringify(scene)) }); await fresh.waitForTimeout(1200);
+    const after = await fresh.evaluate(() => ({ depth: window.__viewerDebug.undoDepth(), views: window.__viewerDebug.savedViews().length, labels: window.__viewerDebug.labelRecords().map(label => label.text) }));
+    if (!/Scene restored/.test(await freshStatus(fresh)) || after.views !== 0 || after.labels.join() !== 'From the scene') throw new Error('setup: the scene did not replace the records: ' + JSON.stringify(after));
+    if (after.depth !== before.depth + 1) throw new Error('undo depth ' + before.depth + ' → ' + after.depth + ' after a restore');
+    await fresh.evaluate(() => document.querySelector('#gpv-stage').focus({ preventScroll: true })); await fresh.keyboard.press('Control+z'); await fresh.waitForTimeout(400);
+    const undone = await fresh.evaluate(() => ({ views: window.__viewerDebug.savedViews().map(view => view.name), labels: window.__viewerDebug.labelRecords().length }));
+    if (!/^Undid scene restore/.test(await freshStatus(fresh)) || undone.views.join() !== 'Before the restore' || undone.labels !== 0) throw new Error('after ⌘Z: ' + await freshStatus(fresh) + ' · ' + JSON.stringify(undone));
+  } finally { await fresh.close(); }
+});
+await step('the methods text calls a crystal structure experimental and says how distances were measured; the legend names a renamed label’s residue', async () => {
+  const fresh = await freshViewer([experimentalFile('5cha.cif')]);
+  try {
+    const methods = await fresh.evaluate(() => window.__viewerDebug.methodsText());
+    if (!/^Experimental structure \(PDB 5CHA\) was inspected in Protein Structure Viewer/.test(methods)) throw new Error('5CHA methods: ' + methods.slice(0, 120));
+  } finally { await fresh.close(); }
+  const predicted = await freshViewer([models[0]]);
+  try {
+    const name = basename(models[0]);
+    if (!/^Predicted structure was inspected/.test(await predicted.evaluate(() => window.__viewerDebug.methodsText()))) throw new Error('synthetic model methods: ' + (await predicted.evaluate(() => window.__viewerDebug.methodsText())).slice(0, 80));
+    const scene = { type: 'protein-viewer-scene', schemaVersion: 1, models: [{ name }], settings: {},
+      labels: [{ model: name, chain: 'A', resi: 5, atom: 'CA', text: 'Loop tip' }, { model: name, chain: 'A', resi: 9, atom: 'CA', text: 'ALA9 · A' }],
+      measurements: [{ type: 'distance', points: [{ model: name, chain: 'A', resi: 5, atom: 'CA' }, { model: name, chain: 'B', resi: 5, atom: 'CA' }] }, { type: 'distance', points: [{ model: name, chain: 'A', resi: 7, atom: 'O' }, { model: name, chain: 'B', resi: 7, atom: 'N' }] }] };
+    await predicted.setInputFiles('#gpv-load-scene', { name: 'scene.json', mimeType: 'application/json', buffer: Buffer.from(JSON.stringify(scene)) }); await predicted.waitForTimeout(1200);
+    await predicted.click('[data-gpv-tab="publish"]'); await predicted.click('#gpv-figure-legend'); await predicted.waitForTimeout(300);
+    const legend = await predicted.inputValue('#gpv-legend-text');
+    if (!/Labelled residues: Loop tip \(ALA5 · A\), ALA9 · A\./.test(legend)) throw new Error('legend: ' + (legend.match(/Labelled residues:[^.]*\./) || [legend.slice(0, 160)])[0]);
+    const text = await predicted.evaluate(() => window.__viewerDebug.methodsText());
+    if (!/Of the 2 distances shown, 1 was measured between Cα atoms and 1 between the specific atoms named in the figure legend .*, in Å, from the model coordinates/.test(text)) throw new Error('methods: ' + text);
+  } finally { await predicted.close(); }
+});
+await step('the publication checklist follows the legend switch and the scale bar at once', async () => {
+  /* The rules read the controls live, but nothing re-rendered the list when these two changed: it kept
+     "The colour legend is drawn on exports" after the legend was switched off. */
+  const fresh = await freshViewer([models[0]]);
+  try {
+    await fresh.click('[data-gpv-tab="appearance"]'); await fresh.selectOption('#gpv-color-mode', 'chain'); await fresh.waitForTimeout(300);
+    await fresh.click('[data-gpv-tab="publish"]'); await fresh.waitForTimeout(300);
+    if ((await fresh.inputValue('#gpv-projection')) !== 'perspective') throw new Error('setup: projection ' + await fresh.inputValue('#gpv-projection'));
+    const items = () => fresh.evaluate(() => [...document.querySelectorAll('#gpv-check-list li')].map(li => li.className + ' ' + li.textContent));
+    if (!(await items()).some(text => /is-ok ✓The colour legend is drawn/.test(text))) throw new Error('setup: ' + JSON.stringify(await items()));
+    await fresh.uncheck('#gpv-export-legend');
+    if (!(await items()).some(text => /is-warn !The colours need a key/.test(text))) throw new Error('after unticking the legend: ' + JSON.stringify(await items()));
+    await fresh.selectOption('#gpv-scale-bar', '10');
+    if (!(await items()).some(text => /is-warn !A scale bar is only exact in orthographic/.test(text))) throw new Error('after choosing a scale bar: ' + JSON.stringify(await items()));
+  } finally { await fresh.close(); }
+});
+await step('the composite lays the pLDDT profile out in its cell at the chosen text size, keys the PAE panel and keeps “pLDDT” capitalised', async () => {
+  /* The profile was a 1200-unit chart shrunk into a 500 px cell: a strip with 1 pt tick labels. */
+  const fresh = await freshViewer([join(here, 'fixtures', 'alphafold-db', 'AF-P69905-F1-model_v6.cif'), join(here, 'fixtures', 'alphafold-db', 'AF-P69905-F1-predicted_aligned_error_v6.json')]);
+  try {
+    await fresh.click('[data-gpv-tab="appearance"]'); await fresh.selectOption('#gpv-color-mode', 'plddt'); await fresh.waitForTimeout(300);
+    await printPlan(fresh, '85', '300', '8');
+    /* Record what the composite draws: the profile goes in as an SVG image, the text through fillText. */
+    await fresh.evaluate(() => {
+      window.__svgImages = []; window.__drawnText = [];
+      const source = Object.getOwnPropertyDescriptor(HTMLImageElement.prototype, 'src');
+      Object.defineProperty(HTMLImageElement.prototype, 'src', { configurable: true, get() { return source.get.call(this); }, set(value) { if (String(value).startsWith('data:image/svg+xml')) window.__svgImages.push(decodeURIComponent(String(value).replace(/^data:image\/svg\+xml;charset=utf-8,/, ''))); source.set.call(this, value); } });
+      const fillText = CanvasRenderingContext2D.prototype.fillText;
+      CanvasRenderingContext2D.prototype.fillText = function (text, ...rest) { window.__drawnText.push([String(text), this.font]); return fillText.call(this, text, ...rest); };
+    });
+    const png = pngSize(await freshDownload(fresh, '#gpv-composite', 180000));
+    const drawn = await fresh.evaluate(() => ({ svgs: window.__svgImages, text: window.__drawnText }));
+    const profile = drawn.svgs.find(svg => /pLDDT/.test(svg));
+    if (!profile) throw new Error('no profile SVG was drawn');
+    const size = (profile.match(/<svg [^>]*width="([\d.]+)" height="([\d.]+)"/) || []).slice(1).map(Number);
+    const cell = Math.floor(1004 / 2); const pad = Math.round(cell * 0.03);
+    if (size[0] !== cell - 2 * pad) throw new Error('profile laid out ' + size.join(' × ') + ' for a ' + (cell - 2 * pad) + ' px box');
+    const tick = Math.min(...[...profile.matchAll(/font-size="([\d.]+)"[^>]*>(?:0|50|100)</g)].map(match => Number(match[1])));
+    const wanted = 8 / 72 * 300;
+    if (!(tick >= wanted * 0.95)) throw new Error('tick labels ' + tick + ' px; 8 pt at 300 dpi is ' + wanted.toFixed(1) + ' px');
+    if (!drawn.text.some(([text]) => text === 'Å') || !drawn.text.some(([text]) => text === '28')) throw new Error('no PAE colour bar labels: ' + JSON.stringify(drawn.text.map(([text]) => text)));
+    if (!drawn.text.some(([text]) => /coloured by pLDDT confidence/.test(text))) throw new Error('caption: ' + JSON.stringify(drawn.text.filter(([text]) => /coloured/.test(text))));
+    console.log('       composite ' + png.width + ' × ' + png.height + ' · profile ' + size.join(' × ') + ' px with ' + tick + ' px ticks · PAE bar 0–28 Å');
+  } finally { await fresh.close(); }
+});
+await page.bringToFront();
 
 group('interface');
 await step('"?" opens help and Escape closes it', async () => {

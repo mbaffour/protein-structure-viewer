@@ -172,6 +172,19 @@
   function updateStatus(message = 'Ready') {
     if (!root.querySelector('[data-gpv-panel="publish"]').hidden) { setTimeout(renderPublicationChecks, 0); setTimeout(renderCompositeControls, 0); }
     const visible = displayedEntries();
+    /* Models loaded but none of them shown (Hide all, or every switch off): an empty stage that does not
+       say why looks like a failed load. */
+    const allHidden = structures.length > 0 && !structures.some(entry => entry.visible);
+    if (allHidden && message === 'Ready') message = 'All models are hidden · Show all brings them back';
+    let hiddenHint = root.querySelector('#gpv-stage-hidden');
+    if (!hiddenHint && allHidden) {
+      hiddenHint = document.createElement('div'); hiddenHint.className = 'gpv-stage-empty'; hiddenHint.id = 'gpv-stage-hidden';
+      const title = document.createElement('strong'); title.textContent = 'All models are hidden';
+      const show = document.createElement('button'); show.className = 'btn'; show.type = 'button'; show.textContent = 'Show all';
+      show.addEventListener('click', () => root.querySelector('#gpv-show-all').click());
+      hiddenHint.append(title, show); root.querySelector('#gpv-stage-empty').after(hiddenHint);
+    }
+    if (hiddenHint) hiddenHint.hidden = !allHidden;
     root.querySelector('#gpv-count').textContent = visible.length + ' displayed / ' + structures.length + ' loaded';
     const scores = visible.flatMap(entry => entry.scores);
     const score = mean(scores);
@@ -192,7 +205,7 @@
     root.querySelector('#gpv-profile-svg').disabled = !scored;
     root.querySelector('#gpv-profile-png').disabled = !scored;
     root.querySelector('#gpv-image').disabled = structures.length === 0; root.querySelector('#gpv-model-panels').disabled = structures.length < 2;
-    root.querySelector('#gpv-rmsd-matrix-run').disabled = structures.length < 2;
+    root.querySelector('#gpv-rmsd-matrix-run').disabled = visible.filter(entry => entry.visible).length < 2;
     root.querySelector('#gpv-svg').disabled = structures.length === 0;
     if (typeof renderImageButton === 'function') renderImageButton();
     root.querySelector('#gpv-video').disabled = structures.length === 0;
@@ -209,11 +222,16 @@
     root.querySelector('#gpv-captions').disabled = savedViews.length === 0;
     ['#gpv-domain-labels', '#gpv-pae-domain-labels', '#gpv-architecture-png', '#gpv-architecture-svg'].forEach(selector => { root.querySelector(selector).disabled = structures.length === 0; });
     updateReportEstimate();
-    ['#gpv-current', '#gpv-reference', '#gpv-selection-model', '#gpv-left-model', '#gpv-previous', '#gpv-next', '#gpv-cycle', '#gpv-align', '#gpv-restore', '#gpv-add-selection', '#gpv-box-select', '#gpv-annotate', '#gpv-add-screen-text', '#gpv-interface-model', '#gpv-interface-run'].forEach(selector => {
+    ['#gpv-current', '#gpv-reference', '#gpv-selection-model', '#gpv-left-model', '#gpv-previous', '#gpv-next', '#gpv-add-selection', '#gpv-box-select', '#gpv-annotate', '#gpv-add-screen-text', '#gpv-interface-model', '#gpv-interface-run'].forEach(selector => {
       root.querySelector(selector).disabled = structures.length === 0;
     });
+    /* Align needs a second shown model to superpose; Restore needs something superposed to put back;
+       Cycle needs a shown model. Each used to stay enabled and answer with a misleading status. */
+    root.querySelector('#gpv-align').disabled = structures.filter(entry => entry.visible).length < 2;
+    root.querySelector('#gpv-restore').disabled = !structures.some(entry => entry.superposed);
+    root.querySelector('#gpv-cycle').disabled = !structures.some(entry => entry.visible) && !cycleTimer;
     const comparing = root.querySelector('#gpv-side-by-side').checked && comparePanels.length > 0 && structures.length > 0;
-    root.querySelector('#gpv-add-panel').disabled = structures.length === 0 || comparePanels.length >= maxComparePanels;
+    renderAddPanelButton();
     root.querySelector('#gpv-clear-panels').disabled = comparePanels.length === 0;
     root.querySelector('#gpv-compare-image').disabled = !comparing;
     root.querySelector('#gpv-compare-svg').disabled = !comparing;
@@ -234,7 +252,10 @@
     /* Experimental structures carry crystallographic B-factors, not pLDDT, in the same
        column; do not report them as confidence. */
     entry.experimentalMethod = entry.experimentalMethod ?? experimentalMethod(entry.text);
-    if (!entry.scores.length && entry.collection !== 'RCSB PDB' && !entry.experimentalMethod) entry.scores = modelScores(model);
+    /* A header-less PDB is read as a prediction (ColabFold and AlphaFold write none), but only one with
+       a polymer: a file of ligands and ions has no pLDDT, and its calcium ion, named CA, is not a Cα. */
+    const polymer = atoms.some(atom => !atom.hetflag && (atom.atom === 'CA' || atom.atom === "C1'"));
+    if (!entry.scores.length && entry.collection !== 'RCSB PDB' && !entry.experimentalMethod && polymer) entry.scores = modelScores(model);
     entry.originalAtoms = atoms.map(atom => ({ x: atom.x, y: atom.y, z: atom.z }));
     return model;
   }
@@ -294,7 +315,8 @@
       structures.forEach(entry => {
         const option = document.createElement('option');
         option.value = String(entry.id);
-        option.textContent = (entry.collection ? entry.collection + ' › ' : '') + displayName(entry);
+        /* A name that already carries its source (from an older scene or session) is not prefixed twice. */
+        option.textContent = (entry.collection && !displayName(entry).startsWith(entry.collection + ' › ') ? entry.collection + ' › ' : '') + displayName(entry);
         select.append(option);
       });
       if (structures.some(entry => String(entry.id) === String(previous))) select.value = String(previous);
@@ -339,7 +361,7 @@
       visible.type = 'checkbox';
       visible.checked = entry.visible;
       visible.setAttribute('aria-label', 'Show ' + entry.name);
-      visible.addEventListener('change', () => { entry.visible = visible.checked; applyStyle(); });
+      visible.addEventListener('change', () => { entry.visible = visible.checked; applyStyle(); renderAlignmentResults(); });
       visibleLabel.append(visible);
 
       const copy = document.createElement('span');
@@ -421,6 +443,8 @@
       row.append(visibleLabel, copy, score, color, fadeLabel, focus, rename, remove);
       list.append(row);
     });
+    /* The alignment table names models and dims hidden ones; Show all, Hide all and Rename come here. */
+    renderAlignmentResults();
   }
 
   /* Everything that names the model goes with it: its records, the card and the selected residue
@@ -447,6 +471,13 @@
     if (siteResults && siteResults.entryId === entry.id) siteResults = null;
     if (nearbyResult && nearbyResult.entry === entry) { nearbyResult = null; root.querySelector('#gpv-near-copy').disabled = true; }
     if (rmsdMatrix) { rmsdMatrix = null; renderRmsdMatrix(); }
+    /* Its comparison panels close with it. They used to be handed silently to the first model, until
+       every panel showed the same one; and with no panel left the multi-view has nothing to compare. */
+    const panelsClosed = comparePanels.filter(panel => panel.entryId === entry.id);
+    panelsClosed.forEach(destroyPanelViewer);
+    comparePanels = comparePanels.filter(panel => panel.entryId !== entry.id);
+    const wasPrimary = root.querySelector('#gpv-side-by-side').checked && Number(root.querySelector('#gpv-left-model').value) === entry.id;
+    if (!comparePanels.length) root.querySelector('#gpv-side-by-side').checked = false;
     if (!structures.length) {
       setBoxSelectMode(false);
       if (annotationActive) toggleAnnotating(false);
@@ -456,7 +487,8 @@
     renderLabelList(); renderSelectionList(); renderMeasurementList(); renderAnnotationList();
     renderList();
     applyStyle();
-    announce('Removed ' + displayName(entry));
+    const primary = root.querySelector('#gpv-side-by-side').checked ? activeEntry() : null;
+    announce('Removed ' + displayName(entry) + (panelsClosed.length ? ' · its panel' + (panelsClosed.length === 1 ? '' : 's') + ' closed' : '') + (wasPrimary && primary ? ' · the primary panel now shows ' + displayName(primary) : ''));
   }
 
   function addStructure(name, text, format, sourcePath = name, collection = 'Individual files', lazy = false) {
@@ -523,8 +555,13 @@
     }
     activeId = entry.id;
     root.querySelector('#gpv-current').value = String(entry.id);
+    /* In the synchronized multi-view the primary panel is the current model: it changes with the
+       choice, where the status used to say "Showing" a model no panel showed. The View mode is not
+       the multi-view's, so it is left alone. */
+    const comparing = root.querySelector('#gpv-side-by-side').checked;
+    if (comparing) root.querySelector('#gpv-left-model').value = String(entry.id);
     const mode = root.querySelector('#gpv-view-mode');
-    const leftOverlay = !keepMode && mode.value !== 'single';
+    const leftOverlay = !keepMode && !comparing && mode.value !== 'single';
     if (leftOverlay) { mode.value = 'single'; savePreferences(); }
     applyStyle();
     root.querySelectorAll('#gpv-list [data-entry-id]').forEach(row => row.classList.toggle('is-active', Number(row.dataset.entryId) === entry.id));
@@ -532,7 +569,8 @@
     const average = mean(entry.scores);
     if (activeRow) activeRow.textContent = average === null ? 'pLDDT —' : average.toFixed(1);
     if (fit && entry.model) { viewer.zoomTo({ model: entry.model.getID() }); viewer.render(); }
-    updateStatus('Showing ' + displayName(entry) + (leftOverlay ? ' · one model at a time (View mode)' : ''));
+    if (comparing) syncViewsFrom(viewer);
+    updateStatus('Showing ' + displayName(entry) + (comparing ? ' in the primary panel' : leftOverlay ? ' · one model at a time (View mode)' : ''));
   }
 
   function selectRelative(delta, fit = true) {
@@ -545,7 +583,7 @@
 
   function toggleCycle() {
     if (cycleTimer) { stopCycle(); return; }
-    if (!cycleEntries().length) return;
+    if (!cycleEntries().length) { updateStatus('No shown models to cycle'); return; }
     const delay = Math.max(500, Number(root.querySelector('#gpv-cycle-speed').value) * 1000);
     cycleTimer = setInterval(() => selectRelative(1, false), delay);
     const button = root.querySelector('#gpv-cycle');
