@@ -339,6 +339,24 @@ of BSA over all of them were compared as well as the named pair.
 | B — MS2 maturation protein–coat | A–B | 22 101.3 / 22 134.0 | 9 554.0 / 9 556.0 | 30 585.4 / 30 628.7 | 1 069.9 / 1 061.4 | 0.8 % | 3 / 3 | 7 668 / 7 588 | ✓ |
 | C — phiX174 F–G | A–B | 23 907.2 / 23 893.5 | 9 757.0 / 9 760.8 | 32 954.8 / 32 956.1 | 709.5 / 698.1 | 1.6 % | 1 / 1 | 710 / 698 | ✓ |
 
+**A crystal structure, without its water (added 2.52.0, batch L).** The three runs above are predicted
+models, which have no water. On the deposited barnase–barstar structure 1BRS
+(`tests/fixtures/experimental/1brs.cif`), whose 513 waters all carry protein chain letters, the viewer
+counted them as part of their chains until 2.52.0 (A–D: 280 contacts, 2 289 Å²). It now leaves water
+out. The reference is `tests/reference.py`, unmodified, run on 1BRS with its HOH records removed
+(`python3 reference.py <folder> A 4 A D`, the file copied as `1brs_model_0.cif` and `_1.cif`, since the
+script wants two models); the atom-pair count, which reference.py does not report, is Biopython's
+`NeighborSearch` over the same water-free heavy atoms. Checked by a step of `tests/run.mjs`.
+
+| run | chains | atom contacts (viewer / ref) | residue pairs (viewer / ref) | residues (viewer / ref) | BSA (viewer / ref, Å²) | rel. diff. | pairs | total BSA (viewer / ref, Å²) | |
+|---|---|---:|---:|---:|---:|---:|---:|---:|:--:|
+| 1BRS, water removed | A–D | 165 / 165 | 36 / 36 | 16 + 14 / 16 + 14 | 1 561.5 / 1 551.8 | 0.6 % | 5 / 5 | 5 330 / 5 348 | ✓ |
+
+The residue pairs of the other four chain pairs agree too (A–B 11, A–C 2, B–E 37, C–F 34). With the
+waters left in, reference.py gives 2 319.8 Å² for A–D — its BSA comment says it keeps every
+non-hydrogen atom, water included, which is what the viewer did before — so the 47 % was a difference
+in what was counted, not in how.
+
 **Why the tolerance is per cent and not 10⁻⁵.** Shrake–Rupley is a sampling method: it counts how many
 of a fixed set of points on each atom's expanded sphere escape every neighbour. The viewer and
 Biopython both use 92 points laid out by a golden-angle spiral, but not the *same* 92 points (the

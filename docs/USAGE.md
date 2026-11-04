@@ -210,7 +210,8 @@ shown, ligands as sticks). Nothing is locked; adjust any control afterwards.
 
 **Ligands and ions** decides how hetero groups are drawn — AlphaFold 3 ligands, cofactors, ions and
 glycans, or the ligands in an experimental structure: sticks with small spheres (default), spheres
-only, or hidden. Water is never drawn. Cartoon mode alone would hide all of them.
+only, or hidden. Water is never drawn. Cartoon mode alone would hide all of them. A modified residue bonded into its chain — a phosphothreonine or selenomethionine written as
+HETATM — is not a ligand: it is drawn, counted and written (as its parent's letter) with its chain.
 
 **Surface** adds a molecular surface — translucent or opaque — coloured by the current scheme, on top
 of the representation. Combined with *Residue charge* or *Hydrophobicity* it gives the familiar
@@ -303,7 +304,8 @@ Hovering shows the nearest residue in the status bar without clicking.
 model has a residue 100A and no chain A (otherwise `100A` still means chain A); a plain `100` is the
 residue without one. A chain is matched as typed, ignoring case only when no chain has exactly that
 name. Residues told apart only by an insertion code — 100, 100A, 100B in Kabat-numbered antibodies —
-are separate cells in the sequence strip and keep their own labels, card and marker; a scene, session
+are separate cells in the sequence strip and keep their own labels, card and marker, from a PDB or an
+mmCIF file alike; a scene, session
 or share link records the code (`"icode": "A"`) only where there is one. The residue is selected as if clicked (the label field fills in, and
 a drawing or measurement in progress takes it as a point), the camera zooms to it, and the strip
 marks it. A residue card left open at another residue closes, as it does for a click on the view.
@@ -682,7 +684,8 @@ ipTM are what speak to domain and chain placement.
 **Interfaces.** Pick a model and a contact cutoff (3–6 Å, default 4) and press **Analyse
 interfaces**. For every pair of chains in contact the table lists heavy-atom contacts, residue pairs,
 interface residues on each chain, and buried surface area — the solvent-accessible area each chain
-loses on forming the pair, by Shrake–Rupley with a 1.4 Å probe and 92 points per atom. **Highlight**
+loses on forming the pair, by Shrake–Rupley with a 1.4 Å probe and 92 points per atom. Water is left
+out (ligands and ions count with their chain). **Highlight**
 adds the interface residues of a pair as a selection in Annotate's *Highlight colour* — the one colour
 every highlight in the viewer uses — which you can manage in the Annotate tab;
 **Download interface CSV** exports the table with the residue lists. This is geometry of the model as

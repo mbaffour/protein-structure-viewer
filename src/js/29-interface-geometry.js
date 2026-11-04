@@ -98,7 +98,13 @@
     await afterPaint();
     try {
       if (!entry.model) materializeEntry(entry);
-      const atoms = heavyAtoms(entry);
+      /* Water is solvent, not a side of an interface. A crystal structure's waters carry the protein
+         chains' letters, so they were counted as contacts, listed as interface residues (barnase
+         "residue 241") and buried as surface: 1BRS A–D read 280 contacts and 2289 Å² where the
+         protein–protein interface is 165 and about 1550 Å². PDBePISA leaves water out of interface
+         areas the same way. Ligands and ions stay with their chain: a bound cofactor at an interface
+         is part of it, and a predicted model's ligand chain is a partner of its own. */
+      const atoms = heavyAtoms(entry).filter(atom => !isWater(atom));
       const chains = [...new Set(atoms.map(atom => atom.chain || ''))];
       if (chains.length < 2) { interfaceResults = { entryId: entry.id, cutoff, rows: [] }; renderInterfaceResults(); state.textContent = displayName(entry) + ' has a single chain — no inter-chain interface to measure.'; return; }
       const rows = contactSummary(atoms, cutoff);

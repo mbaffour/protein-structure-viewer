@@ -17,7 +17,8 @@
   }
 
   function isNucleotide(atom) {
-    const code = String(atom.resn || '').toUpperCase().trim();
+    /* A modified nucleotide (PSU, 5MC …) counts as its parent, so an RNA chain with one is still "nt". */
+    const name = String(atom.resn || '').toUpperCase().trim(); const code = modifiedResidueParents[name] || name;
     return !aminoAcids[code] && Boolean(nucleotides[code]);
   }
 
@@ -275,6 +276,9 @@
       viewer.removeModel(model);
       throw new Error('No atoms could be read from ' + entry.name);
     }
+    /* mmCIF insertion codes and modified residues bonded into their chain (03b), before anything —
+       the chain colours, the pLDDT read below, the strip — looks at the atoms. */
+    prepareStructureAtoms(entry, atoms);
     entry.model = model;
     entry.atoms = atoms;
     seedChainColors(atoms);
@@ -671,8 +675,10 @@
   }
 
   /* An insertion code tells residues 100, 100A and 100B apart (antibody and Kabat numbering). 3Dmol
-     reads a blank as ' ' from a PDB file and as '?' or '.' from mmCIF; all three mean none. Records
-     (a label, the selected residue, a measurement point) carry it as `icode`, read the same way. */
+     reads a blank as ' ' from a PDB file; its mmCIF reader does not read the column at all, so the
+     code is set from the file's atom_site loop as the model is made (03b), and '?' or '.' there mean
+     none, as a blank does. Records (a label, the selected residue, a measurement point) carry it as
+     `icode`, read the same way. */
   function insertionCodeOf(atom) {
     const code = String((atom && atom.icode) ?? '').trim();
     return code === '?' || code === '.' ? '' : code;

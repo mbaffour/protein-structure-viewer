@@ -174,7 +174,7 @@
     applyViewStyle(target);
     if (!entry.model) materializeEntry(entry);
     const model = target.addModel(entry.text, entry.format);
-    model.selectedAtoms({}).forEach((atom, index) => { const source = entry.atoms[index]; if (source) { atom.x = source.x; atom.y = source.y; atom.z = source.z; } });
+    adoptEntryAtoms(model.selectedAtoms({}), entry);
     await applyModelStyle(model, entry, target);
     const shownIds = new Set([entry.id]);
     /* Camera first, then the overlays: this panel's labels are placed in this panel's projection,

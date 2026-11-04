@@ -204,10 +204,7 @@
       }
       if (typeof secondary.removeAllSurfaces === 'function') secondary.removeAllSurfaces();
       panel.model = secondary.addModel(target.text, target.format);
-      panel.model.selectedAtoms({}).forEach((atom, atomIndex) => {
-        const source = target.atoms[atomIndex];
-        if (source) { atom.x = source.x; atom.y = source.y; atom.z = source.z; }
-      });
+      adoptEntryAtoms(panel.model.selectedAtoms({}), target);
       applyModelStyle(panel.model, target, secondary);
       drawOverlays(secondary, new Set([target.id]), { width: panel.stage.clientWidth, height: panel.stage.clientHeight }, false);
       const background = backgroundSpec();

@@ -63,6 +63,33 @@ All notable changes to this project are recorded here.
 
 ### Fixed
 
+- **Insertion codes from mmCIF files.** 3Dmol's mmCIF reader never reads `_atom_site.pdbx_PDB_ins_code`,
+  so in every `.cif` — including every structure fetched by PDB ID — residues 100, 100A and 100B were one
+  residue numbered 100: the strip, Composition, the FASTA, Go to, labels, the card and Measure to… kept
+  only the last of them, and all of 2.52.0's insertion-code work applied to PDB files alone. The viewer
+  now reads the column from the file itself as the model is made and sets the code where the PDB reader
+  sets it, so the same residues give the same strip, Composition, FASTA and measurements in either
+  format. If the file's rows cannot be matched to the atoms one for one, nothing is changed.
+- **Modified residues written as HETATM stay in their chain.** Phosphothreonine (TPO), phosphoserine,
+  phosphotyrosine, selenomethionine (MSE) and the like are polymer residues written as HETATM records,
+  and the viewer read every HETATM as a ligand: AlphaFold 3's Aurora A model counted 274 residues in
+  chain A instead of 276, its FASTA lost "TT" at 160–161, the strip jumped from 159 to 162, and *Ligands
+  and ions* listed `TPO ×2`; the contact map, box selection, the card's Contacts and Distances, Highlight
+  nearby residues and Colour by distance left them out, and the card on one stood on its phosphorus. A
+  HETATM residue now counts as a residue of its chain when it has a backbone (N, Cα and C; C1′ with P or
+  O3′ for a nucleotide) and is bonded into the chain — its C within 1.9 Å of another residue's N or its N
+  of another's C (O3′–P for a nucleotide), the length the card already calls a peptide bond. A free amino
+  acid, a cap such as ACE or NH2, and every ligand still are ligands. Its letter is its parent's (TPO →
+  T, MSE → M, SEP → S, PTR → Y, PSU → U and about twenty more), `X` for one the viewer does not know. It
+  is now drawn in the cartoon with its chain rather than as hetero sticks, and *Ligands and ions → hide*
+  no longer hides it.
+- **Interfaces counted water.** Every water of a crystal structure carries a protein chain's letter, so
+  Confidence → Interfaces counted water–protein and water–water contacts, listed waters as interface
+  residues (barnase "residue 241"), and buried the water shell's surface: 1BRS barnase–barstar A–D read
+  280 contacts, 43 + 39 residues and 2 289 Å² where the protein interface has 165 contacts, 16 + 14
+  residues and about 1 550 Å² (`tests/reference.py` on 1BRS with its waters removed: 1 551.8 Å²).
+  Water is now left out of the contacts, the areas, Highlight and the CSV, as PDBePISA leaves it out;
+  ligands and ions still count with their chain.
 - **Documentation drift: nine control names that the viewer no longer spells that way.** Found by
   sweeping both guides against the control inventory rather than by reading them. In
   `docs/USE-CASES.md`, the colour select was called *Colour by* in five places (it is **Colour

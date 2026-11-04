@@ -4540,25 +4540,10 @@ await step('the sequence strip shows both chains and selects a residue on click'
   if ((await page.inputValue('#gpv-selection-chain')) !== 'B') throw new Error('chain field not filled');
   console.log('       range ' + range + ' of chain B');
 });
-await step('insertion codes: 100, 100A and 100B are three residues in the strip, Go to, a label, the card and a scene', async () => {
-  /* A Kabat-numbered stretch of a heavy chain H beside a light chain L. Before 2.52.0 the strip
-     merged 100, 100A and 100B into one cell, a label on 100A sat on 100's Cα and shared its key, the
-     card for 100A read 100's pLDDT, and Go to read "100A" as chain A, residue 100. */
-  const numbering = [[98, ' ', 90], [99, ' ', 90], [100, ' ', 92], [100, 'A', 41], [100, 'B', 62], [101, ' ', 90]];
-  const lines = []; let serial = 1;
-  numbering.forEach(([resi, icode, b], index) => {
-    const x = index * 3.8;
-    lines.push(pdbAtom('ATOM', serial++, 'N', 'GLY', 'H', resi, [x - 1.2, 0.8, 0], 'N', icode, b));
-    lines.push(pdbAtom('ATOM', serial++, 'CA', 'GLY', 'H', resi, [x, 0, 0], 'C', icode, b));
-    lines.push(pdbAtom('ATOM', serial++, 'C', 'GLY', 'H', resi, [x + 1.2, 0.8, 0], 'C', icode, b));
-  });
-  [1, 2, 3, 4].forEach((resi, index) => {
-    const x = index * 3.8;
-    lines.push(pdbAtom('ATOM', serial++, 'N', 'ALA', 'L', resi, [x - 1.2, 9.8, 0], 'N'));
-    lines.push(pdbAtom('ATOM', serial++, 'CA', 'ALA', 'L', resi, [x, 9, 0], 'C'));
-    lines.push(pdbAtom('ATOM', serial++, 'C', 'ALA', 'L', resi, [x + 1.2, 9.8, 0], 'C'));
-  });
-  const file = join(work, 'kabat_insertions.pdb'); await writeFile(file, lines.join('\n') + '\nEND\n');
+/* The Kabat checks of the step below, run on the PDB it builds and on the same model written as mmCIF
+   (batch L): 3Dmol's mmCIF reader does not read the insertion-code column, so until the viewer read it
+   itself every .cif merged 100, 100A and 100B — and every insertion-code step built a PDB. */
+const kabatInsertionChecks = async file => {
   const fresh = await freshViewer([file]);
   try {
     const goTo = async where => {
@@ -4612,6 +4597,32 @@ await step('insertion codes: 100, 100A and 100B are three residues in the strip,
     const restored = await fresh.evaluate(() => window.__viewerDebug.labelRecords().map(record => ({ key: record.key, icode: record.icode })));
     if (restored.length !== 1 || !/\|100\|A$/.test(restored[0].key)) throw new Error('the scene restored ' + JSON.stringify(restored));
   } finally { await fresh.close(); }
+};
+await step('insertion codes: 100, 100A and 100B are three residues in the strip, Go to, a label, the card and a scene', async () => {
+  /* A Kabat-numbered stretch of a heavy chain H beside a light chain L. Before 2.52.0 the strip
+     merged 100, 100A and 100B into one cell, a label on 100A sat on 100's Cα and shared its key, the
+     card for 100A read 100's pLDDT, and Go to read "100A" as chain A, residue 100. */
+  const numbering = [[98, ' ', 90], [99, ' ', 90], [100, ' ', 92], [100, 'A', 41], [100, 'B', 62], [101, ' ', 90]];
+  const lines = []; let serial = 1;
+  numbering.forEach(([resi, icode, b], index) => {
+    const x = index * 3.8;
+    lines.push(pdbAtom('ATOM', serial++, 'N', 'GLY', 'H', resi, [x - 1.2, 0.8, 0], 'N', icode, b));
+    lines.push(pdbAtom('ATOM', serial++, 'CA', 'GLY', 'H', resi, [x, 0, 0], 'C', icode, b));
+    lines.push(pdbAtom('ATOM', serial++, 'C', 'GLY', 'H', resi, [x + 1.2, 0.8, 0], 'C', icode, b));
+  });
+  [1, 2, 3, 4].forEach((resi, index) => {
+    const x = index * 3.8;
+    lines.push(pdbAtom('ATOM', serial++, 'N', 'ALA', 'L', resi, [x - 1.2, 9.8, 0], 'N'));
+    lines.push(pdbAtom('ATOM', serial++, 'CA', 'ALA', 'L', resi, [x, 9, 0], 'C'));
+    lines.push(pdbAtom('ATOM', serial++, 'C', 'ALA', 'L', resi, [x + 1.2, 9.8, 0], 'C'));
+  });
+  const file = join(work, 'kabat_insertions.pdb'); await writeFile(file, lines.join('\n') + '\nEND\n');
+  await kabatInsertionChecks(file);
+});
+await step('insertion codes read from an mmCIF file: 100, 100A and 100B are three residues in the strip, Go to, a label, the card and a scene (batch L)', async () => {
+  /* The same model as kabat_insertions.cif. Before batch L the strip read GLY98, GLY99, GLY100, GLY101: the
+     three 100s were one residue, so Go to 100A found nothing and the label and card could not be made. */
+  await kabatInsertionChecks(join(here, 'fixtures', 'insertion-codes', 'kabat_insertions.cif'));
 });
 await step('go to residue selects and zooms by chain and number', async () => {
   await page.fill('#gpv-goto', 'B:12'); await page.click('#gpv-goto-run'); await page.waitForTimeout(500);
@@ -5428,11 +5439,9 @@ const j2Card = async (fresh, where) => {
   await fresh.keyboard.press('l'); await fresh.waitForTimeout(400);
   if (!(await fresh.locator('#gpv-label-editor').isVisible())) throw new Error('the card did not open at ' + where);
 };
-await step('insertion codes: Measure to… from 57 to 57B measures 57B, and the card at 57A lists 57 and 57B as its bonded neighbours (round 2)', async () => {
-  /* Before: 57, 57A and 57B were one atom set wherever a residue was looked up by chain and number —
-     Measure to… 57 → 57B in closest atoms recorded 57 N to 57 N, 0.00 Å; the card at 57A left 57 and
-     57B out of its contacts as "itself", and its Distances CSV was "Distances from ALA57". */
-  const fresh = await freshViewer([await j2InsertionModel()]);
+/* The checks of the step below, on the PDB j2InsertionModel writes and on the same model as mmCIF (batch L). */
+const j2InsertionChecks = async file => {
+  const fresh = await freshViewer([file]);
   try {
     await j2Card(fresh, 'A:57');
     await fresh.selectOption('#gpv-label-editor-measure-atoms', 'closest'); await fresh.waitForTimeout(200);
@@ -5468,7 +5477,146 @@ await step('insertion codes: Measure to… from 57 to 57B measures 57B, and the 
     if (!keys.includes('57') || !keys.includes('57B') || keys.includes('57A')) throw new Error('Highlight on chain A: ' + JSON.stringify(chainA));
     console.log('       57 → 57B ' + value + ' Å · 57A bonded to ' + bonded.join(' and ') + ' · ' + rows.length + ' contacts · CSV ' + resis.length + ' chain-A rows');
   } finally { await fresh.close(); }
+};
+await step('insertion codes: Measure to… from 57 to 57B measures 57B, and the card at 57A lists 57 and 57B as its bonded neighbours (round 2)', async () => {
+  /* Before: 57, 57A and 57B were one atom set wherever a residue was looked up by chain and number —
+     Measure to… 57 → 57B in closest atoms recorded 57 N to 57 N, 0.00 Å; the card at 57A left 57 and
+     57B out of its contacts as "itself", and its Distances CSV was "Distances from ALA57". */
+  await j2InsertionChecks(await j2InsertionModel());
 });
+await step('insertion codes read from an mmCIF file: Measure to… from 57 to 57B measures 57B, and the card at 57A lists 57 and 57B as its bonded neighbours (batch L)', async () => {
+  /* j2_insertions.cif is j2InsertionModel's model. Before batch L the mmCIF reader gave 57, 57A and 57B as one
+     residue 57, so Go to A:57B found nothing to measure to. */
+  await j2InsertionChecks(join(here, 'fixtures', 'insertion-codes', 'j2_insertions.cif'));
+});
+/* batch-L begin */
+/* ---- Stress loop, round 3, batch L: what 3Dmol's parsers leave out of the atoms (03b), and water in
+   Interfaces. On pages of their own; every step's name ends "(batch L)". ---- */
+await step('the same five residues as PDB and as mmCIF give the same strip, Composition, FASTA and Measure to… 100A (batch L)', async () => {
+  /* Before: the mmCIF file's strip read GLY99, TYR100, GLY101, Composition counted 3, the FASTA was GYG,
+     and Go to H:100A found nothing to measure to — 3Dmol's mmCIF reader never reads the insertion code. */
+  const read = async file => {
+    const fresh = await freshViewer([file]);
+    try {
+      const strip = await fresh.evaluate(() => {
+        const canvas = document.querySelector('#gpv-sequence-rows canvas[data-chain="H"]'); if (!canvas) return null;
+        const box = canvas.getBoundingClientRect(); const texts = [];
+        for (let index = 0; index < 5; index += 1) {
+          canvas.dispatchEvent(new PointerEvent('pointermove', { clientX: box.left + (index + 0.5) * box.width / 5, clientY: box.top + 10, bubbles: true }));
+          texts.push(document.querySelector('#gpv-sequence-hint').textContent.split(' · ')[0]);
+        }
+        return texts.join(',');
+      });
+      await fresh.click('[data-gpv-tab="models"]'); await fresh.waitForTimeout(200);
+      const composition = await fresh.evaluate(() => [...document.querySelectorAll('#gpv-chain-rows tr')].map(tr => [...tr.querySelectorAll('th, td')].slice(0, 3).map(cell => cell.textContent.trim()).join(' ')).join(' | '));
+      const fasta = (await freshDownload(fresh, '#gpv-fasta')).toString('utf8');
+      const sequence = fasta.split('\n').filter(line => !line.startsWith('>')).join('');
+      await j2Card(fresh, 'H:99');
+      await fresh.evaluate(() => document.querySelector('#gpv-label-editor-measure').click()); await fresh.waitForTimeout(300);
+      await freshGoTo(fresh, 'H:100A');
+      const points = await fresh.evaluate(() => { const list = window.__viewerDebug.measurementRecords(); const last = list[list.length - 1]; return last ? last.points.map(point => point.chain + point.resi + (point.icode || '') + ':' + point.atom) : null; });
+      const status = await j2Status(fresh);
+      const value = Number((status.match(/([\d.]+) Å/) || [])[1]);
+      return { strip, composition, sequence, header: fasta.split('\n')[0].replace(/^>[^|]*/, ''), points: points && points.join('→'), value };
+    } finally { await fresh.close(); }
+  };
+  const pdb = await read(join(here, 'fixtures', 'insertion-codes', 'fab_h_insertions.pdb'));
+  const cif = await read(join(here, 'fixtures', 'insertion-codes', 'fab_h_insertions.cif'));
+  if (pdb.strip !== 'GLY99,ALA100,SER100A,TYR100B,GLY101') throw new Error('the PDB strip reads ' + pdb.strip);
+  if (pdb.sequence !== 'GASYG' || !/^H 5 99–101/.test(pdb.composition)) throw new Error('the PDB file: ' + JSON.stringify(pdb));
+  if (pdb.points !== 'H99:CA→H100A:CA' || Math.abs(pdb.value - 7.6) > 0.01) throw new Error('Measure to… 99 → 100A on the PDB: ' + JSON.stringify(pdb));
+  for (const key of ['strip', 'composition', 'sequence', 'header', 'points', 'value']) if (pdb[key] !== cif[key]) throw new Error(key + ' differs — PDB ' + JSON.stringify(pdb[key]) + ', mmCIF ' + JSON.stringify(cif[key]));
+  console.log('       both: ' + cif.strip + ' · ' + cif.composition + ' · ' + cif.sequence + ' · ' + cif.points + ' ' + cif.value + ' Å');
+});
+await step('a modified residue written as HETATM is a residue of its chain: Aurora A\'s two phosphothreonines count, read T, sit in the strip and open the card (batch L)', async () => {
+  /* The AlphaFold Server model of Aurora A has TPO at A160 and A161, HETATM records bonded into the chain.
+     Before: Composition counted 274, the FASTA dropped "TT" (length=274), the strip ran 159 → 162, Ligands
+     listed "TPO ×2", the card at 160 stood on its N and found no peptide-bonded neighbour, and Colour by
+     distance painted both grey. */
+  const fresh = await freshViewer([join(here, 'fixtures', 'published', 'ipsae-aurka-tpx2', 'fold_aurka_0_tpx2_0_model_0.cif')]);
+  try {
+    await fresh.click('[data-gpv-tab="models"]'); await fresh.waitForTimeout(200);
+    const count = await fresh.evaluate(() => { const row = [...document.querySelectorAll('#gpv-chain-rows tr')].find(tr => tr.querySelector('th').textContent.trim() === 'A'); return row ? row.querySelectorAll('td')[0].textContent.trim() : null; });
+    if (count !== '276') throw new Error('Composition counts chain A as ' + count + ' residues, not 276');
+    const hetero = await freshText(fresh, '#gpv-hetero-summary');
+    if (/TPO/.test(hetero) || !/MG ×2/.test(hetero) || !/ATP/.test(hetero)) throw new Error('Ligands and ions: ' + hetero);
+    const fasta = (await freshDownload(fresh, '#gpv-fasta')).toString('utf8');
+    const record = fasta.split('>').find(text => text.includes('chain_A')) || '';
+    const sequence = record.split('\n').slice(1).join('');
+    if (!/chain_A length=276/.test(record) || sequence.length !== 276 || sequence.slice(159, 161) !== 'TT') throw new Error('FASTA chain A: ' + record.split('\n')[0] + ' · 160–161 read ' + sequence.slice(159, 161));
+    const strip = await fresh.evaluate(() => {
+      const canvas = document.querySelector('#gpv-sequence-rows canvas[data-chain="A"]'); if (!canvas) return null;
+      const box = canvas.getBoundingClientRect(); const texts = [];
+      [158, 159, 160, 161].forEach(index => {
+        canvas.dispatchEvent(new PointerEvent('pointermove', { clientX: box.left + (index + 0.5) * box.width / 276, clientY: box.top + 10, bubbles: true }));
+        texts.push(document.querySelector('#gpv-sequence-hint').textContent.split(' · ')[0]);
+      });
+      return texts.join(',');
+    });
+    if (!/^[A-Z]{3}159,TPO160,TPO161,[A-Z]{3}162$/.test(strip || '')) throw new Error('the strip at 159–162 reads ' + strip);
+    /* The card at TPO160 (04c's Cα lookup): headed by it, its Cα the stand-in, both neighbours peptide-bonded
+       (the proximity search, 10, no longer drops a HETATM neighbour). */
+    await j2Card(fresh, 'A:160');
+    const head = await freshText(fresh, '#gpv-label-editor .gpv-label-editor-residue');
+    if (!head.startsWith('TPO160 · chain A')) throw new Error('the card is headed "' + head + '"');
+    await fresh.evaluate(() => document.querySelector('#gpv-label-editor-contacts').click()); await fresh.waitForTimeout(400);
+    const rows = await fresh.evaluate(() => [...document.querySelectorAll('#gpv-residue-contacts-rows .gpv-residue-contact')].map(button => ({ chain: button.dataset.chain, resi: button.dataset.resi, bond: button.dataset.bond })));
+    const bonded = rows.filter(row => row.chain === 'A' && row.bond === 'peptide').map(row => row.resi).sort();
+    if (bonded.join() !== '159,161') throw new Error('TPO160 peptide-bonded to ' + JSON.stringify(bonded) + ' of ' + rows.length + ' contacts');
+    const distances = await fresh.evaluate(() => { const d = window.__viewerDebug; const entry = d.entries()[0]; const rows = d.residueDistances(entry.id, 'A', 160); return rows ? rows.filter(row => row.chain === 'A' && (row.resi === 159 || row.resi === 161)).map(row => row.resi + ' ' + row.atoms).sort() : null; });
+    if (!distances || distances.join() !== '159 Cα–Cα,161 Cα–Cα') throw new Error('distances from TPO160: ' + JSON.stringify(distances));
+    await fresh.keyboard.press('Escape'); await fresh.waitForTimeout(150);
+    /* Colour by distance from residue 158 (03a): the two TPOs take a band like any residue; the ions stay grey. */
+    await fresh.click('[data-gpv-tab="appearance"]'); await fresh.selectOption('#gpv-color-mode', 'fromresidue'); await fresh.waitForTimeout(300);
+    await freshGoTo(fresh, 'A:158'); await fresh.waitForTimeout(400);
+    const colours = await fresh.evaluate(() => {
+      const entry = window.__viewerDebug.entries()[0];
+      const ca = resi => entry.atoms.find(atom => atom.chain === 'A' && atom.resi === resi && atom.atom === 'CA');
+      const ion = entry.atoms.find(atom => atom.resn === 'MG');
+      const fn = atom => atom && atom.style && atom.style.cartoon && typeof atom.style.cartoon.colorfunc === 'function' ? atom.style.cartoon.colorfunc : null;
+      const paint = fn(ca(159));
+      return { tpo160: fn(ca(160)) ? fn(ca(160))(ca(160)) : null, tpo161: fn(ca(161)) ? fn(ca(161))(ca(161)) : null, grey: paint ? paint(ion) : null };
+    });
+    if (!colours.tpo160 || !colours.tpo161 || colours.tpo160 === colours.grey || colours.tpo161 === colours.grey) throw new Error('distance colours: ' + JSON.stringify(colours));
+    console.log('       chain A 276 · 160–161 ' + sequence.slice(159, 161) + ' · ' + hetero + ' · TPO160 bonded to ' + bonded.join(' and ') + ' · colours ' + colours.tpo160 + ' ' + colours.tpo161);
+  } finally { await fresh.close(); }
+});
+await step('Interfaces leave water out: 1BRS A–D has 165 contacts, 16 + 14 residues and the buried area reference.py gives without water (batch L)', async () => {
+  /* Every water in 1BRS carries a protein chain's letter, so A–D read 280 contacts, 43 + 39 interface
+     residues (barnase "residue 241", a water), and 2289 Å². The targets: reference.py, unmodified, on 1BRS
+     with its HOH records removed — A–D 36 residue pairs, 16 + 14 residues, BSA 1551.85 Å², and residue pairs
+     A–B 11, A–C 2, B–E 37, C–F 34 — and the atom-pair count, 165, from Biopython's NeighborSearch over the
+     same atoms. The BSA band is VALIDATION.md's 5 % (Shrake–Rupley sampling); with water it is 47 % high. */
+  const fresh = await freshViewer([experimentalFile('1brs.cif')]);
+  try {
+    await fresh.evaluate(() => document.querySelector('#gpv-interface-run').click());
+    await fresh.waitForFunction(() => document.querySelectorAll('#gpv-contacts-rows button').length > 0 && !document.querySelector('#gpv-interface-run').disabled, null, { timeout: 120000 });
+    const rows = await fresh.evaluate(() => window.__viewerDebug.interfaceResults().rows.map(row => ({ pair: row.chains.join(''), contacts: row.contacts, pairs: row.residuePairs.size, a: row.residuesA.size, b: row.residuesB.size, maxA: Math.max(...row.residuesA), maxB: Math.max(...row.residuesB), bsa: row.bsa })));
+    const ad = rows.find(row => row.pair === 'AD');
+    if (!ad || ad.contacts !== 165 || ad.pairs !== 36 || ad.a !== 16 || ad.b !== 14) throw new Error('A–D: ' + JSON.stringify(ad));
+    if (!(Math.abs(ad.bsa - 1551.85) <= 1551.85 * 0.05)) throw new Error('A–D buried surface ' + ad.bsa.toFixed(1) + ' Å², reference.py 1551.85 Å² without water');
+    const pairs = Object.fromEntries(rows.map(row => [row.pair, row.pairs]));
+    if (Object.keys(pairs).sort().join() !== 'AB,AC,AD,BE,CF') throw new Error('chain pairs in contact: ' + JSON.stringify(pairs));
+    if (pairs.AB !== 11 || pairs.AC !== 2 || pairs.BE !== 37 || pairs.CF !== 34) throw new Error('residue pairs per chain pair: ' + JSON.stringify(pairs));
+    const total = rows.reduce((sum, row) => sum + row.bsa, 0);
+    if (!(Math.abs(total - 5347.66) <= 5347.66 * 0.05)) throw new Error('total buried surface ' + total.toFixed(1) + ' Å², reference.py 5347.66 Å²');
+    /* Barnase has 110 residues and barstar 89: no interface residue past them, in the table, Highlight or CSV. */
+    if (rows.some(row => row.maxA > 110 || row.maxB > 110)) throw new Error('a water listed as an interface residue: ' + JSON.stringify(rows));
+    const before = await fresh.evaluate(() => window.__viewerDebug.selectionRecords().length);
+    await fresh.evaluate(() => [...document.querySelectorAll('#gpv-contacts-rows tr')].find(tr => tr.querySelector('th').textContent.replace(/\s/g, '') === 'A–D').querySelector('button').click()); await fresh.waitForTimeout(400);
+    const highlighted = await fresh.evaluate(n => window.__viewerDebug.selectionRecords().slice(n).map(record => record.chain + ':' + Math.max(...record.residues) + ':' + record.residues.length), before);
+    if (highlighted.join() !== 'A:' + ad.maxA + ':16,D:' + ad.maxB + ':14') throw new Error('Highlight: ' + JSON.stringify(highlighted));
+    /* Interfaces sits on the Confidence tab, not shown on this page: the buttons are pressed as the step above presses Run. */
+    const download = fresh.waitForEvent('download', { timeout: 30000 });
+    await fresh.evaluate(() => document.querySelector('#gpv-interface-csv').click());
+    const csv = (await readFile(await (await download).path(), 'utf8')).split('\n').map(csvCells);
+    const line = csv.find(cells => cells[1] === 'A' && cells[2] === 'D');
+    const numbers = cells => cells.split(' ').map(Number);
+    if (!line || line[4] !== '165' || numbers(line[9]).length !== 16 || numbers(line[10]).length !== 14 || Math.max(...numbers(line[9]), ...numbers(line[10])) > 110) throw new Error('CSV A–D: ' + JSON.stringify(line));
+    console.log('       A–D ' + ad.contacts + ' contacts · ' + ad.pairs + ' residue pairs · ' + ad.a + ' + ' + ad.b + ' residues · BSA ' + ad.bsa.toFixed(1) + ' Å² (reference.py 1551.85) · 5 pairs, total ' + total.toFixed(0) + ' Å² (5347.66)');
+  } finally { await fresh.close(); }
+});
+/* batch-L end */
 await step('a nucleotide is measured by its P and a calcium ion by its own name, never as a Cα, and an RNA chain counts nucleotides (round 2)', async () => {
   /* The contacts' last column read "Cα 6.01 Å" between two nucleotides, the card offered "Cα–Cα",
      Distances CSV said "(Cα–Cα)", Measure to… a calcium ion said "C1–Cα", and the contact map's chain

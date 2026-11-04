@@ -805,8 +805,8 @@
     const pending = [];
     shown.forEach(entry => {
       const model = target.addModel(entry.text, entry.format);
-      const atoms = model.selectedAtoms({});
-      atoms.forEach((atom, index) => { if (entry.atoms[index]) { atom.x = entry.atoms[index].x; atom.y = entry.atoms[index].y; atom.z = entry.atoms[index].z; } });
+      /* The coordinates, and the insertion codes and modified residues the parser leaves out (03b). */
+      adoptEntryAtoms(model.selectedAtoms({}), entry);
       pending.push(applyModelStyle(model, entry, target));
     });
     await Promise.all(pending);

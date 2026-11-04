@@ -3,7 +3,10 @@
   const nucleotides = { DA: 'A', DC: 'C', DG: 'G', DT: 'T', DU: 'U', A: 'A', C: 'C', G: 'G', U: 'U', I: 'I' };
   function residueLetter(resn) {
     const code = String(resn || '').toUpperCase().trim();
-    return aminoAcids[code] || nucleotides[code] || 'X';
+    /* A modified residue (TPO, MSE …) is written as its parent's letter, as the PDB's own sequence
+       records write it (03b); one with no known parent is X. */
+    const parent = modifiedResidueParents[code];
+    return aminoAcids[code] || nucleotides[code] || (parent && (aminoAcids[parent] || nucleotides[parent])) || 'X';
   }
 
   function fastaText(entries) {
