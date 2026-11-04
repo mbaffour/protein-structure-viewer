@@ -964,8 +964,10 @@
       const name = document.createElement('span');
       name.className = 'gpv-entry-name';
       /* compactRange (28-figure-legend.js) folds a long selection into runs — "10–20" instead of
-         "10, 11, 12, 13 … 20" — the same way the figure legend and domain ranges already read. */
-      name.textContent = displayName(entry) + ' · ' + (record.chain ? 'chain ' + record.chain : 'all chains') + ' · ' + (Array.isArray(record.icodes) ? clipText(selectionResidueKeys(record).join(', '), 60) : compactRange(record.residues)) + ' · ' + record.action;
+         "10, 11, 12, 13 … 20" — the same way the figure legend and domain ranges already read. A
+         selection with insertion codes goes through it too, now that it keeps a coded residue out of
+         every run, so this row and the figure legend's caption read alike: "9, 10A, 10B, 11–13". */
+      name.textContent = displayName(entry) + ' · ' + (record.chain ? 'chain ' + record.chain : 'all chains') + ' · ' + (Array.isArray(record.icodes) ? clipText(compactRange(record.residues, record.icodes), 60) : compactRange(record.residues)) + ' · ' + record.action;
       const remove = document.createElement('button');
       remove.className = 'btn btn-ghost'; remove.type = 'button'; remove.textContent = 'Remove';
       remove.setAttribute('aria-label', 'Remove the selection ' + name.textContent);

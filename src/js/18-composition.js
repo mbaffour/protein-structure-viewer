@@ -1,12 +1,24 @@
   /* ---------- Composition ---------- */
 
+  /* What a chain's residues are counted in: nucleotides for an RNA or DNA chain, amino acids for a
+     protein one, plain residues for a chain of both. The Composition panel, the entity legend and the
+     contact map's chain menu all read it from here, so they say the same thing about the same chain —
+     the panel and the legend called a 24-nucleotide chain "24 aa" while the menu called it "24 nt". */
+  function residueCountUnit(residues) {
+    if (!residues.length) return ' residues';
+    if (residues.every(isNucleotide)) return ' nt';
+    if (residues.some(isNucleotide)) return residues.length === 1 ? ' residue' : ' residues';
+    return ' aa';
+  }
+
   function heteroInventory(entry) {
     const groups = new Map();
     entry.atoms.forEach(atom => {
       if (!atom.hetflag || isWater(atom)) return;
       const name = String(atom.resn || '?').toUpperCase();
       if (!groups.has(name)) groups.set(name, new Set());
-      groups.get(name).add((atom.chain || '') + '|' + atom.resi);
+      /* Two copies of one ligand at 101 and 101A are two groups, not one. */
+      groups.get(name).add((atom.chain || '') + '|' + atom.resi + '|' + insertionCodeOf(atom));
     });
     return [...groups.entries()].map(([name, set]) => [name, set.size]).sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]));
   }
@@ -75,7 +87,7 @@
       : 'No ligands or ions (water is not counted).';
     root.querySelector('#gpv-chains-all').disabled = hidden.length === 0 && !(entry.fadedChains || []).length;
     const groups = entityGroups(entry); const size = assemblyDimensions(entry);
-    root.querySelector('#gpv-assembly-summary').textContent = !rows.length ? 'No polymer chains (ligands and ions only).' : (groups.length ? 'Stoichiometry: ' + groups.map(group => group.label + ' ×' + group.chains.length + ' (' + clipText(group.chains.join(', '), 30) + ', ' + group.length + ' aa)').join(' · ') : '')
+    root.querySelector('#gpv-assembly-summary').textContent = !rows.length ? 'No polymer chains (ligands and ions only).' : (groups.length ? 'Stoichiometry: ' + groups.map(group => group.label + ' ×' + group.chains.length + ' (' + clipText(group.chains.join(', '), 30) + ', ' + group.length + group.unit + ')').join(' · ') : '')
       + (size ? (groups.length ? ' · ' : '') + 'Cα extent ' + (size.exact ? '' : '≥ ') + (size.extent / 10).toFixed(1) + ' nm · radius of gyration ' + (size.gyration / 10).toFixed(1) + ' nm' : '');
   }
 

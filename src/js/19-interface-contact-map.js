@@ -44,12 +44,11 @@
     const rows = entry && entry.model ? residueRows(entry) : [];
     const previous = [first.value, second.value];
     const total = rows.reduce((sum, row) => sum + row.residues.length, 0);
-    /* An RNA or DNA chain counts nucleotides, not amino acids; a mixed set counts residues. */
-    const unit = residues => (residues.every(isNucleotide) ? ' nt' : residues.some(isNucleotide) ? ' residues' : ' aa');
+    /* An RNA or DNA chain counts nucleotides, not amino acids; a mixed set counts residues (18). */
     [first, second].forEach((select, index) => {
       select.replaceChildren();
-      rows.forEach(row => { const option = document.createElement('option'); option.value = row.chain; option.textContent = (row.chain || '—') + ' · ' + row.residues.length + unit(row.residues); select.append(option); });
-      if (rows.length) { const option = document.createElement('option'); option.value = contactAllChains; option.textContent = 'All chains · ' + total + unit(rows.flatMap(row => row.residues)); select.append(option); }
+      rows.forEach(row => { const option = document.createElement('option'); option.value = row.chain; option.textContent = (row.chain || '—') + ' · ' + row.residues.length + residueCountUnit(row.residues); select.append(option); });
+      if (rows.length) { const option = document.createElement('option'); option.value = contactAllChains; option.textContent = 'All chains · ' + total + residueCountUnit(rows.flatMap(row => row.residues)); select.append(option); }
       const kept = previous[index] === contactAllChains ? rows.length > 0 : rows.some(row => row.chain === previous[index]);
       if (kept) select.value = previous[index]; else if (rows[Math.min(index, rows.length - 1)]) select.value = rows[Math.min(index, rows.length - 1)].chain;
     });

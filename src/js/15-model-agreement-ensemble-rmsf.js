@@ -8,11 +8,14 @@
      used (alignedPairs), not by matching chain and residue number: models from different sources
      number differently — an AlphaFold DB model keeps the initiator Met that a crystal structure's
      mature chain lacks — and pooling by number then averages each residue with its neighbour.
-     Residues present in one model only are skipped. */
+     Residues present in one model only are skipped.
+     The tag is residueCodeTag, the same one the superposition pairs by (30): keyed by number alone,
+     100, 100A and 100B were one key — the reference kept only the last of the three, and every pair
+     the alignment had made for a coded residue then matched nothing and was dropped. */
   function ensembleAgreement(reference, targets) {
     if (!reference || !targets.length) return null;
     const perTag = new Map();
-    reference.atoms.forEach(atom => { if (atom.atom === 'CA' && !atom.hetflag) perTag.set(residueTag(atom), [[atom.x, atom.y, atom.z]]); });
+    reference.atoms.forEach(atom => { if (atom.atom === 'CA' && !atom.hetflag) perTag.set(residueCodeTag(atom), [[atom.x, atom.y, atom.z]]); });
     /* model id → its own residue tag → the reference tag it was paired with; null for the reference. */
     const byEntry = new Map([[reference.id, null]]);
     targets.forEach(entry => {
@@ -21,7 +24,7 @@
         const points = perTag.get(tag);
         if (!points || atom.hetflag) return;
         points.push([atom.x, atom.y, atom.z]);
-        own.set(residueTag(atom), tag);
+        own.set(residueCodeTag(atom), tag);
       });
       byEntry.set(entry.id, own);
     });
@@ -39,8 +42,14 @@
   function agreementValue(entry, atom) {
     if (!ensembleSpread || !entry || !ensembleSpread.byEntry.has(entry.id)) return undefined;
     const pairing = ensembleSpread.byEntry.get(entry.id);
-    const tag = pairing ? pairing.get(residueTag(atom)) : residueTag(atom);
+    const tag = pairing ? pairing.get(residueCodeTag(atom)) : residueCodeTag(atom);
     return tag === undefined ? undefined : ensembleSpread.values.get(tag);
+  }
+
+  /* chain | number | insertion code, back out of the tag the values are keyed by. */
+  function agreementTagParts(tag) {
+    const [chain, resi, icode = ''] = String(tag).split('|');
+    return { chain, resi: Number(resi), icode };
   }
 
   function agreementColor(entry, atom) {
@@ -57,7 +66,7 @@
   function rmsfProfileSvg(fit = null) {
     if (!ensembleSpread || !ensembleSpread.values.size) return null;
     const byChain = new Map();
-    ensembleSpread.values.forEach((value, tag) => { const [chain, resi] = tag.split('|'); if (!byChain.has(chain)) byChain.set(chain, []); byChain.get(chain).push({ resi: Number(resi), value }); });
+    ensembleSpread.values.forEach((value, tag) => { const { chain, resi, icode } = agreementTagParts(tag); if (!byChain.has(chain)) byChain.set(chain, []); byChain.get(chain).push({ resi, icode, value }); });
     const chains = [...byChain.keys()].sort(compareChains).slice(0, 12);
     if (!chains.length) return null;
     let k = 1; let width = 1200; let left = 72; let right = 30; let top = 64; let rowHeight = 170; let gap = 40; let bottom = 40; let axisLabel = 52;
@@ -82,7 +91,8 @@
     const plotWidth = width - left - right;
     chains.forEach((chain, index) => {
       const y0 = top + index * (rowHeight + gap);
-      const residues = byChain.get(chain).sort((a, b) => a.resi - b.resi);
+      /* 100, 100A and 100B are three points at the same place on the axis, in their own order. */
+      const residues = byChain.get(chain).sort((a, b) => a.resi - b.resi || (a.icode < b.icode ? -1 : a.icode > b.icode ? 1 : 0));
       const minResi = residues[0].resi; const maxResi = residues[residues.length - 1].resi;
       const x = resi => left + (maxResi === minResi ? 0 : (resi - minResi) / (maxResi - minResi) * plotWidth);
       const y = value => y0 + rowHeight - Math.min(ceiling, value) / ceiling * rowHeight;
@@ -129,8 +139,12 @@
   function downloadRmsfCsv() {
     if (!ensembleSpread) return;
     const rows = [['chain', 'resi', 'models', 'ca_rmsf_angstrom']];
-    [...ensembleSpread.values.entries()].sort((a, b) => compareChains(a[0].split('|')[0], b[0].split('|')[0]) || Number(a[0].split('|')[1]) - Number(b[0].split('|')[1]))
-      .forEach(([tag, value]) => rows.push([tag.split('|')[0], tag.split('|')[1], ensembleSpread.counts.get(tag), value.toFixed(3)]));
+    /* `resi` carries the insertion code where a residue has one — "100A", as the measurements CSV
+       writes it — so 100, 100A and 100B are three rows that can be told apart. */
+    [...ensembleSpread.values.entries()]
+      .map(([tag, value]) => ({ ...agreementTagParts(tag), value, tag }))
+      .sort((a, b) => compareChains(a.chain, b.chain) || a.resi - b.resi || (a.icode < b.icode ? -1 : a.icode > b.icode ? 1 : 0))
+      .forEach(row => rows.push([row.chain, row.resi + row.icode, ensembleSpread.counts.get(row.tag), row.value.toFixed(3)]));
     rows.push([]); rows.push(['# models', ensembleSpread.models.join(' | ')]);
     rows.push(['# residue numbering', ensembleSpread.models[0] + ' (reference); each model matched through its superposition pairing']);
     downloadBlob(rows.map(row => row.join(',')).join('\n'), 'text/csv', 'protein-ensemble-rmsf.csv');

@@ -7775,6 +7775,167 @@ await step('the share link reopens the fetched model with its annotations', asyn
   await shared.close();
 });
 
+/* Batch K: the cross-file lines two concurrent round-2 fixers each needed in the other's files,
+   deferred to one batch rather than risked as a merge conflict. Every step is on a page of its own. */
+group('batch K: the deferred cross-file fixes');
+await step('a scene puts a compared position and a highlighted selection back on their insertion codes, not on the plain residue (batch K)', async () => {
+  /* applyScene read a position's number without its `icode` and a selection's `residues` without its
+     `icodes`, so an antibody-numbered scene came back one residue out: 100A restored onto 100. */
+  const fresh = await freshViewer([{ name: 'icode.pdb', mimeType: 'chemical/x-pdb', buffer: Buffer.from(c2Pdb()) }]);
+  try {
+    await c2Scene(fresh, { type: 'protein-viewer-scene', schemaVersion: 1, models: [{ name: 'icode.pdb' }], settings: {},
+      positions: [{ chain: 'A', resi: 10, icode: 'B' }],
+      selections: [{ model: 'icode.pdb', chain: 'A', residues: [10, 10], icodes: ['A', 'B'], action: 'highlight', color: '#f97316' }] });
+    await fresh.waitForTimeout(1500);
+    const state = await fresh.evaluate(() => {
+      const debug = window.__viewerDebug;
+      const record = debug.selectionRecords()[0] || null;
+      return { positions: debug.spotlightResidues().map(spot => ({ chain: spot.chain, resi: spot.resi, icode: spot.icode || '' })),
+        selection: record ? { residues: record.residues, icodes: record.icodes || null } : null };
+    });
+    if (JSON.stringify(state.positions) !== JSON.stringify([{ chain: 'A', resi: 10, icode: 'B' }])) throw new Error('the restored position: ' + JSON.stringify(state.positions));
+    if (!state.selection || JSON.stringify(state.selection.icodes) !== JSON.stringify(['A', 'B'])) throw new Error('the restored selection: ' + JSON.stringify(state.selection));
+    await fresh.click('[data-gpv-tab="annotate"]'); await fresh.waitForTimeout(200);
+    const row = await freshText(fresh, '#gpv-selection-list .gpv-entry .gpv-entry-name');
+    if (!/ · 10A, 10B · highlight$/.test(row)) throw new Error('the selection row: ' + row);
+    console.log('       ' + row);
+  } finally { await fresh.close(); }
+});
+await step('the figure legend names a highlighted insertion code and never folds one into a numeric run (batch K)', async () => {
+  /* compactRange saw only the numbers: 9, 10A, 10B, 11, 12, 13 deduplicated to 9…13 and printed
+     "chain A 9–13", a caption that named six residues as five and hid both insertions. */
+  const fresh = await freshViewer([{ name: 'icode.pdb', mimeType: 'chemical/x-pdb', buffer: Buffer.from(c2Pdb()) }]);
+  try {
+    await c2Scene(fresh, { type: 'protein-viewer-scene', schemaVersion: 1, models: [{ name: 'icode.pdb' }], settings: {},
+      selections: [{ model: 'icode.pdb', chain: 'A', residues: [9, 10, 10, 11, 12, 13], icodes: ['', 'A', 'B', '', '', ''], action: 'highlight', color: '#f97316' }] });
+    await fresh.waitForTimeout(1500);
+    await fresh.click('[data-gpv-tab="publish"]'); await fresh.click('#gpv-figure-legend'); await fresh.waitForTimeout(400);
+    const legend = await fresh.inputValue('#gpv-legend-text');
+    if (!legend.includes('Highlighted residues: chain A 9, 10A, 10B, 11–13.')) throw new Error('the figure legend: ' + (legend.split('Highlighted')[1] || legend).slice(0, 120));
+    /* The Annotate row reads the same as the caption; it listed every residue while the compactor
+       could not be trusted with codes. */
+    await fresh.click('[data-gpv-tab="annotate"]'); await fresh.waitForTimeout(200);
+    const row = await freshText(fresh, '#gpv-selection-list .gpv-entry .gpv-entry-name');
+    if (!/ · 9, 10A, 10B, 11–13 · highlight$/.test(row)) throw new Error('the selection row: ' + row);
+    console.log('       Highlighted residues: ' + legend.split('Highlighted residues: ')[1].split('.')[0] + ' · row "' + row + '"');
+  } finally { await fresh.close(); }
+});
+await step('the clipboard fallback says what is in the box without conjugating against a count it cannot see (batch K)', async () => {
+  /* "Clipboard unavailable — the 1 measurement are selected in the box under the view". */
+  const fresh = await freshViewer([{ name: 'icode.pdb', mimeType: 'chemical/x-pdb', buffer: Buffer.from(c2Pdb()) }]);
+  try {
+    await fresh.evaluate(() => { Object.defineProperty(navigator, 'clipboard', { configurable: true, value: { writeText: () => Promise.reject(new Error('blocked')) } }); });
+    await c2Scene(fresh, { type: 'protein-viewer-scene', schemaVersion: 1, models: [{ name: 'icode.pdb' }], settings: {},
+      measurements: [{ type: 'distance', points: [{ model: 'icode.pdb', chain: 'A', resi: 9, atom: 'CA' }, { model: 'icode.pdb', chain: 'A', resi: 11, atom: 'CA' }] }] });
+    await fresh.waitForTimeout(1500);
+    await fresh.click('[data-gpv-tab="annotate"]'); await fresh.waitForTimeout(200);
+    await fresh.click('#gpv-measurements-copy'); await fresh.waitForTimeout(400);
+    if (await fresh.locator('#gpv-copy-fallback').isHidden()) throw new Error('the copy box did not open');
+    const said = await freshStatus(fresh);
+    if (said !== 'Clipboard unavailable — 1 measurement selected in the box under the view; press Ctrl/⌘+C to copy') throw new Error('one measurement: ' + said);
+    console.log('       ' + said);
+  } finally { await fresh.close(); }
+});
+await step('a nucleotide chain is counted in nucleotides wherever it is named, a ligand chain is no key in the chain legend, and two copies of one ligand count as two (batch K)', async () => {
+  /* The contact map's chain menu said "6 nt" while the Composition panel and the entity legend said
+     "6 aa" of the same chain; the chain key listed the ligand chain L, which is drawn in element
+     colours whatever the scheme, so its swatch named a colour nowhere on the model; and the hetero
+     inventory keyed a group by chain and number alone, so LIG 101 and LIG 101A counted as one. */
+  const lines = []; let serial = 1;
+  for (let index = 0; index < 6; index += 1) {
+    const x = index * 3.8;
+    [['N', -1.2, 0.4, 'N'], ['CA', 0, 0, 'C'], ['C', 1.2, 0.4, 'C'], ['O', 1.4, 1.6, 'O']].forEach(([name, dx, dy, element]) => lines.push(pdbAtom('ATOM', serial++, name, 'ALA', 'A', index + 1, [x + dx, dy, 0], element)));
+  }
+  ['A', 'U', 'G', 'C', 'A', 'U'].forEach((resn, index) => {
+    const x = index * 6;
+    [['P', 0, 0, 'P'], ['OP1', 0, 1.4, 'O'], ["C4'", 1.5, -1, 'C'], ["C1'", 2.5, -1.5, 'C'], ['N1', 3.6, -1, 'N']].forEach(([name, dx, dy, element]) => lines.push(pdbAtom('ATOM', serial++, name, resn, 'R', index + 1, [x + dx, dy + 20, 0], element)));
+  });
+  lines.push(pdbAtom('HETATM', serial++, 'C1', 'LIG', 'L', 101, [0, 40, 0], 'C'), pdbAtom('HETATM', serial++, 'C2', 'LIG', 'L', 101, [1.4, 40, 0], 'C'));
+  lines.push(pdbAtom('HETATM', serial++, 'C1', 'LIG', 'L', 101, [0, 44, 0], 'C', 'A'), pdbAtom('HETATM', serial++, 'C2', 'LIG', 'L', 101, [1.4, 44, 0], 'C', 'A'));
+  const fresh = await freshViewer([{ name: 'rna_ligand.pdb', mimeType: 'chemical/x-pdb', buffer: Buffer.from(lines.join('\n') + '\nEND\n') }]);
+  try {
+    await fresh.click('[data-gpv-tab="models"]'); await fresh.waitForTimeout(300);
+    const summary = await freshText(fresh, '#gpv-assembly-summary');
+    if (!/α ×1 \(A, 6 aa\)/.test(summary) || !/β ×1 \(R, 6 nt\)/.test(summary)) throw new Error('the stoichiometry: ' + summary);
+    const hetero = await freshText(fresh, '#gpv-hetero-summary');
+    if (!/LIG ×2/.test(hetero)) throw new Error('the hetero summary: ' + hetero);
+    await fresh.click('[data-gpv-tab="appearance"]'); await fresh.selectOption('#gpv-color-mode', 'entity'); await fresh.waitForTimeout(400);
+    const entity = await freshText(fresh, '#gpv-plddt-legend');
+    if (!/6 nt/.test(entity) || /6 aa[\s\S]*6 aa/.test(entity)) throw new Error('the entity legend: ' + entity);
+    await fresh.selectOption('#gpv-color-mode', 'chain'); await fresh.waitForTimeout(400);
+    const chains = await fresh.evaluate(() => [...document.querySelectorAll('#gpv-plddt-legend span')].map(span => span.textContent));
+    if (JSON.stringify(chains) !== JSON.stringify(['A', 'R'])) throw new Error('the chain legend names ' + JSON.stringify(chains));
+    console.log('       ' + summary.split(' · ').slice(0, 2).join(' · ') + ' · ' + hetero + ' · chain key ' + JSON.stringify(chains));
+  } finally { await fresh.close(); }
+});
+await step('model agreement keeps 10A and 10B apart: six residues in the RMSF, and the CSV names their codes (batch K)', async () => {
+  /* ensembleAgreement keyed the reference by chain and number, while the superposition pairs by
+     chain, number and insertion code (30): 10A's pair matched no key and was dropped, and 10 held
+     whichever of 10, 10A and 10B the file listed last. Four residues came back out of six. */
+  const nudge = line => (/^ATOM/.test(line) ? line.slice(0, 46) + (Number(line.slice(46, 54)) + (Number(line.slice(6, 11)) % 3) * 0.4).toFixed(3).padStart(8) + line.slice(54) : line);
+  const fresh = await freshViewer([
+    { name: 'icode.pdb', mimeType: 'chemical/x-pdb', buffer: Buffer.from(c2Pdb()) },
+    { name: 'icode_b.pdb', mimeType: 'chemical/x-pdb', buffer: Buffer.from(c2Pdb().split('\n').map(nudge).join('\n')) }
+  ]);
+  try {
+    await fresh.click('[data-gpv-tab="compare"]'); await fresh.waitForTimeout(200);
+    await fresh.click('#gpv-align'); await fresh.waitForTimeout(1500);
+    const spread = await fresh.evaluate(() => { const found = window.__viewerDebug.ensembleSpread(); return found ? { keys: [...found.values.keys()], max: found.max } : null; });
+    if (!spread) throw new Error('no ensemble spread after Align visible · ' + await freshStatus(fresh));
+    if (spread.keys.length !== 6 || !spread.keys.includes('A|10|A') || !spread.keys.includes('A|10|B')) throw new Error('RMSF keys: ' + JSON.stringify(spread.keys));
+    const csv = (await freshDownload(fresh, '#gpv-rmsf-csv')).toString('utf8');
+    if (!/\nA,10A,2,/.test(csv) || !/\nA,10B,2,/.test(csv)) throw new Error('RMSF CSV rows: ' + csv.split('\n').slice(0, 8).join(' | '));
+    console.log('       ' + spread.keys.join(' ') + ' · max ' + spread.max.toFixed(2) + ' Å');
+  } finally { await fresh.close(); }
+});
+await step('a figure draws the models the export began with: one that appears mid-render brings no label onto it (batch K)', async () => {
+  /* FA-18. renderPublicationImage asked displayedEntries() once to add the models and again, after
+     the styles and the surface had been awaited, to decide whose labels to draw: a model that
+     arrived in between reached the overlays but not the image. */
+  const fresh = await freshViewer([
+    { name: 'one.pdb', mimeType: 'chemical/x-pdb', buffer: Buffer.from(c2Pdb({ insertion: false })) },
+    { name: 'two.pdb', mimeType: 'chemical/x-pdb', buffer: Buffer.from(c2Pdb({ insertion: false })) }
+  ]);
+  try {
+    await c2Scene(fresh, { type: 'protein-viewer-scene', schemaVersion: 1, models: [{ name: 'one.pdb' }, { name: 'two.pdb' }], settings: {},
+      labels: [{ model: 'one.pdb', chain: 'A', resi: 3, atom: 'CA', text: 'KEPT' }, { model: 'two.pdb', chain: 'A', resi: 3, atom: 'CA', text: 'LATE' }] });
+    await fresh.waitForTimeout(1500);
+    const labels = await fresh.evaluate(() => window.__viewerDebug.labelRecords().map(record => record.text));
+    if (labels.join() !== 'KEPT,LATE') throw new Error('setup: the scene made ' + JSON.stringify(labels));
+    await c2Record(fresh);
+    const drawn = await fresh.evaluate(async () => {
+      const debug = window.__viewerDebug;
+      const late = debug.entries().find(entry => entry.name === 'two.pdb');
+      late.visible = false;
+      const pending = debug.renderPublicationImage(null, { width: 420, height: 320 });
+      late.visible = true;
+      await pending;
+      return window.__drawnText.map(item => item[0]);
+    });
+    if (!drawn.includes('KEPT')) throw new Error('the export drew no labels at all: ' + JSON.stringify(drawn));
+    if (drawn.includes('LATE')) throw new Error('the export drew the label of a model it never added: ' + JSON.stringify(drawn));
+    console.log('       drew ' + JSON.stringify(drawn));
+  } finally { await fresh.close(); }
+});
+
+await step('Clear all takes the named-domain rows with it (batch K)', async () => {
+  /* Clear all emptied domainRecords but never re-rendered Annotate → Domains, so the rows of a model
+     that was gone stayed on screen. It now empties the page through sessionEmptyPage(), the path a
+     session file takes, which renders every list it empties. */
+  const fresh = await freshViewer([{ name: 'plain.pdb', mimeType: 'chemical/x-pdb', buffer: Buffer.from(c2Pdb({ insertion: false })) }]);
+  try {
+    await fresh.click('[data-gpv-tab="annotate"]'); await fresh.waitForTimeout(200);
+    await fresh.fill('#gpv-domain-name', 'N-lobe'); await fresh.fill('#gpv-domain-range', '1-3');
+    await fresh.click('#gpv-add-domain'); await fresh.waitForTimeout(300);
+    const before = await fresh.locator('#gpv-domain-list .gpv-entry').count();
+    if (before !== 1) throw new Error('setup: ' + before + ' domain rows');
+    fresh.once('dialog', dialog => dialog.accept());
+    await fresh.click('[data-gpv-tab="models"]'); await fresh.click('#gpv-clear'); await fresh.waitForTimeout(600);
+    if ((await freshEntries(fresh)).length) throw new Error('Clear all accepted but the model remains');
+    const after = await fresh.locator('#gpv-domain-list .gpv-entry').count();
+    if (after) throw new Error(after + ' domain row' + (after === 1 ? '' : 's') + ' left after Clear all: ' + await freshText(fresh, '#gpv-domain-list'));
+  } finally { await fresh.close(); }
+});
 await browser.close();
 server.close();
 

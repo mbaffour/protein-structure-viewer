@@ -226,14 +226,26 @@
       if (!atom) return null;
       return { entryId: entry.id, chain: label.chain || '', resi: label.resi, icode, atom: label.atom || 'CA', resn: atom.resn, x: atom.x, y: atom.y, z: atom.z, key: residueKey(entry.id, label.chain, label.resi, icode), ...(label.kind === 'domain' || label.kind === 'position' ? { kind: label.kind } : {}), ...(label.offset && Number.isFinite(Number(label.offset.x)) ? { offset: { x: Number(label.offset.x), y: Number(label.offset.y), z: Number(label.offset.z) } } : {}), text: label.text, color: /^#[0-9a-f]{6}$/i.test(label.color || '') ? label.color : undefined, size: labelSizes.some(([value]) => value === Number(label.size)) ? Number(label.size) : undefined };
     }).filter(Boolean);
+    /* A compared position carries its insertion code as `icode`, the way the scene wrote it: without
+       it 100A would be restored onto 100, a different residue in an antibody-numbered model. */
     spotlightResidues = (Array.isArray(scene.positions) ? scene.positions : []).slice(0, 200)
-      .map(record => ({ chain: String(record && record.chain || '').slice(0, 4), resi: Number(record && record.resi) }))
+      .map(record => { const icode = sceneInsertionCode(record); return { chain: String(record && record.chain || '').slice(0, 4), resi: Number(record && record.resi), ...(icode ? { icode } : {}) }; })
       .filter(spot => Number.isFinite(spot.resi));
     positionEffect = null; renderPositionEffect();
     renderPositionState();
     selectionRecords = (scene.selections || []).map(record => {
       const entry = byName.get(record.model); if (!entry) return null;
-      return { id: nextAnnotationId++, entryId: entry.id, chain: record.chain || '', residues: (record.residues || []).map(Number).filter(Number.isFinite), action: record.action === 'hide' ? 'hide' : 'highlight', color: /^#[0-9a-f]{6}$/i.test(record.color || '') ? record.color : '#f97316' };
+      /* `icodes` runs alongside `residues` ('' for a residue with no code), the shape selectionResidues
+         writes: the two are read together so a code can never slide onto its neighbour, and the list is
+         kept only when some residue has one — a record without codes keeps the older shape exactly. */
+      const codes = Array.isArray(record.icodes) ? record.icodes : null;
+      const residues = []; const icodes = [];
+      (record.residues || []).forEach((value, index) => {
+        const resi = Number(value);
+        if (!Number.isFinite(resi)) return;
+        residues.push(resi); icodes.push(codes ? sceneInsertionCode({ icode: codes[index] }) : '');
+      });
+      return { id: nextAnnotationId++, entryId: entry.id, chain: record.chain || '', residues, ...(icodes.some(Boolean) ? { icodes } : {}), action: record.action === 'hide' ? 'hide' : 'highlight', color: /^#[0-9a-f]{6}$/i.test(record.color || '') ? record.color : '#f97316' };
     }).filter(Boolean);
     measurementRecords = (scene.measurements || []).map(record => {
       const points = (record.points || []).map(scenePoint).filter(Boolean);
@@ -782,16 +794,23 @@
     target.setBackgroundColor(background.color, background.alpha);
     if (typeof target.setProjection === 'function') target.setProjection(root.querySelector('#gpv-projection').value);
     applyViewStyle(target);
+    /* The models this export is of, read once and used for everything below. displayedEntries() is
+       live, and it used to be asked twice with awaits in between: a model that appeared — or was
+       hidden, or removed — while the styles or the surface were being built reached the overlay pass
+       but not the image, so the figure drew one set of models with another set's labels on it.
+       The export finishes with the models it began with rather than being abandoned: abandoning it
+       would raise an error for a race the user did not cause, and a file opened mid-export already
+       waits for the busy badge to come down (40), so nothing here needs to stall. */
+    const shown = displayedEntries().filter(entry => entry.model);
     const pending = [];
-    displayedEntries().forEach(entry => {
-      if (!entry.model) return;
+    shown.forEach(entry => {
       const model = target.addModel(entry.text, entry.format);
       const atoms = model.selectedAtoms({});
       atoms.forEach((atom, index) => { if (entry.atoms[index]) { atom.x = entry.atoms[index].x; atom.y = entry.atoms[index].y; atom.z = entry.atoms[index].z; } });
       pending.push(applyModelStyle(model, entry, target));
     });
     await Promise.all(pending);
-    const shownIds = new Set(displayedEntries().map(entry => entry.id));
+    const shownIds = new Set(shown.map(entry => entry.id));
     /* The camera goes on before the overlays are drawn, because where the labels of this panel
        belong is a question about this panel's projection and there is no projection until the
        camera is set. */
@@ -1059,10 +1078,13 @@
       if (!groups.length) return null;
       /* An assembly with more distinct sequences than the key can name has the same problem as a
          many-chain one, and the same answer: name what fits, count the rest. */
-      return { title: 'Entity', ...legendNamesOrCount(groups, group => [entityColorFor(group.index), group.label + ' ×' + group.chains.length, group.label + ' ×' + group.chains.length + ' · ' + clipText(group.chains.join(', '), 24) + ' · ' + group.length + ' aa']) };
+      return { title: 'Entity', ...legendNamesOrCount(groups, group => [entityColorFor(group.index), group.label + ' ×' + group.chains.length, group.label + ' ×' + group.chains.length + ' · ' + clipText(group.chains.join(', '), 24) + ' · ' + group.length + group.unit]) };
     }
     if (mode === 'chain') {
-      const chains = [...new Set([...shown, ...panelEntries].flatMap(entry => entry.atoms.map(atom => atom.chain || '')))].sort(compareChains);
+      /* Polymer atoms only. Ligands, ions and water are drawn in element colours whatever the colour
+         scheme is, so a chain holding nothing else would be a key to a colour that is nowhere on the
+         model — and the Composition panel, which lists the same chains, never listed it either. */
+      const chains = [...new Set([...shown, ...panelEntries].flatMap(entry => entry.atoms.filter(atom => !atom.hetflag).map(atom => atom.chain || '')))].sort(compareChains);
       if (!chains.length) return null;
       return { title: 'Chain', ...legendNamesOrCount(chains, chain => [chainColor(chain), chain || '—']) };
     }

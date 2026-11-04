@@ -184,68 +184,26 @@
        model: work on it, saved views, or more models. */
     const work = labelRecords.length + selectionRecords.length + measurementRecords.length + annotationRecords.length + domainRecords.length + savedViews.length;
     if ((structures.length > 1 || work) && !confirm('Remove ' + (structures.length === 1 ? 'the model' : 'all ' + structures.length + ' models') + ' and everything made on ' + (structures.length === 1 ? 'it' : 'them') + ' — labels, selections, measurements, annotations, domains and saved views? This cannot be undone.')) return;
-    stopCycle();
-    stopMotion();
+    /* Emptying the page is the session's own path (12 sessionEmptyPage), which a session file takes
+       before it writes its own work over the page: the models, their records and panels, the
+       analyses made on them, the undo history and the drawing and measuring modes. What is left
+       here is what Clear all alone does — the fields and the Motion select nobody is restoring. */
+    sessionEmptyPage();
     /* Nothing is left to turn; the Motion select says so, and S starts it again from off. */
     root.querySelector('#gpv-motion').value = 'off';
-    dismissCanvasText();
-    cancelMeasureTo(false);
-    setBoxSelectMode(false);
-    viewer.removeAllModels();
-    viewer.removeAllLabels();
-    viewer.removeAllShapes();
-    comparePanels.forEach(destroyPanelViewer);
-    releaseExportViewer();
-    structures = [];
-    activeId = null;
-    selectedResidue = null;
-    clearHistory();
-    labelRecords = [];
-    spotlightResidues = []; positionEffect = null; renderPositionEffect(); renderPositionState();
-    domainRecords = []; domainVersion += 1;
-    residueData = null; nearbyResult = null; renderDataState();
-    selectionRecords = [];
-    measurementRecords = [];
-    measurementDraft = [];
-    measurementActive = false;
-    annotationRecords = [];
-    annotationDraft = [];
-    annotationActive = false;
-    interfaceResults = null;
-    renderInterfaceResults();
     root.querySelector('#gpv-interface-state').textContent = '';
-    setButtonText(root.querySelector('#gpv-annotate'), 'Start drawing');
-    root.querySelector('#gpv-stage').classList.remove('is-drawing');
-    root.querySelector('#gpv-annotation-state').textContent = 'Pick a tool, start drawing, then click atoms in the main viewer.';
-    savedViews = [];
-    confidenceAssets = [];
-    interactionResults = null;
-    alignmentResults = [];
-    pendingScene = null;
-    root.querySelector('#gpv-residue').textContent = idleResidueText;
     root.querySelector('#gpv-label-text').value = '';
     root.querySelector('#gpv-position-set').value = '';
     root.querySelector('#gpv-add-label').disabled = true;
     root.querySelector('#gpv-position-compare').disabled = true;
     root.querySelector('#gpv-all-labels').checked = false;
-    root.querySelector('#gpv-side-by-side').checked = false;
-    clearComparePanels();
     root.querySelector('#gpv-model-search').value = '';
-    root.querySelector('#gpv-measure').textContent = 'Start measuring';
-    root.querySelector('#gpv-measure-state').textContent = 'Measurement mode is off.';
     root.querySelector('#gpv-source-filter').value = 'all';
     root.querySelector('#gpv-import-errors').hidden = true;
     root.querySelector('#gpv-pae-detail').textContent = 'Move over the heatmap to inspect a residue pair.';
     root.querySelector('#gpv-fetch-id').value = '';
     listLimit = listPageSize;
     nextAnnotationId = 1;
-    resetAnalyses();
-    renderAlignmentResults();
-    renderSelectionList();
-    renderMeasurementList();
-    renderAnnotationList();
-    renderLabelList();
-    renderSavedViews();
     renderList();
     applyStyle();
     renderComparePanels();

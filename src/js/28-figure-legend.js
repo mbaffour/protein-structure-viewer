@@ -1,15 +1,29 @@
   /* ---------- Figure legend ---------- */
 
-  function compactRange(values) {
-    const sorted = [...new Set(values.map(Number))].sort((a, b) => a - b);
-    if (!sorted.length) return '';
-    const parts = []; let start = sorted[0]; let previous = sorted[0];
-    for (let index = 1; index <= sorted.length; index += 1) {
-      const value = sorted[index];
-      if (value === previous + 1) { previous = value; continue; }
-      parts.push(start === previous ? String(start) : start + '–' + previous);
-      start = value; previous = value;
-    }
+  /* Runs of consecutive residue numbers, "20–24" for 20, 21, 22, 23, 24. `icodes`, when it is given,
+     runs alongside `values` ('' for a residue with no code), the shape a selection record carries.
+     A residue with an insertion code is a residue of its own and never folds into a run: 100A sits
+     between 100 and 101 and is written out, so "9, 10A, 10B, 11–13" — never "9–13", which is what a
+     compactor that saw only the numbers made of it, having first deduplicated 10 against 10. */
+  function compactRange(values, icodes = null) {
+    const seen = new Set(); const items = [];
+    values.forEach((value, index) => {
+      const resi = Number(value);
+      if (!Number.isFinite(resi)) return;
+      const code = Array.isArray(icodes) && icodes[index] ? String(icodes[index]).trim() : '';
+      const key = resi + '|' + code;
+      if (seen.has(key)) return;
+      seen.add(key); items.push({ resi, code });
+    });
+    items.sort((a, b) => a.resi - b.resi || (a.code < b.code ? -1 : a.code > b.code ? 1 : 0));
+    const parts = []; let start = null; let previous = null;
+    const flush = () => { if (start !== null) parts.push(start === previous ? String(start) : start + '–' + previous); start = null; previous = null; };
+    items.forEach(item => {
+      if (item.code) { flush(); parts.push(item.resi + item.code); return; }
+      if (start !== null && item.resi === previous + 1) { previous = item.resi; return; }
+      flush(); start = item.resi; previous = item.resi;
+    });
+    flush();
     return parts.join(', ');
   }
 
@@ -71,7 +85,7 @@
       const effect = positionEffectLegend(spot); if (effect) sentences.push(effect);
     });
     const highlights = selectionRecords.filter(record => record.action === 'highlight' && shownIds.has(record.entryId));
-    if (highlights.length) sentences.push('Highlighted residues: ' + highlights.map(record => (record.chain ? 'chain ' + record.chain + ' ' : '') + compactRange(record.residues)).join('; ') + '.');
+    if (highlights.length) sentences.push('Highlighted residues: ' + highlights.map(record => (record.chain ? 'chain ' + record.chain + ' ' : '') + compactRange(record.residues, record.icodes)).join('; ') + '.');
     const measurements = measurementRecords.filter(record => record.points.every(point => shownIds.has(point.entryId)));
     /* The atoms each joins, its value, and the user's words for it in parentheses. */
     if (measurements.length) sentences.push('Measurements: ' + measurements.map(record => measurementAtomsText(record, true) + ' ' + measurementText(record) + (record.text ? ' (' + record.text + ')' : '')).join('; ') + '.');

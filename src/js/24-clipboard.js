@@ -8,7 +8,10 @@
       const field = root.querySelector('#gpv-copy-fallback-text');
       field.value = text; root.querySelector('#gpv-copy-fallback').hidden = false;
       field.focus({ preventScroll: true }); field.select();
-      announce('Clipboard unavailable — the ' + what + ' are selected in the box under the view; press Ctrl/⌘+C');
+      /* `what` arrives already counted — "1 measurement", "7 contacts of HIS57", "12 residues" — so
+         the sentence is written around it rather than conjugated to a count it never sees: "the 1
+         measurement are selected" was the one branch of this message nobody read aloud. */
+      announce('Clipboard unavailable — ' + what + ' selected in the box under the view; press Ctrl/⌘+C to copy');
       return false;
     }
   }

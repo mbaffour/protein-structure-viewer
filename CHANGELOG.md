@@ -103,7 +103,9 @@ All notable changes to this project are recorded here.
   (and its enabled RMSF buttons), the RMSD matrix, a loose `.a3m`, renamed legend entries, the motif
   line and *Copy residue list* outlived it, and because model ids restarted at 1 the old results
   attached to the next models loaded; ids now keep counting and those results are cleared. The Motion
-  select goes back to off with nothing left to turn.
+  select goes back to off with nothing left to turn. The named domains were emptied but their rows in
+  Annotate → Domains stayed on screen: Clear all now empties the page through the same path a session
+  file takes, which re-renders every list it empties.
 - **Undo steps that undid nothing**: undoing a fade, *Emphasise*, *Use medoid*, *Colour by MSA* or a
   renamed legend entry said "Undid …" and changed nothing, using up the step. They now come back; the
   legend rename is remembered before the first keystroke, not after the last. Undoing *Compare this
@@ -116,7 +118,30 @@ All notable changes to this project are recorded here.
   A. Each is now its own residue in the strip, labels, the card, the marker and Measure to…; Go to
   takes `H:100A`, and `100A` where the model has that residue and no chain A; scenes, sessions and share
   links record `"icode"` only for a residue that has one, so older scenes load as before. Go to also
-  matches a chain's case exactly when both `a` and `A` exist.
+  matches a chain's case exactly when both `a` and `A` exist. Restoring a scene reads those codes back:
+  a compared position and a highlighted selection used to come back one residue out, 100A landing on
+  100. The figure legend writes them too — `Highlighted residues: chain A 9, 10A, 10B, 11–13`, where the
+  range compactor saw six numbers, deduplicated 10 against 10 and printed `9–13`; a residue with an
+  insertion code is now never folded into a numeric run. **Model agreement (Cα RMSF)** keyed its
+  residues by chain and number while the superposition pairs them by chain, number and code, so every
+  coded residue was dropped from the ensemble and 100 held whichever of 100, 100A and 100B came last in
+  the file: six residues now come back where four did, and the RMSF CSV's `resi` column names the code.
+  Two copies of one ligand at 101 and 101A also count as two in *Ligands and ions*, not one.
+- **A nucleotide chain was counted in amino acids** in Models → Composition (`Stoichiometry: β ×1 (R, 24
+  aa)`) and in the entity legend, while the contact map's chain menu called the same chain `24 nt`. All
+  three now read the count from one place: `nt` for an RNA or DNA chain, `aa` for a protein one,
+  `residues` for a chain of both. A chain of nothing but ligands, ions or water is no longer a row in the
+  chain key either: hetero groups are drawn in element colours whatever the colour scheme, so its swatch
+  named a colour that was nowhere on the model — and the Composition panel never listed it.
+- **The clipboard fallback had a branch nobody read aloud**: with one measurement refused by the browser
+  it said *the 1 measurement are selected in the box under the view*. The sentence is now written around
+  the name the caller passes, which already carries its own count, so it reads the same for one as for
+  twelve — and *Copy residue list* says *1 residue*, not *1 residues*.
+- **A model that appeared while a figure was rendering could reach its labels but not its image**
+  (FA-18). Opening a file already waits for an export to finish, but the renderer itself asked which
+  models were shown twice, once to add them and once — after the styles and any surface had been
+  awaited — to decide whose labels to draw. It now reads that list once and finishes the figure with the
+  models it began with; nothing waits.
 - **An `.a3m` dropped on its own only served models opened as individual files**: with a fetched or
   unzipped model *Colour by MSA* stayed disabled and the import said "No supported structures found". It
   now serves every model, and the import says *Alignment added*.
