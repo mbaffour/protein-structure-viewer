@@ -30,6 +30,25 @@ All notable changes to this project are recorded here.
 - **Separate labels and per-panel placement include measurement text**: a measurement's value lying on
   a residue label is moved off it on screen (`2 labels and 1 measurement moved apart`) and again at
   print size in every exported panel; text placed by hand is left where it was put.
+- **A tutorials guide, [`docs/TUTORIALS.md`](docs/TUTORIALS.md).** Six walkthroughs, each ending in a
+  file: a first figure, a wild type against a mutant, an ensemble, exporting cleanly, a figure someone
+  else can rebuild, and measuring a catalytic triad. Every one can be followed with a public structure
+  from the PDB or AlphaFold DB. `tests/tutorials.mjs` drives the steps against the built page, and
+  `node tests/tutorials.mjs --text-only` — which CI runs — checks that every control the tutorials name
+  in bold is a control `src/00-head.html` actually has, with the help dialog left out of the corpus so
+  prose describing a feature cannot stand in for the control itself. The walkthrough itself runs in
+  CI's Chromium leg: it drives every step of all six tutorials against the built page and fails if a
+  named control is missing, greyed out at the point the tutorial presses it, or needs a step the
+  tutorial does not give. Green in Chromium and WebKit, with no console errors. Linked from the README,
+  the usage guide's contents and the in-app help.
+- **The text check also verifies navigation chains** — `Appearance → Colour scheme → pLDDT
+  confidence` — across `docs/USAGE.md`, `docs/USE-CASES.md` and `docs/TUTORIALS.md`, against the
+  structure of `src/00-head.html` rather than against a list of names: the second segment has to be an
+  option of the select the first one labels, a control under the heading it names, or a control in the
+  tab it names. Checking names alone could not find this class of drift, because `Colour by` is a real
+  prefix of the `Colour by MSA` button and so matched something every time. Only chains written wholly
+  inside one bold or italic run are checked, which is what gives a chain its boundaries; a paragraph
+  lead-in that happens to contain an arrow is left alone.
 
 ### Changed
 
@@ -44,6 +63,24 @@ All notable changes to this project are recorded here.
 
 ### Fixed
 
+- **Documentation drift: nine control names that the viewer no longer spells that way.** Found by
+  sweeping both guides against the control inventory rather than by reading them. In
+  `docs/USE-CASES.md`, the colour select was called *Colour by* in five places (it is **Colour
+  scheme**; the similarly named **Colour by MSA**, **Colour by data**, **Colour by domains** and
+  **Colour by annotated domains** buttons are untouched and correct), the Compare block was called
+  *Interface contact map* with a *Compute contacts* button (renamed to **Contact and distance map**
+  and **Compute map** in 2.50.0), and the label button was called *Add label* (it is **Add or
+  update**). In `docs/USAGE.md`, *Download publication TIFF* described a button that stopped existing
+  when 2.35.0 moved the formats into the **Figure format** select, and the file picker was called
+  *Add structures* in two places (it is **Choose model files**). The navigation-chain check added
+  above now fails CI on the first of these; the rest are not reachable by any name check, and are
+  recorded here so the next sweep knows they were deliberate corrections.
+- **Two tutorial steps that could not be followed as written**, caught by the walkthrough rather than
+  by reading: *Go to* was described as opening the residue card, when it deliberately *closes* one —
+  the card names the residue it was opened at, and the selection has just moved — so the card has to be
+  asked for with <kbd>L</kbd> or a click; and *Use medoid as reference* relabels itself to name the
+  model it found once a matrix is computed, so the reader presses a button reading *Use … as
+  reference*. Both are now in the tutorials, with the step the first one was missing.
 - **Not now kept nothing.** Every page load saved the empty page about 1.5 s in, which deleted the
   autosaved session the banner was offering, so *Not now* behaved as *Forget it* and the next visit
   offered nothing. An empty page now never replaces a stored session; only a page that has held models

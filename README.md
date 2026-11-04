@@ -17,6 +17,7 @@ Structure files you open stay in the browser. Nothing is uploaded.
 
 - **Live viewer:** <https://mbaffour.github.io/protein-structure-viewer/>
 - **Walkthroughs with live examples:** [`docs/USE-CASES.md`](docs/USE-CASES.md)
+- **Tutorials, start to finish:** [`docs/TUTORIALS.md`](docs/TUTORIALS.md)
 - **Usage guide:** [`docs/USAGE.md`](docs/USAGE.md)
 - **Scientific and publication-readiness audit:** [`SCIENTIFIC-AUDIT.md`](SCIENTIFIC-AUDIT.md)
 - **Release notes:** [`CHANGELOG.md`](CHANGELOG.md)

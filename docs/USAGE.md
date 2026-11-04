@@ -6,6 +6,7 @@ interpretation caveats see [`SCIENTIFIC-AUDIT.md`](../SCIENTIFIC-AUDIT.md).
 
 ## Contents
 
+- [Tutorials](TUTORIALS.md) — six walkthroughs, start to finish, each ending in a file
 - [Layout](#layout)
 - [Composite figure](#composite-figure)
 - [Publication checklist](#publication-checklist)
@@ -735,7 +736,7 @@ confident interface can still be wrong, and a true one can be predicted poorly.
 
 AlphaFold 3 archives include, under `msas/`, the unpaired multiple sequence alignment for each
 entity as an `.a3m` file. The viewer keeps these when the archive is opened (an `.a3m` can also be
-added on its own with *Add structures*, and then serves every model — fetched, unzipped or opened as
+added on its own with **Choose model files**, and then serves every model — fetched, unzipped or opened as
 a file — with the import line saying *Alignment added*), and **Colour by MSA** maps the alignment's per-column
 statistic onto every chain whose sequence matches the alignment's query. Three statistics:
 **conservation**, 1 − H/log₂20 where H is the Shannon entropy of the amino-acid distribution at the
@@ -765,10 +766,10 @@ the estimate line gives the pixel dimensions and the physical size, the PNG carr
 file (a `pHYs` chunk, which is what journal figure checkers read), and every residue label, callout,
 measurement value, legend and caption is drawn so its text prints at the chosen point size. The
 **figure font** (Arial/Helvetica by default, Times, or the system font) applies to all of them and to
-SVG text. **Download publication TIFF** writes a baseline uncompressed RGBA TIFF with the resolution
-set; it is large (about 4 bytes per pixel) but it is what some journals ask for. The PNG is rendered
-off-screen at full resolution, independent of your window size, and the file is exactly the size the
-estimate states, legend or not. Very large requests are capped at roughly 24 megapixels for browser
+SVG text. **Figure format → TIFF** makes the download button write a baseline uncompressed RGBA TIFF
+with the resolution set instead of a PNG; it is large (about 4 bytes per pixel) but it is what some
+journals ask for. The PNG is rendered off-screen at full resolution, independent of your window size,
+and the file is exactly the size the estimate states, legend or not. Very large requests are capped at roughly 24 megapixels for browser
 stability, and at the largest canvas your graphics card can draw (often 8192 px a side, which 3Dmol's
 doubled drawing resolution reaches at 178 mm and 600 dpi). A capped print figure keeps its width and
 gives up resolution — the estimate and the status line say `rendered at 584 dpi, the most this GPU
@@ -1144,7 +1145,7 @@ for a mixture or anything else. Only sentences that apply to the current scene a
 **Session files.** **Save session file** writes one ZIP that carries the models themselves (their
 coordinate text), every confidence matrix as binary floats, the current alignment, labels, selections,
 measurements, annotations, named domains, per-residue data, saved views, provenance and every setting.
-**Open session file** — or dropping the ZIP onto the page, or choosing it with *Add structures* —
+**Open session file** — or dropping the ZIP onto the page, or choosing it with **Choose model files** —
 restores all of it, on any computer, with no other files. A session is a whole workspace, so it
 *replaces* the page: with models or work on the page it first asks *Replace the … and the work on this
 page with the session? Cancel keeps the page.*, and the status then counts the models on the page.
@@ -1308,7 +1309,9 @@ substitute for keeping the coordinate files.
 
 ## Recipes
 
-Three workflows the viewer was built around, end to end.
+Three workflows the viewer was built around, end to end. For the same ground covered a step at a
+time — with what you should see after each press, and a public structure to practise on — see
+[`TUTORIALS.md`](TUTORIALS.md).
 
 **A thesis figure comparing several predictions.** Drop the result archives. In **Models**, order by
 ranking score and hide anything you will not show. In **Appearance**, colour by pLDDT confidence and

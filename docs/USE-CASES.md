@@ -35,7 +35,7 @@ between **System** (the default, which follows your operating system and changes
 
 1. Type `P04637` in the box at the top and press **Fetch**. For your own run, drop the AlphaFold result
    ZIP instead: the models, their PAE matrices and the ipTM/pTM summary load together.
-2. **Appearance → Colour by → pLDDT confidence.** Blue is very high confidence (≥ 90), light blue
+2. **Appearance → Colour scheme → pLDDT confidence.** Blue is very high confidence (≥ 90), light blue
    confident, yellow low, orange very low (< 50).
 3. Open the **Confidence** tab. The table gives mean pLDDT per model (75.1 here) and, for an AlphaFold 3
    run, pTM, ipTM, ranking score and the clash flag. Below it is the **PAE heatmap**: a low-error (blue)
@@ -44,7 +44,7 @@ between **System** (the default, which follows your operating system and changes
 4. **Appearance → Hide pLDDT below 70** removes everything the model is not confident about, in the view,
    the panels and the exports.
 5. **Confidence → Find domains** splits the model where the PAE says the pieces move independently, and
-   **Colour by → PAE domains** paints them.
+   **Colour scheme → PAE domains** paints them.
 
 <img src="images/use-cases/anim-confidence-threshold.webp" alt="Animation: the p53 model rotating while the confidence cut-off steps from showing every residue, to hiding pLDDT below 50, to hiding pLDDT below 70, leaving only the DNA-binding domain." width="560">
 
@@ -74,7 +74,7 @@ crystal structure (PDB 4HHB, chain A).
 3. **View mode → Overlay selected** shows both at once.
 4. **Compare → Alignment reference:** the crystal structure, then **Align visible**. Residues are matched
    by sequence (or by chain and number); the table reports the Cα pairs used, sequence identity and RMSD.
-5. Colour each model with its swatch in the Models list, or use **Colour by → Cα deviation after
+5. Colour each model with its swatch in the Models list, or use **Colour scheme → Cα deviation after
    alignment** to colour every residue by how far it sits from the reference.
 
 <img src="images/use-cases/anim-superpose.webp" alt="Animation: the AlphaFold model and the crystal structure start apart, then Align visible superposes them and the pair rotates together." width="560">
@@ -101,11 +101,11 @@ four haem groups.
 
 1. Fetch `4hhb`. **Models → Composition** lists every chain with its length and range, the stoichiometry
    (α ×2, β ×2), the Cα extent and radius of gyration, and the ligands (HEM ×4, PO4 ×2).
-2. **Colour by → Per chain**, then click a chain's swatch in the Composition table to give it the colour
+2. **Colour scheme → Per chain**, then click a chain's swatch in the Composition table to give it the colour
    that means something — here α subunits in reds and β in blues. Double-click a swatch to go back to the
    palette; **Reset chain colours** resets them all. The colours are saved with the session and carried by
    share links.
-3. **Compare → Interface contact map:** chain `A` against chain `B` → **Compute contacts** draws the
+3. **Compare → Contact and distance map:** chain `A` against chain `B` → **Compute map** draws the
    residue-pair map; **Highlight interface** marks both sides on the structure. Here that is 49 residue pairs within 4.5 Å — 20 interface residues on chain A and 21 on chain B — marked on both sequence strips.
 4. **Confidence → Ligand sites → Analyse ligand sites** lists every bound group with the residues around it
    (six sites here); **Highlight** shows a pocket on the model.
@@ -140,8 +140,8 @@ labelled.
    (all five models of one AlphaFold run), or to everything loaded.
 3. **Colour by annotated domains** paints them and adds them to the legend; **Label domains** puts a label
    at each one.
-4. **Go to** `A:175` selects that residue and zooms to it; type the label text (`R175`) and press **Add
-   label**. R175, R248 and R273 are among the most frequently mutated positions in human cancer.
+4. **Go to** `A:175` selects that residue and zooms to it; type the label text (`R175`) and press **Add or
+   update**. R175, R248 and R273 are among the most frequently mutated positions in human cancer.
 5. Drag a label to move it — a leader line keeps it tied to its residue — and **Reset** puts it back.
    **Download architecture PNG/SVG** draws the domains as a linear diagram.
 
@@ -226,7 +226,7 @@ three-panel figure.
 2. **Compare → Fit on → A chain or residue range…** `A`, pick a reference and press **Align visible**.
 3. **Compute matrix** gives the pairwise Cα RMSD between every pair; **Use medoid as reference** re-fits
    everything on the model that sits closest to all the others.
-4. **Colour by → Model agreement (Cα RMSF)** colours each residue by how much the models disagree there;
+4. **Colour scheme → Model agreement (Cα RMSF)** colours each residue by how much the models disagree there;
    **RMSF profile** plots it per residue.
 5. For an AlphaFold run, drop the ZIP: all five models load with their ranking, **Model order → Ranking
    score** sorts them, and **Cycle models** flips through them.
