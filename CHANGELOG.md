@@ -446,6 +446,62 @@ All notable changes to this project are recorded here.
   or a measurement's *Reset* (the focus goes to *Show* beside it once Reset greys out), a domain's
   scope, and the figure builder's tick and ↑/↓ keep the keyboard focus instead of dropping it on the
   page; the site-figure tip in Help names *Download built figure PNG or SVG*.
+- **One export at a time.** A second export pressed while one rendered — another *Download built figure*
+  press, *Download all views (ZIP)*, *Download figure SVG*, the composite — ran on the same export
+  surface: it emptied the first one's scene between its awaits, shrank the surface under it, and took a
+  saved view's colours and camera as "the page to go back to", so both files came out wrong and the
+  screen was left in panel A's colours. The export buttons were disabled only by the export itself and
+  every restyle enabled them again, still reading "Rendering 1 / 3…". Exports now take a turn: a press
+  while one renders is refused with a line saying so, and the buttons stay off until it ends. The
+  "export in progress" test that makes a dropped file wait no longer reads the busy badge's label, which
+  any job started meanwhile (Align visible) overwrote, so a file dropped then loaded halfway through.
+- **An export draws one state of the page.** The SVG overlay, the built figure's SVG panels, the legend
+  and the scale bar read the shown models again after the image had rendered, so with *Cycle models*
+  running (or ← →) the image was one model and its labels, key and bar another's. They now use the models
+  the image was drawn with; an export stops the cycle as it starts, and ← → and C do nothing until it ends.
+- **SVG labels follow the figure, not the interface theme.** In the dark theme every uncoloured label and
+  measurement value in an SVG was white text on a white box, invisible; the PNG was readable. SVG labels
+  now take their box, text and border by the PNG's rule — the figure's background first, the theme only
+  for a transparent one — and *Labels: Plain text* draws no box in the SVG either.
+- **A built figure's PNG and SVG agree on corner text.** The PNG printed a corner title (Annotate →
+  screen text) in every panel and the SVG in none; neither does now — it is a title for one figure.
+- **A print-size composite is the width asked for.** Each cell had a 300 px floor, so a 35 mm composite
+  in two columns at 300 dpi came out 600 px — 51 mm — under a name that still said 35 mm. The floor now
+  applies to pixel exports only, and the status gives the composite's printed width.
+- **Share links match their models by what was fetched, not by name.** A link records the sender's
+  model names, and a sender with a local `1brs.cif` beside the fetched one named it `1brs.cif (2)`: the
+  recipient's fetch was `1brs.cif`, so every label, measurement and selection was dropped and each
+  saved view hid every model — under a status that said the scene had opened. A recipient whose own
+  file was called `1brs.cif` skipped the fetch and got the link's labels on their file. Each model is
+  now matched to the model fetched from its identifier, the scene is read through those names, and the
+  status keeps the count of records that matched nothing.
+- **Share links keep emphasis and faded chains**, and a scene keeps which labels and measurement values
+  were placed by *Separate labels* rather than by hand, so after reopening it Separate labels still
+  moves them and the exports still re-place them at print size. Undoing a scene restore puts emphasis
+  back with the colours.
+- **Make site figure keeps a site's insertion code.** At H:100A the panels were named "Site H:100", the
+  close-up's caption gave residue 100's identities, and 100, 100A and 100B were all framed as the site;
+  the code now travels through the panels, the caption and the neighbourhood.
+- **The HTML report reads residues as the viewer does.** It parses each file again with 3Dmol, which
+  reads no mmCIF insertion codes and treats a phosphothreonine as a ligand: an antibody `.cif` merged
+  100, 100A and 100B and Aurora A's TPO160–161 were drawn as sticks and left out of the strip. The report
+  now carries the viewer's reading of each atom, numbers its strip readout with the code, and its
+  contact map keys residues by 100A rather than 100.
+- **The legend for many models, and for hidden chains.** Colour scheme *Structure* drew no Model key at all
+  from nine models on (on screen, on every export, and no checklist line), although models have had
+  twelve colours since this release; it names them as chains are named, then "+N more". The chain key
+  no longer lists a chain switched off in Composition.
+- **A legend down the side stays inside the panel.** A stacked legend taller than the panel — nine chains
+  at 85 mm — was centred anyway and ran off the top and bottom. It now shrinks for height (to the same
+  55 % floor as for width) and, if still too tall, goes along the bottom.
+- ***Score all shown* scores every shown model.** An archive's models after the first are read only when
+  shown, and a Chai-1 run writes no PAE, so the second sample counted as unscorable and was left out;
+  they are read first now.
+- **Smaller things**: an export says when it left the scale bar out of a panel (and which) because the bar
+  did not fit, and the checklist stops ticking it; a comparison or per-model figure capped at 24
+  megapixels says how wide each panel now prints; the checklist's *Switch to orthographic* is remembered
+  after a reload like its other fixes; *Load scene JSON* waits for an export to finish; the per-model
+  figure's refusal says to show two models.
 
 ## 2.51.0
 

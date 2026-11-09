@@ -34,19 +34,22 @@
      it is the same neighbourhood the effect table measures. Those rows are reused when a
      superposition has been measured at these positions; without one the neighbourhood is found the
      same way, straight from the reference's own heavy atoms. */
+  /* Residues are keyed with their insertion code (residueCodeTag): by chain and number alone, a site at
+     100A took in 100 and 100B as the site too, and a table measured at 100 passed for one at 100A. */
+  const siteResidue = item => ({ chain: item.chain || '', resi: item.resi, ...(insertionCodeOf(item) ? { icode: insertionCodeOf(item) } : {}) });
   function siteFigureNeighbourhood(reference, spot) {
-    const sites = (Array.isArray(spot) ? spot : [spot]).map(item => ({ chain: item.chain || '', resi: item.resi }));
-    const keys = new Set(sites.map(site => site.chain + '|' + site.resi));
+    const sites = (Array.isArray(spot) ? spot : [spot]).map(siteResidue);
+    const keys = new Set(sites.map(residueCodeTag));
     const measured = positionEffect ? positionEffect.spots || [positionEffect.spot] : [];
     /* The measured rows are reused only when the table is about exactly these sites; a table left
        over from another position would frame the wrong part of the model. */
     if (positionEffect && positionEffect.rows.length && measured.length === sites.length
-      && measured.every(item => keys.has((item.chain || '') + '|' + item.resi))) {
-      return positionEffect.rows.map(row => ({ chain: row.chain || '', resi: row.resi }));
+      && measured.every(item => keys.has(residueCodeTag(item)))) {
+      return positionEffect.rows.map(siteResidue);
     }
     const cutoff = positionCutoff();
     const heavy = heavyAtoms(reference).filter(atom => !atom.hetflag);
-    const isSiteAtom = atom => keys.has((atom.chain || '') + '|' + atom.resi);
+    const isSiteAtom = atom => keys.has(residueCodeTag(atom));
     const targets = heavy.filter(isSiteAtom);
     if (!targets.length) return sites;
     const candidates = heavy.filter(atom => !isSiteAtom(atom));
@@ -56,8 +59,8 @@
     targets.forEach(target => grid.near(target).forEach(index => {
       const atom = candidates[index];
       if (squaredDistance(atom, target) > limit) return;
-      const key = (atom.chain || '') + '|' + atom.resi;
-      if (!found.has(key)) found.set(key, { chain: atom.chain || '', resi: atom.resi });
+      const key = residueCodeTag(atom);
+      if (!found.has(key)) found.set(key, siteResidue(atom));
     }));
     return [...sites, ...found.values()];
   }
@@ -69,9 +72,15 @@
     const byChain = new Map();
     siteFigureNeighbourhood(reference, spot).forEach(item => {
       if (!byChain.has(item.chain)) byChain.set(item.chain, []);
-      byChain.get(item.chain).push(item.resi);
+      byChain.get(item.chain).push(item);
     });
-    const parts = [...byChain.entries()].map(([chain, residues]) => (chain ? { chain, resi: residues } : { resi: residues }));
+    /* A number selects every insertion code it has; where a chain's residues carry codes the part
+       also tests the code, as selectionSpec does (03). */
+    const parts = [...byChain.entries()].map(([chain, items]) => {
+      const part = chain ? { chain, resi: items.map(item => item.resi) } : { resi: items.map(item => item.resi) };
+      if (items.some(item => item.icode)) { const wanted = new Set(items.map(residueNumber)); part.predicate = atom => wanted.has(residueNumber(atom)); }
+      return part;
+    });
     const selection = { model: reference.model.getID() };
     if (parts.length === 1) Object.assign(selection, parts[0]); else selection.or = parts;
     return selection;
@@ -85,7 +94,9 @@
     if (!reference) { announce('Show at least two models to make a site figure', 'error'); return; }
     /* Every compared position is part of the same figure: a binding site is several residues, and a
        panel of one of them with the rest out of frame answers nothing. */
-    const spots = spotlightResidues.map(item => ({ chain: item.chain || '', resi: item.resi }));
+    /* With its insertion code: without it a site at H:100A was named "Site H:100" and its caption read
+       residue 100's identities, a different residue in an antibody-numbered model. */
+    const spots = spotlightResidues.map(siteResidue);
     const single = spots.length === 1;
     const tag = positionTag(spots[0]);
     const restore = captureViewState();

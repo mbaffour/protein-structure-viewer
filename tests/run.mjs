@@ -11,7 +11,7 @@ import { createReadStream, existsSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { basename, dirname, extname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { writeFixtures } from './fixtures.mjs';
+import { writeFixtures, pdb as fixturePdb } from './fixtures.mjs';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const failures = [];
@@ -8238,6 +8238,474 @@ await step('Clear all takes the named-domain rows with it (batch K)', async () =
     if ((await freshEntries(fresh)).length) throw new Error('Clear all accepted but the model remains');
     const after = await fresh.locator('#gpv-domain-list .gpv-entry').count();
     if (after) throw new Error(after + ' domain row' + (after === 1 ? '' : 's') + ' left after Clear all: ' + await freshText(fresh, '#gpv-domain-list'));
+  } finally { await fresh.close(); }
+});
+/* ---- Stress loop, round 3, batch I: publish, export and share (2.52.0) ----
+   Each on a page of its own. Exports are driven through their own buttons; where a step needs an
+   entry point mid-render it calls it through the debug hook, because a disabled button cannot be pressed. */
+group('stress round 3, batch I: publish, export and share');
+/* Every status line the page writes, in order, from now on — a line replaced within the same frame is still caught. */
+const i3Statuses = fresh => fresh.evaluate(() => {
+  window.__statuses = [];
+  const state = document.querySelector('#gpv-state');
+  new MutationObserver(() => window.__statuses.push(state.textContent)).observe(state, { childList: true, characterData: true, subtree: true });
+});
+const i3Views = async (fresh, schemes) => {
+  for (const [index, scheme] of schemes.entries()) {
+    await fresh.click('[data-gpv-tab="appearance"]'); await fresh.selectOption('#gpv-color-mode', scheme); await fresh.waitForTimeout(200);
+    await fresh.click('[data-gpv-tab="publish"]'); await fresh.fill('#gpv-view-name', 'View ' + (index + 1)); await fresh.click('#gpv-save-view'); await fresh.waitForTimeout(250);
+  }
+};
+const i3Theme = async (fresh, mode) => {
+  for (let i = 0; i < 3 && (await fresh.locator('#gpv-theme').getAttribute('data-mode')) !== mode; i += 1) { await fresh.click('#gpv-theme'); await fresh.waitForTimeout(250); }
+  if ((await fresh.locator('#gpv-theme').getAttribute('data-mode')) !== mode) throw new Error('setup: the theme is not ' + mode);
+};
+/* "#rrggbb", "rgb(1, 2, 3)" or "rgb(1 2 3)" as [r, g, b]. */
+const i3Rgb = value => {
+  const hex = /^#([0-9a-f]{6})$/i.exec(String(value).trim());
+  if (hex) return [0, 2, 4].map(offset => parseInt(hex[1].slice(offset, offset + 2), 16));
+  const parts = String(value).match(/[\d.]+/g);
+  return parts ? parts.slice(0, 3).map(Number) : null;
+};
+const i3Luminance = rgb => (0.2126 * rgb[0] + 0.7152 * rgb[1] + 0.0722 * rgb[2]) / 255;
+/* The overlay of a single-figure SVG: everything between <g id="overlay"> and the legend. */
+const i3Overlay = svg => { const start = svg.indexOf('<g id="overlay">'); const end = svg.indexOf('<g id="legend"', start); return start < 0 ? '' : svg.slice(start, end < 0 ? undefined : end); };
+const i3LabelScene = (name, extra = {}) => ({ type: 'protein-viewer-scene', schemaVersion: 1, models: [{ name }], settings: {},
+  labels: [{ model: name, chain: 'A', resi: 5, atom: 'CA', text: 'Site five' }],
+  measurements: [{ type: 'distance', points: [{ model: name, chain: 'A', resi: 3, atom: 'CA' }, { model: name, chain: 'A', resi: 12, atom: 'CA' }] }], ...extra });
+
+await step('one export at a time: a second export started while a built figure renders is refused, the figure finishes, and the page keeps its colours and camera (FC-1)', async () => {
+  /* Each export disabled only its own button and every restyle enabled them all again, so a second
+     press ran a second render on the one export surface: it emptied the first one's scene, and took
+     saved view A's colours and camera as the page to return to. */
+  const fresh = await freshViewer([models[0], models[1]]);
+  try {
+    await i3Views(fresh, ['chain', 'plddt', 'structure']);
+    await fresh.click('[data-gpv-tab="appearance"]'); await fresh.selectOption('#gpv-color-mode', 'element'); await fresh.waitForTimeout(200);
+    await fresh.click('[data-gpv-tab="publish"]'); await fresh.waitForTimeout(200);
+    const before = await fresh.evaluate(() => ({ scheme: document.querySelector('#gpv-color-mode').value, camera: window.__viewerDebug.viewer.getView() }));
+    await i3Statuses(fresh);
+    let downloads = 0; fresh.on('download', () => { downloads += 1; });
+    const first = fresh.waitForEvent('download', { timeout: 180000 });
+    await fresh.click('#gpv-contact-sheet', { noWaitAfter: true });
+    await fresh.waitForFunction(() => /^Rendering [12] \/ 3/.test(document.querySelector('#gpv-contact-sheet').textContent.trim()), null, { timeout: 60000 });
+    const held = await fresh.evaluate(() => ({ image: document.querySelector('#gpv-image').disabled, svg: document.querySelector('#gpv-svg').disabled, rendering: window.__viewerDebug.exportRendering() }));
+    /* The second press, as one that got through a re-enabled button would arrive. */
+    await fresh.evaluate(() => { window.__second = window.__viewerDebug.downloadPublicationSvg(); });
+    await first; await fresh.waitForTimeout(1500);
+    await fresh.evaluate(() => window.__second);
+    await fresh.waitForTimeout(500);
+    const after = await fresh.evaluate(() => ({ scheme: document.querySelector('#gpv-color-mode').value, camera: window.__viewerDebug.viewer.getView(), rendering: window.__viewerDebug.exportRendering(), image: document.querySelector('#gpv-image').disabled, statuses: window.__statuses }));
+    if (!held.rendering || !held.image || !held.svg) throw new Error('mid-render: ' + JSON.stringify(held));
+    if (!after.statuses.some(line => /^An export is still rendering · wait for it to finish, then press again$/.test(line))) throw new Error('the second export was not refused: ' + JSON.stringify(after.statuses.slice(-6)));
+    if (downloads !== 1) throw new Error(downloads + ' downloads for one built figure and one refused press');
+    if (after.scheme !== before.scheme) throw new Error('the page was left in colour scheme ' + after.scheme + ', not ' + before.scheme);
+    if (after.camera.some((value, index) => Math.abs(value - before.camera[index]) > 1e-6)) throw new Error('the camera moved: ' + JSON.stringify(before.camera) + ' → ' + JSON.stringify(after.camera));
+    if (after.rendering || after.image) throw new Error('after the export: ' + JSON.stringify({ rendering: after.rendering, image: after.image }));
+    console.log('       ' + after.statuses.find(line => /^An export is still rendering/.test(line)));
+  } finally { await fresh.close(); }
+});
+await step('Load scene JSON during an export waits for it, then applies (FA-11, 41)', async () => {
+  const fresh = await freshViewer([models[0]]);
+  try {
+    const name = basename(models[0]);
+    await i3Views(fresh, ['chain', 'plddt', 'structure']);
+    await i3Statuses(fresh);
+    const first = fresh.waitForEvent('download', { timeout: 180000 });
+    await fresh.click('#gpv-contact-sheet', { noWaitAfter: true });
+    await fresh.waitForFunction(() => /^Rendering [12] \/ 3/.test(document.querySelector('#gpv-contact-sheet').textContent.trim()), null, { timeout: 60000 });
+    await c2Scene(fresh, i3LabelScene(name));
+    const during = await fresh.evaluate(() => window.__viewerDebug.labelRecords().length);
+    await first; await fresh.waitForTimeout(1500);
+    const state = await fresh.evaluate(() => ({ labels: window.__viewerDebug.labelRecords().map(label => label.text), statuses: window.__statuses }));
+    if (!state.statuses.includes('Export in progress — scene.json will load when it finishes')) throw new Error('the scene did not wait: ' + JSON.stringify(state.statuses.slice(-6)));
+    if (during !== 0) throw new Error('the scene was applied mid-export (' + during + ' labels)');
+    if (state.labels.join() !== 'Site five') throw new Error('after the export the scene gave ' + JSON.stringify(state.labels));
+  } finally { await fresh.close(); }
+});
+await step('an SVG exported with Cycle models running stops the cycle and carries the labels of the model it drew (FC-7)', async () => {
+  /* Nothing in an export stopped the cycle, and the SVG overlay re-read the shown models after the
+     render: the image could be one model and its labels another's. */
+  const fresh = await freshViewer([models[0], models[1]]);
+  try {
+    const [a, b] = [basename(models[0]), basename(models[1])];
+    await c2Scene(fresh, { type: 'protein-viewer-scene', schemaVersion: 1, models: [{ name: a }, { name: b }], settings: { viewMode: 'single', activeModel: a },
+      labels: [{ model: a, chain: 'A', resi: 5, atom: 'CA', text: 'ON-A' }, { model: b, chain: 'A', resi: 5, atom: 'CA', text: 'ON-B' }] });
+    await fresh.waitForTimeout(1200);
+    await fresh.click('[data-gpv-tab="models"]');
+    await fresh.evaluate(() => { const speed = document.querySelector('#gpv-cycle-speed'); speed.value = '0.5'; speed.dispatchEvent(new Event('input', { bubbles: true })); speed.dispatchEvent(new Event('change', { bubbles: true })); });
+    await fresh.click('#gpv-cycle'); await fresh.waitForTimeout(700);
+    if (!/Pause cycle$/.test((await fresh.locator('#gpv-cycle').textContent()).trim())) throw new Error('setup: the cycle did not start');
+    await fresh.click('[data-gpv-tab="publish"]');
+    const svg = (await freshDownload(fresh, '#gpv-svg')).toString('utf8');
+    await fresh.waitForTimeout(1200);
+    const after = await fresh.evaluate(() => ({ cycle: document.querySelector('#gpv-cycle').textContent.trim(), active: window.__viewerDebug.activeEntry().name }));
+    const overlay = i3Overlay(svg);
+    const drawn = ['ON-A', 'ON-B'].filter(text => overlay.includes('>' + text + '<'));
+    if (!/Cycle models$/.test(after.cycle)) throw new Error('the cycle is still running after the export: ' + after.cycle);
+    if (drawn.length !== 1) throw new Error('the SVG overlay holds ' + JSON.stringify(drawn));
+    if (drawn[0] !== (after.active === a ? 'ON-A' : 'ON-B')) throw new Error('the SVG labels ' + drawn[0] + ' but the cycle stopped on ' + after.active);
+    console.log('       stopped on ' + after.active + ' · overlay ' + drawn[0]);
+  } finally { await fresh.close(); }
+});
+await step('SVG labels in the dark interface theme read on a white figure: the text is not its box\'s colour (FC-2)', async () => {
+  const fresh = await freshViewer([models[0]]);
+  try {
+    await c2Scene(fresh, i3LabelScene(basename(models[0]))); await fresh.waitForTimeout(1200);
+    await i3Theme(fresh, 'dark');
+    await fresh.click('[data-gpv-tab="appearance"]'); await fresh.selectOption('#gpv-background', 'white'); await fresh.waitForTimeout(300);
+    await fresh.click('[data-gpv-tab="publish"]');
+    const overlay = i3Overlay((await freshDownload(fresh, '#gpv-svg')).toString('utf8'));
+    const groups = [...overlay.matchAll(/<g><rect [^>]*fill="([^"]+)"[^>]*\/><text [^>]*fill="([^"]+)"[^>]*>([^<]*)<\/text><\/g>/g)].map(match => ({ box: match[1], ink: match[2], text: match[3] }));
+    if (groups.length < 2) throw new Error('expected a label and a measurement value in the overlay, found ' + groups.length);
+    const flat = groups.filter(group => Math.abs(i3Luminance(i3Rgb(group.box)) - i3Luminance(i3Rgb(group.ink))) < 0.5);
+    if (flat.length) throw new Error('unreadable SVG labels: ' + JSON.stringify(flat));
+    console.log('       ' + groups.map(group => group.text + ' ' + group.ink + ' on ' + group.box).join(' · '));
+  } finally { await fresh.close(); }
+});
+await step('Plain text labels have no box in the SVG, as in the PNG (FC-3)', async () => {
+  const fresh = await freshViewer([models[0]]);
+  try {
+    await c2Scene(fresh, i3LabelScene(basename(models[0]))); await fresh.waitForTimeout(1200);
+    await fresh.click('[data-gpv-tab="annotate"]'); await fresh.selectOption('#gpv-label-style', 'plain'); await fresh.waitForTimeout(300);
+    await fresh.click('[data-gpv-tab="publish"]');
+    const overlay = i3Overlay((await freshDownload(fresh, '#gpv-svg')).toString('utf8'));
+    const boxed = (overlay.match(/<g><rect /g) || []).length; const plain = (overlay.match(/<g><text /g) || []).length;
+    if (boxed || plain < 2) throw new Error(boxed + ' boxed and ' + plain + ' plain labels in a Plain text SVG');
+  } finally { await fresh.close(); }
+});
+await step('a print-size composite is the width asked for: 35 mm in two columns at 300 dpi is at most 413 px wide (FC-5)', async () => {
+  /* Each cell had a 300 px floor: 600 px, 51 mm at 300 dpi, under a file name that said 35 mm. */
+  const fresh = await freshViewer([models[0]]);
+  try {
+    await printPlan(fresh, 'custom', '300');
+    await fresh.fill('#gpv-print-custom', '35'); await fresh.dispatchEvent('#gpv-print-custom', 'change'); await fresh.waitForTimeout(300);
+    await fresh.selectOption('#gpv-composite-columns', '2'); await fresh.waitForTimeout(200);
+    const plan = await fresh.evaluate(() => window.__viewerDebug.exportDimensions());
+    if (plan.mm !== 35 || plan.width !== 413) throw new Error('setup: the plan is ' + plan.mm + ' mm, ' + plan.width + ' px');
+    const png = pngSize(await freshDownload(fresh, '#gpv-composite', 180000));
+    const status = await freshStatus(fresh);
+    if (png.width > 413 || png.dpi !== 300) throw new Error('composite ' + png.width + ' px at ' + png.dpi + ' dpi for a 35 mm, 300 dpi plan of 413 px · ' + status);
+    console.log('       ' + png.width + ' × ' + png.height + ' px · ' + status);
+  } finally { await fresh.close(); }
+});
+await step('a share link matches its models by fetch id, not by the sender\'s page-local name (FC-11)', async () => {
+  /* The sender's fetched model was "1brs.cif (2)" beside a local 1brs.cif; the recipient's fetch is
+     "1brs.cif", so every record was dropped under a status that said the scene opened. */
+  const sender = await freshViewer([{ name: '1brs.cif', mimeType: 'chemical/x-mmcif', buffer: Buffer.from(cifText) }]);
+  let link = null;
+  try {
+    await serveFetch(sender);
+    await sender.click('[data-gpv-tab="models"]'); await sender.fill('#gpv-fetch-id', '1brs'); await sender.click('#gpv-fetch'); await sender.waitForTimeout(2500);
+    const fetched = await sender.evaluate(() => (window.__viewerDebug.entries().find(entry => entry.fetchId === '1brs') || {}).name);
+    if (fetched !== '1brs.cif (2)') throw new Error('setup: the fetched model is named ' + fetched);
+    await c2Scene(sender, { type: 'protein-viewer-scene', schemaVersion: 1, models: [{ name: '1brs.cif' }, { name: fetched }], settings: { viewMode: 'overlay' },
+      labels: [{ model: fetched, chain: 'A', resi: 5, atom: 'CA', text: 'On the fetch' }] });
+    await sender.waitForTimeout(1200);
+    await sender.click('[data-gpv-tab="publish"]'); await sender.click('#gpv-share-link'); await sender.waitForTimeout(1000);
+    link = await sender.inputValue('#gpv-share-url');
+  } finally { await sender.close(); }
+  const recipient = await browser.newPage({ viewport: { width: 1280, height: 1000 } });
+  recipient.on('pageerror', error => noteError('FC-11 RECIPIENT PAGEERROR: ' + error.message));
+  try {
+    await serveFetch(recipient);
+    await recipient.goto(link); await recipient.waitForTimeout(4000);
+    const state = await recipient.evaluate(() => { const debug = window.__viewerDebug; return { entries: debug.entries().map(entry => ({ id: entry.id, name: entry.name, fetchId: entry.fetchId })), labels: debug.labelRecords().map(label => ({ text: label.text, entryId: label.entryId })) }; });
+    const status = await freshStatus(recipient);
+    const target = state.entries.find(entry => entry.fetchId === '1brs');
+    if (!target || state.labels.length !== 1 || state.labels[0].entryId !== target.id) throw new Error('recipient: ' + JSON.stringify(state) + ' · ' + status);
+    if (/matched no model/.test(status)) throw new Error('status: ' + status);
+    console.log('       ' + status);
+  } finally { await recipient.close(); }
+  /* A recipient's own local 1brs.cif is not the link's model: the link fetches it and labels the fetch. */
+  const token = 'j.' + Buffer.from(JSON.stringify({ type: 'protein-viewer-scene', schemaVersion: 1, shared: true, models: [{ name: '1brs.cif', fetch: '1brs' }], settings: {},
+    labels: [{ model: '1brs.cif', chain: 'A', resi: 5, atom: 'CA', text: 'Linked' }] })).toString('base64url');
+  const own = await freshViewer([{ name: '1brs.cif', mimeType: 'chemical/x-mmcif', buffer: Buffer.from(cifText) }]);
+  try {
+    await serveFetch(own);
+    await own.evaluate(async value => { location.hash = '#scene=' + value; await window.__viewerDebug.openSharedScene(); }, token);
+    await own.waitForTimeout(1000);
+    const state = await own.evaluate(() => { const debug = window.__viewerDebug; return { entries: debug.entries().map(entry => ({ id: entry.id, name: entry.name, fetchId: entry.fetchId || null })), labels: debug.labelRecords().map(label => label.entryId) }; });
+    const fetchedHere = state.entries.find(entry => entry.fetchId === '1brs');
+    if (!fetchedHere || state.entries.length !== 2 || state.labels.length !== 1 || state.labels[0] !== fetchedHere.id) throw new Error('a page with its own 1brs.cif: ' + JSON.stringify(state));
+  } finally { await own.close(); }
+});
+await step('a share link keeps a model\'s emphasis and its faded chains (FC-9)', async () => {
+  const sender = await freshViewer();
+  let link = null;
+  try {
+    await serveFetch(sender);
+    await sender.click('[data-gpv-tab="models"]'); await sender.fill('#gpv-fetch-id', '1tst'); await sender.click('#gpv-fetch'); await sender.waitForTimeout(2500);
+    await sender.evaluate(() => { const entry = window.__viewerDebug.entries()[0]; entry.faded = true; entry.fadedChains = ['B']; });
+    await sender.click('[data-gpv-tab="publish"]'); await sender.click('#gpv-share-link'); await sender.waitForTimeout(1000);
+    link = await sender.inputValue('#gpv-share-url');
+  } finally { await sender.close(); }
+  const recipient = await browser.newPage({ viewport: { width: 1280, height: 1000 } });
+  recipient.on('pageerror', error => noteError('FC-9 RECIPIENT PAGEERROR: ' + error.message));
+  try {
+    await serveFetch(recipient);
+    await recipient.goto(link); await recipient.waitForTimeout(4000);
+    const entry = await recipient.evaluate(() => { const item = window.__viewerDebug.entries()[0]; return item ? { faded: item.faded === true, fadedChains: item.fadedChains } : null; });
+    if (!entry || !entry.faded || JSON.stringify(entry.fadedChains) !== '["B"]') throw new Error('the shared model: ' + JSON.stringify(entry));
+  } finally { await recipient.close(); }
+});
+await step('a scene keeps which label and measurement offsets Separate labels chose (FC-10, the reader; the writer is 30)', async () => {
+  const fresh = await freshViewer([models[0]]);
+  try {
+    const name = basename(models[0]);
+    await c2Scene(fresh, i3LabelScene(name, {
+      labels: [{ model: name, chain: 'A', resi: 5, atom: 'CA', text: 'Moved for me', offset: { x: 3, y: 1, z: 0 }, autoPlaced: true }],
+      measurements: [{ type: 'distance', offset: { x: 0, y: 2, z: 0 }, autoPlaced: true, points: [{ model: name, chain: 'A', resi: 3, atom: 'CA' }, { model: name, chain: 'A', resi: 12, atom: 'CA' }] }] }));
+    await fresh.waitForTimeout(1200);
+    const state = await fresh.evaluate(() => ({ label: window.__viewerDebug.labelRecords().map(record => record.autoPlaced === true), measurement: window.__viewerDebug.measurementRecords().map(record => record.autoPlaced === true) }));
+    if (state.label.join() !== 'true' || state.measurement.join() !== 'true') throw new Error('autoPlaced after the scene: ' + JSON.stringify(state));
+  } finally { await fresh.close(); }
+});
+const i3SiteFigure = async (files, where) => {
+  const fresh = await freshViewer(files);
+  try {
+    await freshGoTo(fresh, where);
+    if (await fresh.locator('#gpv-position-compare').isDisabled()) throw new Error('setup: Compare this position is disabled at ' + where);
+    await fresh.click('#gpv-position-compare'); await fresh.waitForTimeout(900);
+    const spots = await fresh.evaluate(() => window.__viewerDebug.spotlightResidues().map(spot => spot.chain + ':' + spot.resi + (spot.icode || '')));
+    if (spots.join() !== where) throw new Error('setup: compared ' + JSON.stringify(spots));
+    await fresh.click('#gpv-position-figure'); await fresh.waitForTimeout(1500);
+    return await fresh.evaluate(() => window.__viewerDebug.savedViews().map(view => ({ name: view.name, caption: view.caption })));
+  } finally { await fresh.close(); }
+};
+await step('Make site figure keeps a compared position\'s insertion code: Site A:10A, captioned for 10A (FC-8)', async () => {
+  const views = await i3SiteFigure([{ name: 'wt.pdb', mimeType: 'chemical/x-pdb', buffer: Buffer.from(c2Pdb()) }, { name: 'mut.pdb', mimeType: 'chemical/x-pdb', buffer: Buffer.from(c2Pdb()) }], 'A:10A');
+  const site = views.find(view => /^Site /.test(view.name));
+  if (!site || site.name !== 'Site A:10A' || !/^A:10A · Ala in all 2 models/.test(site.caption)) throw new Error('views: ' + JSON.stringify(views));
+  console.log('       ' + site.name + ' — ' + site.caption);
+});
+await step('Make site figure keeps a compared position\'s insertion code read from an mmCIF file: Site H:100A (FC-8, mmCIF)', async () => {
+  const cif = await readFile(join(here, 'fixtures', 'insertion-codes', 'fab_h_insertions.cif'));
+  const views = await i3SiteFigure([{ name: 'wt.cif', mimeType: 'chemical/x-mmcif', buffer: cif }, { name: 'mut.cif', mimeType: 'chemical/x-mmcif', buffer: cif }], 'H:100A');
+  const site = views.find(view => /^Site /.test(view.name));
+  if (!site || site.name !== 'Site H:100A' || !/^H:100A · Ser in all 2 models/.test(site.caption)) throw new Error('views: ' + JSON.stringify(views));
+});
+await step('a built figure prints no corner text in any panel, PNG or SVG (FC-4)', async () => {
+  /* The PNG's panels were rendered with the corner text on (three copies in three panels); the SVG's without. */
+  const fresh = await freshViewer([models[0]]);
+  try {
+    await fresh.click('[data-gpv-tab="appearance"]'); await fresh.selectOption('#gpv-background', 'white'); await fresh.waitForTimeout(200);
+    await fresh.click('[data-gpv-tab="annotate"]');
+    await fresh.evaluate(() => { const well = document.querySelector('#gpv-annotation-color'); well.value = '#ff00ff'; well.dispatchEvent(new Event('input', { bubbles: true })); well.dispatchEvent(new Event('change', { bubbles: true })); });
+    await fresh.fill('#gpv-screen-text', 'CORNER TITLE'); await fresh.click('#gpv-add-screen-text'); await fresh.waitForTimeout(400);
+    const magenta = async png => fresh.evaluate(async base64 => {
+      const image = new Image(); image.src = 'data:image/png;base64,' + base64; await image.decode();
+      const canvas = document.createElement('canvas'); canvas.width = image.naturalWidth; canvas.height = image.naturalHeight;
+      const context = canvas.getContext('2d'); context.drawImage(image, 0, 0);
+      const data = context.getImageData(0, 0, canvas.width, canvas.height).data; let count = 0;
+      for (let i = 0; i < data.length; i += 4) if (data[i] > 200 && data[i + 1] < 80 && data[i + 2] > 200) count += 1;
+      return count;
+    }, png.toString('base64'));
+    await fresh.click('[data-gpv-tab="publish"]');
+    /* The single figure does carry the corner text: the colour is set up and visible in a render. */
+    const single = await magenta(await freshDownload(fresh, '#gpv-image'));
+    if (!single) throw new Error('setup: the corner text drew no magenta pixel in the single figure');
+    await i3Views(fresh, ['element', 'element']);
+    const built = await magenta(await freshDownload(fresh, '#gpv-contact-sheet', 180000));
+    const svg = (await freshDownload(fresh, '#gpv-builder-svg', 180000)).toString('utf8');
+    if (built) throw new Error(built + ' magenta pixels of the corner text in the built PNG (the single figure has ' + single + ')');
+    if (/(fill|stroke)="#ff00ff"/i.test(svg) || svg.includes('CORNER TITLE')) throw new Error('the built SVG carries the corner text');
+    console.log('       single figure ' + single + ' corner-text pixels · built PNG ' + built);
+  } finally { await fresh.close(); }
+});
+await step('the HTML report reads an mmCIF file\'s insertion codes: the strip of fab_h reads 99, 100, 100A, 100B, 101, and so does its contact map (L-R1)', async () => {
+  const fresh = await freshViewer([join(here, 'fixtures', 'insertion-codes', 'fab_h_insertions.cif')]);
+  let report = null;
+  try {
+    await fresh.click('[data-gpv-tab="compare"]'); await fresh.fill('#gpv-contact-cutoff', '8'); await fresh.click('#gpv-contact-run'); await fresh.waitForTimeout(600);
+    await fresh.click('[data-gpv-tab="publish"]');
+    const made = await c2Report(fresh, 'i3-fab-report.html'); report = made.report;
+    const contacts = (made.html.match(/"residuesA":\[([^\]]*)\]/) || [])[1];
+    const strip = await report.evaluate(() => panes[0].rows.map(row => row.chain + ':' + row.atoms.map(atom => atom.resi + icodeOf(atom)).join(',')).join(' | '));
+    const readout = await report.evaluate(() => {
+      const pane = panes[0]; const box = pane.strip.getBoundingClientRect();
+      pane.strip.dispatchEvent(new PointerEvent('pointermove', { clientX: box.left + 2.5 * box.width / 5, clientY: box.top + 5, bubbles: true }));
+      return pane.readout.textContent;
+    });
+    if (strip !== 'H:99,100,100A,100B,101') throw new Error('the report strip reads ' + strip);
+    if (!/SER100A/.test(readout)) throw new Error('the strip readout at the third cell: ' + readout);
+    if (contacts !== '"99","100","100A","100B","101"') throw new Error('the report contact map rows: ' + contacts);
+    console.log('       ' + strip + ' · ' + readout.split(' · click')[0]);
+  } finally { if (report) await report.close(); await fresh.close(); }
+});
+await step('the HTML report draws Aurora A\'s phosphothreonines in the chain and the strip, not as ligands (L-R1)', async () => {
+  const fresh = await freshViewer([join(here, 'fixtures', 'published', 'ipsae-aurka-tpx2', 'fold_aurka_0_tpx2_0_model_0.cif')]);
+  let report = null;
+  try {
+    await fresh.click('[data-gpv-tab="publish"]');
+    report = (await c2Report(fresh, 'i3-aurka-report.html')).report;
+    const state = await report.evaluate(() => {
+      const row = panes[0].rows.find(item => item.chain === 'A');
+      const tpo = panes[0].viewer.getModel().selectedAtoms({ resn: 'TPO', atom: 'CA' });
+      return { count: row ? row.atoms.length : 0, inStrip: row ? row.atoms.filter(atom => atom.resn === 'TPO').map(atom => atom.resi) : [], sticks: tpo.filter(atom => atom.style && atom.style.stick).length, cartoon: tpo.filter(atom => atom.style && atom.style.cartoon).length };
+    });
+    if (state.count !== 276 || state.inStrip.join() !== '160,161' || state.sticks || state.cartoon !== 2) throw new Error('report: ' + JSON.stringify(state));
+  } finally { if (report) await report.close(); await fresh.close(); }
+});
+await step('nine models coloured by structure keep a Model key on exports and a legend line in the checklist (FC-12)', async () => {
+  const files = Array.from({ length: 9 }, (_, index) => ({ name: 'run_' + (index + 1) + '.pdb', mimeType: 'chemical/x-pdb', buffer: Buffer.from(fixturePdb({ seed: index + 1 })) }));
+  const fresh = await freshViewer(files);
+  try {
+    await fresh.click('[data-gpv-tab="models"]'); await fresh.selectOption('#gpv-view-mode', 'overlay'); await fresh.waitForTimeout(400);
+    await fresh.click('[data-gpv-tab="appearance"]'); await fresh.selectOption('#gpv-color-mode', 'structure'); await fresh.waitForTimeout(300);
+    await fresh.click('[data-gpv-tab="publish"]'); await fresh.waitForTimeout(400);
+    const legend = await fresh.evaluate(() => { const debug = window.__viewerDebug; const items = debug.legendItems('figure'); const metrics = debug.legendMetrics(document.createElement('canvas').getContext('2d'), 1, 'figure', false); return { title: items && items.title, count: items ? items.items.length : 0, metrics: Boolean(metrics), shown: debug.displayedEntries().length }; });
+    const checklist = await freshText(fresh, '#gpv-check-list');
+    if (legend.shown !== 9) throw new Error('setup: ' + legend.shown + ' models shown');
+    if (legend.title !== 'Model' || legend.count !== 9 || !legend.metrics) throw new Error('legend: ' + JSON.stringify(legend));
+    if (!/The colour legend is drawn on exports\./.test(checklist)) throw new Error('the checklist has no legend line');
+  } finally { await fresh.close(); }
+});
+await step('the chain key leaves out a chain switched off in Composition (FC-17)', async () => {
+  const fresh = await freshViewer([experimentalFile('2hhb.cif')]);
+  try {
+    await fresh.click('[data-gpv-tab="appearance"]'); await fresh.selectOption('#gpv-color-mode', 'chain'); await fresh.waitForTimeout(300);
+    const before = await fresh.evaluate(() => window.__viewerDebug.legendItems('figure').items.map(item => item[1]).join(','));
+    if (!before.split(',').includes('C')) throw new Error('setup: the key reads ' + before);
+    await fresh.click('[data-gpv-tab="models"]'); await fresh.locator('#gpv-chain-rows input[aria-label="Show chain C"]').uncheck(); await fresh.waitForTimeout(400);
+    const after = await fresh.evaluate(() => window.__viewerDebug.legendItems('figure').items.map(item => item[1]).join(','));
+    if (after.split(',').includes('C') || after.split(',').length !== before.split(',').length - 1) throw new Error('with chain C off the key reads ' + after + ' (before: ' + before + ')');
+  } finally { await fresh.close(); }
+});
+const i3Chains = count => {
+  const lines = []; let serial = 1;
+  'ABCDEFGHIJKLMNOPQRSTUVWX'.slice(0, count).split('').forEach((chain, chainIndex) => {
+    for (let resi = 1; resi <= 3; resi += 1) lines.push(pdbAtom('ATOM', serial++, 'CA', 'ALA', chain, resi, [resi * 3.8, chainIndex * 6, 0], 'C'));
+    lines.push('TER');
+  });
+  return lines.join('\n') + '\nEND\n';
+};
+await step('a legend stacked down one side stays inside the panel: 12 chains shrink, 24 go along the bottom, at 85 mm (FC-6)', async () => {
+  /* The stack only ever shrank for width and was centred however tall it was: nine chains ran off the panel. */
+  for (const count of [12, 24]) {
+    const fresh = await freshViewer([{ name: 'chains' + count + '.pdb', mimeType: 'chemical/x-pdb', buffer: Buffer.from(i3Chains(count)) }]);
+    try {
+      await fresh.click('[data-gpv-tab="appearance"]'); await fresh.selectOption('#gpv-color-mode', 'chain'); await fresh.waitForTimeout(300);
+      await printPlan(fresh, '85', '300', '8');
+      await fresh.selectOption('#gpv-legend-position', 'left'); await fresh.waitForTimeout(200);
+      const box = await fresh.evaluate(() => {
+        const debug = window.__viewerDebug; const plan = debug.exportDimensions();
+        const layout = debug.furnitureLayout(plan.width, plan.height, debug.figureScale(plan), null, debug.figurePalette(), true);
+        /* Before this fix the layout gave no box; a stacked legend's top was legendY and its height the metrics'. */
+        const metrics = debug.legendMetrics(document.createElement('canvas').getContext('2d'), layout.legendScale, 'figure', layout.vertical, layout.legendAvailable);
+        const top = layout.legendTop ?? (layout.vertical ? layout.legendY : layout.legendY + metrics.top);
+        return { top, bottom: top + (layout.legendHeight || metrics.height), height: plan.height, vertical: layout.vertical, scale: layout.legendScale / debug.figureScale(plan), items: debug.legendItems('figure').items.length };
+      });
+      if (box.items < Math.min(count, 20)) throw new Error('setup: the key has ' + box.items + ' entries for ' + count + ' chains');
+      if (box.top < 0 || box.bottom > box.height) throw new Error(count + ' chains: the legend runs ' + Math.round(box.top) + ' … ' + Math.round(box.bottom) + ' in a ' + box.height + ' px panel');
+      if (count === 24 && box.vertical) throw new Error('24 chains stayed stacked down the side');
+      console.log('       ' + count + ' chains: ' + (box.vertical ? 'stacked at ' + Math.round(box.scale * 100) + ' %' : 'along the bottom') + ', ' + Math.round(box.top) + ' … ' + Math.round(box.bottom) + ' of ' + box.height + ' px');
+    } finally { await fresh.close(); }
+  }
+});
+await step('an export says when it left the scale bar out of the figure, and the checklist stops ticking it (FC-15)', async () => {
+  const fresh = await freshViewer([models[0]]);
+  try {
+    await fresh.click('[data-gpv-tab="appearance"]'); await fresh.selectOption('#gpv-projection', 'orthographic'); await fresh.waitForTimeout(200);
+    await fresh.click('[data-gpv-tab="publish"]'); await fresh.selectOption('#gpv-scale-bar', '50'); await fresh.waitForTimeout(200);
+    await fresh.evaluate(() => { const viewer = window.__viewerDebug.viewer; viewer.zoom(12); viewer.render(); });
+    await fresh.waitForTimeout(300);
+    await freshDownload(fresh, '#gpv-image');
+    const status = await freshStatus(fresh);
+    await fresh.evaluate(() => document.querySelector('#gpv-scale-bar').dispatchEvent(new Event('change', { bubbles: true }))); await fresh.waitForTimeout(300);
+    const checklist = await freshText(fresh, '#gpv-check-list');
+    if (!/scale bar left out — 50 Å is wider than the panel; choose a shorter bar/.test(status)) throw new Error('status: ' + status);
+    if (/✓\s*50 Å scale bar/.test(checklist) || !/left the 50 Å scale bar out/.test(checklist)) throw new Error('checklist: ' + checklist);
+    console.log('       ' + status);
+  } finally { await fresh.close(); }
+});
+await step('a comparison capped at 24 megapixels says how wide each panel prints (FC-16, the layout through the debug hook, not a 3-panel 600 dpi render)', async () => {
+  const fresh = await freshViewer([models[0]]);
+  try {
+    await fresh.evaluate(() => window.__viewerDebug.setExportGpuLimit(16384));
+    await printPlan(fresh, '178', '600');
+    const result = await fresh.evaluate(() => {
+      const debug = window.__viewerDebug; const entry = debug.entries()[0];
+      const panes = [0, 1, 2].map(() => ({ entry, camera: null }));
+      const layout = debug.panelFigureLayout(panes);
+      return { text: debug.panelFigureSize(layout), cell: layout.cellWidth, dpi: layout.requested.dpi };
+    });
+    const wanted = Math.round(result.cell / result.dpi * 25.4);
+    if (result.dpi !== 600 || !new RegExp('each panel ' + wanted + ' mm wide, not 178, to stay under 24 megapixels').test(result.text)) throw new Error(result.dpi + ' dpi, cell ' + result.cell + ' px: ' + result.text);
+    console.log('       ' + result.text);
+  } finally { await fresh.evaluate(() => window.__viewerDebug.setExportGpuLimit(0)).catch(() => {}); await fresh.close(); }
+});
+await step('the checklist\'s Switch to orthographic is remembered after a reload (FC-18)', async () => {
+  const fresh = await freshViewer([models[0]]);
+  try {
+    await fresh.click('[data-gpv-tab="appearance"]'); await fresh.selectOption('#gpv-projection', 'perspective'); await fresh.waitForTimeout(200);
+    await fresh.click('[data-gpv-tab="publish"]'); await fresh.selectOption('#gpv-scale-bar', '20'); await fresh.waitForTimeout(300);
+    await fresh.locator('#gpv-check-list button', { hasText: /^Switch to orthographic$/ }).click(); await fresh.waitForTimeout(400);
+    if ((await fresh.inputValue('#gpv-projection')) !== 'orthographic') throw new Error('setup: the fix did not switch the projection');
+    await fresh.reload(); await fresh.waitForTimeout(2000);
+    const after = await fresh.inputValue('#gpv-projection');
+    if (after !== 'orthographic') throw new Error('after a reload the projection is ' + after);
+  } finally { await fresh.close(); }
+});
+await step('Score all shown reads an archive\'s unviewed models first: both Chai-1 samples are scored (FA-8a)', async () => {
+  /* The second sample is added unread; Chai-1 writes no PAE, so it had no scores and was left out. */
+  const fresh = await freshViewer([join(predictorDir, 'chai_hbdimer.zip')]);
+  try {
+    await fresh.waitForTimeout(1500);
+    const unread = await fresh.evaluate(() => window.__viewerDebug.entries().filter(entry => !entry.model).length);
+    if (unread < 1) throw new Error('setup: every model of the archive is already read');
+    await fresh.click('[data-gpv-tab="confidence"]'); await fresh.waitForTimeout(300);
+    await fresh.click('#gpv-ipsae-all'); await fresh.waitForTimeout(2000);
+    const status = await freshStatus(fresh);
+    const scored = await fresh.evaluate(() => { const results = window.__viewerDebug.interactionResults(); return results ? results.byEntry.size : 0; });
+    if (scored !== 2 || status !== 'Chain pairs scored in 2 models') throw new Error(scored + ' scored · ' + status);
+  } finally { await fresh.close(); }
+});
+/* How wide a line is in a PNG, by difference: the same figure rendered with and without it, the
+   coverage summed across the line (green channel, against the line's own green) at every pixel along
+   its outer thirds — the middle holds the value's label. */
+const i3StrokeWidth = (fresh, withPng, withoutPng, line, green) => fresh.evaluate(async ([a64, b64, line, green]) => {
+  const pixels = async base64 => { const image = new Image(); image.src = 'data:image/png;base64,' + base64; await image.decode();
+    const canvas = document.createElement('canvas'); canvas.width = image.naturalWidth; canvas.height = image.naturalHeight;
+    const context = canvas.getContext('2d'); context.drawImage(image, 0, 0); return { w: canvas.width, data: context.getImageData(0, 0, canvas.width, canvas.height).data }; };
+  const drawn = await pixels(a64); const bare = await pixels(b64);
+  const [x1, y1, x2, y2] = line; const length = Math.hypot(x2 - x1, y2 - y1); const ux = (x2 - x1) / length, uy = (y2 - y1) / length;
+  const widths = [];
+  for (const [t0, t1] of [[0.08, 0.35], [0.65, 0.92]]) for (let s = t0 * length; s < t1 * length; s += 1) {
+    let sum = 0; let clear = true;
+    for (let o = -14; o <= 14; o += 0.5) {
+      const x = Math.round(x1 + ux * s - uy * o); const y = Math.round(y1 + uy * s + ux * o); const i = (y * drawn.w + x) * 4 + 1;
+      if (bare.data[i] - green < 80) { clear = false; break; }
+      sum += Math.max(0, Math.min(1, (bare.data[i] - drawn.data[i]) / (bare.data[i] - green))) * 0.5;
+    }
+    if (clear) widths.push(sum);
+  }
+  widths.sort((p, q) => p - q);
+  return { samples: widths.length, width: widths.length ? widths[Math.floor(widths.length / 2)] : null };
+}, [withPng.toString('base64'), withoutPng.toString('base64'), line, green]);
+await step('a measurement line in an exported PNG is as wide as in the SVG, not a one-pixel GL line (FC-13; the drawing is 03, batch M)', async () => {
+  /* 3Dmol's addLine is a GL line and browsers clamp those to one device pixel: at 85 mm and 300 dpi the
+     PNG line measured 0.6 px where the SVG's stroke is 5.56 px (2 × the text scale), at 600 dpi still
+     0.6 px against 9.3. Two lone atoms 31 Å apart, so the line crosses nothing but the white background. */
+  const atoms = [[0, 0, 0], [30, 8, 0], [-4, 20, 0], [34, -12, 0]].map((xyz, index) => pdbAtom('ATOM', index + 1, 'CA', 'ALA', 'A', index + 1, xyz, 'C')).join('\n') + '\nEND\n';
+  const fresh = await freshViewer([{ name: 'atoms.pdb', mimeType: 'chemical/x-pdb', buffer: Buffer.from(atoms) }]);
+  try {
+    await c2Scene(fresh, { type: 'protein-viewer-scene', schemaVersion: 1, models: [{ name: 'atoms.pdb' }], settings: { background: 'white', colorMode: 'element', representation: 'sphere' },
+      measurements: [{ type: 'distance', dashed: false, points: [{ model: 'atoms.pdb', chain: 'A', resi: 1, atom: 'CA' }, { model: 'atoms.pdb', chain: 'A', resi: 2, atom: 'CA' }] }] });
+    await fresh.waitForTimeout(1200);
+    await printPlan(fresh, '85', '300', '8');
+    const png = await freshDownload(fresh, '#gpv-image');
+    const svg = (await freshDownload(fresh, '#gpv-svg')).toString('utf8');
+    const match = svg.match(/<line x1="([\d.-]+)" y1="([\d.-]+)" x2="([\d.-]+)" y2="([\d.-]+)" stroke="#e11d48" stroke-width="([\d.]+)"/);
+    if (!match) throw new Error('setup: no measurement line in the SVG');
+    await fresh.click('[data-gpv-tab="annotate"]'); await fresh.click('#gpv-clear-measurements'); await fresh.waitForTimeout(400);
+    await fresh.click('[data-gpv-tab="publish"]');
+    const bare = await freshDownload(fresh, '#gpv-image');
+    const stroke = Number(match[5]);
+    const result = await i3StrokeWidth(fresh, png, bare, match.slice(1, 5).map(Number), 29);
+    if (result.samples < 100) throw new Error('setup: only ' + result.samples + ' clear cross-sections of the line');
+    if (!(result.width >= stroke * 0.6 && result.width <= stroke * 1.5)) throw new Error('the PNG line is ' + result.width.toFixed(2) + ' px wide; the SVG stroke is ' + stroke + ' px');
+    console.log('       PNG ' + result.width.toFixed(2) + ' px · SVG ' + stroke + ' px (median of ' + result.samples + ' cross-sections)');
   } finally { await fresh.close(); }
 });
 await browser.close();

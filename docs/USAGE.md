@@ -67,7 +67,11 @@ cancels an armed *Measure to…*. When the request cannot reach the server at al
 — the status says *Could not reach the PDB (1ubq) — check the network and the id* (or *AlphaFold DB*);
 an entry the server does not have says so in its own words. A file opened or fetched while a figure is
 rendering waits for the figure to finish (*Export in progress — 1brs.cif will load when it finishes*),
-so the image and its legend show the same models.
+so the image and its legend show the same models; so does *Load scene JSON*. Exports themselves take
+turns: while one renders the other export buttons are off, and a press that gets through is refused
+(*An export is still rendering · wait for it to finish, then press again*). An export stops *Cycle
+models* as it starts, and ← → and C do nothing until it has finished, so the image, its labels and its
+legend are all of one model.
 
 **Confidence and ranking metadata.** Drop these alongside (or inside) your models and they attach
 automatically by file-name matching:
@@ -242,7 +246,9 @@ Notes on the colour schemes:
   the palette for that chain everywhere those surfaces read it. The
   legend under the viewport names every chain, wrapping onto as many rows as it needs; past twenty
   chains it names the first nineteen and ends with `+N more`, and the generated figure legend text
-  names them all. In overlay mode with per-structure colouring the legend names the models instead.
+  names them all. A chain switched off in Composition is not in the key. In overlay mode with
+  per-structure colouring the legend names the models instead, the same way: every model up to twenty,
+  then `+N more`.
 - **Cα deviation after alignment** colours each residue by the distance between its Cα and the
   matched residue of the reference once you have used *Align visible* (Compare tab): under 1 Å blue,
   1–2 Å green, 2–4 Å yellow, 4–8 Å orange, 8 Å and above red; residues the alignment did not match
@@ -707,7 +713,8 @@ chain pair on the interface itself, with four published scores:
 
 Choose a **PAE cutoff** (10 Å by default; the reference's AlphaFold 3 example uses 10, its
 AlphaFold 2 example and ColabFold's own scores 15) and an **interface distance** (which only changes
-the residue counts), then **Score chain pairs** for the current model or **Score all shown models**.
+the residue counts), then **Score chain pairs** for the current model or **Score all shown models**
+(which first reads any shown model of an archive you have not looked at yet).
 The table gives ipSAE with both directions, the ipTM the predictor itself reported for the pair,
 pDockQ, pDockQ2, LIS and the interface residues of each chain (PAE below the cutoff and Cβ within the
 distance). Hover the ipSAE to see which residue gives it. With two or more models scored, a second
@@ -957,7 +964,8 @@ is framed on the site *and its neighbourhood* — every residue with a heavy ato
 **Neighbourhood (Å)** cutoff of it — not the lone residue, so a position in a large assembly keeps the
 context around it instead of filling the panel with the nearest wall of ribbon. It needs a
 compared position and at least two shown models; it switches colouring to one colour per model and turns
-**Side chains at compared positions** on. The close-up takes the comparison readout as its caption.
+**Side chains at compared positions** on. The close-up takes the comparison readout as its caption;
+a position with an insertion code keeps it (*Site H:100A*).
 With the models superposed and **Deviation panel** on (it is on by default), a third panel follows:
 **Deviation**, the close-up framed exactly as panel B but with every model drawn solid and coloured by
 Cα deviation from the reference — the distance between paired Cα atoms after the superposition — blue
@@ -1050,7 +1058,9 @@ projection for figures that carry one.
 the molecule as a raster image and everything drawn over it — residue labels, measurements, arrows,
 callouts, markers, corner titles, panel letters, captions, legend — as SVG elements. A measurement's
 text, colour, solid or dashed line and the place you moved its text to (with its leader line) are written
-exactly as on screen, in the SVG as in the PNG, PDF and TIFF. Open the file in
+exactly as on screen, in the SVG as in the PNG, PDF and TIFF, and every label takes the PNG's colours
+— its box the figure's background, its text the ink that reads on it — whichever interface theme you
+work in; *Plain text* labels have no box in either file. Open the file in
 Illustrator, Inkscape, or Affinity to restyle type, recolour arrows, or move a label without
 re-rendering.
 
@@ -1101,6 +1111,9 @@ whether each panel carries its **legend and scale bar**. **Download built figure
 ticked view from its own camera, colour scheme, model selection and background at the same text
 size, puts the letter and caption in a strip under each cell, and writes the resolution into the
 file; **Download built figure SVG** does the same with vector captions, labels, legends and scale bars.
+A corner title (Annotate → screen text) belongs to one figure and is printed in no panel of a built
+figure, PNG or SVG; add it as a caption or in the layout program. A legend placed down one side of a
+panel shrinks to fit the panel's height and, if it still cannot, goes along the bottom.
 A caption wraps onto up to three lines; one longer than that ends in an ellipsis, and the estimate
 line and the download's status say which panel's caption was shortened.
 The cells share the aspect ratio set under *Output* and are sized so the whole figure is exactly the
@@ -1136,7 +1149,10 @@ and secondary structure), show ligands as sticks or spheres or hide them, follow
 read pLDDT and PAE for the focused panel, and export a stitched lettered PNG or a composite video of
 their own. Chains you hid stay hidden in the report. Under every panel a sequence strip shows the model's
 residues in the panel's colour scheme, one row per chain, hidden chains dimmed: hover to read chain,
-residue and pLDDT, click to zoom that panel to the residue.
+residue and pLDDT, click to zoom that panel to the residue. The report reads residues as the viewer
+does: insertion codes from an mmCIF file (100, 100A and 100B are three residues), and a modified
+residue written as HETATM but bonded into its chain (a phosphothreonine) drawn and listed with the
+chain, not as a ligand.
 
 Two controls govern size and portability. **PAE in report** keeps the heatmaps at full detail (up to
 400 × 400), compacts them to 200 × 200, or omits them; the size estimate updates as you switch.
@@ -1198,7 +1214,11 @@ The scene is compressed into the URL fragment (the part after `#`), so nothing i
 and the link works wherever the viewer is hosted. Files you opened from disk cannot travel this way —
 the recipient has no way to fetch them — so they are left out, and the status line says how many.
 Saved views whose models were fetched by identifier travel in the link too, so the recipient can
-follow your guided tour. Links are typically one
+follow your guided tour. Emphasis and faded chains travel with the models. The recipient's viewer
+matches each model by what it was fetched as, not by its name on your page: a model you named
+`1brs.cif (2)` because a local `1brs.cif` was open beside it is the recipient's `1brs.cif`, and a
+recipient's own local file of the same name is never taken for it. If some records find no model
+(a fetch that failed), the status line says how many. Links are typically one
 to three kilobytes; a scene with many annotations may run longer, and every modern browser accepts
 fragments far larger than that.
 
@@ -1248,7 +1268,8 @@ reports and share links remain the deliberate ways to keep or hand over work.
 
 
 **Label style (Annotate).** *Boxed* labels sit on a small card and read on any background;
-*Plain text* drops the card and border for clean figures where the box would cover the model.
+*Plain text* drops the card and border for clean figures where the box would cover the model — in
+the PNG, PDF, TIFF and SVG alike.
 The choice applies to residue labels, measurements and callouts, is saved with scenes, and is
 carried into the shared report.
 
@@ -1266,7 +1287,9 @@ are laid out at the size of their cell with their axis text at the chosen point 
 heatmap has a colour bar from 0 to its maximum in Å. Every caption, panel letter, panel A's legend and
 the labels of the contact map, RMSD matrix and architecture bar print at the chosen text size; captions
 wrap onto up to three lines, and a chart that cannot hold its text in its cell makes its row taller
-(the status says so) rather than shrinking the text. Choose one, two or three
+(the status says so) rather than shrinking the text. At a print size the figure is the width chosen,
+however many columns (the status gives the printed width); a pixel export keeps each cell at least
+300 px wide. Choose one, two or three
 columns. Panels that are not available for the current model are greyed out with the reason in their
 tooltip. The result is the confidence figure most AlphaFold papers need, assembled in one step; open
 it in Illustrator or Inkscape for the final layout if the journal needs a different arrangement.
@@ -1277,7 +1300,9 @@ At the foot of the Publish tab. The viewer reads its own settings and lists, wit
 or a note, what a journal's figure guide or a careful reviewer would raise: a pixel export that
 carries no physical size; resolution below 300 dpi; text under 7 pt at the printed width; chain,
 entity or domain colours that are not colour-blind safe; a colour scheme whose legend is switched
-off; a scale bar in perspective projection, where its length depends on depth; several models shown
+off; a scale bar in perspective projection, where its length depends on depth; a scale bar the last export
+had to leave out of a panel because it did not fit there (the export's status names the panel; choose a
+shorter bar); several models shown
 without superposition; a pLDDT cut that hides residues; a dark or custom background; many chains
 without an outline; no figure title. Warnings have a one-click fix where one exists (use print size,
 use Okabe–Ito, draw legend, switch to orthographic), and the status line says what each one set. The

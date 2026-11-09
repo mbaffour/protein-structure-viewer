@@ -1,8 +1,9 @@
   /* ---------- Scale bar ---------- */
 
   let sceneCentreCache = null;
-  function sceneCentre() {
-    const shown = displayedEntries().filter(entry => entry.model);
+  /* `shown` is the models the bar is measured among: the screen's, or the ones an export is drawing
+     (figureEntries, 31), which a model cycled to mid-render is not. */
+  function sceneCentre(shown = displayedEntries().filter(entry => entry.model)) {
     if (!shown.length) return null;
     const key = shown.map(entry => entry.id).join(',') + '|' + alignmentResults.length;
     if (sceneCentreCache && sceneCentreCache.key === key) return sceneCentreCache.centre;
@@ -26,13 +27,46 @@
     return Number.isFinite(pixels) && pixels > 0 ? pixels : null;
   }
 
-  function scaleBarSpec(target, plan) {
+  /* An export's stroke of `px` figure pixels as a cylinder radius in ångströms, at `at` in the export
+     viewer's projection (null for any other viewer — the screen, a comparison panel — or without a
+     projection). 3Dmol's addLine is a GL line,
+     and browsers clamp GL lines to one device pixel: a measurement exported at 300 or 600 dpi was a
+     0.6 px hairline where the SVG of the same figure draws 2 × the text scale (5.6 px at 8 pt and 300
+     dpi). A cylinder of this radius prints at the SVG's width (03 drawMeasurements and drawLabels). */
+  function exportStrokeRadius(target, at, px) {
+    if (!target || target !== exportViewer) return null;
+    const perAngstrom = pixelsPerAngstrom(target, at);
+    return perAngstrom ? px / 2 / perAngstrom : null;
+  }
+
+  /* A bar that does not fit its panel is left out of it — wider than 90 % of the panel, or under
+     8 px — and that used to happen in silence: a site figure's close-up printed without the bar its
+     overview had, the status said nothing and the checklist kept "✓ 50 Å scale bar". While an export
+     runs (beginExport, 40) each bar left out is noted with its panel, for the export's status line,
+     and the last export's misses stay for the checklist. */
+  let scaleBarMisses = null;
+  let lastScaleBarMiss = null;
+  function scaleBarSpec(target, plan, panel = '') {
     const length = Number(root.querySelector('#gpv-scale-bar').value) || 0;
     if (!length || !target) return null;
-    const perAngstrom = pixelsPerAngstrom(target); if (!perAngstrom) return null;
+    const perAngstrom = pixelsPerAngstrom(target, target === viewer ? null : sceneCentre(figureEntries())); if (!perAngstrom) return null;
     const pixels = length * perAngstrom;
-    if (pixels < 8 || pixels > plan.width * 0.9) return null;
+    if (pixels < 8 || pixels > plan.width * 0.9) {
+      if (scaleBarMisses && !scaleBarMisses.some(miss => miss.panel === panel)) scaleBarMisses.push({ length, panel, small: pixels < 8 });
+      return null;
+    }
     return { length, pixels, width: plan.width, height: plan.height };
+  }
+  /* " · scale bar left out of panel B — 50 Å is wider than the panel; choose a shorter bar", once per
+     export; empty when every panel drew it. Read once, at the export's status line. */
+  function scaleBarMissNote() {
+    const misses = scaleBarMisses || [];
+    scaleBarMisses = null;
+    lastScaleBarMiss = misses.length ? { length: misses[0].length, small: misses.every(miss => miss.small) } : null;
+    if (!misses.length) return '';
+    const panels = misses.map(miss => miss.panel).filter(Boolean);
+    const where = panels.length ? ' of panel' + (panels.length === 1 ? ' ' : 's ') + panels.join(', ') : '';
+    return ' · scale bar left out' + where + ' — ' + lastScaleBarMiss.length + ' Å is ' + (lastScaleBarMiss.small ? 'under 8 px there; choose a longer bar' : 'wider than the panel; choose a shorter bar');
   }
 
   function drawScaleBar(context, bar, scale, palette) {

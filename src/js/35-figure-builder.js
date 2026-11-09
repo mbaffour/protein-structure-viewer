@@ -107,6 +107,7 @@
     const panels = figurePanelsSelected();
     const button = root.querySelector(kind === 'svg' ? '#gpv-builder-svg' : '#gpv-contact-sheet'); const idle = button.textContent;
     if (!panels.length) { announce('Tick at least one saved view for the figure', 'error'); return; }
+    const finish = beginExport(); if (!finish) return;
     const layout = figureLayout(panels.length, panels); const options = layout.options; const palette = figurePalette();
     const done = setBusy('Rendering figure…'); button.disabled = true; button.textContent = 'Rendering…'; await afterPaint();
     const restore = captureViewState();
@@ -122,9 +123,11 @@
         button.textContent = 'Rendering ' + (index + 1) + ' / ' + panels.length + '…'; await afterPaint();
         applyViewState(panels[index], { panels: false });
         const x = (index % layout.columns) * layout.cellWidth; const y = Math.floor(index / layout.columns) * (layout.cellHeight + layout.captionHeight);
-        const uri = await renderPublicationImage(null, layout.cellPlan, kind === 'png');
-        const wanted = options.legends && legendItems('figure') !== null; const bar = options.legends ? scaleBarSpec(exportViewer, layout.cellPlan) : null;
+        /* No corner text in any panel, PNG or SVG: it is a title for one figure, and the PNG printed it
+           once per panel while the SVG never had it. */
+        const uri = await renderPublicationImage(null, layout.cellPlan, kind === 'png', false, false);
         const letter = String.fromCharCode(65 + index); const captionLines = layout.captionLines(panels[index]);
+        const wanted = options.legends && legendItems('figure') !== null; const bar = options.legends ? scaleBarSpec(exportViewer, layout.cellPlan, letter) : null;
         const firstLine = y + layout.cellHeight + Math.round(layout.fontPx * 1.1); const lineStep = Math.round(layout.fontPx * 1.3);
         const textX = x + layout.inset + layout.letterWidth;
         if (kind === 'png') {
@@ -136,7 +139,8 @@
           captionLines.forEach((line, lineIndex) => context.fillText(line, textX, firstLine + lineIndex * lineStep));
         } else {
           parts.push(svgImage(uri, x, y, layout.cellWidth, layout.cellHeight));
-          const overlay = overlaySvg(exportViewer, new Set(displayedEntries().map(entry => entry.id)), layout.cellPlan, false);
+          /* The models this panel's image was drawn with (FC-7). */
+          const overlay = overlaySvg(exportViewer, exportShown || new Set(), layout.cellPlan, false);
           parts.push('<g transform="translate(' + f(x) + ' ' + f(y) + ')">' + overlay + svgFurniture(layout.cellWidth, layout.cellHeight, scale, bar, palette, wanted) + '</g>');
           if (options.letters) parts.push(svgText(x + layout.inset, firstLine, layout.fontPx * 1.3, 700, letter));
           captionLines.forEach((line, lineIndex) => parts.push(svgText(textX, firstLine + lineIndex * lineStep, layout.fontPx, 500, line)));
@@ -153,11 +157,12 @@
       const stem = 'protein-figure-' + panels.length + '-panel' + (panels.length === 1 ? '' : 's');
       if (kind === 'png') downloadBlob(await pngWithDpi(canvas.toDataURL('image/png'), layout.requested.dpi), 'image/png', exportFileName(stem, layout.requested, 'png'));
       else downloadBlob(svgDocument(layout.width, layout.height, palette.paper, parts.join('\n')), 'image/svg+xml', stem + '.svg');
-      outcome = ['Figure ' + kind.toUpperCase() + ' downloaded · ' + panels.length + ' panel' + (panels.length === 1 ? '' : 's') + ' · ' + layout.width + ' × ' + layout.height + ' px' + (layout.requested.dpi ? ' · ' + layout.requested.mm + ' mm wide at ' + layout.requested.dpi + ' dpi' : '') + exportCapText(layout.requested) + shortenedCaptionsNote(layout)];
+      outcome = ['Figure ' + kind.toUpperCase() + ' downloaded · ' + panels.length + ' panel' + (panels.length === 1 ? '' : 's') + ' · ' + layout.width + ' × ' + layout.height + ' px' + (layout.requested.dpi ? ' · ' + layout.requested.mm + ' mm wide at ' + layout.requested.dpi + ' dpi' : '') + exportCapText(layout.requested) + shortenedCaptionsNote(layout) + scaleBarMissNote()];
     } catch (error) {
       outcome = ['Could not render the figure: ' + error.message, 'error'];
     } finally {
       releaseExportViewer(); applyViewState(restore, { panels: false }); done(); button.textContent = idle; renderFigureBuilder();
+      finish();
       if (outcome) announce(...outcome);
     }
   }
@@ -335,9 +340,45 @@
     return '<script>' + text + '<\/script>';
   }
 
+  /* The residues as the viewer reads them, for the report's own copy of each model (L-R1). The report
+     parses the file again with 3Dmol, which leaves out what 03b adds: an mmCIF file's insertion codes
+     (100, 100A and 100B came back as three residues numbered 100) and the HETATM residues bonded into
+     their chain (TPO drawn as a ligand, missing from the strip). Rather than a second copy of that rule
+     the report carries its result, by atom index as adoptEntryAtoms copies it: [index, code] for each
+     atom with a code in an mmCIF model (the PDB reader reads codes itself), and the index of each
+     polymer HETATM atom. A model not yet drawn has no atoms to read, so it is parsed once here, on the
+     export surface, by the same prepareStructureAtoms. */
+  function reportAtomNotes(entry) {
+    let atoms = entry.atoms;
+    let scratch = false;
+    if (!atoms.length) {
+      try {
+        const target = acquireExportViewer(4, 4); scratch = true;
+        atoms = target.addModel(entry.text, entry.format).selectedAtoms({});
+        prepareStructureAtoms(entry, atoms);
+      } catch (error) { atoms = []; }
+    }
+    const icodes = []; const polymerAtoms = [];
+    atoms.forEach((atom, index) => {
+      if (entry.format === 'cif' && insertionCodeOf(atom)) icodes.push([index, insertionCodeOf(atom)]);
+      if (atom.polymerHetatm) polymerAtoms.push(index);
+    });
+    if (scratch) releaseExportViewer();
+    return { ...(icodes.length ? { icodes } : {}), ...(polymerAtoms.length ? { polymerAtoms } : {}) };
+  }
+
   async function downloadReport() {
     const chosen = reportEntries();
     if (!chosen.length) { announce('Load a model before building a report', 'error'); return; }
+    /* A report reads the page's camera, colours and models; during a built figure those are a saved
+       view's, and the export surface it may parse on is the figure's. */
+    const finish = beginExport(); if (!finish) return;
+    try {
+      await buildReport(chosen);
+    } finally { finish(); }
+  }
+
+  async function buildReport(chosen) {
     let library = reportLibraryTag();
     if (root.querySelector('#gpv-report-offline').checked) {
       const done = setBusy('Embedding 3Dmol.js…');
@@ -359,7 +400,8 @@
       hasConfidence: entry.scores.length > 0,
       coords: reportCoordinates(entry),
       shapes: reportShapes(entry),
-      labels: labelRecords.filter(label => label.entryId === entry.id).map(label => ({ text: label.text, chain: label.chain, resi: label.resi, atom: label.atom, ...labelPosition(label), color: label.color || null, size: label.size || 12 }))
+      labels: labelRecords.filter(label => label.entryId === entry.id).map(label => ({ text: label.text, chain: label.chain, resi: label.resi, ...(insertionCodeOf(label) ? { icode: insertionCodeOf(label) } : {}), atom: label.atom, ...labelPosition(label), color: label.color || null, size: label.size || 12 })),
+      ...reportAtomNotes(entry)
     }));
     const chosenNames = new Set(chosen.map(entry => entry.name));
     const contactOwner = contactResult ? entryById(contactResult.entryId) : null;
@@ -371,8 +413,10 @@
          chain, so only maps whose axes are single chains (two chains, or one against itself) go in. */
       contacts: contactOwner && chosenNames.has(contactOwner.name) && contactResult.pairs.size && !contactResult.allChainsA && !contactResult.allChainsB ? {
         model: contactOwner.name, chainA: contactResult.chainA, chainB: contactResult.chainB, cutoff: contactResult.cutoff, mode: contactResult.mode,
-        residuesA: contactResult.rowA.residues.map(atom => atom.resi), residuesB: contactResult.rowB.residues.map(atom => atom.resi),
-        pairs: [...contactResult.pairs.entries()].map(([key, d]) => { const [i, j] = key.split('|').map(Number); return [contactResult.rowA.residues[i].resi, contactResult.rowB.residues[j].resi, Math.round(d * 1000) / 1000]; })
+        /* As the file numbers them — 100A, not 100 — since the report keys the map by these: by number
+           alone 100, 100A and 100B were one row. */
+        residuesA: contactResult.rowA.residues.map(residueNumber), residuesB: contactResult.rowB.residues.map(residueNumber),
+        pairs: [...contactResult.pairs.entries()].map(([key, d]) => { const [i, j] = key.split('|').map(Number); return [residueNumber(contactResult.rowA.residues[i]), residueNumber(contactResult.rowB.residues[j]), Math.round(d * 1000) / 1000]; })
       } : null,
       panels: reportPanelNames().filter(name => chosenNames.has(name)),
       sync: root.querySelector('#gpv-sync-mode').value,
@@ -601,6 +645,14 @@ function show(pane, preserveView) {
   const s = structures[pane.index];
   pane.viewer.removeAllModels(); pane.viewer.removeAllLabels(); pane.viewer.removeAllShapes();
   const m = pane.viewer.addModel(s.text, s.format);
+  /* What the viewer read and 3Dmol's parser does not (03b): mmCIF insertion codes, and the HETATM
+     residues bonded into their chain, which are residues, not ligands. By atom index, before anything
+     reads the atoms. */
+  if (Array.isArray(s.icodes) || Array.isArray(s.polymerAtoms)) {
+    const atoms = m.selectedAtoms({});
+    (s.icodes || []).forEach(([i, code]) => { if (atoms[i]) atoms[i].icode = code; });
+    (s.polymerAtoms || []).forEach(i => { if (atoms[i]) atoms[i].hetflag = false; });
+  }
   if (Array.isArray(s.coords)) m.selectedAtoms({}).forEach((a, i) => { if (s.coords.length >= i * 3 + 3) { a.x = s.coords[i * 3]; a.y = s.coords[i * 3 + 1]; a.z = s.coords[i * 3 + 2]; } });
   spectrumFor(s, m);
   m.setStyle({}, styleSpec(s));
@@ -686,13 +738,14 @@ function addPane(index) {
   strip.addEventListener('pointermove', e => {
     const hit = stripHit(pane, e); if (!hit) return;
     pane.mark = { row: hit.row, index: hit.index };
-    readout.textContent = (hit.chain ? 'Chain ' + hit.chain + ' · ' : '') + (hit.atom.resn || 'RES') + hit.atom.resi + (Number.isFinite(Number(hit.atom.b)) ? ' · pLDDT ' + Number(hit.atom.b).toFixed(1) : '') + ' · click to zoom';
+    readout.textContent = (hit.chain ? 'Chain ' + hit.chain + ' · ' : '') + (hit.atom.resn || 'RES') + hit.atom.resi + icodeOf(hit.atom) + (Number.isFinite(Number(hit.atom.b)) ? ' · pLDDT ' + Number(hit.atom.b).toFixed(1) : '') + ' · click to zoom';
     drawStrip(pane, structures[pane.index]);
   });
   strip.addEventListener('pointerleave', () => { pane.mark = null; readout.textContent = 'Hover the strip to read a residue; click to zoom to it.'; drawStrip(pane, structures[pane.index]); });
   strip.addEventListener('click', e => {
     const hit = stripHit(pane, e); if (!hit) return;
-    const sel = { resi: hit.atom.resi }; if (hit.chain) sel.chain = hit.chain;
+    const code = icodeOf(hit.atom), sel = { resi: hit.atom.resi }; if (hit.chain) sel.chain = hit.chain;
+    if (code) sel.predicate = a => icodeOf(a) === code;
     pane.viewer.zoomTo(sel); pane.viewer.render(); focusPane(pane);
   });
   const bg = backgroundFor(el('background').value); viewer.setBackgroundColor(bg.color, bg.alpha); applyViewStyle(viewer);
@@ -759,7 +812,7 @@ function refreshDomainLegend() {
 function stripRows(m) {
   const byChain = new Map();
   m.selectedAtoms({}).forEach(a => { if (a.hetflag || a.atom !== 'CA') return; const c = a.chain || ''; if (!byChain.has(c)) byChain.set(c, []); byChain.get(c).push(a); });
-  return [...byChain.entries()].map(([chain, atoms]) => ({ chain, atoms: atoms.sort((x, y) => x.resi - y.resi) })).filter(r => r.atoms.length > 1).slice(0, 12);
+  return [...byChain.entries()].map(([chain, atoms]) => ({ chain, atoms: atoms.sort((x, y) => x.resi - y.resi || (icodeOf(x) < icodeOf(y) ? -1 : icodeOf(x) > icodeOf(y) ? 1 : 0)) })).filter(r => r.atoms.length > 1).slice(0, 12);
 }
 /* Sequence spectrum, as the viewer paints it: each chain blue at its first residue to red at its last,
    by the residue's place in the chain (polymer residues, in number and insertion-code order; a chain

@@ -75,18 +75,65 @@
      added between its awaits used to reach its legend but not its image. While that badge is up, an
      import (31 loadFiles) or a fetch waits for it to come down, and says so. */
   const exportBusyLabel = /^(Rendering|Embedding|Saving session)/;
+  /* The badge label alone was not enough: one label for the whole page, and any job started during an
+     export (Align visible, Segment PAE) wrote its own over it and never put it back, so the export
+     stopped counting as one and a dropped file loaded halfway through it. An export that began with
+     beginExport is counted here instead, whatever the badge says; the label test stays for the paths
+     that do not go through beginExport yet. */
+  let exportsInFlight = 0;
+  const exportWaiters = new Set();
   function exportRendering() {
+    if (exportsInFlight > 0) return true;
     const badge = root.querySelector('#gpv-busy');
     return Boolean(badge && !badge.hidden && exportBusyLabel.test(root.querySelector('#gpv-busy-label').textContent));
+  }
+
+  /* Every export renders on the one shared export viewer (31) and most of them move the page through
+     the states they draw — a built figure applies each saved view in turn. A second export started
+     meanwhile emptied the first one's scene between its awaits, shrank the surface under its pngURI,
+     and captured a saved view's colours and camera as "the page to go back to", so both files came
+     out wrong and the screen was left in panel A's state. So: one export at a time. The entry calls
+     this first; null means another is rendering and nothing was started. Otherwise it returns the
+     function that ends this one, to call last, in the export's finally. A running Cycle models would
+     switch the model between the image and its labels (FC-7), so it stops here. */
+  function beginExport() {
+    if (exportRendering()) { announce('An export is still rendering · wait for it to finish, then press again', 'error'); return null; }
+    exportsInFlight += 1;
+    exportShown = null;
+    scaleBarMisses = [];
+    if (cycleTimer) stopCycle();
+    holdExportButtons();
+    let ended = false;
+    return () => {
+      if (ended) return;
+      ended = true;
+      exportsInFlight = Math.max(0, exportsInFlight - 1);
+      /* The held buttons take their states from the page again; the line the export wrote stays. */
+      updateStatus(root.querySelector('#gpv-state').textContent || 'Ready');
+      exportWaiters.forEach(waiter => waiter());
+    };
+  }
+
+  /* The buttons that start an export or snapshot the page, kept disabled while one renders: a restyle
+     during a built figure (each panel is applied in turn) recomputes every button from the page and
+     enabled them all again, still labelled "Rendering 1 / 3…". updateStatus calls this through
+     renderImageButton (33). */
+  const exportButtons = ['#gpv-image', '#gpv-svg', '#gpv-copy-image', '#gpv-contact-sheet', '#gpv-builder-svg', '#gpv-views-zip', '#gpv-compare-image', '#gpv-compare-svg', '#gpv-model-panels', '#gpv-composite', '#gpv-report', '#gpv-save-session'];
+  function holdExportButtons() {
+    if (!exportsInFlight) return;
+    exportButtons.forEach(selector => { const button = root.querySelector(selector); if (button) button.disabled = true; });
   }
 
   function afterExportRenders(what) {
     updateStatus('Export in progress — ' + what + ' will load when it finishes');
     return new Promise(resolve => {
       const badge = root.querySelector('#gpv-busy');
-      const check = () => { if (exportRendering()) return; observer.disconnect(); setTimeout(resolve, 0); };
+      /* The badge can come down before the export's count does (its finally ends the badge first), so
+         the end of an export asks again too. */
+      const check = () => { if (exportRendering()) return; observer.disconnect(); exportWaiters.delete(check); setTimeout(resolve, 0); };
       const observer = new MutationObserver(check);
       observer.observe(badge, { attributes: true, attributeFilter: ['hidden'], childList: true, characterData: true, subtree: true });
+      exportWaiters.add(check);
       check();
     });
   }

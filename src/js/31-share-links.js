@@ -20,7 +20,9 @@
       createdAt: new Date().toISOString(),
       shared: true,
       provenance: provenanceValues(),
-      models: shared.map(entry => ({ name: entry.name, fetch: entry.fetchId, visible: entry.visible, color: entry.color, label: entry.label || '', hiddenChains: entry.hiddenChains || [] })),
+      /* Emphasis and faded chains are part of what the figure shows; applyScene sets both from the
+         record, so a link without them reopened every model solid. */
+      models: shared.map(entry => ({ name: entry.name, fetch: entry.fetchId, visible: entry.visible, color: entry.color, label: entry.label || '', hiddenChains: entry.hiddenChains || [], ...(entry.faded ? { faded: true } : {}), ...(entry.fadedChains && entry.fadedChains.length ? { fadedChains: entry.fadedChains } : {}) })),
       settings,
       ...sceneOverlays(entryId => ids.has(entryId)),
       savedViews: savedViews.filter(view => has(view.activeModel) || (view.visibleModels || []).some(has)).map(view => ({
@@ -83,6 +85,37 @@
     }
   }
 
+  /* The identifier a fetch stores on its entry (40 fetchIdentifier): '1brs', 'AF-P69905-F1'. */
+  function sharedFetchKey(raw) {
+    const target = parseIdentifier(String(raw || ''));
+    if (!target) return null;
+    return target.kind === 'pdb' ? target.code : 'AF-' + target.accession + '-F' + target.fragment;
+  }
+
+  /* A scene with its model names replaced through `rename` (old → new; null for a model that is not
+     on this page, which then matches nothing). Every field that names a model is covered — the
+     records, the settings, and the saved views, which applyViewState resolves by name later. */
+  function renameSceneModels(scene, rename) {
+    const name = value => (typeof value === 'string' && rename.has(value) ? rename.get(value) : value);
+    const names = value => (Array.isArray(value) ? value.map(name).filter(item => item !== null) : value);
+    const keyed = value => (value && typeof value === 'object' ? Object.fromEntries(Object.entries(value).map(([key, item]) => [name(key), item]).filter(([key]) => key !== null)) : value);
+    const record = item => (item && typeof item === 'object' ? { ...item, model: name(item.model) } : item);
+    const pointed = item => (item && typeof item === 'object' && Array.isArray(item.points) ? { ...item, points: item.points.map(record) } : item);
+    const panels = item => ({ ...item, activeModel: name(item.activeModel), referenceModel: name(item.referenceModel), leftModel: name(item.leftModel), rightModel: name(item.rightModel), comparePanels: names(item.comparePanels) });
+    return {
+      ...scene,
+      models: (scene.models || []).map(item => (item && typeof item === 'object' ? { ...item, name: name(item.name) } : item)),
+      settings: scene.settings && typeof scene.settings === 'object' ? panels(scene.settings) : scene.settings,
+      labels: Array.isArray(scene.labels) ? scene.labels.map(record) : scene.labels,
+      selections: Array.isArray(scene.selections) ? scene.selections.map(record) : scene.selections,
+      domains: Array.isArray(scene.domains) ? scene.domains.map(record) : scene.domains,
+      measurements: Array.isArray(scene.measurements) ? scene.measurements.map(pointed) : scene.measurements,
+      annotations: Array.isArray(scene.annotations) ? scene.annotations.map(pointed) : scene.annotations,
+      residueData: scene.residueData && typeof scene.residueData === 'object' ? record(scene.residueData) : scene.residueData,
+      savedViews: Array.isArray(scene.savedViews) ? scene.savedViews.map(view => (view && typeof view === 'object' ? { ...panels(view), visibleModels: names(view.visibleModels), colors: keyed(view.colors), faded: keyed(view.faded) } : view)) : scene.savedViews
+    };
+  }
+
   async function openSharedScene() {
     const match = location.hash.match(/^#scene=([A-Za-z0-9._-]+)$/);
     if (!match) return;
@@ -93,15 +126,34 @@
     const done = setBusy('Opening shared scene…');
     const missing = [];
     try {
+      /* A link names its models as the sender's page did — "1brs.cif (2)" when a local 1brs.cif was
+         open there too — and the recipient's own names differ: the same fetch is "1brs.cif" on an empty
+         page, and a local file called 1brs.cif is someone else's copy, not the entry the link means.
+         So each record is matched by what it was fetched as: a model already on this page from the
+         same fetch (each used once), else the one fetching it now gives, and the scene is renamed to
+         those models before it is applied. Matching by name skipped the fetch for a same-named local
+         file and pinned the link's labels to it, or matched nothing at all. */
+      const rename = new Map(); const claimed = new Set();
       for (const record of scene.models) {
-        if (!record.fetch || structures.some(entry => entry.name === record.name)) continue;
-        try { await fetchIdentifier(String(record.fetch)); }
-        catch (error) { missing.push(String(record.fetch)); }
+        if (!record || typeof record.name !== 'string') continue;
+        const key = record.fetch ? sharedFetchKey(record.fetch) : null;
+        /* A record with no identifier (a hand-written link) keeps its name, as links always matched. */
+        if (!key) continue;
+        let entry = structures.find(item => item.fetchId === key && !claimed.has(item));
+        if (!entry) {
+          try { entry = (await fetchIdentifier(String(record.fetch))).entry; }
+          catch (error) { missing.push(String(record.fetch)); }
+        }
+        if (entry) claimed.add(entry);
+        rename.set(record.name, entry ? entry.name : null);
       }
       pendingScene = null;
-      await applyScene(scene);
+      const result = await applyScene(renameSceneModels(scene, rename));
       const loaded = scene.models.length - missing.length;
-      announce('Opened a shared scene with ' + loaded + ' model' + (loaded === 1 ? '' : 's') + (missing.length ? ' · could not fetch ' + missing.join(', ') : ''), missing.length ? 'error' : 'info');
+      /* applyScene's own count of records that matched no model is kept: before, this line replaced
+         it, and a link whose labels had all been dropped said it had opened. */
+      const unmatched = result && result.unmatched ? ' · ' + result.unmatched + ' record' + (result.unmatched === 1 ? '' : 's') + ' matched no model on this page' : '';
+      announce('Opened a shared scene with ' + loaded + ' model' + (loaded === 1 ? '' : 's') + (missing.length ? ' · could not fetch ' + missing.join(', ') : '') + unmatched, missing.length || unmatched ? 'error' : 'info');
     } catch (error) {
       announce('Could not open the shared scene: ' + error.message, 'error');
     } finally {
@@ -149,7 +201,7 @@
   function sceneDisplayState() {
     return {
       settings: sceneSettings(), provenance: provenanceValues(),
-      models: structures.map(entry => ({ id: entry.id, visible: entry.visible, color: entry.color, label: entry.label || '', hiddenChains: [...(entry.hiddenChains || [])], fadedChains: [...(entry.fadedChains || [])] }))
+      models: structures.map(entry => ({ id: entry.id, visible: entry.visible, color: entry.color, label: entry.label || '', hiddenChains: [...(entry.hiddenChains || [])], fadedChains: [...(entry.fadedChains || [])], faded: entry.faded === true }))
     };
   }
   function applySceneDisplay(display) {
@@ -158,6 +210,8 @@
       const entry = entryById(item.id); if (!entry) return;
       entry.visible = item.visible !== false; entry.color = item.color || entry.color; entry.label = item.label || '';
       entry.hiddenChains = [...(item.hiddenChains || [])]; entry.fadedChains = [...(item.fadedChains || [])];
+      /* applyScene sets emphasis from the scene too, so undoing a restore puts it back with the rest. */
+      entry.faded = item.faded === true;
     });
     const settings = display.settings || {};
     applySceneSettings(settings);
@@ -224,7 +278,7 @@
       const icode = sceneInsertionCode(label);
       const atom = entry.atoms.find(item => sameResidue(item, label.chain, label.resi, icode) && (item.atom === label.atom || item.atom === 'CA'));
       if (!atom) return null;
-      return { entryId: entry.id, chain: label.chain || '', resi: label.resi, icode, atom: label.atom || 'CA', resn: atom.resn, x: atom.x, y: atom.y, z: atom.z, key: residueKey(entry.id, label.chain, label.resi, icode), ...(label.kind === 'domain' || label.kind === 'position' ? { kind: label.kind } : {}), ...(label.offset && Number.isFinite(Number(label.offset.x)) ? { offset: { x: Number(label.offset.x), y: Number(label.offset.y), z: Number(label.offset.z) } } : {}), text: label.text, color: /^#[0-9a-f]{6}$/i.test(label.color || '') ? label.color : undefined, size: labelSizes.some(([value]) => value === Number(label.size)) ? Number(label.size) : undefined };
+      return { entryId: entry.id, chain: label.chain || '', resi: label.resi, icode, atom: label.atom || 'CA', resn: atom.resn, x: atom.x, y: atom.y, z: atom.z, key: residueKey(entry.id, label.chain, label.resi, icode), ...(label.kind === 'domain' || label.kind === 'position' ? { kind: label.kind } : {}), ...(label.offset && Number.isFinite(Number(label.offset.x)) ? { offset: { x: Number(label.offset.x), y: Number(label.offset.y), z: Number(label.offset.z) } } : {}), ...(label.autoPlaced === true ? { autoPlaced: true } : {}), text: label.text, color: /^#[0-9a-f]{6}$/i.test(label.color || '') ? label.color : undefined, size: labelSizes.some(([value]) => value === Number(label.size)) ? Number(label.size) : undefined };
     }).filter(Boolean);
     /* A compared position carries its insertion code as `icode`, the way the scene wrote it: without
        it 100A would be restored onto 100, a different residue in an antibody-numbered model. */
@@ -254,7 +308,10 @@
          default, which is the field left out. */
       const offset = record.offset && ['x', 'y', 'z'].every(axis => Number.isFinite(Number(record.offset[axis]))) ? { x: Number(record.offset.x), y: Number(record.offset.y), z: Number(record.offset.z) } : null;
       const text = typeof record.text === 'string' ? record.text.trim().slice(0, 120) : '';
-      return { id: nextAnnotationId++, type: record.type === 'angle' ? 'angle' : 'distance', points, ...(text ? { text } : {}), ...(record.showValue === false ? { showValue: false } : {}), ...(labelOffsetLength({ offset }) ? { offset } : {}), ...(/^#[0-9a-f]{6}$/i.test(record.color || '') ? { color: record.color } : {}), ...(record.dashed === false ? { dashed: false } : {}) };
+      /* `autoPlaced` marks an offset Separate labels chose, not one dragged by hand: without it a
+         reopened scene's separated labels counted as placed by hand, Separate labels would not move
+         them again and the exports could no longer re-place them at print size. */
+      return { id: nextAnnotationId++, type: record.type === 'angle' ? 'angle' : 'distance', points, ...(text ? { text } : {}), ...(record.showValue === false ? { showValue: false } : {}), ...(labelOffsetLength({ offset }) ? { offset } : {}), ...(labelOffsetLength({ offset }) && record.autoPlaced === true ? { autoPlaced: true } : {}), ...(/^#[0-9a-f]{6}$/i.test(record.color || '') ? { color: record.color } : {}), ...(record.dashed === false ? { dashed: false } : {}) };
     }).filter(Boolean);
     annotationRecords = (scene.annotations || []).map(record => {
       const type = record.type === 'screen' || annotationTools[record.type] ? record.type : null;
@@ -301,6 +358,8 @@
     viewer.render();
     pendingScene = null;
     updateStatus('Scene restored' + (unmatched ? ' · ' + unmatched + ' record' + (unmatched === 1 ? '' : 's') + ' matched no model on this page' : '') + (hashWarnings ? ' · warning: ' + hashWarnings + ' file hash mismatch' + (hashWarnings === 1 ? '' : 'es') : ''));
+    /* For a caller that writes a status line of its own (a share link): what this one said. */
+    return { unmatched, hashWarnings };
   }
 
   function nextPaint() {
@@ -746,6 +805,15 @@
      whole session; releaseExportViewer() only empties and shrinks it. */
   let exportSurface = null;
   let exportViewer = null;
+  /* The ids of the models the export viewer is drawing, from renderPublicationImage until the export
+     releases the viewer. The image, its labels, its legend and its scale bar are one state of the
+     page, but every caller read the shown models again after the render's awaits, and a model cycled
+     to (or shown, or hidden) meanwhile put model B's labels and key on model A's image. */
+  let exportShown = null;
+  /* The models a figure is of: those the export is drawing while one renders, else those on screen. */
+  function figureEntries() {
+    return exportShown ? structures.filter(entry => exportShown.has(entry.id) && entry.model) : displayedEntries().filter(entry => entry.model);
+  }
 
   function acquireExportViewer(width, height) {
     if (!exportSurface) {
@@ -777,6 +845,7 @@
      exports eventually killed the main view. One export context for the whole session
      cannot. */
   function releaseExportViewer() {
+    exportShown = null;
     if (!exportViewer) return;
     exportViewer.removeAllModels(); exportViewer.removeAllLabels(); exportViewer.removeAllShapes();
     if (typeof exportViewer.removeAllSurfaces === 'function') exportViewer.removeAllSurfaces();
@@ -785,8 +854,9 @@
   }
 
   /* strict: the caller can plan again and retry (renderFittedFigure), so a render the browser shrank is
-     refused rather than returned. */
-  async function renderPublicationImage(state = null, dimensions = exportDimensions(), overlays = true, strict = false) {
+     refused rather than returned. screenText: false leaves the corner texts out — a built figure's
+     panels, whose SVG has never carried them, so the PNG printed a corner title once per panel. */
+  async function renderPublicationImage(state = null, dimensions = exportDimensions(), overlays = true, strict = false, screenText = true) {
     const restore = state ? captureViewState() : null;
     if (state) applyViewState(state, { panels: false });
     const target = acquireExportViewer(dimensions.width, dimensions.height);
@@ -811,6 +881,7 @@
     });
     await Promise.all(pending);
     const shownIds = new Set(shown.map(entry => entry.id));
+    exportShown = shownIds;
     /* The camera goes on before the overlays are drawn, because where the labels of this panel
        belong is a question about this panel's projection and there is no projection until the
        camera is set. */
@@ -819,7 +890,7 @@
       if (typeof viewer.getView === 'function' && typeof target.setView === 'function') target.setView(viewer.getView());
     };
     frame();
-    if (overlays) drawOverlays(target, shownIds, dimensions, true, panelLabelPlacement(target, dimensions, shownIds));
+    if (overlays) drawOverlays(target, shownIds, dimensions, screenText !== false, panelLabelPlacement(target, dimensions, shownIds));
     /* zoomTo again afterwards: its lasting effect past setView is the near and far clipping planes,
        and those have always been computed with the overlay shapes in the scene. */
     frame();
@@ -1065,9 +1136,11 @@
     /* Deviation before an alignment is the same case: every residue grey, and a printed key would read
        the grey as "unmatched". */
     if (mode === 'deviation' && !alignmentResults.length) return kind === 'screen' ? { title: 'Cα deviation', items: [['#9ca3af', 'align first', 'Grey until models are aligned — Compare → Align visible']] } : null;
-    if (mode === 'plddt' && !displayedEntries().some(entry => entry.model && entry.scores.length)) {
+    /* A key on an export describes the models that export drew (figureEntries); the screen's, the screen. */
+    const drawn = kind === 'screen' ? displayedEntries().filter(entry => entry.model) : figureEntries();
+    if (mode === 'plddt' && !drawn.some(entry => entry.scores.length)) {
       if (kind !== 'screen') return null;
-      const shownNow = displayedEntries().filter(entry => entry.model);
+      const shownNow = drawn;
       const experimental = shownNow.length && shownNow.every(entry => entry.experimentalMethod || entry.collection === 'RCSB PDB');
       return { title: 'pLDDT', items: [['#9ca3af', 'no pLDDT', 'No pLDDT in ' + (shownNow.length === 1 ? displayName(shownNow[0]) : 'the shown models') + (experimental ? ' (experimental)' : '') + ' — drawn in the model colour']] };
     }
@@ -1075,7 +1148,7 @@
     if (mode === 'deviation') return { title: 'Cα deviation', items: [...deviationBands.map(([, color, label]) => [color, label]), ['#9ca3af', 'unmatched']] };
     if (mode === 'fromresidue') return distanceColourLegend();
     if (mode === 'plddt') return { title: 'pLDDT', items: [['#ff7d45', '<50', 'Very low <50'], ['#ffdb13', '50–70', 'Low 50–70'], ['#65cbf3', '70–90', 'Confident 70–90'], ['#0053d6', '≥90', 'Very high ≥90']] };
-    const shown = displayedEntries().filter(entry => entry.model);
+    const shown = drawn;
     const panelEntries = root.querySelector('#gpv-side-by-side').checked ? comparePanels.map(panel => entryById(panel.entryId)).filter(entry => entry && entry.model) : [];
     if (mode === 'entity') {
       const active = sequenceEntry(); if (!active) return null;
@@ -1088,17 +1161,21 @@
     if (mode === 'chain') {
       /* Polymer atoms only. Ligands, ions and water are drawn in element colours whatever the colour
          scheme is, so a chain holding nothing else would be a key to a colour that is nowhere on the
-         model — and the Composition panel, which lists the same chains, never listed it either. */
-      const chains = [...new Set([...shown, ...panelEntries].flatMap(entry => entry.atoms.filter(atom => !atom.hetflag).map(atom => atom.chain || '')))].sort(compareChains);
+         model — and the Composition panel, which lists the same chains, never listed it either. A
+         chain switched off in Composition is not drawn (03), so it has no swatch either. */
+      const chains = [...new Set([...shown, ...panelEntries].flatMap(entry => { const hidden = entry.hiddenChains || []; return entry.atoms.filter(atom => !atom.hetflag && !hidden.includes(atom.chain || '')).map(atom => atom.chain || ''); }))].sort(compareChains);
       if (!chains.length) return null;
       return { title: 'Chain', ...legendNamesOrCount(chains, chain => [chainColor(chain), chain || '—']) };
     }
     if (mode === 'structure' && kind !== 'comparison') {
-      if (shown.length < 2 || shown.length > 8) return null;
+      /* Past eight models the key used to vanish — on screen, on every export and from the checklist —
+         although models have had twelve distinct colours since 2.52.0 precisely so that nine to twelve
+         can be told apart. A long list is named as chains and entities are: what fits, then '+N more'. */
+      if (shown.length < 2) return null;
       const names = distinguishingNames(shown.map(displayName));
       /* A faded model is drawn as a tint, so its swatch is that tint — the legend shows what is on the page. */
       const background = backgroundSpec(); const paper = background.alpha === 0 ? '#ffffff' : background.color;
-      return { title: 'Model', items: shown.map((entry, index) => [entry.faded ? mixHex(entry.color, paper, 0.72) : entry.color, names[index], displayName(entry) + (entry.faded ? ' · faded' : '')]) };
+      return { title: 'Model', ...legendNamesOrCount(shown, (entry, index) => [entry.faded ? mixHex(entry.color, paper, 0.72) : entry.color, names[index], displayName(entry) + (entry.faded ? ' · faded' : '')]) };
     }
     return null;
   }
@@ -1210,13 +1287,34 @@
   function furnitureLayout(width, height, scale, bar, palette, wanted = legendWanted(), fixedText = false) {
     const margin = Math.round(24 * scale);
     const place = legendPlacement();
-    const available = place.vertical ? Math.max(1, width * 0.45) : width - margin * 2;
+    let available = place.vertical ? Math.max(1, width * 0.45) : width - margin * 2;
     let legendScale = scale; let metrics = null;
-    if (wanted) {
-      metrics = legendMetrics(furnitureMeasure, legendScale, 'figure', place.vertical);
+    const fitWidth = vertical => {
+      metrics = legendMetrics(furnitureMeasure, legendScale, 'figure', vertical);
       if (metrics && metrics.width > available) {
         legendScale = fixedText ? scale : Math.max(scale * 0.55, scale * available / metrics.width);
-        metrics = legendMetrics(furnitureMeasure, legendScale, 'figure', place.vertical, available);
+        metrics = legendMetrics(furnitureMeasure, legendScale, 'figure', vertical, available);
+      }
+    };
+    if (wanted) {
+      fitWidth(place.vertical);
+      /* A stack down one side only ever shrank for width, and was centred however tall it was: nine
+         chains at 85 mm ran off the top and bottom of the panel, title and last entries cut, in the PNG
+         and the SVG alike. Shrink it for height as for width, to the same 55 % floor; a key still too
+         tall goes along the bottom instead, where a long list wraps into rows. */
+      const room = height - margin * 2;
+      if (metrics && place.vertical && metrics.height > room) {
+        /* The swatch and gap are whole pixels, so one proportional step can land a pixel or two over;
+           a few more steps settle it before the floor is taken as the answer. */
+        for (let step = 0; !fixedText && step < 4 && metrics && metrics.height > room && legendScale > scale * 0.55; step += 1) {
+          legendScale = Math.max(scale * 0.55, legendScale * room / metrics.height * (step ? 0.98 : 1));
+          metrics = legendMetrics(furnitureMeasure, legendScale, 'figure', true, available);
+        }
+        if (metrics && metrics.height > room) {
+          place.vertical = false; place.top = false;
+          available = width - margin * 2; legendScale = scale;
+          fitWidth(false);
+        }
       }
     }
     const legendWidth = metrics ? metrics.width : 0;
@@ -1237,7 +1335,8 @@
       const meet = legendRect.left < barRect.right && barRect.left < legendRect.right && legendRect.top < barRect.bottom && barRect.top < legendRect.bottom;
       if (meet) barLift = Math.round(barRect.bottom - legendRect.top + 10 * scale);
     }
-    return { legendX, legendY, legendScale, legendAvailable: available, barLift, vertical: place.vertical, position: place.value };
+    /* legendTop and legendHeight: the key's box in the panel, for anything that must keep inside it. */
+    return { legendX, legendY, legendScale, legendAvailable: available, barLift, vertical: place.vertical, position: place.value, legendTop: metrics ? legendY + metrics.top : null, legendHeight: metrics ? metrics.height : 0 };
   }
   function drawFurniture(context, width, height, scale, bar, palette, wanted = legendWanted(), fixedText = false) {
     const layout = furnitureLayout(width, height, scale, bar, palette, wanted, fixedText);

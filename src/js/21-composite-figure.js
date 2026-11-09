@@ -22,6 +22,8 @@
       const control = root.querySelector(selector); control.disabled = !ok; control.closest('label').title = ok ? '' : 'Not available for the current model';
     });
     root.querySelector('#gpv-composite').disabled = structures.length === 0;
+    /* Runs a tick after every restyle, so a figure rendering panel by panel would enable it again. */
+    holdExportButtons();
   }
 
   /* The heatmap with a colour bar beside it when `font` (its label size in pixels) is given: a PAE
@@ -108,6 +110,7 @@
 
   async function downloadCompositeFigure() {
     const entry = activeEntry(); if (!entry || !entry.model) { announce('Show a model first', 'error'); return; }
+    const finish = beginExport(); if (!finish) return;
     const button = root.querySelector('#gpv-composite');
     const requested = exportDimensions();
     const available = compositeAvailability();
@@ -122,7 +125,10 @@
     const columns = Math.max(1, Math.min(3, Number(root.querySelector('#gpv-composite-columns').value) || 2));
     const count = 1 + Object.values(wanted).filter(Boolean).length;
     const rows = Math.ceil(count / columns);
-    const cell = Math.max(300, Math.floor(requested.width / columns));
+    /* A pixel export keeps its 300 px floor, so a small screen size still gives readable cells. A print
+       size is the width the journal asked for: the floor made a 35 mm figure in two columns 600 px —
+       51 mm at 300 dpi — under a file name and a dpi that still said 35 mm. */
+    const cell = requested.dpi ? Math.max(1, Math.floor(requested.width / columns)) : Math.max(300, Math.floor(requested.width / columns));
     const cellHeight = Math.round(cell / (requested.width / requested.height));
     const palette = figurePalette();
     const done = setBusy('Rendering composite…'); button.disabled = true; button.textContent = 'Rendering…';
@@ -198,10 +204,11 @@
         drawFigureCaption(context, captions, index, x, y + rowHeight, palette);
       });
       downloadBlob(await pngWithDpi(canvas.toDataURL('image/png'), requested.dpi), 'image/png', exportFileName('protein-composite-' + panels.length + '-panel' + (panels.length === 1 ? '' : 's'), requested, 'png'));
-      announce('Composite figure downloaded · ' + panels.length + ' panel' + (panels.length === 1 ? '' : 's') + ' · ' + canvas.width + ' × ' + canvas.height + (requested.dpi ? ' at ' + requested.dpi + ' dpi' : '') + exportCapText(requested) + (grown ? ' · rows made taller to keep the text at ' + (requested.dpi ? requested.points + ' pt' : 'its size') : '') + figureCaptionsCutNote(captions));
+      announce('Composite figure downloaded · ' + panels.length + ' panel' + (panels.length === 1 ? '' : 's') + ' · ' + canvas.width + ' × ' + canvas.height + (requested.dpi ? ' at ' + requested.dpi + ' dpi (' + Math.round(canvas.width / requested.dpi * 25.4) + ' mm wide)' : '') + exportCapText(requested) + (grown ? ' · rows made taller to keep the text at ' + (requested.dpi ? requested.points + ' pt' : 'its size') : '') + figureCaptionsCutNote(captions) + scaleBarMissNote());
     } catch (error) {
       announce('Could not render the composite figure: ' + error.message, 'error');
     } finally {
       releaseExportViewer(); done(); button.textContent = 'Download composite figure'; button.disabled = structures.length === 0;
+      finish();
     }
   }

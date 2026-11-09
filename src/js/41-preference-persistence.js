@@ -351,6 +351,9 @@
     try {
       const scene = JSON.parse(await file.text());
       if (scene.type !== 'protein-viewer-scene') throw new Error('Not a scene file');
+      /* A scene replaces the records, the colours and the camera an export is drawing; it waits, as a
+         file opened or fetched during one does (40). */
+      if (exportRendering()) await afterExportRenders(file.name);
       if (structures.length) await applyScene(scene);
       else { pendingScene = scene; updateStatus('Scene loaded; now add its matching structure files'); }
     } catch (error) {
@@ -414,6 +417,10 @@
       if (measurementActive) { toggleMeasurement(); return; }
       return;
     }
+    /* ← → and C change the model on show; during an export that is the model being drawn, and its
+       image and its labels would describe two different models (an export stops the cycle as it starts). */
+    const stepsModel = event.key === 'ArrowLeft' || event.key === 'ArrowRight' || (event.key.toLowerCase() === 'c' && !event.shiftKey);
+    if (stepsModel && exportRendering()) { event.preventDefault(); updateStatus('An export is rendering · the model on show changes when it has finished'); return; }
     if (event.key === 'ArrowLeft') { event.preventDefault(); stopCycle(); selectRelative(-1); return; }
     if (event.key === 'ArrowRight') { event.preventDefault(); stopCycle(); selectRelative(1); return; }
     const key = event.key.toLowerCase();

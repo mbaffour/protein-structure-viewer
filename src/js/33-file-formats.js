@@ -106,6 +106,9 @@
     const format = imageFormats[imageFormat()];
     const button = root.querySelector('#gpv-image');
     if (!button.dataset.busy) button.textContent = 'Download figure ' + format.label;
+    /* updateStatus calls this after it has set the image buttons from the page; while an export
+       renders they stay off (40). */
+    holdExportButtons();
   }
   /* toBlob falls back to PNG when a browser cannot encode the type asked for; say so rather than
      handing over a .jpg that is really a PNG. */
@@ -113,6 +116,7 @@
     return new Promise(resolve => canvas.toBlob(blob => resolve(blob), mime, quality));
   }
   async function downloadPublicationImage() {
+    const finish = beginExport(); if (!finish) return;
     const key = imageFormat(); const format = imageFormats[key];
     const button = root.querySelector('#gpv-image');
     const planned = exportDimensions();
@@ -122,7 +126,7 @@
     await afterPaint();
     try {
       const { plan, uri } = await renderFittedFigure(planned);
-      const size = plan.width + ' × ' + plan.height + (plan.dpi ? ' at ' + plan.dpi + ' dpi (' + plan.mm + ' mm wide)' : '') + exportCapNote(plan);
+      const size = plan.width + ' × ' + plan.height + (plan.dpi ? ' at ' + plan.dpi + ' dpi (' + plan.mm + ' mm wide)' : '') + exportCapNote(plan) + scaleBarMissNote();
       if (key === 'png') {
         const blob = await pngWithDpi(uri, plan.dpi);
         downloadBlob(blob, 'image/png', exportFileName('protein-publication', plan, 'png'));
@@ -151,7 +155,8 @@
       announce('Could not render the figure ' + format.label + ': ' + error.message, 'error');
     } finally {
       releaseExportViewer(); done();
-      delete button.dataset.busy; button.disabled = structures.length === 0; renderImageButton();
+      delete button.dataset.busy; button.disabled = structures.length === 0;
+      finish(); renderImageButton();
     }
   }
 

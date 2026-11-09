@@ -37,13 +37,24 @@
     return svgLine(a, base, color, width, false) + '<polygon points="' + points + '" fill="' + color + '"/>';
   }
 
-  function svgLabel(position, text, fontSize, color, palette, anchor = 'middle') {
+  /* How a label looks: the same rule the PNG draws it by (labelStyle, 03) — its box the figure's paper
+     (the interface's card only when the background is transparent), its text the ink that reads on
+     that paper, its border the label's own colour, and no box at all in Plain text. The SVG took its
+     text colour from the interface theme and its box from the figure, so in the dark theme every
+     uncoloured label and measurement was white on a white box, and it boxed every label whatever the
+     style. `color` is the record's own colour, or nothing for the default. */
+  function svgLabelLook(color) {
+    const style = labelStyle(null, { color });
+    return { paper: style.backgroundColor, ink: style.fontColor, border: style.borderColor, boxed: style.showBackground !== false };
+  }
+
+  function svgLabel(position, text, fontSize, look, anchor = 'middle') {
     svgMeasure.font = '500 ' + fontSize + 'px ' + svgFont;
     const width = svgMeasure.measureText(text).width + fontSize * 0.9; const height = fontSize * 1.6;
     const x = anchor === 'start' ? position.x : anchor === 'end' ? position.x - width : position.x - width / 2;
     const y = position.y - height / 2;
-    return '<g><rect x="' + f(x) + '" y="' + f(y) + '" width="' + f(width) + '" height="' + f(height) + '" rx="' + f(fontSize * 0.3) + '" fill="' + palette.paper + '" fill-opacity="0.88" stroke="' + color + '" stroke-width="1"/>'
-      + '<text x="' + f(x + width / 2) + '" y="' + f(position.y) + '" text-anchor="middle" dominant-baseline="central" font-family="' + svgFont + '" font-size="' + f(fontSize) + '" font-weight="500" fill="' + color + '">' + svgEscape(text) + '</text></g>';
+    return '<g>' + (look.boxed ? '<rect x="' + f(x) + '" y="' + f(y) + '" width="' + f(width) + '" height="' + f(height) + '" rx="' + f(fontSize * 0.3) + '" fill="' + look.paper + '" fill-opacity="0.88" stroke="' + look.border + '" stroke-width="1"/>' : '')
+      + '<text x="' + f(x + width / 2) + '" y="' + f(position.y) + '" text-anchor="middle" dominant-baseline="central" font-family="' + svgFont + '" font-size="' + f(fontSize) + '" font-weight="500" fill="' + look.ink + '">' + svgEscape(text) + '</text></g>';
   }
 
   /* The same rows legendMetrics hands the canvas drawer, so a PNG and an SVG of one figure wrap
@@ -71,19 +82,18 @@
     return parts.join('');
   }
 
-  function svgScreenText(record, dimensions, scale, palette) {
+  function svgScreenText(record, dimensions, scale) {
     const fontSize = 16 * record.size * scale; const margin = 16 * scale;
     const right = record.corner.endsWith('right'); const bottom = record.corner.startsWith('bottom');
     const x = Math.max(0, Math.min(dimensions.width, (right ? dimensions.width - margin : margin) + (record.dx || 0) * scale));
     const y = Math.max(0, Math.min(dimensions.height, (bottom ? dimensions.height - margin : margin) + (record.dy || 0) * scale)) + (bottom ? -fontSize * 0.8 : fontSize * 0.8);
-    return svgLabel({ x, y }, record.text, fontSize, record.color, palette, right ? 'end' : 'start');
+    return svgLabel({ x, y }, record.text, fontSize, svgLabelLook(record.color), right ? 'end' : 'start');
   }
 
   function overlaySvg(target, shownIds, dimensions, includeScreenText) {
     const project = projectorFor(target);
     const scale = dimensions.textScale || Math.max(1, dimensions.width / 600);
-    const palette = figurePalette(); const byId = entriesById(); const parts = [];
-    const ink = themeColor('--card-foreground', '#111827');
+    const byId = entriesById(); const parts = [];
     /* The same resolver the PNG of this panel draws with, run on the same viewer and the same plan,
        so the two files place every label on the same pixel. */
     const placement = panelLabelPlacement(target, dimensions, shownIds);
@@ -91,7 +101,7 @@
       const anchor = labelAnchor(label, byId);
       const position = (placement && placement.get(label)) || shiftBy(anchor, label.offset);
       if (leaderLength(anchor, position) > leaderMinimum) parts.push(svgLine(project(anchor), project(position), label.color || '#94a3b8', Math.max(1, scale), false));
-      parts.push(svgLabel(project(position), label.text, (label.size || 12) * scale, label.color || ink, palette));
+      parts.push(svgLabel(project(position), label.text, (label.size || 12) * scale, svgLabelLook(label.color)));
     });
     measurementRecords.forEach(record => {
       if (!record.points.every(point => shownIds.has(point.entryId))) return;
@@ -110,10 +120,10 @@
          projected ends, which a perspective camera puts a fraction of a pixel from the projected
          midpoint. */
       const at = placed || labelOffsetLength(record) ? project(position) : record.type === 'angle' ? screen[1] : { x: (screen[0].x + screen[1].x) / 2, y: (screen[0].y + screen[1].y) / 2 };
-      parts.push(svgLabel(at, measurementLabelText(record), 12 * scale, measurementColor(record) || ink, palette));
+      parts.push(svgLabel(at, measurementLabelText(record), 12 * scale, svgLabelLook(measurementColor(record))));
     });
     annotationRecords.forEach(record => {
-      if (record.type === 'screen') { if (includeScreenText) parts.push(svgScreenText(record, dimensions, scale, palette)); return; }
+      if (record.type === 'screen') { if (includeScreenText) parts.push(svgScreenText(record, dimensions, scale)); return; }
       if (!record.points.every(point => shownIds.has(point.entryId))) return;
       const points = record.points.map(resolvePoint); if (points.some(point => !point)) return;
       const screen = points.map(project); const fontSize = 13 * record.size * scale; const stroke = Math.max(1.5, 2 * record.size * scale);
@@ -124,10 +134,10 @@
         const anchor = project(calloutAnchor(points[0], record));
         parts.push(svgLine(screen[0], anchor, record.color, Math.max(1, stroke / 2), record.dashed));
         parts.push('<circle cx="' + f(screen[0].x) + '" cy="' + f(screen[0].y) + '" r="' + f(pixelRadius(target, project, points[0], 0.45 * record.size)) + '" fill="' + record.color + '"/>');
-        parts.push(svgLabel(anchor, record.text || pointName(record.points[0]), fontSize, record.color, palette));
+        parts.push(svgLabel(anchor, record.text || pointName(record.points[0]), fontSize, svgLabelLook(record.color)));
         return;
       }
-      if (record.text) parts.push(svgLabel(project(shiftBy(points.length > 1 ? midpoint(points[0], points[1]) : points[0], record.offset)), record.text, fontSize, record.color, palette));
+      if (record.text) parts.push(svgLabel(project(shiftBy(points.length > 1 ? midpoint(points[0], points[1]) : points[0], record.offset)), record.text, fontSize, svgLabelLook(record.color)));
     });
     return parts.join('\n');
   }
@@ -142,6 +152,7 @@
   }
 
   async function downloadPublicationSvg() {
+    const finish = beginExport(); if (!finish) return;
     const button = root.querySelector('#gpv-svg');
     const requested = exportDimensions();
     const done = setBusy('Rendering SVG…');
@@ -150,18 +161,20 @@
     try {
       const uri = await renderPublicationImage(null, requested, false);
       const target = exportViewer;
-      const overlay = overlaySvg(target, new Set(displayedEntries().map(entry => entry.id)), requested, true);
+      /* The models the image was drawn with, not the ones shown now (FC-7). */
+      const overlay = overlaySvg(target, exportShown || new Set(), requested, true);
       const scale = figureScale(requested);
       const legend = svgFurniture(requested.width, requested.height, scale, scaleBarSpec(target, requested), figurePalette());
       const background = backgroundSpec();
       const svg = svgDocument(requested.width, requested.height, background.alpha ? background.color : null, svgImage(uri, 0, 0, requested.width, requested.height) + '\n<g id="overlay">\n' + overlay + '\n' + legend + '</g>');
       downloadBlob(svg, 'image/svg+xml', 'protein-figure-' + requested.width + 'x' + requested.height + '.svg');
-      announce('Figure SVG downloaded · raster molecule, vector labels');
+      announce('Figure SVG downloaded · raster molecule, vector labels' + scaleBarMissNote());
     } catch (error) {
       announce('Could not build the SVG: ' + error.message, 'error');
     } finally {
       releaseExportViewer(); done();
       button.textContent = 'Download figure SVG'; button.disabled = structures.length === 0;
+      finish();
     }
   }
 
@@ -179,6 +192,8 @@
     let cellWidth = requested.width; let cellHeight = requested.height;
     if (fitWidth) { cellWidth = Math.floor(requested.width / columns); cellHeight = Math.max(1, Math.floor(cellWidth * requested.height / Math.max(1, requested.width))); }
     const maxPixels = 24000000;
+    /* The width each panel was asked to print at, before the cap below. */
+    const askedCellWidth = cellWidth;
     if (cellWidth * cellHeight * panes.length > maxPixels) {
       const correction = Math.sqrt(maxPixels / (cellWidth * cellHeight * panes.length));
       cellWidth = Math.floor(cellWidth * correction); cellHeight = Math.floor(cellHeight * correction);
@@ -193,17 +208,23 @@
     const height = rows * (cellHeight + captions.height) + footer;
     /* The centre line of the footer's last row; a legend that wrapped stacks its rows above it. */
     const footerY = height - Math.round(fontPx * 0.6) - (legend ? legend.swatch : Math.round(fontPx * 0.65));
-    return { requested, columns, rows, cellWidth, cellHeight, cellPlan, captions, fontPx, textScale, inset, title, legend, footer, footerY, width, height };
+    return { requested, columns, rows, cellWidth, cellHeight, askedCellWidth, cellPlan, captions, fontPx, textScale, inset, title, legend, footer, footerY, width, height };
   }
   /* "W × H at D dpi (M mm wide)": the whole figure, which for a comparison is columns × the chosen size. */
   function panelFigureSize(layout) {
     const plan = layout.requested;
-    return layout.width + ' × ' + layout.height + (plan.dpi ? ' at ' + plan.dpi + ' dpi (' + Math.round(layout.width / plan.dpi * 25.4) + ' mm wide)' : '') + exportCapText(plan) + figureCaptionsCutNote(layout.captions);
+    /* The 24-megapixel cap above shrinks every cell and keeps the dpi, so each panel prints narrower
+       than the width chosen for it — the overall width alone did not say so (178 mm asked, three panels
+       of 147 mm). */
+    const shrunk = plan.dpi && layout.askedCellWidth && layout.cellWidth < layout.askedCellWidth
+      ? ' · each panel ' + Math.round(layout.cellWidth / plan.dpi * 25.4) + ' mm wide, not ' + Math.round(layout.askedCellWidth / plan.dpi * 25.4) + ', to stay under 24 megapixels' : '';
+    return layout.width + ' × ' + layout.height + (plan.dpi ? ' at ' + plan.dpi + ' dpi (' + Math.round(layout.width / plan.dpi * 25.4) + ' mm wide)' : '') + shrunk + exportCapText(plan) + figureCaptionsCutNote(layout.captions);
   }
 
   async function downloadComparisonSvg() {
     const panes = comparisonPanes();
     if (panes.length < 2) { announce('Turn on the synchronized multi-view with at least one panel first', 'error'); return; }
+    const finish = beginExport(); if (!finish) return;
     const button = root.querySelector('#gpv-compare-svg');
     const layout = panelFigureLayout(panes); const palette = figurePalette();
     const { columns, cellWidth, cellHeight, captions, width, height } = layout;
@@ -238,6 +259,7 @@
       releaseExportViewer(); done();
       button.textContent = 'Download comparison SVG';
       button.disabled = !(root.querySelector('#gpv-side-by-side').checked && comparePanels.length);
+      finish();
     }
   }
 
@@ -262,7 +284,7 @@
     const active = activeEntry();
     const shown = displayedEntries().filter(entry => entry.model);
     const entries = shown.length >= 2 ? shown : structures.filter(entry => active && entry.collection === active.collection);
-    if (entries.length < 2) { announce('Load at least two models (or show two) to make a per-model figure', 'error'); return; }
+    if (entries.length < 2) { announce('Show two models (or open two from one source) to make a per-model figure', 'error'); return; }
     const failures = [];
     entries.forEach(entry => { try { materializeEntry(entry); } catch (error) { failures.push(entry.name); } });
     const ready = entries.filter(entry => entry.model);
@@ -275,6 +297,7 @@
   }
 
   async function renderPanelFigure(panes, button, options) {
+    const finish = beginExport(); if (!finish) return;
     const layout = panelFigureLayout(panes, options.fitWidth === true);
     const { requested, columns, cellWidth, cellHeight, captions } = layout;
     const palette = figurePalette();
@@ -314,6 +337,7 @@
       done();
       button.textContent = options.idle;
       button.disabled = options.disabledAfter();
+      finish();
     }
   }
 
