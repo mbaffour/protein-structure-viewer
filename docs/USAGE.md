@@ -1054,6 +1054,31 @@ exactly as on screen, in the SVG as in the PNG, PDF and TIFF. Open the file in
 Illustrator, Inkscape, or Affinity to restyle type, recolour arrows, or move a label without
 re-rendering.
 
+**Legend key.** **Download legend key** saves the figure's colour key on its own: a small image of the
+title and every entry with its exact swatch colour and its name, as the legend on the figure draws them
+(Figure labels renames included), in the figure font, at the figure's text size, in its ink on its
+background — a transparent figure gives a transparent key. It writes the format chosen in **Figure
+format** (PNG and TIFF with the resolution, PDF at its physical size, JPEG, WebP), named
+`<figure title>-legend-key.png` (`protein-figure-legend-key.png` without a title). **Download legend key
+SVG** writes the same key with editable text. The key is drawn by the code that draws the legend on
+every exported figure, so the two match swatch for swatch and letter for letter, with two differences.
+The key is always a single row wrapping at its own width — the figure's width, or 1200 px of
+screen-size text if that is narrower — where the figure's legend may be shrunk to fit a panel or
+stacked down a side. On a transparent background the key has no panel behind it, where the figure's
+legend keeps its light panel to stay legible over the molecule. The box under the buttons
+says the same key in words, ready to paste into the figure legend and edit — `Model: model_a (purple);
+model_b (cyan); model_c (orange).` or `pLDDT: <50 (orange); 50–70 (yellow); 70–90 (light blue); ≥90
+(dark blue).` Each colour is named by the nearest of a few dozen colour words measured perceptually
+(CIEDE2000), and the hex code is added only where two entries would otherwise share a word; a long chain
+key that stops at `+N more` is written out in full. **Copy legend text** copies it. The image, the SVG
+and the text are drawn at the moment you ask, so they follow the colour scheme, the models shown, their
+colours and the Figure labels — there is no stored copy to go stale. A colour scheme with nothing to
+name (element colouring, a single model in its own colour, amino-acid colours) greys the buttons out
+and the box says why. **Download all views (ZIP)** puts the key in the ZIP as `legend-key.png` and
+`legend-key.svg` — one pair per distinct key, named after the first view that uses it, when views are
+coloured differently. The figure builder and the composite figure draw each panel's legend from the same
+key, so they need no separate file.
+
 **Video.** Record a 5, 10, or 15 second WebM of the structure spinning. Chrome and Firefox support
 this; Safari does not, and the viewer will say so.
 

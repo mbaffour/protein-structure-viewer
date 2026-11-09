@@ -667,6 +667,28 @@ group('tutorial 4 — exporting cleanly');
       await ui.choose('gpv-legend-position', 'Bottom left');
       await ui.press('Edit figure labels', 500);
     });
+    await step('4.5b the legend key downloads as the figure format and as SVG, and its text names the colours in words', async () => {
+      await ui.tab('appearance');
+      const mode = await ui.page.inputValue('#gpv-color-mode');
+      try {
+        await ui.choose('gpv-color-mode', 'Per structure');
+        await ui.tab('publish');
+        if (await ui.offers('Download legend key')) throw new Error('Download legend key is offered for one model in its own colour, which has no key');
+        await ui.tab('appearance');
+        await ui.choose('gpv-color-mode', 'pLDDT confidence');
+        await ui.tab('publish');
+        const png = await ui.download('Download legend key');
+        if (png.slice(1, 4).toString() !== 'PNG') throw new Error('the legend key is not a PNG');
+        const svg = (await ui.download('Download legend key SVG')).toString();
+        if (!/<svg/i.test(svg.slice(0, 400)) || !/50–70/.test(svg)) throw new Error('the legend key SVG does not carry the pLDDT bands');
+        const text = await ui.page.inputValue('#gpv-legend-key-text');
+        if (text !== 'pLDDT: <50 (orange); 50–70 (yellow); 70–90 (light blue); ≥90 (dark blue).') throw new Error('Legend text starter reads: ' + text);
+        if (!(await ui.offers('Copy legend text'))) throw new Error('Copy legend text is greyed out with a key on screen');
+        console.log('       ' + (png.length / 1024).toFixed(1) + ' KB key · ' + text);
+      } finally {
+        await ui.tab('appearance'); await ui.page.selectOption('#gpv-color-mode', mode); await ui.page.waitForTimeout(300); await ui.tab('publish');
+      }
+    });
     await step('4.6 Label style offers Plain text and Separate labels is there', async () => {
       await ui.tab('annotate');
       await ui.choose('gpv-label-style', 'Plain text');

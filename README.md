@@ -178,6 +178,8 @@ into the file (or fixed pixel sizes), text sized in points, a journal font, a sc
 synchronized panel, every saved view as a ZIP of print-size PNGs, SVG variants of both with labels, arrows, captions, and the colour legend
 (pLDDT bands, chains, or models) as editable vector layers, and 5-, 10-, or 15-second WebM spin-video export. Reusable named views with
 captions, multi-panel contact-sheet export, and caption-text export.
+A one-click legend key for every figure: the colour key on its own as an image in the figure's format, font and text size (and as SVG,
+and in the views ZIP), with a sentence naming each entry's colour in words to paste into the figure legend.
 Self-contained interactive HTML reports (each panel with a hover-to-read, click-to-zoom sequence
 strip), share links that reopen models fetched by identifier
 with the same camera, colours, labels, and annotations, and a figure-legend writer that drafts the

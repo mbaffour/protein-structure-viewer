@@ -7108,6 +7108,162 @@ await step('all saved views download as a ZIP of print-size PNGs', async () => {
   if (!zip.includes('captions.txt') || !zip.includes('01-A-')) throw new Error('ZIP lacks expected entries');
   console.log('       views ZIP ' + (zip.length / 1024).toFixed(0) + ' KB');
 });
+/* The legend key (34a): the figure's colour key as a standalone image and as a sentence. Each step
+   runs on a page of its own with the three fixture models, so the colour scheme, the models shown
+   and their colours are the defaults whatever earlier steps left on the main page; closing that page
+   in the step's `finally` is what restores everything it changed. */
+const keyDownload = async (fresh, selector) => {
+  const download = fresh.waitForEvent('download', { timeout: 60000 }); await fresh.click(selector);
+  const file = await download;
+  return { name: file.suggestedFilename(), bytes: await readFile(await file.path()) };
+};
+const keySvgParts = svg => {
+  const decode = text => text.replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '"').replace(/&#39;/g, "'").replace(/&amp;/g, '&');
+  return {
+    width: Number((svg.match(/<svg[^>]*\swidth="([\d.]+)"/) || [])[1]),
+    height: Number((svg.match(/<svg[^>]*\sheight="([\d.]+)"/) || [])[1]),
+    /* Swatches only: the legend's panel rect carries fill-opacity and the background rect no x. */
+    swatches: [...svg.matchAll(/<rect x="([-\d.]+)" y="([-\d.]+)" width="([\d.]+)" height="[\d.]+" fill="(#[0-9a-fA-F]{6})"\/>/g)].map(match => ({ x: Number(match[1]), y: Number(match[2]), size: Number(match[3]), fill: match[4].toLowerCase() })),
+    texts: [...svg.matchAll(/<text[^>]*>([^<]*)<\/text>/g)].map(match => decode(match[1]))
+  };
+};
+/* The colour of the PNG at each point, read back through a canvas in the page. */
+const keyPixels = (fresh, bytes, points) => fresh.evaluate(async ([b64, at]) => {
+  const bitmap = await createImageBitmap(await (await fetch('data:image/png;base64,' + b64)).blob(), { colorSpaceConversion: 'none' });
+  const canvas = document.createElement('canvas'); canvas.width = bitmap.width; canvas.height = bitmap.height;
+  const context = canvas.getContext('2d'); context.drawImage(bitmap, 0, 0);
+  return at.map(([x, y]) => [...context.getImageData(Math.round(x), Math.round(y), 1, 1).data.slice(0, 3)]);
+}, [bytes.toString('base64'), points]);
+const hexChannels = hex => [1, 3, 5].map(offset => parseInt(hex.slice(offset, offset + 2), 16));
+/* Both files of the current key, checked against legendItems('figure'): the SVG lists the title and
+   every entry's name in order with its swatch in that entry's colour, the PNG is the SVG's size, at
+   the figure's dpi, with each swatch's centre pixel that colour. */
+const checkLegendKeyFiles = async (fresh, dpi) => {
+  const legend = await fresh.evaluate(() => window.__viewerDebug.legendItems('figure'));
+  const png = await keyDownload(fresh, '#gpv-legend-key');
+  const svg = await keyDownload(fresh, '#gpv-legend-key-svg');
+  if (!/-legend-key\.png$/.test(png.name) || !/-legend-key\.svg$/.test(svg.name)) throw new Error('file names: ' + png.name + ', ' + svg.name);
+  if (png.bytes.toString('latin1', 1, 4) !== 'PNG') throw new Error('the key is not a PNG');
+  const size = pngSize(png.bytes);
+  if (size.dpi !== dpi) throw new Error('the key PNG states ' + size.dpi + ' dpi, not the figure plan\'s ' + dpi);
+  const parts = keySvgParts(svg.bytes.toString('utf8'));
+  if (size.width !== parts.width || size.height !== parts.height) throw new Error('PNG ' + size.width + ' × ' + size.height + ' against SVG ' + parts.width + ' × ' + parts.height);
+  const texts = [legend.title, ...legend.items.map(item => item[1])];
+  if (JSON.stringify(parts.texts) !== JSON.stringify(texts)) throw new Error('SVG text ' + JSON.stringify(parts.texts) + ', key ' + JSON.stringify(texts));
+  const fills = legend.items.map(item => item[0].toLowerCase());
+  if (JSON.stringify(parts.swatches.map(swatch => swatch.fill)) !== JSON.stringify(fills)) throw new Error('SVG swatches ' + JSON.stringify(parts.swatches.map(swatch => swatch.fill)) + ', key ' + JSON.stringify(fills));
+  const pixels = await keyPixels(fresh, png.bytes, parts.swatches.map(swatch => [swatch.x + swatch.size / 2, swatch.y + swatch.size / 2]));
+  pixels.forEach((rgb, index) => {
+    if (hexChannels(fills[index]).some((channel, i) => Math.abs(channel - rgb[i]) > 2)) throw new Error('PNG swatch ' + (index + 1) + ' is rgb(' + rgb.join(', ') + '), the key says ' + fills[index]);
+  });
+  return { legend, size, parts };
+};
+
+await step('the legend key downloads as PNG and SVG with every entry\'s name and colour, and follows a model renamed in Figure labels', async () => {
+  const fresh = await freshViewer(models);
+  try {
+    await fresh.click('[data-gpv-tab="appearance"]'); await fresh.selectOption('#gpv-color-mode', 'structure'); await fresh.waitForTimeout(400);
+    await fresh.click('[data-gpv-tab="publish"]');
+    await fresh.selectOption('#gpv-export-mode', 'print'); await fresh.selectOption('#gpv-print-width', '85'); await fresh.selectOption('#gpv-print-dpi', '300'); await fresh.selectOption('#gpv-image-format', 'png'); await fresh.waitForTimeout(300);
+    const setup = await fresh.evaluate(() => window.__viewerDebug.legendItems('figure'));
+    if (!setup || setup.title !== 'Model' || setup.items.length !== 3) throw new Error('setup: the key is ' + JSON.stringify(setup));
+    const first = await checkLegendKeyFiles(fresh, 300);
+    /* Rename the first model in Figure labels: both files carry the new name, not the old one. */
+    await fresh.click('#gpv-labels-edit'); await fresh.waitForTimeout(300);
+    const old = first.legend.items[0][1];
+    const field = fresh.locator('#gpv-labels-rows input[data-gpv-label-key="structure|' + old + '"]');
+    await field.fill('Wild-type apo model'); await field.press('Tab'); await fresh.waitForTimeout(400);
+    const second = await checkLegendKeyFiles(fresh, 300);
+    if (second.legend.items[0][1] !== 'Wild-type apo model') throw new Error('the rename did not reach the key: ' + JSON.stringify(second.legend.items[0]));
+    if (second.parts.texts.includes(old)) throw new Error('the SVG still names ' + old);
+    /* A longer name makes a wider row, or a second one where the row would pass the figure's width. */
+    if (second.size.width === first.size.width && second.size.height === first.size.height) throw new Error('the PNG kept its size, ' + first.size.width + ' × ' + first.size.height + ', for a much longer name');
+    console.log('       ' + first.size.width + ' × ' + first.size.height + ' at 300 dpi → ' + second.size.width + ' × ' + second.size.height + ' renamed · ' + second.parts.texts.join(' | '));
+  } finally { await fresh.close(); }
+});
+await step('the views ZIP carries legend-key.png and legend-key.svg naming the models', async () => {
+  const fresh = await freshViewer([models[0], models[1]]);
+  try {
+    await fresh.click('[data-gpv-tab="appearance"]'); await fresh.selectOption('#gpv-color-mode', 'structure'); await fresh.waitForTimeout(400);
+    await fresh.click('[data-gpv-tab="publish"]');
+    await fresh.selectOption('#gpv-export-mode', 'pixels'); await fresh.selectOption('#gpv-export-size', '1200x1200'); await fresh.selectOption('#gpv-export-scale', '1'); await fresh.waitForTimeout(300);
+    await fresh.fill('#gpv-view-name', 'Overlay'); await fresh.click('#gpv-save-view'); await fresh.waitForTimeout(300);
+    const legend = await fresh.evaluate(() => window.__viewerDebug.legendItems('figure'));
+    const zip = await freshDownload(fresh, '#gpv-views-zip', 180000);
+    const inside = await fresh.evaluate(async b64 => {
+      const archive = await JSZip.loadAsync(b64, { base64: true });
+      const read = async (name, type) => (archive.file(name) ? archive.file(name).async(type) : null);
+      return { names: Object.keys(archive.files), svg: await read('legend-key.svg', 'string'), png: await read('legend-key.png', 'base64') };
+    }, zip.toString('base64'));
+    if (!inside.names.includes('legend-key.png') || !inside.names.includes('legend-key.svg')) throw new Error('the ZIP holds ' + JSON.stringify(inside.names));
+    const png = Buffer.from(inside.png, 'base64');
+    if (png.toString('latin1', 1, 4) !== 'PNG') throw new Error('legend-key.png is not a PNG');
+    const parts = keySvgParts(inside.svg);
+    const texts = [legend.title, ...legend.items.map(item => item[1])];
+    if (JSON.stringify(parts.texts) !== JSON.stringify(texts)) throw new Error('legend-key.svg reads ' + JSON.stringify(parts.texts) + ', the key ' + JSON.stringify(texts));
+    if (JSON.stringify(parts.swatches.map(swatch => swatch.fill)) !== JSON.stringify(legend.items.map(item => item[0].toLowerCase()))) throw new Error('legend-key.svg swatches ' + JSON.stringify(parts.swatches.map(swatch => swatch.fill)));
+    const size = pngSize(png);
+    if (size.width !== parts.width || size.height !== parts.height) throw new Error('legend-key.png is ' + size.width + ' × ' + size.height + ', the SVG ' + parts.width + ' × ' + parts.height);
+    /* The status is written after the download, once the on-screen view is put back. */
+    await fresh.waitForFunction(() => /with the legend key/.test(document.querySelector('#gpv-state').textContent), null, { timeout: 15000 }).catch(() => {});
+    if (!/with the legend key/.test(await freshStatus(fresh))) throw new Error('status: ' + await freshStatus(fresh));
+    console.log('       ' + inside.names.join(', '));
+  } finally { await fresh.close(); }
+});
+await step('the legend text starter names each colour in words and follows a rename and a colour change', async () => {
+  /* The words first, on colours whose names are not in doubt: the default model palette, pLDDT's
+     dark blue and Okabe–Ito's vermilion, which must not come out as plain blue or red. */
+  const fresh = await freshViewer(models);
+  try {
+    const words = await fresh.evaluate(() => ['#8b5cf6', '#06b6d4', '#f97316', '#0053d6', '#65cbf3', '#d55e00', '#009e73', '#9ca3af'].map(window.__viewerDebug.colourName));
+    if (JSON.stringify(words) !== JSON.stringify(['purple', 'cyan', 'orange', 'dark blue', 'light blue', 'dark orange', 'green', 'grey'])) throw new Error('colour words: ' + JSON.stringify(words));
+    await fresh.click('[data-gpv-tab="appearance"]'); await fresh.selectOption('#gpv-color-mode', 'structure'); await fresh.waitForTimeout(400);
+    await fresh.click('[data-gpv-tab="publish"]');
+    const text = () => fresh.inputValue('#gpv-legend-key-text');
+    const legend = await fresh.evaluate(() => window.__viewerDebug.legendItems('figure'));
+    const [a, b, c] = legend.items.map(item => item[1]);
+    const opening = await text();
+    if (opening !== 'Model: ' + a + ' (purple); ' + b + ' (cyan); ' + c + ' (orange).') throw new Error('the text starter reads: ' + opening);
+    if (/#/.test(opening)) throw new Error('hex codes where every word differs: ' + opening);
+    /* A rename in Figure labels reaches the sentence without pressing anything. */
+    await fresh.click('#gpv-labels-edit'); await fresh.waitForTimeout(300);
+    const field = fresh.locator('#gpv-labels-rows input[data-gpv-label-key="structure|' + a + '"]');
+    await field.fill('Apo'); await field.press('Tab'); await fresh.waitForTimeout(400);
+    const renamed = await text();
+    if (!renamed.startsWith('Model: Apo (purple); ') || renamed.includes(a + ' (')) throw new Error('after the rename: ' + renamed);
+    /* A new model colour changes its word; two models in shades of one word get their hex codes. */
+    await fresh.click('[data-gpv-tab="models"]');
+    const names = await fresh.evaluate(() => window.__viewerDebug.displayedEntries().map(entry => entry.label || entry.name));
+    await fresh.locator('#gpv-list input[type="color"][aria-label="Colour for ' + names[1] + '"]').fill('#14b8a6'); await fresh.waitForTimeout(400);
+    const teal = await text();
+    if (!teal.includes(b + ' (teal)')) throw new Error('after recolouring ' + b + ' teal: ' + teal);
+    await fresh.locator('#gpv-list input[type="color"][aria-label="Colour for ' + names[2] + '"]').fill('#0d9488'); await fresh.waitForTimeout(400);
+    const shared = await text();
+    if (!shared.includes(b + ' (teal, #14b8a6)') || !shared.includes(c + ' (teal, #0d9488)') || !shared.includes('Apo (purple)')) throw new Error('two teals: ' + shared);
+    console.log('       ' + opening + ' → ' + shared);
+  } finally { await fresh.close(); }
+});
+await step('the legend key is greyed out under element colouring and says why', async () => {
+  const fresh = await freshViewer(models);
+  try {
+    await fresh.click('[data-gpv-tab="appearance"]'); await fresh.selectOption('#gpv-color-mode', 'element'); await fresh.waitForTimeout(400);
+    await fresh.click('[data-gpv-tab="publish"]');
+    for (const selector of ['#gpv-legend-key', '#gpv-legend-key-svg', '#gpv-legend-key-copy']) if (!(await fresh.locator(selector).isDisabled())) throw new Error(selector + ' is enabled under element colouring');
+    const tip = await fresh.getAttribute('#gpv-legend-key', 'data-tooltip');
+    if (!/^No legend key: Element colouring has no colour key/.test(tip || '')) throw new Error('tooltip: ' + tip);
+    const box = await fresh.evaluate(() => ({ value: document.querySelector('#gpv-legend-key-text').value, placeholder: document.querySelector('#gpv-legend-key-text').placeholder }));
+    if (box.value || !/Element colouring has no colour key/.test(box.placeholder)) throw new Error('the text box: ' + JSON.stringify(box));
+    /* Back to a scheme with a key: enabled again, with the button's own tooltip back. */
+    await fresh.click('[data-gpv-tab="appearance"]'); await fresh.selectOption('#gpv-color-mode', 'chain'); await fresh.waitForTimeout(400);
+    await fresh.click('[data-gpv-tab="publish"]');
+    if (await fresh.locator('#gpv-legend-key').isDisabled()) throw new Error('still greyed out under chain colouring');
+    const restored = await fresh.getAttribute('#gpv-legend-key', 'data-tooltip');
+    if (/^No legend key/.test(restored || '')) throw new Error('the reason outlived it: ' + restored);
+    const chains = await fresh.inputValue('#gpv-legend-key-text');
+    if (chains !== 'Chain: A (blue); B (orange).') throw new Error('chain text: ' + chains);
+    console.log('       ' + tip);
+  } finally { await fresh.close(); }
+});
 await step('copying the PNG to the clipboard reports an outcome', async () => {
   await tab('publish');
   await page.click('#gpv-copy-image');

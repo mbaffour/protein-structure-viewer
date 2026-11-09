@@ -1187,8 +1187,12 @@ html>body{padding:0}</style>
       <button class="btn" type="button" id="gpv-image" disabled>Download figure PNG</button>
       <button class="btn" type="button" id="gpv-copy-image" disabled data-tooltip="Render the publication PNG and put it on the clipboard, ready to paste into slides or a document">Copy PNG to clipboard</button>
       <button class="btn" type="button" id="gpv-svg" disabled data-tooltip="Raster molecule with labels, arrows, callouts and legend as editable vector layers">Download figure SVG</button>
+      <button class="btn" type="button" id="gpv-legend-key" disabled data-tooltip="A small image of the figure's colour key on its own — every entry with its exact colour and name, in the figure font and text size, in the Figure format chosen above — to place beside the figure or in its legend">Download legend key</button>
+      <button class="btn" type="button" id="gpv-legend-key-svg" disabled data-tooltip="The same colour key as an SVG with editable text, drawn by the code that draws the legend on the figure SVG">Download legend key SVG</button>
       <button class="btn" type="button" id="gpv-compare-image" disabled data-tooltip="Stitch every synchronized panel into one lettered figure at the chosen size">Download comparison PNG</button>
       <button class="btn" type="button" id="gpv-model-panels" disabled data-tooltip="One lettered panel per model, every panel rendered from the current camera — the five models of an AlphaFold run side by side, identically framed">Download one panel per model</button>
+      <textarea class="form-control gpv-legend-text" id="gpv-legend-key-text" rows="2" readonly aria-label="Legend text starter" placeholder="Load a model to name the colours of its key"></textarea>
+      <button class="btn btn-ghost" type="button" id="gpv-legend-key-copy" disabled data-tooltip="Copy the sentence above — every key entry with its colour in words — to paste into the figure legend and edit">Copy legend text</button>
     </div>
     <div class="viz-controls gpv-composite" aria-label="Composite figure">
       <span class="text-small text-muted">Composite figure</span>
@@ -1331,6 +1335,7 @@ html>body{padding:0}</style>
       <ul>
         <li><em>Annotate → Compare this position</em> takes the residue you have selected and, in every shown model, draws its side chain, writes that model’s own residue on it (Arg273, His273) and states whether the models agree — the one-press check on a wild-type and mutant pair. Positions are matched by the Cα pairing of the superposition once the models are aligned, and by chain and residue number otherwise. After <em>Align visible</em> the same press also measures what the substitution did: a neighbourhood table of every residue with a heavy atom within the cutoff of the site, each row giving its Cα deviation from the reference in every other model, with <em>Highlight neighbourhood</em> and an effect CSV. A binding site is several residues, so the same block takes a set: type <em>A:20-30, A:45</em> (or bare numbers and ranges, which use the chain of the selected residue) into <em>Positions</em> and press <em>Compare these positions</em> — every one of them is compared in one press and one undo step, up to 40, any that fewer than two shown models carry being skipped and counted, and the table then opens with a row per site followed by the union of their neighbourhoods. <em>Make site figure</em> then turns the comparison into a finished two-panel figure in one press: panel A an overview of the superposed models with the site marked, panel B a close-up of the site with the side chains and each model’s label, the reference model solid and the others faded. With the models superposed and <em>Deviation panel</em> on, a panel C follows: the same close-up, every model solid and coloured by how far each residue moved from the reference, blue under 1 Å to red 8 Å and over, with the band scale as its legend. The panels are saved as views, ticked as the only panels of the figure builder in two columns (three with the deviation panel), and the Publish tab opens at the builder ready for <em>Download built figure PNG</em> or <em>SVG</em>; ⌘Z takes the whole press back.</li>
         <li><em>Publish → Figure format</em> saves the same figure as PNG or TIFF with the resolution in the file, as a PDF whose page is the physical size you chose, or as JPEG or WebP for slides; <em>Download figure SVG</em> stays the vector option with editable text.</li>
+        <li><em>Publish → Download legend key</em> saves the figure's colour key on its own — every entry with its exact colour and name, in the figure font and text size, in the chosen Figure format — and <em>Download legend key SVG</em> saves it with editable text; the box under them says the same key in words ("model_a (purple); model_b (cyan)") for the figure legend, and <em>Copy legend text</em> copies it. Both follow the colour scheme, the shown models, their colours and the Figure labels, and the views ZIP carries the key as <code>legend-key.png</code> and <code>legend-key.svg</code>.</li>
         <li>After <em>Align visible</em>, <em>RMSF profile SVG/PNG</em> plots the per-residue Cα spread across the aligned models, one panel per chain with the agreement bands behind the trace, and the same plot is a panel of the composite figure — the ensemble counterpart of the pLDDT profile.</li>
         <li><em>Compare → Pairwise RMSD → Compute matrix</em> superposes every shown model onto every other with the same rules as Align visible and tabulates the Cα RMSDs — which models of an ensemble agree, which is the odd one out — with a mean column, a ★ on the medoid, a CSV, a heat-map PNG or SVG with the values in the cells, and a panel for the composite figure. <em>Use medoid as reference</em> superposes everything onto that model and draws it solid against the rest.</li>
         <li><em>Compare → Match identical chains by position</em> re-pairs the chains of an assembly by where they sit after a first fit, so a model that puts the same subunit in a different place is compared against the copy it actually corresponds to; the chain mapping it chose is printed with each result.</li>
@@ -1954,6 +1959,73 @@ html>body{padding:0}</style>
     return maximum;
   }
 
+
+  /* ---------- Colour words ----------
+     The legend text starter (34a) names each key colour in a word — "model_a (purple)" — because a
+     figure legend is read in print and in a screen reader, where "#8b5cf6" means nothing. A wrong
+     word is worse than a hex code, so the word is chosen perceptually: the colour's CIELAB value is
+     compared with a few prototypes per word by CIEDE2000, the difference measure built to match
+     what people judge "close", and the nearest prototype names it. Plain RGB or HSL distance put
+     pale blue nearer grey and dark orange nearer red than anyone reading the figure would.
+     Prototypes are the viewer's own palettes (models, chains, Okabe–Ito, pLDDT, bands) plus the
+     CSS primaries, so every colour the viewer draws by default lands on the word its caption uses. */
+  function hexToLab(hex) {
+    const short = /^#?([0-9a-f])([0-9a-f])([0-9a-f])$/i.exec(String(hex || '').trim());
+    const value = short ? short.slice(1).map(c => c + c).join('') : (/^#?([0-9a-f]{6})$/i.exec(String(hex || '').trim()) || [])[1];
+    if (!value) return null;
+    const linear = [0, 2, 4].map(offset => { const c = parseInt(value.slice(offset, offset + 2), 16) / 255; return c <= 0.04045 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4; });
+    /* sRGB → XYZ (D65), each axis over its white point, then the CIE companding. */
+    const xyz = [
+      (0.4124 * linear[0] + 0.3576 * linear[1] + 0.1805 * linear[2]) / 0.95047,
+      0.2126 * linear[0] + 0.7152 * linear[1] + 0.0722 * linear[2],
+      (0.0193 * linear[0] + 0.1192 * linear[1] + 0.9505 * linear[2]) / 1.08883
+    ].map(t => (t > 216 / 24389 ? Math.cbrt(t) : (24389 / 27 * t + 16) / 116));
+    return [116 * xyz[1] - 16, 500 * (xyz[0] - xyz[1]), 200 * (xyz[1] - xyz[2])];
+  }
+  /* CIEDE2000 (Sharma, Wu & Dalal 2005), checked against their published test pairs. */
+  function colourDifference(first, second) {
+    const [L1, a1, b1] = first; const [L2, a2, b2] = second; const rad = Math.PI / 180;
+    const meanChroma = (Math.hypot(a1, b1) + Math.hypot(a2, b2)) / 2;
+    const G = 0.5 * (1 - Math.sqrt(meanChroma ** 7 / (meanChroma ** 7 + 25 ** 7)));
+    const ap1 = a1 * (1 + G); const ap2 = a2 * (1 + G);
+    const C1 = Math.hypot(ap1, b1); const C2 = Math.hypot(ap2, b2);
+    const hue = (y, x) => { if (!x && !y) return 0; const h = Math.atan2(y, x) / rad; return h < 0 ? h + 360 : h; };
+    const h1 = hue(b1, ap1); const h2 = hue(b2, ap2);
+    let dh = 0; if (C1 * C2) { dh = h2 - h1; if (dh > 180) dh -= 360; else if (dh < -180) dh += 360; }
+    const dL = L2 - L1; const dC = C2 - C1; const dH = 2 * Math.sqrt(C1 * C2) * Math.sin(dh / 2 * rad);
+    const Lm = (L1 + L2) / 2; const Cm = (C1 + C2) / 2;
+    let hm = h1 + h2; if (C1 * C2) hm = Math.abs(h1 - h2) > 180 ? (h1 + h2 + (h1 + h2 < 360 ? 360 : -360)) / 2 : (h1 + h2) / 2;
+    const T = 1 - 0.17 * Math.cos((hm - 30) * rad) + 0.24 * Math.cos(2 * hm * rad) + 0.32 * Math.cos((3 * hm + 6) * rad) - 0.2 * Math.cos((4 * hm - 63) * rad);
+    const SL = 1 + 0.015 * (Lm - 50) ** 2 / Math.sqrt(20 + (Lm - 50) ** 2); const SC = 1 + 0.045 * Cm; const SH = 1 + 0.015 * Cm * T;
+    const RT = -2 * Math.sqrt(Cm ** 7 / (Cm ** 7 + 25 ** 7)) * Math.sin(60 * Math.exp(-(((hm - 275) / 25) ** 2)) * rad);
+    return Math.sqrt((dL / SL) ** 2 + (dC / SC) ** 2 + (dH / SH) ** 2 + RT * (dC / SC) * (dH / SH));
+  }
+  /* Light and dark variants exist where the viewer draws both and a reader must tell them apart —
+     pLDDT's light and dark blue, the distance bands' blues, a faded model's pale tint. Indigo is
+     here because the chain and domain palettes have one between their blue and their purple, and
+     either of those words would name two different colours in one key. */
+  const colourWords = [
+    ['black', '#000000', '#111827'], ['dark grey', '#4b5563', '#374151'], ['grey', '#9ca3af', '#808080', '#999999'], ['light grey', '#d1d5db', '#e5e7eb'], ['white', '#ffffff', '#f8fafc'],
+    ['red', '#dc2626', '#ef4444', '#ff0000', '#e60a0a'], ['dark red', '#991b1b', '#7f1d1d', '#800000'], ['light red', '#f87171', '#fca5a5', '#fa8072'],
+    ['pink', '#ec4899', '#f472b6', '#ff69b4', '#cc79a7'], ['light pink', '#fbcfe8', '#ffc0cb'],
+    ['orange', '#f97316', '#ff8c00', '#fb923c', '#ff7d45', '#e69f00', '#ffa500'], ['dark orange', '#c2410c', '#d55e00'], ['light orange', '#fdba74', '#fed7aa'],
+    ['brown', '#92400e', '#78350f', '#8b4513', '#a0522d'],
+    ['yellow', '#facc15', '#ffff00', '#f0e442', '#ffdb13', '#fde725', '#eab308'], ['dark yellow', '#a16207', '#ca8a04', '#808000'], ['pale yellow', '#fef08a', '#fef9c3'],
+    ['light green', '#86efac', '#a3e635', '#90ee90', '#bbf7d0'], ['green', '#22c55e', '#16a34a', '#00a000', '#5ec962'], ['dark green', '#166534', '#14532d', '#0f820f'],
+    ['teal', '#14b8a6', '#0d9488', '#0f766e', '#008080', '#21918c'], ['cyan', '#06b6d4', '#22d3ee', '#00ffff', '#00dcdc'], ['light cyan', '#a5f3fc', '#cffafe'],
+    ['light blue', '#7dd3fc', '#60a5fa', '#56b4e9', '#93c5fd', '#65cbf3'], ['pale blue', '#bfdbfe', '#dbeafe'],
+    ['blue', '#2563eb', '#3b82f6', '#0000ff', '#0072b2'], ['dark blue', '#1e3a8a', '#1e40af', '#000080', '#0053d6'],
+    ['indigo', '#4f46e5', '#6366f1', '#4338ca'],
+    ['purple', '#a855f7', '#8b5cf6', '#7c3aed', '#800080'], ['dark purple', '#4c1d95', '#440154'], ['light purple', '#d8b4fe', '#c4b5fd', '#e9d5ff'],
+    ['magenta', '#d946ef', '#c026d3', '#ff00ff']
+  ].map(([name, ...prototypes]) => ({ name, labs: prototypes.map(hexToLab) }));
+  /* The word for a colour; anything that is not a hex colour comes back as it was given. */
+  function colourName(hex) {
+    const lab = hexToLab(hex); if (!lab) return String(hex || '');
+    let best = ''; let nearest = Infinity;
+    colourWords.forEach(word => word.labs.forEach(prototype => { const distance = colourDifference(lab, prototype); if (distance < nearest) { nearest = distance; best = word.name; } }));
+    return best;
+  }
   /* ---------- Large confidence files ----------
      An AlphaFold 3 full_data file carries two N×N matrices: the PAE, which the viewer uses,
      and contact probabilities, which it does not. For a 4 400-token assembly that is 175 MB
@@ -7759,21 +7831,35 @@ html>body{padding:0}</style>
     let outcome = null;
     try {
       const zip = new JSZip();
+      /* The legend key of each view, drawn while that view is applied so it names that view's
+         colours (34a). Views that share a key share one pair of files. */
+      const keys = new Map();
       for (let index = 0; index < savedViews.length; index += 1) {
         button.textContent = 'Rendering ' + (index + 1) + ' / ' + savedViews.length + '…'; await afterPaint();
         /* Apply the view first so the legend and scale bar describe that view, not the one on screen;
            restore straight after so side-by-side views do not stack up WebGL panel contexts. */
         applyViewState(savedViews[index], { panels: false });
         const rendered = await renderFittedFigure(plan); plan = rendered.plan; const uri = rendered.uri;
-        applyViewState(restore, { panels: false });
         const letter = panelLetter(savedViews[index]);
-        zip.file(String(index + 1).padStart(2, '0') + '-' + (letter === '—' ? '' : letter + '-') + String(savedViews[index].name || 'view').replace(/[^\w.-]+/g, '_') + '.png', await pngWithDpi(uri, plan.dpi));
+        const stem = String(index + 1).padStart(2, '0') + '-' + (letter === '—' ? '' : letter + '-') + String(savedViews[index].name || 'view').replace(/[^\w.-]+/g, '_');
+        /* Drawn before the restore, encoded after it: nothing awaits between the two applyViewState calls
+           that did not before. */
+        const key = legendKeySvg(); const keyDrawn = key && !keys.has(key.svg) ? legendKeyCanvas() : null;
+        applyViewState(restore, { panels: false });
+        if (keyDrawn) keys.set(key.svg, { stem, png: await pngWithDpi(keyDrawn.canvas.toDataURL('image/png'), keyDrawn.layout.plan.dpi) });
+        zip.file(stem + '.png', await pngWithDpi(uri, plan.dpi));
       }
+      /* legend-key.png and legend-key.svg when every view has the same key — the usual case — and
+         one pair per distinct key, named after the first view that uses it, when they differ. */
+      [...keys.entries()].forEach(([svg, key]) => {
+        const name = keys.size === 1 ? 'legend-key' : key.stem + '-legend-key';
+        zip.file(name + '.png', key.png); zip.file(name + '.svg', svg);
+      });
       const provenance = provenanceValues();
       zip.file('captions.txt', [provenance.title || 'Protein structure figure', provenance.source, provenance.method, '', ...panelCaptionLines(), '', provenance.notes, '', figureLegendText()].filter((line, index, array) => line || array[index - 1]).join('\n'));
       const blob = await zip.generateAsync({ type: 'blob' });
       downloadBlob(blob, 'application/zip', exportFileName('protein-views', plan, 'zip'));
-      outcome = [savedViews.length + ' view' + (savedViews.length === 1 ? '' : 's') + ' exported · ' + formatBytes(blob.size) + ' · ' + plan.width + ' × ' + plan.height + (plan.dpi ? ' at ' + plan.dpi + ' dpi' : '') + exportCapNote(plan)];
+      outcome = [savedViews.length + ' view' + (savedViews.length === 1 ? '' : 's') + ' exported' + (keys.size ? ' with ' + (keys.size === 1 ? 'the legend key' : keys.size + ' legend keys') : '') + ' · ' + formatBytes(blob.size) + ' · ' + plan.width + ' × ' + plan.height + (plan.dpi ? ' at ' + plan.dpi + ' dpi' : '') + exportCapNote(plan)];
     } catch (error) {
       outcome = ['Could not export the views: ' + error.message, 'error'];
     } finally {
@@ -12019,7 +12105,9 @@ html>body{padding:0}</style>
     if (all.length <= legendNamedLimit) return { items: all };
     const named = all.slice(0, legendNamedLimit - 1);
     const rest = all.length - named.length;
-    return { items: [...named, ['#9ca3af', '+' + rest + ' more', '+' + rest + ' more — the figure legend text names them all']], abbreviated: all.map(entry => entry[1]) };
+    /* `all` keeps every entry with its colour for the legend key's text starter (34a), which has
+       the room the drawn key does not. */
+    return { items: [...named, ['#9ca3af', '+' + rest + ' more', '+' + rest + ' more — the figure legend text names them all']], abbreviated: all.map(entry => entry[1]), all };
   }
   /* Everything the drawn key stands for, when it had to abbreviate — the caption names it in full. */
   function legendAbbreviated(kind = 'figure') {
@@ -12036,13 +12124,16 @@ html>body{padding:0}</style>
     const legend = defaultLegendItems(kind); if (!legend) return null;
     const mode = root.querySelector('#gpv-color-mode').value;
     const title = figureLabels[mode + '|title'];
-    const items = legend.items.map(([color, short, long]) => {
+    const renamed = ([color, short, long]) => {
       const custom = figureLabels[mode + '|' + short];
       if (!custom) return [color, short, long];
       const detail = long && long.includes(' · ') ? long.slice(long.indexOf(' · ')) : '';
       return [color, custom, custom + detail];
-    });
-    return { title: title || legend.title, items, defaults: legend };
+    };
+    const items = legend.items.map(renamed);
+    /* `full`: every entry, renamed, even when the drawn key stopped at '+N more' — the list the
+       legend key's text starter writes out. */
+    return { title: title || legend.title, items, full: legend.all ? legend.all.map(renamed) : items, defaults: legend };
   }
   function figureLabelsCustomised(legend = legendItems('figure')) {
     return Boolean(legend && (legend.title !== legend.defaults.title || legend.items.some((item, index) => item[1] !== legend.defaults.items[index][1])));
@@ -12203,6 +12294,9 @@ html>body{padding:0}</style>
   }
 
   function renderScreenLegend() {
+    /* Every change that redraws the on-screen key — colour scheme, a model's colour, a hidden model,
+       a renamed entry — comes through here, so the legend key's button and text follow it (34a). */
+    renderLegendKey();
     const host = root.querySelector('#gpv-plddt-legend');
     const legend = legendItems('screen');
     host.hidden = !legend;
@@ -12965,6 +13059,152 @@ html>body{padding:0}</style>
     return lines;
   }
 
+  /* ---------- Legend key ----------
+     The figure's colour key on its own: a small image of every entry with its exact colour and its
+     name, to set beside a figure or in a multi-panel layout where the key belongs outside the
+     panels, and a sentence naming each entry's colour in words to paste into the figure legend.
+     Nothing here is stored: the key is drawn from legendItems('figure') at the moment it is asked
+     for, so it follows the colour scheme, the models shown, their colours and the Figure labels —
+     there is no copy to go stale. The image is drawn by the code that draws the legend on every
+     exported figure (legendMetrics' rows walked by drawPlddtLegend, and by svgLegend for the SVG),
+     at the figure's text scale and in its font, ink and background; the one thing that differs is
+     that it is always a row, wrapping at its own width, where the figure's legend may be shrunk,
+     stacked down a side, or wrapped to fit a panel. */
+
+  /* Why there is no key, in the words the buttons' tooltips and the text box use; '' when there is. */
+  function legendKeyUnavailable() {
+    if (!structures.length) return 'Load a model first — the key names what the figure is coloured by.';
+    if (legendItems('figure')) return '';
+    const mode = root.querySelector('#gpv-color-mode').value;
+    const shown = displayedEntries().filter(entry => entry.model);
+    const reasons = {
+      element: 'Element colouring has no colour key: every atom takes the colour of its element.',
+      amino: 'Amino-acid colouring uses twenty colours and prints no key — Residue type or Charge colouring has one.',
+      spectrum: 'A sequence spectrum is a ramp from the N- to the C-terminus, not a set of colours, so it has no key.',
+      agreement: 'Model agreement is grey until the models are aligned (Compare → Align visible), so it has no key yet.',
+      deviation: 'Cα deviation is grey until the models are aligned (Compare → Align visible), so it has no key yet.',
+      plddt: 'The shown models carry no pLDDT and are drawn in their model colours, so pLDDT has no key.',
+      structure: shown.length > 8 ? 'More than eight models are shown — too many for a per-model key.' : 'One model in its own colour needs no key — show two to eight models, or colour by chain.'
+    };
+    return reasons[mode] || 'This colour scheme has nothing for a key to name.';
+  }
+
+  /* "pLDDT: <50 (orange); 50–70 (yellow); 70–90 (light blue); ≥90 (dark blue)." Each entry as the
+     key draws it (item[1], renamed by Figure labels), its colour as a word (colourName, 01), and
+     the hex as well only where two entries share a word, so the sentence never names two colours
+     alike. A key that stopped at '+N more' is written out in full here — the text has the room. */
+  function legendKeyText(legend = legendItems('figure')) {
+    if (!legend) return '';
+    const entries = legend.full.filter(([, label]) => String(label || '').trim());
+    const words = entries.map(([color]) => colourName(color));
+    const shared = word => words.filter(other => other === word).length > 1;
+    const colour = (color, word) => word + (shared(word) && /^#/.test(String(color)) ? ', ' + String(color).toLowerCase() : '');
+    return legend.title + ': ' + entries.map(([color, label], index) => label + ' (' + colour(color, words[index]) + ')').join('; ') + '.';
+  }
+
+  /* The key as one row at the figure's text scale, wrapping at the figure's width or at 1200 px of
+     screen-scale text (1200 × the text scale), whichever is narrower — so a print key wraps where a
+     screen one would, whatever the dpi. (x, y) puts the legend's box at the image's top-left corner:
+     the drawers paint it from (x − gap, y + top). */
+  function legendKeyLayout(measure) {
+    const plan = exportDimensions(); const scale = figureScale(plan);
+    const available = Math.min(plan.width, Math.round(1200 * scale));
+    const metrics = legendMetrics(measure, scale, 'figure', false, available);
+    if (!metrics) return null;
+    return { plan, scale, available, metrics, x: metrics.gap, y: -metrics.top, width: Math.ceil(metrics.boxWidth), height: Math.ceil(metrics.height) };
+  }
+  /* The figure's ink and paper. On a transparent figure the key stays transparent: the paper panel
+     the figure puts behind its legend (to keep it legible over the molecule) has nothing to cover
+     here, so it is drawn in no colour. */
+  function legendKeyPalette(vector) {
+    const palette = figurePalette();
+    return backgroundSpec().alpha ? palette : { ...palette, paper: vector ? 'none' : 'rgba(0, 0, 0, 0)' };
+  }
+  function legendKeyCanvas() {
+    const canvas = document.createElement('canvas'); const context = canvas.getContext('2d');
+    const layout = legendKeyLayout(context); if (!layout) return null;
+    canvas.width = layout.width; canvas.height = layout.height;
+    const background = backgroundSpec();
+    if (background.alpha) { context.fillStyle = background.color; context.fillRect(0, 0, canvas.width, canvas.height); }
+    drawPlddtLegend(context, layout.x, layout.y, layout.scale, legendKeyPalette(false), 'figure', false, false, layout.available);
+    return { canvas, layout };
+  }
+  function legendKeySvg() {
+    const layout = legendKeyLayout(svgMeasure); if (!layout) return null;
+    const background = backgroundSpec();
+    const legend = svgLegend(layout.x, layout.y, layout.scale, legendKeyPalette(true), 'figure', false, layout.available);
+    return { svg: svgDocument(layout.width, layout.height, background.alpha ? background.color : null, legend.markup), layout };
+  }
+  /* The raster key in a figure format, encoded as the figure is: the resolution in a PNG or TIFF,
+     the physical page in a PDF, flattened onto the paper for JPEG and WebP (which have no alpha). */
+  async function legendKeyImage(key = 'png') {
+    const drawn = legendKeyCanvas(); if (!drawn) return null;
+    const { canvas, layout } = drawn; const plan = layout.plan; const uri = canvas.toDataURL('image/png');
+    if (key === 'png') return { blob: await pngWithDpi(uri, plan.dpi), extension: 'png', label: 'PNG', layout };
+    if (key === 'tiff') return { blob: await tiffFromImage(uri, plan.dpi || 96), extension: 'tiff', label: 'TIFF', layout };
+    if (key === 'pdf') return { blob: (await pdfFromImage(uri, plan)).blob, extension: 'pdf', label: 'PDF', layout };
+    const format = imageFormats[key];
+    const flat = document.createElement('canvas'); flat.width = canvas.width; flat.height = canvas.height;
+    const context = flat.getContext('2d');
+    context.fillStyle = figurePalette().paper; context.fillRect(0, 0, flat.width, flat.height); context.drawImage(canvas, 0, 0);
+    const blob = await encodeCanvas(flat, format.mime, 0.95);
+    if (!blob) throw new Error('this browser could not encode the image');
+    const fellBack = blob.type !== format.mime;
+    return { blob, extension: fellBack ? 'png' : format.extension, label: fellBack ? 'PNG' : format.label, fellBack, layout };
+  }
+  function legendKeyFileName(extension) {
+    const title = provenanceValues().title.replace(/[^\w.-]+/g, '_').replace(/^_+|_+$/g, '');
+    return (title || 'protein-figure') + '-legend-key.' + extension;
+  }
+
+  async function downloadLegendKey(vector = false) {
+    const reason = legendKeyUnavailable();
+    if (reason) { announce('No legend key to download: ' + reason, 'error'); return; }
+    const button = root.querySelector(vector ? '#gpv-legend-key-svg' : '#gpv-legend-key');
+    button.disabled = true;
+    try {
+      const entries = legendItems('figure').items.length; const count = entries + ' entr' + (entries === 1 ? 'y' : 'ies');
+      if (vector) {
+        const made = legendKeySvg();
+        downloadBlob(made.svg, 'image/svg+xml', legendKeyFileName('svg'));
+        announce('Legend key SVG downloaded · ' + count + ' · ' + made.layout.width + ' × ' + made.layout.height + ' · editable text');
+      } else {
+        const made = await legendKeyImage(imageFormat());
+        const plan = made.layout.plan;
+        downloadBlob(made.blob, made.blob.type, legendKeyFileName(made.extension));
+        announce('Legend key ' + made.label + ' downloaded · ' + count + ' · ' + made.layout.width + ' × ' + made.layout.height + (plan.dpi ? ' at ' + plan.dpi + ' dpi, the figure’s text size' : '') + (made.fellBack ? ' · this browser cannot write ' + imageFormats[imageFormat()].label + ', so a PNG was saved instead' : ''));
+      }
+    } catch (error) {
+      announce('Could not draw the legend key: ' + error.message, 'error');
+    } finally { renderLegendKey(); }
+  }
+
+  /* Called from renderScreenLegend (31), which every change to the key passes through. The buttons'
+     tooltips carry the reason when there is no key, and so does the text box, where it can be read
+     without hovering a greyed-out button. */
+  function renderLegendKey() {
+    const reason = legendKeyUnavailable();
+    ['#gpv-legend-key', '#gpv-legend-key-svg'].forEach(selector => {
+      const button = root.querySelector(selector);
+      if (!button.dataset.keyTip) button.dataset.keyTip = button.dataset.tooltip || '';
+      button.disabled = Boolean(reason);
+      button.dataset.tooltip = reason ? 'No legend key: ' + reason : button.dataset.keyTip;
+    });
+    root.querySelector('#gpv-legend-key-copy').disabled = Boolean(reason);
+    const field = root.querySelector('#gpv-legend-key-text');
+    field.value = reason ? '' : legendKeyText();
+    field.placeholder = reason;
+  }
+
+  root.querySelector('#gpv-legend-key').addEventListener('click', () => { downloadLegendKey(false); });
+  root.querySelector('#gpv-legend-key-svg').addEventListener('click', () => { downloadLegendKey(true); });
+  root.querySelector('#gpv-legend-key-copy').addEventListener('click', () => {
+    renderLegendKey();
+    const text = root.querySelector('#gpv-legend-key-text').value;
+    if (text) copyTextOrShow(text, 'Legend text copied — every key entry with its colour in words', 'the legend text');
+  });
+  /* A faded model's swatch is its tint on the paper, so a new background can change its colour word. */
+  ['#gpv-background', '#gpv-background-color'].forEach(selector => root.querySelector(selector).addEventListener('change', renderLegendKey));
   /* ---------- Figure builder ----------
      Saved views are the panels. Each ticked view is rendered from its own camera, colour
      scheme and model selection at the same text size; the cells share the figure's aspect
@@ -15647,6 +15887,7 @@ applyBackground();
     'In overlay mode the sequence strip shows one row per model and chain, so pLDDT of competing predictions lines up residue by residue. Hovering the PAE heatmap marks both residues on the strip.',
     'X, Y and Z rotate the view by exactly 90° (Shift reverses), so a front, side and top panel of the same model line up in a figure. Shift+R returns to the file frame.',
     'Appearance → Presets sets up a thesis figure, a dark slide, or a confidence review in one click; every control stays editable afterwards.',
+    'Publish → Download legend key saves the figure\'s colour key as a small image of its own, in the same format, font and text size as the figure, and the box under it names every colour in words, ready to paste into the figure legend.',
     'Publish → Write figure legend drafts the legend from what is on screen — models, colouring, cut-offs, alignment RMSD, labels and measurements — ready to paste and edit.',
     'AlphaFold 3 ligands, ions and glycans are drawn as sticks by default; switch them to spheres or hide them under Appearance → Ligands and ions. Water is never shown.',
     'Models → Download FASTA writes one record per chain of the displayed models, with length and mean pLDDT in the header.',
@@ -15763,7 +16004,7 @@ applyBackground();
   offerSessionRestore();
   /* ?debug=1 exposes a few internals for the regression suite and for bug reports;
      it has no effect otherwise. */
-  if (new URLSearchParams(location.search).has('debug')) window.__viewerDebug = { viewer, pickAtomAt, displayedEntries, activeEntry, colorOptions, sceneSettings, contactResult: () => contactResult, residueData: () => residueData, msaAssets: () => msaAssets, entries: () => structures, nearbyResidues, assemblyDimensions, paeDomains, parseConfidenceBytes, methodsText, alignmentResults: () => alignmentResults, ensembleSpread: () => ensembleSpread, siteResults: () => siteResults, interfaceResults: () => interfaceResults, solventAccessibleArea, heavyAtoms, ligandGroups, architectureModel, domainSets, distinguishingNames, rmsdMatrix: () => rmsdMatrix, rmsdMedoid, scaleBarSpec, pixelsPerAngstrom, sceneCentre, exportDimensions, exportGpuLimit, setExportGpuLimit, exportViewer: () => exportViewer, renderPublicationImage, furnitureLayout, legendMetrics, legendWanted, figurePalette, figureScale, releaseExportViewer, labelRecords: () => labelRecords, labelPosition, labelHitAt, labelScreenBox, separateLabels, spotlightResidues: () => spotlightResidues, positionEffect: () => positionEffect, savedViews: () => savedViews, selectionRecords: () => selectionRecords, labelStyle, themeColor, hexLuminance, backgroundSpec, paeTokenLayout, readNpy, materializeEntry, interactionScores, reportedPairIptm, reportedPairIptmMax, interactionResults: () => interactionResults, reportConfidence, activeText: () => { const resolved = activeCanvasText(); return resolved ? { kind: resolved.kind, key: resolved.record.key || null, id: resolved.record.id || null } : null; }, labelEditor: () => (labelEditor ? { kind: labelEditor.kind, key: labelEditor.key || null, id: labelEditor.id || null } : null), undoDepth: () => undoStack.length, rememberedSteps: () => rememberedSteps, boxSelectMode: () => boxSelectMode, residueMarker: residueMarkerText, selectedResidue: () => (selectedResidue ? { ...selectedResidue } : null), measureFrom: () => (measureFrom ? { ...measureFrom } : null), measurementRecords: () => measurementRecords, drawLabels, distanceMatrix: contactDistanceMatrix, residueContacts: debugResidueContacts, residueDistances: debugResidueDistances, atomPairDistance: debugAtomPairDistance, measureAtoms: () => measureAtoms, contactHover: () => (contactHover ? { ...contactHover } : null), measurementHover: () => measurementHover, measurementLabelText, measurementAtomsText, measurementsText, measurementAnchor, measurementScreenBox, panelLabelPlacement };
+  if (new URLSearchParams(location.search).has('debug')) window.__viewerDebug = { viewer, pickAtomAt, displayedEntries, activeEntry, colorOptions, sceneSettings, contactResult: () => contactResult, residueData: () => residueData, msaAssets: () => msaAssets, entries: () => structures, nearbyResidues, assemblyDimensions, paeDomains, parseConfidenceBytes, methodsText, alignmentResults: () => alignmentResults, ensembleSpread: () => ensembleSpread, siteResults: () => siteResults, interfaceResults: () => interfaceResults, solventAccessibleArea, heavyAtoms, ligandGroups, architectureModel, domainSets, distinguishingNames, rmsdMatrix: () => rmsdMatrix, rmsdMedoid, scaleBarSpec, pixelsPerAngstrom, sceneCentre, exportDimensions, exportGpuLimit, setExportGpuLimit, exportViewer: () => exportViewer, renderPublicationImage, furnitureLayout, legendMetrics, legendWanted, figurePalette, figureScale, releaseExportViewer, labelRecords: () => labelRecords, labelPosition, labelHitAt, labelScreenBox, separateLabels, spotlightResidues: () => spotlightResidues, positionEffect: () => positionEffect, savedViews: () => savedViews, selectionRecords: () => selectionRecords, labelStyle, themeColor, hexLuminance, backgroundSpec, paeTokenLayout, readNpy, materializeEntry, interactionScores, reportedPairIptm, reportedPairIptmMax, interactionResults: () => interactionResults, reportConfidence, activeText: () => { const resolved = activeCanvasText(); return resolved ? { kind: resolved.kind, key: resolved.record.key || null, id: resolved.record.id || null } : null; }, labelEditor: () => (labelEditor ? { kind: labelEditor.kind, key: labelEditor.key || null, id: labelEditor.id || null } : null), undoDepth: () => undoStack.length, rememberedSteps: () => rememberedSteps, boxSelectMode: () => boxSelectMode, residueMarker: residueMarkerText, selectedResidue: () => (selectedResidue ? { ...selectedResidue } : null), measureFrom: () => (measureFrom ? { ...measureFrom } : null), measurementRecords: () => measurementRecords, drawLabels, distanceMatrix: contactDistanceMatrix, residueContacts: debugResidueContacts, residueDistances: debugResidueDistances, atomPairDistance: debugAtomPairDistance, measureAtoms: () => measureAtoms, contactHover: () => (contactHover ? { ...contactHover } : null), measurementHover: () => measurementHover, measurementLabelText, measurementAtomsText, measurementsText, measurementAnchor, measurementScreenBox, panelLabelPlacement, legendItems, legendKeyText, colourName };
   applyTheme(readJson(themeKey, 'system'));
   selectToolTab('models');
   applyAppearance();

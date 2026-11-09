@@ -919,7 +919,9 @@
     if (all.length <= legendNamedLimit) return { items: all };
     const named = all.slice(0, legendNamedLimit - 1);
     const rest = all.length - named.length;
-    return { items: [...named, ['#9ca3af', '+' + rest + ' more', '+' + rest + ' more — the figure legend text names them all']], abbreviated: all.map(entry => entry[1]) };
+    /* `all` keeps every entry with its colour for the legend key's text starter (34a), which has
+       the room the drawn key does not. */
+    return { items: [...named, ['#9ca3af', '+' + rest + ' more', '+' + rest + ' more — the figure legend text names them all']], abbreviated: all.map(entry => entry[1]), all };
   }
   /* Everything the drawn key stands for, when it had to abbreviate — the caption names it in full. */
   function legendAbbreviated(kind = 'figure') {
@@ -936,13 +938,16 @@
     const legend = defaultLegendItems(kind); if (!legend) return null;
     const mode = root.querySelector('#gpv-color-mode').value;
     const title = figureLabels[mode + '|title'];
-    const items = legend.items.map(([color, short, long]) => {
+    const renamed = ([color, short, long]) => {
       const custom = figureLabels[mode + '|' + short];
       if (!custom) return [color, short, long];
       const detail = long && long.includes(' · ') ? long.slice(long.indexOf(' · ')) : '';
       return [color, custom, custom + detail];
-    });
-    return { title: title || legend.title, items, defaults: legend };
+    };
+    const items = legend.items.map(renamed);
+    /* `full`: every entry, renamed, even when the drawn key stopped at '+N more' — the list the
+       legend key's text starter writes out. */
+    return { title: title || legend.title, items, full: legend.all ? legend.all.map(renamed) : items, defaults: legend };
   }
   function figureLabelsCustomised(legend = legendItems('figure')) {
     return Boolean(legend && (legend.title !== legend.defaults.title || legend.items.some((item, index) => item[1] !== legend.defaults.items[index][1])));
@@ -1103,6 +1108,9 @@
   }
 
   function renderScreenLegend() {
+    /* Every change that redraws the on-screen key — colour scheme, a model's colour, a hidden model,
+       a renamed entry — comes through here, so the legend key's button and text follow it (34a). */
+    renderLegendKey();
     const host = root.querySelector('#gpv-plddt-legend');
     const legend = legendItems('screen');
     host.hidden = !legend;

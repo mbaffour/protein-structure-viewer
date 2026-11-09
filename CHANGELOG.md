@@ -49,6 +49,20 @@ All notable changes to this project are recorded here.
   prefix of the `Colour by MSA` button and so matched something every time. Only chains written wholly
   inside one bold or italic run are checked, which is what gives a chain its boundaries; a paragraph
   lead-in that happens to contain an arrow is left alone.
+- **A legend key for every figure, in one click.** **Download legend key** (Publish) saves the
+  figure's colour key on its own — the title and every entry with its exact swatch colour and name,
+  Figure labels renames included, in the figure font, text size, ink and background (a transparent
+  figure gives a transparent key) — in the chosen **Figure format** (PNG and TIFF with the dpi, PDF at
+  its physical size, JPEG, WebP) as `<figure title>-legend-key.<ext>`; **Download legend key SVG** writes
+  it with editable text. It is drawn by the code that draws the legend on every exported figure
+  (`legendMetrics` → `drawPlddtLegend` / `svgLegend`), always as a row wrapping at its own width. A
+  read-only box under the buttons gives a **legend text starter** — `Model: model_a (purple); model_b
+  (cyan); model_c (orange).` — each colour named by `colourName()`, the nearest of a set of colour words
+  by CIEDE2000 in CIELAB (checked against the viewer's own palettes and Okabe–Ito), with the hex only
+  where two entries share a word; **Copy legend text** copies it. All three are derived when asked and
+  follow the colour scheme, shown models, their colours and the Figure labels; a scheme with no key
+  (element colouring, one model) greys the buttons out with the reason. **Download all views (ZIP)**
+  now carries `legend-key.png` and `legend-key.svg`. Each has a suite step, and tutorial 4 drives it.
 
 ### Changed
 

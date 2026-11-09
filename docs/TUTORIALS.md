@@ -287,6 +287,15 @@ corner or stacks it down either side — move it when it sits over the structure
 renames what the legend *says* without touching the data: "N-lobe" instead of a PAE domain's `D1`, a
 protein's name instead of a chain letter.
 
+When the key belongs beside the figure rather than on it — a multi-panel layout, a key shared by several
+panels — press **Download legend key**. It saves the key on its own, every entry with its exact colour
+and name, in the **Figure format**, font and text size you chose; **Download legend key SVG** saves it with
+editable text. A single model in its own colour has nothing to key, so the buttons are greyed out until
+you colour by something with a key: try **Colour scheme** → **pLDDT confidence** in **Appearance**. The
+**Legend text starter** box under the buttons then reads `pLDDT: <50 (orange); 50–70 (yellow); 70–90
+(light blue); ≥90 (dark blue).` — the same key in words, to paste into the figure legend. **Copy legend
+text** copies it. Rename an entry with **Edit figure labels** and the key and the sentence both follow.
+
 ### The one thing that catches everyone
 
 Label text prints about two and a half times larger relative to the structure than it looks on
