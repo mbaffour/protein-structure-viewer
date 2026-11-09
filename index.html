@@ -962,7 +962,7 @@ html>body{padding:0}</style>
     </div>
     <div class="viz-controls">
       <button class="btn" type="button" id="gpv-position-compare" disabled data-tooltip="Show the side chain at the selected position in every shown model, label each model&#39;s residue there, and say whether they differ — positions are matched by the alignment pairing when the models are superposed, otherwise by chain and residue number">Compare this position</button>
-      <label class="form-label">Positions<input class="form-control" id="gpv-position-set" type="text" placeholder="A:20-30, A:45" data-tooltip="A comma-separated set of positions: A:20-30, A:45, or plain numbers like 20-30 and 45, which use the chain of the selected residue (or the only chain the models have)" aria-label="Positions to compare, as a comma-separated list of chains, numbers and ranges"></label>
+      <label class="form-label">Positions<input class="form-control" id="gpv-position-set" type="text" placeholder="A:20-30, A:45" data-tooltip="A comma-separated set of positions: A:20-30, A:45, H:100A for a residue with an insertion code, or plain numbers like 20-30 and 45, which use the chain of the selected residue (or the only chain the models have)" aria-label="Positions to compare, as a comma-separated list of chains, numbers and ranges"></label>
       <button class="btn" type="button" id="gpv-position-set-run" data-tooltip="Compare every position in the list across the shown models in one press — a binding site or an interface is several residues — and measure one neighbourhood table covering all of them">Compare these positions</button>
       <label class="form-check form-switch"><input class="form-check-input" id="gpv-position-sticks" type="checkbox" checked><span class="form-check-label">Side chains at compared positions</span></label>
       <label class="form-label">Neighbourhood (Å)<input class="form-control" id="gpv-position-cutoff" type="number" min="3" max="12" step="0.5" value="5" data-tooltip="Residues of the reference model with any heavy atom this close to the compared residue are the neighbourhood whose movement is measured"></label>
@@ -1914,6 +1914,23 @@ html>body{padding:0}</style>
     return scores;
   }
 
+  /* A residue's pLDDT, read from the atom modelScores averages: its Cα, or a nucleotide's C1′. The
+     per-residue lists (residueRows) stand a nucleotide by its P, and AlphaFold 3 and Boltz write a
+     per-atom pLDDT that differs along a nucleotide, so Composition, the FASTA header and the profile
+     gave one chain a mean that contradicted the header and the methods sentence ("C1′ for
+     nucleotides"). The C1′ atoms are indexed once per set of atoms. */
+  function residueConfidence(entry, atom) {
+    if (atom.atom !== 'CA') {
+      if (!entry.confidenceAtomCache || entry.confidenceAtomCache.atoms !== entry.atoms) {
+        const map = new Map();
+        entry.atoms.forEach(item => { if (item.atom === "C1'" && !item.hetflag) map.set(residueCodeTag(item), item); });
+        entry.confidenceAtomCache = { atoms: entry.atoms, map };
+      }
+      atom = entry.confidenceAtomCache.map.get(residueCodeTag(atom)) || atom;
+    }
+    return Number(atom.b) || 0;
+  }
+
   /* How an experimental structure says what it is: mmCIF _exptl.method or PDB EXPDTA. A crystal
      structure opened from disk has B-factors in the pLDDT column, as a fetched one does; predictions
      either say nothing or say THEORETICAL MODEL. */
@@ -1929,7 +1946,11 @@ html>body{padding:0}</style>
     return values.length ? values.reduce((sum, value) => sum + value, 0) / values.length : null;
   }
 
+  /* A number, or null when there is none. Number(null) and Number('') are 0, which is finite: the
+     metrics table printed "0.0" for the mean pLDDT of a model with no pLDDT, and a blank CSV score
+     ranked as a real 0. Missing is missing. */
   function finiteNumber(value) {
+    if (value === null || value === undefined || (typeof value === 'string' && !value.trim())) return null;
     const number = Number(value);
     return Number.isFinite(number) ? number : null;
   }
@@ -2084,7 +2105,10 @@ html>body{padding:0}</style>
     const entryKey = associationKey(entry.sourcePath || entry.name);
     if (assetKey === entryKey) return true;
     const assetBase = fileStem(asset.name).toLowerCase();
-    const entryBase = fileStem(entry.name).toLowerCase();
+    /* The member's own path, as associationKey reads it: an archive member is named by its last two
+       path parts with spaces ("job / ranked_0.pdb"), whose stem " ranked_0" never matched ranked_N,
+       and a second copy's "(2)" kept the extension on. */
+    const entryBase = fileStem(entry.sourcePath || entry.name).toLowerCase();
     const ranked = entryBase.match(/^ranked_(\d+)$/);
     if (ranked && asset.rankIndex === Number(ranked[1])) return true;
     if (asset.modelName && (entryBase === asset.modelName.toLowerCase() || entryBase.endsWith('_' + asset.modelName.toLowerCase()))) return true;
@@ -2150,12 +2174,27 @@ html>body{padding:0}</style>
     if (!root.querySelector('[data-gpv-panel="confidence"]').hidden) renderConfidence();
   }
 
+  /* An archive's models after the first are read only when they are first shown (lazy loading), so until
+     then they have no pLDDT. Under Mean pLDDT order they were sorted as if theirs were the lowest, below
+     every viewed model, with nothing to say why. They are "not yet ranked": listed after the ranked
+     models in the order they were loaded, labelled so in the list and counted in the status bar. They are
+     not parsed to rank them — that would undo lazy loading for a 40-model archive. */
+  function notYetRanked(entry) {
+    return root.querySelector('#gpv-order').value === 'plddt' && !entry.model && !entry.scores.length;
+  }
+  function modelOrderNote() {
+    const count = structures.filter(notYetRanked).length;
+    return count ? ' · ' + count + ' not yet ranked' : '';
+  }
+
   function applyModelOrder() {
     const mode = root.querySelector('#gpv-order').value;
     const value = entry => mode === 'ranking' ? finiteNumber(entry.confidence && entry.confidence.rankingScore) : mode === 'plddt' ? mean(entry.scores) : -entry.loadIndex;
+    /* Ranked first, then not yet ranked, then models that have no pLDDT at all (an experimental structure). */
+    const tier = entry => (mode !== 'plddt' || value(entry) !== null ? 0 : notYetRanked(entry) ? 1 : 2);
     structures.sort((a, b) => {
       if (mode === 'loaded') return a.loadIndex - b.loadIndex;
-      return (value(b) ?? -Infinity) - (value(a) ?? -Infinity) || a.loadIndex - b.loadIndex;
+      return tier(a) - tier(b) || (value(b) ?? -Infinity) - (value(a) ?? -Infinity) || a.loadIndex - b.loadIndex;
     });
   }
 
@@ -2387,7 +2426,7 @@ html>body{padding:0}</style>
       parts.push(text(left, y0 - 8 * k, chain ? 'Chain ' + chain : 'Chain —', fit ? 11 : 13, 'start', 600));
       parts.push(text(left - axisLabel, y0 + rowHeight / 2, 'pLDDT', 11, 'middle', 400, muted, ' transform="rotate(-90 ' + f(left - axisLabel) + ' ' + f(y0 + rowHeight / 2) + ')"'));
       rows.forEach(item => {
-        const d = item.row.residues.map((atom, position) => (position ? 'L' : 'M') + f(x(atom.resi)) + ' ' + f(y(Math.max(0, Math.min(100, Number(atom.b) || 0))))).join(' ');
+        const d = item.row.residues.map((atom, position) => (position ? 'L' : 'M') + f(x(atom.resi)) + ' ' + f(y(Math.max(0, Math.min(100, residueConfidence(item.entry, atom)))))).join(' ');
         parts.push('<path d="' + d + '" fill="none" stroke="' + item.entry.color + '" stroke-width="' + f((entries.length > 1 ? 1.6 : 2) * k) + '" stroke-linejoin="round"/>');
       });
       parts.push('</g>');
@@ -2912,7 +2951,8 @@ html>body{padding:0}</style>
       spotlightResidues.forEach(spot => {
         if (spot.chain && (entry.hiddenChains || []).includes(spot.chain)) return;
         const selection = spot.chain ? { chain: spot.chain, resi: spot.resi } : { resi: spot.resi };
-        if (insertionCodeOf(spot)) selection.predicate = atom => insertionCodeOf(atom) === insertionCodeOf(spot);
+        /* Always by code, blank included: comparing plain 57 must not draw sticks on 57A and 57B. */
+        selection.predicate = atom => insertionCodeOf(atom) === insertionCodeOf(spot);
         model.setStyle(selection, { stick: { radius: 0.22, colorscheme: 'default' } }, true);
       });
     }
@@ -2946,6 +2986,15 @@ html>body{padding:0}</style>
     return deviationBands.find(([limit]) => value < limit)[1];
   }
 
+  /* Whether Download one panel per model has models to draw, by the rule it draws by (34): the shown
+     models when there are two, otherwise the active model's whole collection. Enabled whenever two
+     models were loaded, it refused a fetched entry and a local file with one of them hidden. */
+  function modelPanelsAvailable() {
+    if (displayedEntries().filter(entry => entry.model).length >= 2) return true;
+    const active = activeEntry();
+    return Boolean(active) && structures.filter(entry => entry.collection === active.collection).length >= 2;
+  }
+
   function updateStatus(message = 'Ready') {
     if (!root.querySelector('[data-gpv-panel="publish"]').hidden) { setTimeout(renderPublicationChecks, 0); setTimeout(renderCompositeControls, 0); }
     const visible = displayedEntries();
@@ -2962,7 +3011,7 @@ html>body{padding:0}</style>
       hiddenHint.append(title, show); root.querySelector('#gpv-stage-empty').after(hiddenHint);
     }
     if (hiddenHint) hiddenHint.hidden = !allHidden;
-    root.querySelector('#gpv-count').textContent = visible.length + ' displayed / ' + structures.length + ' loaded';
+    root.querySelector('#gpv-count').textContent = visible.length + ' displayed / ' + structures.length + ' loaded' + modelOrderNote();
     const scores = visible.flatMap(entry => entry.scores);
     const score = mean(scores);
     root.querySelector('#gpv-confidence').textContent = score === null ? 'Mean pLDDT —' : 'Mean pLDDT ' + score.toFixed(1);
@@ -2981,7 +3030,7 @@ html>body{padding:0}</style>
     const scored = structures.some(entry => entry.visible && entry.scores.length);
     root.querySelector('#gpv-profile-svg').disabled = !scored;
     root.querySelector('#gpv-profile-png').disabled = !scored;
-    root.querySelector('#gpv-image').disabled = structures.length === 0; root.querySelector('#gpv-model-panels').disabled = structures.length < 2;
+    root.querySelector('#gpv-image').disabled = structures.length === 0; root.querySelector('#gpv-model-panels').disabled = !modelPanelsAvailable();
     root.querySelector('#gpv-rmsd-matrix-run').disabled = visible.filter(entry => entry.visible).length < 2;
     root.querySelector('#gpv-svg').disabled = structures.length === 0;
     if (typeof renderImageButton === 'function') renderImageButton();
@@ -3015,7 +3064,7 @@ html>body{padding:0}</style>
     root.querySelector('#gpv-compare-image').disabled = !comparing;
     root.querySelector('#gpv-compare-svg').disabled = !comparing;
     /* Across the panels: three models in three panels is "3 displayed", not the primary's 1. */
-    if (comparing) root.querySelector('#gpv-count').textContent = new Set([...visible.map(entry => entry.id), ...comparePanels.map(panel => panel.entryId).filter(id => entryById(id))]).size + ' displayed / ' + structures.length + ' loaded · ' + (comparePanels.length + 1) + ' panels';
+    if (comparing) root.querySelector('#gpv-count').textContent = new Set([...visible.map(entry => entry.id), ...comparePanels.map(panel => panel.entryId).filter(id => entryById(id))]).size + ' displayed / ' + structures.length + ' loaded · ' + (comparePanels.length + 1) + ' panels' + modelOrderNote();
   }
 
   function materializeEntry(entry) {
@@ -3192,7 +3241,8 @@ html>body{padding:0}</style>
       const score = document.createElement('span');
       score.className = 'gpv-entry-score text-small';
       const average = mean(entry.scores);
-      score.textContent = average === null ? (entry.model ? 'pLDDT —' : 'Not viewed') : average.toFixed(1);
+      score.textContent = average === null ? (entry.model ? 'pLDDT —' : notYetRanked(entry) ? 'Not yet ranked' : 'Not viewed') : average.toFixed(1);
+      if (average === null && notYetRanked(entry)) score.title = 'Not read yet, so it has no pLDDT to sort by: listed after the ranked models. Show it to read its pLDDT; the order is applied again when you choose it or load more files.';
 
       const color = document.createElement('input');
       color.className = 'form-control form-control-color';
@@ -3247,6 +3297,33 @@ html>body{padding:0}</style>
      if they were its, the comparison that included it, and the modes when nothing is left to draw
      on. Otherwise Add or update would label a "Missing model", and the card would follow a residue
      that is no longer drawn. */
+  /* Removed models whose "same source" records moved to another model of their source, by id: undo
+     brings back snapshots taken before the move, and their records are moved the same way (05). */
+  const rehomedModels = new Map();
+  function rehomedRecord(record) {
+    if (!record || record.scope !== 'source') return record;
+    let id = record.entryId; const seen = new Set();
+    while (!entryById(id) && rehomedModels.has(id) && !seen.has(id)) { seen.add(id); id = rehomedModels.get(id); }
+    return id === record.entryId ? record : { ...record, entryId: id };
+  }
+
+  /* Named domains and per-residue data hang on the model they were made on. Scoped to the same
+     source, they colour every model of its collection — until that model was removed: domainApplies
+     found no owner and the domain silently stopped colouring the rest, its row still listed. Such a
+     record moves to a surviving model of the same source; a record of this model alone, or of a
+     source with no model left, goes with it. */
+  function rehomeModelRecords(entry) {
+    const successor = structures.find(item => item.collection === entry.collection) || null;
+    if (successor) rehomedModels.set(entry.id, successor.id);
+    const owned = record => record.scope !== 'all' && record.entryId === entry.id;
+    domainRecords = domainRecords.filter(record => !owned(record) || (record.scope === 'source' && successor)).map(record => (owned(record) ? { ...record, entryId: successor.id } : record));
+    domainVersion += 1; renderDomainList();
+    if (residueData && owned(residueData)) {
+      residueData = residueData.scope === 'source' && successor ? { ...residueData, entryId: successor.id } : null;
+      renderDataState();
+    }
+  }
+
   function removeModelEntry(entry) {
     const hadAlignment = alignmentResults.length > 0;
     const wasReference = hadAlignment && Number(root.querySelector('#gpv-reference').value) === entry.id;
@@ -3268,6 +3345,21 @@ html>body{padding:0}</style>
     spotlightResidues = []; positionEffect = null; renderPositionEffect(); renderPositionState();
     if (siteResults && siteResults.entryId === entry.id) siteResults = null;
     if (nearbyResult && nearbyResult.entry === entry) { nearbyResult = null; root.querySelector('#gpv-near-copy').disabled = true; }
+    /* Its interface table: the rows named chain pairs of a model that was gone, Highlight did nothing
+       and the CSV wrote them with an empty model column. */
+    if (interfaceResults && interfaceResults.entryId === entry.id) { interfaceResults = null; renderInterfaceResults(); root.querySelector('#gpv-interface-state').textContent = ''; }
+    /* A measurement or a drawing half made on it: the next click on another model completed a record
+       whose first point was the removed model — made after its model had gone. */
+    const draftRequired = root.querySelector('#gpv-measure-type').value === 'angle' ? 3 : 2;
+    if (measurementDraft.some(point => !keeps(point))) {
+      measurementDraft = measurementDraft.filter(keeps);
+      if (measurementActive) root.querySelector('#gpv-measure-state').textContent = 'Selected ' + measurementDraft.length + ' of ' + draftRequired + ' atoms.';
+    }
+    if (annotationDraft.some(point => !keeps(point))) {
+      annotationDraft = annotationDraft.filter(keeps);
+      if (annotationActive) root.querySelector('#gpv-annotation-state').textContent = annotationPrompt();
+    }
+    rehomeModelRecords(entry);
     if (rmsdMatrix) { rmsdMatrix = null; renderRmsdMatrix(); }
     /* Its comparison panels close with it. They used to be handed silently to the first model, until
        every panel showed the same one; and with no panel left the multi-view has nothing to compare. */
@@ -3553,7 +3645,8 @@ html>body{padding:0}</style>
       color.addEventListener('change', () => { delete color.dataset.remembered; });
       const show = document.createElement('button'); show.className = 'btn btn-ghost'; show.type = 'button'; show.textContent = 'Show'; show.dataset.control = 'show';
       show.title = 'Zoom to this residue';
-      show.addEventListener('click', () => { if (!entry || !entry.model) return; const selection = { model: entry.model.getID(), resi: label.resi }; if (label.chain) selection.chain = label.chain; viewer.zoomTo(selection); viewer.render(); syncViewsFrom(viewer); });
+      /* Frames the label's residue alone, by its insertion code too (blank included), as Go to does. */
+      show.addEventListener('click', () => { if (!entry || !entry.model) return; const selection = { model: entry.model.getID(), resi: label.resi, predicate: atom => insertionCodeOf(atom) === insertionCodeOf(label) }; if (label.chain) selection.chain = label.chain; viewer.zoomTo(selection); viewer.render(); syncViewsFrom(viewer); });
       const reset = document.createElement('button'); reset.className = 'btn btn-ghost'; reset.type = 'button'; reset.textContent = 'Reset';
       reset.title = 'Put the label back on its residue'; reset.disabled = labelOffsetLength(label) === 0;
       /* Reset greys itself out once used; the focus then goes to Show beside it rather than onto the page. */
@@ -3659,6 +3752,14 @@ html>body{padding:0}</style>
     if (shouldRender) viewer.render();
   }
 
+  /* The first part of a residue range the reader below cannot read ("100A-100C", a typo "2O"), or
+     null. Such a part was skipped without a word, so "100A-100C, 105" made a selection of 105 alone
+     and said "Selection added". Ranges take numbers only: an insertion-code run names no defined set. */
+  function unreadableRangePart(value) {
+    const part = String(value || '').split(',').map(item => item.trim()).find(item => item && !/^(-?\d+)(?:\s*-\s*(-?\d+))?$/.test(item));
+    return part === undefined ? null : part;
+  }
+
   function parseResidueRange(value) {
     const residues = new Set();
     String(value || '').split(',').forEach(part => {
@@ -3683,6 +3784,14 @@ html>body{padding:0}</style>
 
   function selectionResidueKeys(record) {
     return record.residues.map((resi, index) => resi + (Array.isArray(record.icodes) && record.icodes[index] ? record.icodes[index] : ''));
+  }
+
+  /* Of the highlight records a press would add ({ chain, residues, icodes? }), the ones not already
+     on the list for this model in this colour: a second press with nothing changed is refused rather
+     than stacking identical rows and undo steps (as Near's highlight does, 10). */
+  function newHighlightRecords(entryId, records, color) {
+    const same = (record, made) => record.entryId === entryId && record.action === 'highlight' && (record.chain || '') === (made.chain || '') && record.color === color && selectionResidueKeys(record).join() === selectionResidueKeys(made).join();
+    return records.filter(made => !selectionRecords.some(record => same(record, made)));
   }
 
   /* The atoms a record takes in, as a 3Dmol selection: by number, and by insertion code when it has them. */
@@ -3738,6 +3847,8 @@ html>body{padding:0}</style>
   function addSelection() {
     const entryId = Number(root.querySelector('#gpv-selection-model').value);
     const chain = root.querySelector('#gpv-selection-chain').value.trim();
+    const unread = unreadableRangePart(root.querySelector('#gpv-selection-range').value);
+    if (unread !== null) { updateStatus('Could not read "' + unread + '" — enter a valid residue number or range, such as 10-25, 40 (a residue with an insertion code, such as 100A, is selected with Shift-drag)'); return; }
     const residues = parseResidueRange(root.querySelector('#gpv-selection-range').value);
     if (!entryId || !residues.length) { updateStatus('Enter a valid residue number or range'); return; }
     remember('selection');
@@ -3753,8 +3864,14 @@ html>body{padding:0}</style>
   function resolvePoint(reference) {
     const entry = structures.find(item => item.id === reference.entryId);
     if (!entry) return null;
-    return entry.atoms.find(atom => Number.isInteger(reference.index) && atom.index === reference.index)
-      || entry.atoms.find(atom => sameResidue(atom, reference.chain, reference.resi, insertionCodeOf(reference)) && (atom.atom || '') === reference.atom) || null;
+    /* The stored index is a shortcut, not the identity: a scene restored onto a file of the same name
+       but another atom order (a re-run, a remediated entry, waters stripped) put other atoms at those
+       indices, and the distance between them was shown under the scene's atom names. The index hit
+       counts only when it is the named atom; otherwise the atom is found by its name, or not at all. */
+    const named = atom => sameResidue(atom, reference.chain, reference.resi, insertionCodeOf(reference)) && (atom.atom || '') === reference.atom;
+    const indexed = Number.isInteger(reference.index) ? entry.atoms.find(atom => atom.index === reference.index) : null;
+    if (indexed && (typeof reference.atom !== 'string' || named(indexed))) return indexed;
+    return entry.atoms.find(named) || null;
   }
 
   function pointName(reference) {
@@ -4239,6 +4356,12 @@ html>body{padding:0}</style>
     rebuildOverlays();
   }
 
+  /* Whether an annotation's text or leader is anywhere but where it started: what Reset puts back. */
+  function annotationMoved(record) {
+    const offset = record.offset || { x: 0, y: 0, z: 0 };
+    return Boolean(offset.x || offset.y || offset.z || record.dx || record.dy || Number.isFinite(record.distance));
+  }
+
   function annotationHasLabel(record) {
     return record.type === 'screen' || record.type === 'callout' || Boolean(record.text);
   }
@@ -4302,18 +4425,21 @@ html>body{padding:0}</style>
         [['←', 'Move label left', -1, 0], ['→', 'Move label right', 1, 0], ['↑', 'Move label up', 0, 1], ['↓', 'Move label down', 0, -1]].forEach(([glyph, title, dx, dy]) => {
           const button = document.createElement('button'); button.className = 'btn btn-ghost'; button.type = 'button'; button.textContent = glyph;
           button.setAttribute('aria-label', title); button.title = title;
-          button.addEventListener('click', () => nudgeAnnotation(record, dx, dy));
+          button.addEventListener('click', () => { nudgeAnnotation(record, dx, dy); reset.disabled = !annotationMoved(record); });
           nudge.append(button);
         });
         if (record.type === 'callout') {
           const distance = document.createElement('input'); distance.className = 'form-control'; distance.type = 'number'; distance.min = '2'; distance.max = '60'; distance.step = '1';
           distance.value = String(Number.isFinite(record.distance) ? record.distance : Math.round(8 * record.size));
           distance.title = 'Leader length in Å'; distance.setAttribute('aria-label', 'Leader length in angstroms');
-          distance.addEventListener('change', () => { remember('leader length'); record.distance = Math.max(2, Math.min(60, Number(distance.value) || 8)); rebuildOverlays(); });
+          distance.addEventListener('change', () => { remember('leader length'); record.distance = Math.max(2, Math.min(60, Number(distance.value) || 8)); reset.disabled = !annotationMoved(record); rebuildOverlays(); });
           nudge.append(distance);
         }
+        /* Greyed out with nothing to put back, as the label and measurement rows' Reset are: pressed on an
+           arrow never moved it took an undo step ("Undid label reset") that changed nothing. */
         const reset = document.createElement('button'); reset.className = 'btn btn-ghost'; reset.type = 'button'; reset.textContent = 'Reset'; reset.title = 'Put the label back where it started'; reset.dataset.control = 'reset';
-        reset.addEventListener('click', () => { remember('label reset'); record.offset = { x: 0, y: 0, z: 0 }; record.dx = 0; record.dy = 0; record.distance = null; renderAnnotationList(); rebuildOverlays(); });
+        reset.disabled = !annotationMoved(record);
+        reset.addEventListener('click', () => { if (!annotationMoved(record)) return; remember('label reset'); record.offset = { x: 0, y: 0, z: 0 }; record.dx = 0; record.dy = 0; record.distance = null; renderAnnotationList(); rebuildOverlays(); });
         nudge.append(reset);
         row.append(nudge);
       }
@@ -4650,8 +4776,10 @@ html>body{padding:0}</style>
 
   /* The two residues of a two-point distance, when both are in loaded models and are not the same
      residue — the only measurement whose atoms can be chosen again — and which pair it joins now:
-     'closest' when its atoms are the residues' closest heavy-atom pair, 'ca' when they are both Cα
-     atoms, 'measured' otherwise. */
+     'ca' when its atoms are the residues' own representative atoms (residueAlphaCarbon: the Cα, a
+     nucleotide's P — what the card's Measure to… joins by default), 'closest' when they are the
+     residues' closest heavy-atom pair, 'measured' otherwise. Tested by name, a P–P measurement the
+     card had just made read "as measured" under an option called Cα–Cα. */
   function measurementPairState(record) {
     if (!record || record.type !== 'distance' || record.points.length !== 2) return null;
     const [first, second] = record.points;
@@ -4661,10 +4789,11 @@ html>body{padding:0}</style>
     const residueA = { chain: first.chain || '', resi: first.resi, icode: insertionCodeOf(first) }; const residueB = { chain: second.chain || '', resi: second.resi, icode: insertionCodeOf(second) };
     const atomA = resolvePoint(first); const atomB = resolvePoint(second);
     const nearest = closestHeavyAtomPair(entryA, residueA, entryB, residueB);
+    const alphaA = residueAlphaCarbon(entryA, residueA.chain, residueA.resi, residueA.icode); const alphaB = residueAlphaCarbon(entryB, residueB.chain, residueB.resi, residueB.icode);
     let state = 'measured';
-    if (nearest && atomA === nearest.a && atomB === nearest.b) state = 'closest';
-    else if (atomA && atomB && atomA === residueAlphaCarbon(entryA, residueA.chain, residueA.resi, residueA.icode) && atomB === residueAlphaCarbon(entryB, residueB.chain, residueB.resi, residueB.icode) && atomA.atom === 'CA' && atomB.atom === 'CA') state = 'ca';
-    return { entryA, entryB, residueA, residueB, nearest, state };
+    if (atomA && atomB && atomA === alphaA && atomB === alphaB) state = 'ca';
+    else if (nearest && atomA === nearest.a && atomB === nearest.b) state = 'closest';
+    return { entryA, entryB, residueA, residueB, nearest, state, alphaA, alphaB };
   }
 
   /* The same two residues joined by other atoms: their Cα atoms, their closest heavy-atom pair, or —
@@ -4684,6 +4813,9 @@ html>body{padding:0}</style>
       if (first && second) points = [atomReference(pair.entryA, first), atomReference(pair.entryB, second)];
     }
     if (!points || points.some(point => !resolvePoint(point))) { updateStatus('Those atoms are not loaded'); return; }
+    /* The same atoms under another name (a pair whose closest atoms are its Cα atoms): nothing to
+       change, so no undo step that undoes nothing. */
+    if (points.every((point, index) => resolvePoint(point) === resolvePoint(record.points[index]))) { updateStatus('Measurement already joins ' + measurementAtomsText(record)); return; }
     remember('measurement atoms');
     if (pair.state === 'measured' && !record.measured) record.measured = record.points.map(point => ({ ...point }));
     record.points = points;
@@ -4714,7 +4846,9 @@ html>body{padding:0}</style>
     const select = host.querySelector('#gpv-measure-editor-pair');
     wrap.hidden = !pair;
     if (!pair) return;
-    const options = [['ca', 'Cα–Cα'], ['closest', 'closest atoms']];
+    /* Named as the card names it: P–P for two nucleotides, Cα–Cα for two amino acids. */
+    const representative = pair.alphaA && pair.alphaB ? atomWord(pair.alphaA) + '–' + atomWord(pair.alphaB) : 'Cα–Cα';
+    const options = [['ca', representative], ['closest', 'closest atoms']];
     if (pair.state === 'measured' || Array.isArray(record.measured)) options.push(['measured', 'as measured']);
     select.replaceChildren(...options.map(([value, text]) => new Option(text, value)));
     select.value = pair.state;
@@ -5673,7 +5807,7 @@ html>body{padding:0}</style>
       const record = labelRecords.find(label => label.key === editor.key);
       closeLabelEditor(true);
       if (record) setActiveText('label', record);
-      updateStatus('Label added at ' + locationText(editor.atom.chain, editor.atom.resi) + ' · arrow keys move it, Esc lets go');
+      updateStatus('Label added at ' + locationText(editor.atom.chain, residueNumber(editor.atom)) + ' · arrow keys move it, Esc lets go');
       return;
     }
     const record = labelEditorRecord();
@@ -5749,8 +5883,24 @@ html>body{padding:0}</style>
     return kind === 'measurement' ? 'measurement text move' : kind === 'label' ? 'label nudge' : 'annotation text move';
   }
 
+  /* Why the active text is drawn on no view, or null: the rows' arrows, Show and Edit already refuse a
+     measurement on a hidden model (measurementUndrawnReason, 04), and the arrow keys moved it anyway —
+     an undo step and "Measurement text moved" for text no one could see. A label on a hidden model is
+     refused the same way. */
+  function canvasTextUndrawnReason(resolved) {
+    if (resolved.kind === 'measurement') return measurementUndrawnReason(resolved.record);
+    if (resolved.kind !== 'label') return null;
+    const entry = entryById(resolved.record.entryId);
+    if (!entry) return 'Its model is no longer loaded';
+    if (displayedEntries().includes(entry)) return null;
+    if (root.querySelector('#gpv-side-by-side').checked && comparePanels.some(panel => panel.entryId === entry.id)) return null;
+    return 'Show ' + displayName(entry) + ' first — this label is not drawn while it is hidden';
+  }
+
   function nudgeActiveText(dx, dy, repeat) {
     const resolved = activeCanvasText(); if (!resolved) return;
+    const undrawn = canvasTextUndrawnReason(resolved);
+    if (undrawn) { updateStatus(undrawn); return; }
     /* Holding an arrow key is one move, not sixty undo steps. */
     if (!repeat) remember(canvasTextMoveStep(resolved.kind));
     nudgeCanvasText(resolved, dx, dy);
@@ -6103,9 +6253,12 @@ html>body{padding:0}</style>
     const entry = entryById(record.entryId);
     if (!entry || !entry.atoms.length) return [];
     const wanted = new Set(record.residues);
+    /* A record with insertion codes takes in exactly its residues, as it is drawn (selectionSpec): by
+       number alone a highlight of 57A labelled 57 and 57B too. One without codes keeps its old reading. */
+    const keys = Array.isArray(record.icodes) ? new Set(selectionResidueKeys(record)) : null;
     const found = new Map();
     entry.atoms.forEach(atom => {
-      if (atom.hetflag || !wanted.has(atom.resi) || (record.chain && (atom.chain || '') !== record.chain)) return;
+      if (atom.hetflag || !wanted.has(atom.resi) || (keys && !keys.has(residueNumber(atom))) || (record.chain && (atom.chain || '') !== record.chain)) return;
       const key = residueKey(entry.id, atom.chain, atom.resi, insertionCodeOf(atom));
       const current = found.get(key);
       if (!current || (atom.atom === 'CA' && current.atom !== 'CA')) found.set(key, atom);
@@ -6920,7 +7073,8 @@ html>body{padding:0}</style>
     selectionRecords = state.selections.filter(alive);
     measurementRecords = state.measurements.filter(record => record.points.every(alive));
     annotationRecords = state.annotations.filter(record => record.points.every(alive));
-    domainRecords = (state.domains || []).filter(record => record.scope === 'all' || alive(record)); domainVersion += 1;
+    /* A "same source" record taken before its model was removed comes back on the model it was moved to (03). */
+    domainRecords = (state.domains || []).map(rehomedRecord).filter(record => record.scope === 'all' || alive(record)); domainVersion += 1;
     spotlightResidues = state.positions || [];
     /* Saved views are records too: Make site figure adds two or three of them in one press, and undo
        has to take them back with the rest of the state that press changed. */
@@ -6929,12 +7083,18 @@ html>body{padding:0}</style>
     if (state.figureLabels) { setFigureLabels(state.figureLabels); applyFigureLabels(); }
     /* The colour scheme is not itself an undo step; it goes back only with the data it showed. */
     if ('residueData' in state && state.residueData !== residueData) {
-      residueData = state.residueData; renderDataState();
+      const data = rehomedRecord(state.residueData);
+      residueData = data && data.scope !== 'all' && !alive(data) ? null : data; renderDataState();
       const mode = root.querySelector('#gpv-color-mode');
       if (mode.value !== state.colorMode) mode.value = state.colorMode;
     }
-    /* The neighbourhood table belongs to the compared positions it was measured around. */
-    positionEffect = spotlightResidues.length ? state.positionEffect || null : null; renderPositionEffect();
+    /* The neighbourhood table belongs to the compared positions it was measured around, and to the
+       superposition and the models it was measured on: put back after one of them was removed (which
+       clears the alignment), it listed a "Cα Δ vs" column for a model no longer loaded and the legend
+       said the site "moved" in it. */
+    const effect = state.positionEffect || null;
+    const effectLive = effect && alignmentResults.length > 0 && (!Array.isArray(effect.entryIds) || effect.entryIds.every(id => entryById(id)));
+    positionEffect = spotlightResidues.length && effectLive ? effect : null; renderPositionEffect();
     renderLabelList(); renderSelectionList(); renderMeasurementList(); renderAnnotationList(); renderDomainList(); renderPositionState(); renderSavedViews(); renderList(); renderSequenceSoon();
     applyStyle();
     /* A scene restore's step also holds the display it replaced (31, sceneDisplayState). */
@@ -7169,7 +7329,9 @@ html>body{padding:0}</style>
     canvas.addEventListener('dblclick', () => {
       const found = sequenceRowFor(canvas);
       if (!found || !sequenceHover || !found.entry.model) return;
-      const selection = { model: found.entry.model.getID(), resi: sequenceHover.resi };
+      /* The cell's residue alone, by insertion code (blank included): 57 framed 57, 57A and 57B. */
+      const code = insertionCodeOf(sequenceHover);
+      const selection = { model: found.entry.model.getID(), resi: sequenceHover.resi, predicate: atom => insertionCodeOf(atom) === code };
       if (found.row.chain) selection.chain = found.row.chain;
       viewer.zoomTo(selection); viewer.render(); syncViewsFrom(viewer);
     });
@@ -7328,13 +7490,19 @@ html>body{padding:0}</style>
     const rows = lines.map(line => line.split(delimiter).map(cell => cell.trim().replace(/^"|"$/g, '')));
     const header = rows[0].map(cell => cell.toLowerCase());
     const numeric = cell => /^-?\d+(\.\d+)?(e[-+]?\d+)?$/i.test(cell || '');
-    const headerless = header.every(cell => cell === '' || numeric(cell));
+    let headerless = header.every(cell => cell === '' || numeric(cell));
     let chainCol = -1; let resiCol = -1; let valueCol = -1;
     if (!headerless) {
       chainCol = header.findIndex(cell => ['chain', 'chain_id', 'asym', 'asym_id', 'auth_asym_id', 'label_asym_id'].includes(cell));
       resiCol = header.findIndex(cell => ['resi', 'residue', 'resid', 'res', 'position', 'pos', 'site', 'resnum', 'residue_number', 'auth_seq_id', 'seq_id', 'index'].includes(cell));
       const skip = new Set(['resn', 'aa', 'residue_name', 'wt', 'wild_type', 'mutation', 'name', 'label', 'chain', 'chain_id']);
       valueCol = header.findIndex((cell, index) => index !== chainCol && index !== resiCol && !skip.has(cell) && rows.slice(1).some(row => numeric(row[index])));
+      /* "A,10,0.5" is not all numbers, so it looked like a header — but no header word was recognised
+         and it has the chain,number,number shape of a data row. Taken as a header, residue A:10 got no
+         value and nothing said a row was dropped. */
+      if (chainCol < 0 && resiCol < 0 && rows[0].length >= 3 && !numeric(rows[0][0]) && numeric(rows[0][1]) && numeric(rows[0][2])) {
+        headerless = true; chainCol = -1; valueCol = -1;
+      }
     }
     const body = headerless ? rows : rows.slice(1);
     if (resiCol < 0) { if (body[0] && body[0].length >= 3 && !numeric(body[0][0])) { chainCol = 0; resiCol = 1; valueCol = 2; } else { chainCol = -1; resiCol = 0; valueCol = 1; } }
@@ -7348,8 +7516,12 @@ html>body{padding:0}</style>
     return { min: residueData.min, max: residueData.max === residueData.min ? residueData.min + 1 : residueData.max };
   }
 
+  /* A table names residues by number only (a 100A row is skipped as unreadable), so a residue with an
+     insertion code has no value of its own: keyed by chain and number, 100A and 100B were painted with
+     100's value, a different residue's. */
   function residueDataValue(entry, atom) {
     if (!residueData || !domainApplies(residueData, entry)) return undefined;
+    if (insertionCodeOf(atom)) return undefined;
     const key = (atom.chain || '') + '|' + atom.resi;
     if (residueData.values.has(key)) return residueData.values.get(key);
     return residueData.byResi.get(atom.resi);
@@ -7385,7 +7557,8 @@ html>body{padding:0}</style>
   function downloadResidueDataCsv() {
     if (!residueData) return;
     const owner = entryById(residueData.entryId); const entry = (owner && owner.model) ? owner : activeEntry();
-    const names = new Map(); if (entry) entry.atoms.forEach(atom => { if (atom.atom === 'CA') names.set((atom.chain || '') + '|' + atom.resi, atom.resn || ''); });
+    /* The residue a row names is the one without an insertion code: 100, not whichever of 100A or 100B came last. */
+    const names = new Map(); if (entry) entry.atoms.forEach(atom => { if (atom.atom === 'CA' && !atom.hetflag && !insertionCodeOf(atom)) names.set((atom.chain || '') + '|' + atom.resi, atom.resn || ''); });
     const rows = [['chain', 'resi', 'resn', residueData.name.replace(/[^\w()\-. ]+/g, ' ').trim() || 'value']];
     const sortKey = (a, b) => compareChains(a[0], b[0]) || a[1] - b[1];
     const entries = [...residueData.values.entries()].map(([key, value]) => { const [chain, resi] = key.split('|'); return [chain, Number(resi), value]; });
@@ -7469,14 +7642,16 @@ html>body{padding:0}</style>
       let match;
       while ((match = regex.exec(sequence)) !== null) {
         if (!match[0].length) { regex.lastIndex += 1; continue; }
-        for (let offset = 0; offset < match[0].length; offset += 1) { const atom = row.residues[match.index + offset]; if (!byChain.has(row.chain)) byChain.set(row.chain, []); byChain.get(row.chain).push(atom.resi); }
-        hits.push({ chain: row.chain, start: row.residues[match.index].resi, text: match[0] });
+        /* The matched residues themselves, insertion codes and all: by number alone a match starting at
+           100A highlighted 100 too, and the readout named 100. Strip order, so the record is sorted. */
+        for (let offset = 0; offset < match[0].length; offset += 1) { const atom = row.residues[match.index + offset]; if (!byChain.has(row.chain)) byChain.set(row.chain, new Map()); byChain.get(row.chain).set(residueCodeTag(atom), atom); }
+        hits.push({ chain: row.chain, start: residueNumber(row.residues[match.index]), text: match[0] });
       }
     });
     if (!hits.length) { state.textContent = 'No match for ' + pattern + ' in ' + displayName(entry) + '.'; return; }
     remember('motif highlight');
     const color = root.querySelector('#gpv-selection-color').value;
-    byChain.forEach((residues, chain) => selectionRecords.push({ id: nextAnnotationId++, entryId: entry.id, chain, residues: [...new Set(residues)].sort((a, b) => a - b), action: 'highlight', color }));
+    byChain.forEach((residues, chain) => selectionRecords.push({ id: nextAnnotationId++, entryId: entry.id, chain, ...selectionResidues([...residues.values()]), action: 'highlight', color }));
     renderSelectionList(); applyStyle();
     state.textContent = hits.length + ' match' + (hits.length === 1 ? '' : 'es') + ': ' + clipText(hits.map(hit => (hit.chain ? hit.chain + ':' : '') + hit.start + ' ' + hit.text).join(', '), 160);
     updateStatus(hits.length + ' motif match' + (hits.length === 1 ? '' : 'es') + ' highlighted on ' + displayName(entry));
@@ -7582,8 +7757,10 @@ html>body{padding:0}</style>
     const copy = { ...confidence }; delete copy.pae; delete copy.paeMaximum; copy.paeOmitted = true; return copy;
   }
 
+  /* applyScene sets both of a model's fades from its record, so a writer that leaves one out un-fades
+     it: an emphasised model (`faded`) came back solid after every session restore. */
   function sessionScene() {
-    return { type: 'protein-viewer-scene', schemaVersion: 1, viewerVersion, provenance: provenanceValues(), models: structures.map(entry => ({ name: entry.name, visible: entry.visible, color: entry.color, label: entry.label || '', hiddenChains: entry.hiddenChains || [], fadedChains: entry.fadedChains || [] })), settings: sceneSettings(), ...sceneOverlays(), savedViews: savedViews.map(view => ({ ...view })) };
+    return { type: 'protein-viewer-scene', schemaVersion: 1, viewerVersion, provenance: provenanceValues(), models: structures.map(entry => ({ name: entry.name, visible: entry.visible, color: entry.color, label: entry.label || '', hiddenChains: entry.hiddenChains || [], fadedChains: entry.fadedChains || [], ...(entry.faded ? { faded: true } : {}) })), settings: sceneSettings(), ...sceneOverlays(), savedViews: savedViews.map(view => ({ ...view })) };
   }
 
   function sessionSnapshot(confidenceOf = sessionConfidence) {
@@ -7648,6 +7825,10 @@ html>body{padding:0}</style>
 
   async function openSessionFile(file) {
     if (typeof JSZip === 'undefined') { announce('The ZIP reader did not load. Refresh the page and try again.', 'error'); return false; }
+    /* A session empties the page — removes every model and releases the export viewer — so opened
+       between a figure's awaits it pulled the models out from under the render, by the door a file
+       and a fetch already wait at (31, 40). */
+    if (exportRendering()) await afterExportRenders(file.name || 'the session');
     const snapshot = await readSessionZip(await JSZip.loadAsync(file));
     if (!snapshot) { announce('That ZIP is not a session file', 'error'); return false; }
     const restored = await restoreSession(snapshot);
@@ -7739,8 +7920,15 @@ html>body{padding:0}</style>
       });
       renderList(); applyStyle();
       await applyScene(saved.scene);
+      /* The autosave banner offered the page as it was; Restore on it now would replace the session
+         just opened. Loading a file and a fetch take it down the same way. */
+      dismissSessionBanner();
       /* What is on the page now, which is what the session held. */
-      const message = 'Session restored · ' + structures.length + ' model' + (structures.length === 1 ? '' : 's') + ' from ' + new Date(saved.savedAt).toLocaleTimeString() + (open ? ' · replaced the ' + (open === 1 ? 'model that was open' : open + ' models that were open') : '');
+      /* The autosave leaves out a PAE over 1 500 tokens (sessionConfidence) and marks it; nothing said
+         so, and the heatmap, the PAE domains and ipSAE/LIS were simply gone after the restore. */
+      const omitted = saved.files.filter(file => file.confidence && file.confidence.paeOmitted).map(file => file.name);
+      const paeNote = omitted.length ? ' · the PAE of ' + (omitted.length === 1 ? omitted[0] : omitted.length + ' models (' + clipText(omitted.join(', '), 80) + ')') + ' was too large to autosave — reopen its files, or keep it with Save session file' : '';
+      const message = 'Session restored · ' + structures.length + ' model' + (structures.length === 1 ? '' : 's') + ' from ' + new Date(saved.savedAt).toLocaleTimeString() + (open ? ' · replaced the ' + (open === 1 ? 'model that was open' : open + ' models that were open') : '') + paeNote;
       announce(message);
       return { models: structures.length, message };
     } finally { done(); }
@@ -7823,6 +8011,8 @@ html>body{padding:0}</style>
     const name = root.querySelector('#gpv-domain-name').value.trim();
     const residues = parseResidueRange(root.querySelector('#gpv-domain-range').value);
     if (!name) { updateStatus('Give the domain a name'); root.querySelector('#gpv-domain-name').focus(); return; }
+    const unread = unreadableRangePart(root.querySelector('#gpv-domain-range').value);
+    if (unread !== null) { updateStatus('Could not read "' + unread + '" — enter a residue range such as 1-75 or 1-75,120-140'); root.querySelector('#gpv-domain-range').focus(); return; }
     if (!residues.length) { updateStatus('Enter a residue range such as 1-75 or 1-75,120-140'); root.querySelector('#gpv-domain-range').focus(); return; }
     remember('domain');
     domainRecords.push({ id: nextAnnotationId++, entryId: entry.id, name, color: root.querySelector('#gpv-domain-colour').value, chain: root.querySelector('#gpv-domain-chain').value.trim(), residues, scope: root.querySelector('#gpv-domain-scope').value });
@@ -8037,12 +8227,14 @@ html>body{padding:0}</style>
 
   let siteResults = null;
 
+  /* A group is one ligand: its chain, number, insertion code and name. Keyed without the code, two
+     copies at 101 and 101A were one group with both copies' atoms, where Composition counts two. */
   function ligandGroups(entry) {
     const groups = new Map();
     heavyAtoms(entry).forEach(atom => {
       if (!atom.hetflag || isWater(atom)) return;
-      const resn = String(atom.resn || '?').toUpperCase(); const key = (atom.chain || '') + '|' + atom.resi + '|' + resn;
-      if (!groups.has(key)) groups.set(key, { chain: atom.chain || '', resi: atom.resi, resn, atoms: [] });
+      const resn = String(atom.resn || '?').toUpperCase(); const key = (atom.chain || '') + '|' + atom.resi + '|' + insertionCodeOf(atom) + '|' + resn;
+      if (!groups.has(key)) groups.set(key, { chain: atom.chain || '', resi: atom.resi, ...(insertionCodeOf(atom) ? { icode: insertionCodeOf(atom) } : {}), resn, atoms: [] });
       groups.get(key).atoms.push(atom);
     });
     return [...groups.values()];
@@ -8075,8 +8267,9 @@ html>body{padding:0}</style>
     const tokenIndex = paeTokenIndex(entry); const matrix = entry.confidence && entry.confidence.pae;
     const rows = groups.map(group => {
       const residues = new Map();
-      group.atoms.forEach(target => grid.near(target).forEach(i => { const atom = protein[i]; if (squaredDistance(atom, target) <= limit) { const tag = residueTag(atom); if (!residues.has(tag)) residues.set(tag, atom); } }));
-      const site = [...residues.values()].sort((a, b) => compareChains(a.chain || '', b.chain || '') || a.resi - b.resi);
+      /* Site residues by chain, number and insertion code: 57 and 57A are two residues of the site. */
+      group.atoms.forEach(target => grid.near(target).forEach(i => { const atom = protein[i]; if (squaredDistance(atom, target) <= limit) { const tag = residueCodeTag(atom); if (!residues.has(tag)) residues.set(tag, atom); } }));
+      const site = [...residues.values()].sort((a, b) => compareChains(a.chain || '', b.chain || '') || a.resi - b.resi || (insertionCodeOf(a) < insertionCodeOf(b) ? -1 : insertionCodeOf(a) > insertionCodeOf(b) ? 1 : 0));
       const plddt = entry.scores.length && site.length ? mean(site.map(atom => Number(atom.b) || 0)) : null;
       let pae = null;
       if (tokenIndex && matrix) {
@@ -8095,8 +8288,8 @@ html>body{padding:0}</style>
     updateStatus(rows.length + ' ligand site' + (rows.length === 1 ? '' : 's') + ' analysed at ' + cutoff + ' Å on ' + displayName(entry));
   }
 
-  function siteLabel(group) { return group.resn + ' ' + (group.chain ? group.chain + ':' : '') + group.resi; }
-  function siteResidueList(site) { return site.map(atom => (atom.chain ? atom.chain + ':' : '') + (atom.resn || '') + atom.resi).join('; '); }
+  function siteLabel(group) { return group.resn + ' ' + (group.chain ? group.chain + ':' : '') + residueNumber(group); }
+  function siteResidueList(site) { return site.map(atom => (atom.chain ? atom.chain + ':' : '') + (atom.resn || '') + residueNumber(atom)).join('; '); }
 
   function renderLigandSites(entry) {
     const run = root.querySelector('#gpv-site-run'); const state = root.querySelector('#gpv-site-state');
@@ -8117,9 +8310,14 @@ html>body{padding:0}</style>
       const action = document.createElement('td'); const highlight = document.createElement('button'); highlight.className = 'btn btn-ghost'; highlight.type = 'button'; highlight.textContent = 'Highlight';
       highlight.disabled = !row.site.length;
       highlight.addEventListener('click', () => {
+        /* With the site's insertion codes, so a site lined by 57 and 57A does not light 57B too; and a
+           press that would only repeat rows already there is refused, as the card's Highlight is. */
+        const color = root.querySelector('#gpv-selection-color').value;
+        const byChain = new Map(); row.site.forEach(atom => { const chain = atom.chain || ''; if (!byChain.has(chain)) byChain.set(chain, []); byChain.get(chain).push(atom); });
+        const wanted = newHighlightRecords(entry.id, [...byChain].map(([chain, atoms]) => ({ chain, ...selectionResidues(atoms) })), color);
+        if (!wanted.length) { updateStatus(siteLabel(row.group) + ' site is already highlighted · ' + row.site.length + ' residues'); return; }
         remember('ligand site');
-        const byChain = new Map(); row.site.forEach(atom => { const chain = atom.chain || ''; if (!byChain.has(chain)) byChain.set(chain, []); byChain.get(chain).push(atom.resi); });
-        byChain.forEach((residues, chain) => selectionRecords.push({ id: nextAnnotationId++, entryId: entry.id, chain, residues: residues.sort((a, b) => a - b), action: 'highlight', color: root.querySelector('#gpv-selection-color').value }));
+        wanted.forEach(made => selectionRecords.push({ id: nextAnnotationId++, entryId: entry.id, ...made, action: 'highlight', color }));
         renderSelectionList(); applyStyle();
         updateStatus(siteLabel(row.group) + ' site highlighted · ' + row.site.length + ' residues');
       });
@@ -8131,7 +8329,7 @@ html>body{padding:0}</style>
     const entry = activeEntry(); if (!siteResults || !entry) return;
     const quote = value => '"' + String(value).replace(/"/g, '""') + '"';
     const rows = [['model', 'ligand', 'chain', 'resi', 'ligand_atoms', 'cutoff_angstrom', 'site_residue_count', 'site_mean_plddt', 'ligand_site_mean_pae', 'site_residues']];
-    siteResults.rows.forEach(row => rows.push([displayName(entry), row.group.resn, row.group.chain, row.group.resi, row.group.atoms.length, siteResults.cutoff, row.site.length, row.plddt === null ? '' : row.plddt.toFixed(2), row.pae === null ? '' : row.pae.toFixed(3), siteResidueList(row.site)]));
+    siteResults.rows.forEach(row => rows.push([displayName(entry), row.group.resn, row.group.chain, residueNumber(row.group), row.group.atoms.length, siteResults.cutoff, row.site.length, row.plddt === null ? '' : row.plddt.toFixed(2), row.pae === null ? '' : row.pae.toFixed(3), siteResidueList(row.site)]));
     downloadBlob(rows.map(row => row.map(quote).join(',')).join('\n'), 'text/csv', 'ligand-sites.csv');
     updateStatus('Ligand sites CSV downloaded');
   }
@@ -8661,7 +8859,7 @@ html>body{padding:0}</style>
       const count = document.createElement('td'); count.className = 'text-end'; count.textContent = String(row.residues.length); tr.append(count);
       const range = document.createElement('td'); range.textContent = row.residues[0].resi + '–' + row.residues[row.residues.length - 1].resi; tr.append(range);
       const confidence = document.createElement('td'); confidence.className = 'text-end';
-      confidence.textContent = entry.scores.length ? (mean(row.residues.map(atom => Number(atom.b) || 0)) || 0).toFixed(1) : '—'; tr.append(confidence);
+      confidence.textContent = entry.scores.length ? (mean(row.residues.map(atom => residueConfidence(entry, atom))) || 0).toFixed(1) : '—'; tr.append(confidence);
       const toggleCell = document.createElement('td');
       const toggle = document.createElement('input'); toggle.type = 'checkbox'; toggle.className = 'form-check-input'; toggle.checked = !hidden.includes(row.chain);
       toggle.setAttribute('aria-label', 'Show chain ' + (row.chain || '—'));
@@ -8760,14 +8958,16 @@ html>body{padding:0}</style>
 
   /* One axis of the map: a chain's residues, or every chain's end to end, each residue stood for
      by the atom the sequence strip uses (the Cα, else a nucleotide's P), with the chain blocks
-     for the dividers, a chain|resi index for the contact search, and the coordinates the Cα–Cα
-     distances are read from. */
+     for the dividers, a chain|resi|code index for the contact search, and the coordinates the Cα–Cα
+     distances are read from. The index takes the insertion code: keyed by chain and number, 100 and
+     100A both found 100B's row, so 100B was credited with 100A's contact at 100A's distance and the
+     pairs among 100, 100A and 100B fell onto the diagonal and vanished. */
   function contactAxis(entry, value) {
     const all = value === contactAllChains;
     const rows = residueRows(entry).filter(row => all || row.chain === value);
     const residues = []; const blocks = [];
     rows.forEach(row => { blocks.push({ chain: row.chain, start: residues.length, end: residues.length + row.residues.length }); residues.push(...row.residues); });
-    const index = new Map(residues.map((atom, i) => [(atom.chain || '') + '|' + atom.resi, i]));
+    const index = new Map(residues.map((atom, i) => [residueCodeTag(atom), i]));
     const x = new Float64Array(residues.length); const y = new Float64Array(residues.length); const z = new Float64Array(residues.length);
     residues.forEach((atom, i) => { x[i] = atom.x; y[i] = atom.y; z[i] = atom.z; });
     return { value, all, chain: value, residues, blocks, index, x, y, z };
@@ -8813,10 +9013,10 @@ html>body{padding:0}</style>
     const grid = spatialGrid(atomsB, cutoff); const limit = cutoff * cutoff;
     const pairs = new Map();
     atomsA.forEach(a => {
-      const i = axisA.index.get((a.chain || '') + '|' + a.resi); if (i === undefined) return;
+      const i = axisA.index.get(residueCodeTag(a)); if (i === undefined) return;
       grid.near(a).forEach(k => {
         const b = atomsB[k];
-        const j = axisB.index.get((b.chain || '') + '|' + b.resi); if (j === undefined) return;
+        const j = axisB.index.get(residueCodeTag(b)); if (j === undefined) return;
         /* A residue is never in contact with itself (the diagonal stays empty), and a symmetric
            map keeps each unordered pair once. */
         if (symmetric ? j <= i : axisA.residues[i] === axisB.residues[j]) return;
@@ -9026,7 +9226,8 @@ html>body{padding:0}</style>
     /* Positions along the axes are residue order, chain by chain, so they sort an all-chains map too. */
     [...contactResult.pairs.entries()].map(([key, d]) => { const [i, j] = key.split('|').map(Number); return { i, j, a: contactResult.rowA.residues[i], b: contactResult.rowB.residues[j], d }; })
       .sort((x, y) => x.i - y.i || x.j - y.j)
-      .forEach(pair => rows.push([entry ? displayName(entry) : '', pair.a.chain || '', pair.a.resi, pair.a.resn || '', pair.b.chain || '', pair.b.resi, pair.b.resn || '', pair.d.toFixed(3), contactResult.mode === 'ca' ? 'CA' : 'heavy', contactResult.cutoff]));
+      /* The number as the file writes it (100A), as the card's Distances CSV does: three rows of "100" cannot be told apart. */
+      .forEach(pair => rows.push([entry ? displayName(entry) : '', pair.a.chain || '', residueNumber(pair.a), pair.a.resn || '', pair.b.chain || '', residueNumber(pair.b), pair.b.resn || '', pair.d.toFixed(3), contactResult.mode === 'ca' ? 'CA' : 'heavy', contactResult.cutoff]));
     downloadBlob(rows.map(row => row.map(csvCell).join(',')).join('\n'), 'text/csv', 'contacts-' + contactFileTag() + '.csv');
     updateStatus('Contacts CSV downloaded · ' + contactResult.pairs.size + ' pairs');
   }
@@ -9050,7 +9251,7 @@ html>body{padding:0}</style>
     const onB = new Set(rowB.residues);
     const total = symmetric ? n * (n - 1) / 2 : n * m - rowA.residues.filter(atom => onB.has(atom)).length;
     const model = csvCell(entry ? displayName(entry) : '');
-    const prefix = atom => csvCell(atom.chain || '') + ',' + csvCell(atom.resi) + ',' + csvCell(atom.resn || '');
+    const prefix = atom => csvCell(atom.chain || '') + ',' + csvCell(residueNumber(atom)) + ',' + csvCell(atom.resn || '');
     const columns = rowB.residues.map(prefix);
     const parts = [['model', 'chain_a', 'resi_a', 'resn_a', 'chain_b', 'resi_b', 'resn_b', 'ca_distance_angstrom', 'min_heavy_distance_angstrom'].map(csvCell).join(',')];
     let chunk = []; let written = 0;
@@ -9658,7 +9859,7 @@ html>body{padding:0}</style>
     const records = [];
     entries.forEach(entry => residueRows(entry).forEach(row => {
       const sequence = row.residues.map(atom => residueLetter(atom.resn)).join('');
-      const confidence = entry.scores.length ? mean(row.residues.map(atom => Number(atom.b) || 0)) : null;
+      const confidence = entry.scores.length ? mean(row.residues.map(atom => residueConfidence(entry, atom))) : null;
       const header = '>' + displayName(entry).replace(/\s+/g, '_') + (row.chain ? '|chain_' + row.chain : '') + ' length=' + sequence.length + (confidence === null ? '' : ' mean_pLDDT=' + confidence.toFixed(1));
       records.push(header + '\n' + (sequence.match(/.{1,60}/g) || ['']).join('\n'));
     }));
@@ -9947,6 +10148,9 @@ html>body{padding:0}</style>
     return total;
   }
 
+  /* Residues are kept as the file numbers them (100, 100A), so an antibody's 100, 100A and 100B are
+     three interface residues and three pairs, not one; keyed by number alone, a contact at 100A
+     counted once for all three, Highlight lit 100 and 100B with it and the CSV wrote "100". */
   function contactSummary(atoms, cutoff) {
     const grid = spatialGrid(atoms, cutoff);
     const limit = cutoff * cutoff;
@@ -9962,8 +10166,8 @@ html>body{padding:0}</style>
         if (!pairs.has(key)) pairs.set(key, { chains: [first.chain || '', second.chain || ''], contacts: 0, residuePairs: new Set(), residuesA: new Set(), residuesB: new Set() });
         const record = pairs.get(key);
         record.contacts += 1;
-        record.residuePairs.add(first.resi + '|' + second.resi);
-        record.residuesA.add(first.resi); record.residuesB.add(second.resi);
+        record.residuePairs.add(residueNumber(first) + '|' + residueNumber(second));
+        record.residuesA.add(residueNumber(first)); record.residuesB.add(residueNumber(second));
       });
     });
     return [...pairs.values()].sort((a, b) => b.contacts - a.contacts);
@@ -10027,6 +10231,12 @@ html>body{padding:0}</style>
     });
   }
 
+  /* A side's residues back as { resi, icode }, in residue order: 99, 100, 100A, 100B, 101. */
+  function interfaceResidueItems(residues) {
+    return [...residues].map(value => { const match = String(value).match(/^(-?\d+)(.*)$/); return match ? { resi: Number(match[1]), icode: match[2] } : { resi: Number(value), icode: '' }; })
+      .sort((a, b) => a.resi - b.resi || (a.icode < b.icode ? -1 : a.icode > b.icode ? 1 : 0));
+  }
+
   function highlightInterface(row) {
     /* One highlight colour for the whole viewer: Annotate's, as the contact map, the card, Near and
        Ligand sites use. Interfaces had a colour well of its own until 2.52.0. */
@@ -10034,7 +10244,7 @@ html>body{padding:0}</style>
     const entry = entryById(entryId); if (!entry) return;
     remember('interface highlight');
     [[row.chains[0], row.residuesA], [row.chains[1], row.residuesB]].forEach(([chain, residues]) => {
-      selectionRecords.push({ id: nextAnnotationId++, entryId, chain, residues: [...residues].sort((a, b) => a - b), action: 'highlight', color });
+      selectionRecords.push({ id: nextAnnotationId++, entryId, chain, ...selectionResidues(interfaceResidueItems(residues)), action: 'highlight', color });
     });
     if (!entry.visible) entry.visible = true;
     renderSelectionList(); renderList(); applyStyle();
@@ -10046,7 +10256,7 @@ html>body{padding:0}</style>
     const entry = entryById(interfaceResults.entryId);
     const quote = value => '"' + String(value).replace(/"/g, '""') + '"';
     const lines = [['model', 'chain_a', 'chain_b', 'cutoff_angstrom', 'atom_contacts', 'residue_pairs', 'interface_residues_a', 'interface_residues_b', 'buried_surface_area_A2', 'residues_a', 'residues_b'].join(',')];
-    interfaceResults.rows.forEach(row => lines.push([entry ? entry.name : '', row.chains[0], row.chains[1], interfaceResults.cutoff, row.contacts, row.residuePairs.size, row.residuesA.size, row.residuesB.size, Number.isFinite(row.bsa) ? row.bsa.toFixed(1) : '', [...row.residuesA].sort((a, b) => a - b).join(' '), [...row.residuesB].sort((a, b) => a - b).join(' ')].map(quote).join(',')));
+    interfaceResults.rows.forEach(row => lines.push([entry ? entry.name : '', row.chains[0], row.chains[1], interfaceResults.cutoff, row.contacts, row.residuePairs.size, row.residuesA.size, row.residuesB.size, Number.isFinite(row.bsa) ? row.bsa.toFixed(1) : '', interfaceResidueItems(row.residuesA).map(residueNumber).join(' '), interfaceResidueItems(row.residuesB).map(residueNumber).join(' ')].map(quote).join(',')));
     downloadBlob(lines.join('\n'), 'text/csv', 'interface-geometry.csv');
     announce('Interface CSV downloaded');
   }
@@ -10327,12 +10537,17 @@ html>body{padding:0}</style>
     SEC: 'U', PYL: 'O', ASX: 'B', GLX: 'Z'
   };
 
+  /* Each chain's Cα atoms with their one-letter codes, for the sequence-aware pairings and the ipSAE
+     pooling (17a). A calcium ion is a HETATM atom named CA: as an "X residue" it paired with the other
+     model's ion and entered the fit, the RMSD and the identity as a Cα pair. A modified residue bonded
+     into its chain (TPO, MSE) has had its hetflag cleared (03b), so it stays, and it reads its parent's
+     letter, as the strip and the FASTA write it — as X it mis-scored against its own copy. */
   function residueChains(entry) {
     const chains = new Map();
-    entry.atoms.filter(atom => atom.atom === 'CA').forEach(atom => {
+    entry.atoms.filter(atom => atom.atom === 'CA' && !atom.hetflag).forEach(atom => {
       const chain = atom.chain || '';
       if (!chains.has(chain)) chains.set(chain, []);
-      chains.get(chain).push({ atom, letter: aminoAcids[String(atom.resn || '').toUpperCase()] || 'X' });
+      chains.get(chain).push({ atom, letter: residueLetter(atom.resn) });
     });
     return chains;
   }
@@ -10459,6 +10674,9 @@ html>body{padding:0}</style>
     const named = parts.length > 1;
     const chain = named ? parts[0].trim() : (/^[A-Za-z][A-Za-z0-9]{0,3}$/.test(value) ? value : '');
     const rangeText = named ? parts.slice(1).join(':').trim() : (chain ? '' : value);
+    /* A part that cannot be read refuses the region, as Selections and Domains do, rather than fitting
+       on the parts that could be. */
+    if (rangeText && unreadableRangePart(rangeText) !== null) return null;
     const residues = rangeText ? new Set(parseResidueRange(rangeText)) : null;
     if (chain && !rangeText) return { chain, residues: null, label: 'chain ' + chain };
     if (!residues || !residues.size) return null;
@@ -11055,12 +11273,15 @@ html>body{padding:0}</style>
        read exactly as before and older viewers ignore the field. */
     const icodeOf = item => { const icode = insertionCodeOf(item); return icode ? { icode } : {}; };
     const point = item => ({ model: nameOf(item.entryId), chain: item.chain, resi: item.resi, ...icodeOf(item), atom: item.atom, index: item.index });
+    /* An offset Separate labels chose is written as such (`autoPlaced`), so after a scene, a session or
+       a share link the next Separate labels may still move it; without the flag it read as placed by
+       hand and stayed put. Only with an offset: the flag means nothing on a label at its residue. */
     return {
-      labels: labelRecords.filter(kept).map(label => ({ model: nameOf(label.entryId), chain: label.chain, resi: label.resi, ...icodeOf(label), atom: label.atom, text: label.text, color: label.color, size: label.size, ...(label.kind === 'domain' || label.kind === 'position' ? { kind: label.kind } : {}), ...(labelOffsetLength(label) ? { offset: label.offset } : {}) })),
+      labels: labelRecords.filter(kept).map(label => ({ model: nameOf(label.entryId), chain: label.chain, resi: label.resi, ...icodeOf(label), atom: label.atom, text: label.text, color: label.color, size: label.size, ...(label.kind === 'domain' || label.kind === 'position' ? { kind: label.kind } : {}), ...(labelOffsetLength(label) ? { offset: label.offset } : {}), ...(label.autoPlaced && labelOffsetLength(label) ? { autoPlaced: true } : {}) })),
       selections: selectionRecords.filter(kept).map(record => ({ model: nameOf(record.entryId), chain: record.chain, residues: record.residues, ...(Array.isArray(record.icodes) ? { icodes: record.icodes } : {}), action: record.action, color: record.color })),
       /* A measurement's text, value switch, offset, colour and dash only when they differ from the
          defaults, so a scene with none of them reads exactly as it did before they existed. */
-      measurements: measurementRecords.filter(keptPoints).map(record => ({ type: record.type, points: record.points.map(point), ...(record.text ? { text: record.text } : {}), ...(record.showValue === false ? { showValue: false } : {}), ...(labelOffsetLength(record) ? { offset: record.offset } : {}), ...(measurementColor(record) ? { color: record.color } : {}), ...(record.dashed === false ? { dashed: false } : {}) })),
+      measurements: measurementRecords.filter(keptPoints).map(record => ({ type: record.type, points: record.points.map(point), ...(record.text ? { text: record.text } : {}), ...(record.showValue === false ? { showValue: false } : {}), ...(labelOffsetLength(record) ? { offset: record.offset } : {}), ...(record.autoPlaced && labelOffsetLength(record) ? { autoPlaced: true } : {}), ...(measurementColor(record) ? { color: record.color } : {}), ...(record.dashed === false ? { dashed: false } : {}) })),
       residueData: residueData && (residueData.scope === 'all' || keep(residueData.entryId)) ? { name: residueData.name, scale: residueData.scale, scope: residueData.scope, model: nameOf(residueData.entryId), rows: [...residueData.values.entries()].map(([key, value]) => [key.split('|')[0], Number(key.split('|')[1]), value]).concat([...residueData.byResi.entries()].map(([resi, value]) => ['', resi, value])) } : null,
       domains: domainRecords.filter(record => record.scope === 'all' || kept(record)).map(record => ({ name: record.name, color: record.color, chain: record.chain, residues: record.residues, scope: record.scope, model: nameOf(record.entryId) })),
       annotations: annotationRecords.filter(keptPoints).map(record => ({ type: record.type, text: record.text, color: record.color, size: record.size, dashed: record.dashed, corner: record.corner, offset: record.offset, distance: record.distance, dx: record.dx, dy: record.dy, points: record.points.map(point) })),
@@ -11079,6 +11300,9 @@ html>body{padding:0}</style>
       color: entry.color,
       label: entry.label || '',
       hiddenChains: entry.hiddenChains || [],
+      /* Both fades, as the session writes them: applyScene sets each from the record, so a faded
+         chain left out here came back solid from every scene. */
+      fadedChains: entry.fadedChains || [],
       ...(entry.faded ? { faded: true } : {}),
       ...(entry.fetchId ? { fetch: entry.fetchId } : {})
     })));
@@ -14144,10 +14368,11 @@ applyBackground();
     }).filter(Boolean);
   }
 
-  /* Ala, or Ala17 when that model numbers the corresponding residue differently. */
+  /* Ala, or Ala17 when that model numbers the corresponding residue differently — by number and
+     insertion code, so a model whose partner of 100A is 100B says Ala100B. */
   function positionIdentity(spot, item) {
     const name = positionResidueName(item.atom.resn);
-    return item.atom.resi === spot.resi ? name : name + item.atom.resi;
+    return residueNumber(item.atom) === residueNumber(spot) ? name : name + residueNumber(item.atom);
   }
 
   function positionCutoff() {
@@ -14190,7 +14415,7 @@ applyBackground();
     const found = positionAtoms(spot.chain, spot.resi, insertionCodeOf(spot));
     if (!found.length) return positionTag(spot) + ' · in none of the shown models';
     const identities = found.map(item => positionResidueName(item.atom.resn));
-    const renumbered = found.some(item => item.atom.resi !== spot.resi);
+    const renumbered = found.some(item => residueNumber(item.atom) !== residueNumber(spot));
     const tag = positionTag(spot);
     const tail = positionEffectTail(spot);
     if (new Set(identities).size === 1 && !renumbered) return tag + ' · ' + identities[0] + ' in all ' + found.length + ' model' + (found.length === 1 ? '' : 's') + tail;
@@ -14207,7 +14432,7 @@ applyBackground();
     const drawn = root.querySelector('#gpv-position-sticks').checked ? 'is drawn as side-chain sticks and labelled' : 'is labelled';
     const identities = found.map(item => positionResidueName(item.atom.resn));
     const lead = 'Position ' + positionTag(spot) + ' ' + drawn + ' in every model; it is ';
-    if (new Set(identities).size === 1 && !found.some(item => item.atom.resi !== spot.resi)) return lead + identities[0] + ' in all ' + found.length + ' of them.';
+    if (new Set(identities).size === 1 && !found.some(item => residueNumber(item.atom) !== residueNumber(spot))) return lead + identities[0] + ' in all ' + found.length + ' of them.';
     const names = distinguishingNames(found.map(item => displayName(item.entry)));
     const parts = found.map((item, index) => positionIdentity(spot, item) + ' in ' + names[index]);
     return lead + parts.slice(0, -1).join(', ') + ' and ' + parts[parts.length - 1] + '.';
@@ -14219,7 +14444,7 @@ applyBackground();
   function positionEffectLegend(spot) {
     if (!positionEffect) return null;
     const sites = positionEffectSites();
-    if ((sites[0].chain || '') !== (spot.chain || '') || sites[0].resi !== spot.resi) return null;
+    if ((sites[0].chain || '') !== (spot.chain || '') || residueNumber(sites[0]) !== residueNumber(spot)) return null;
     const site = positionEffect.summary.siteDeviation
       .map((value, index) => (Number.isFinite(value) ? value.toFixed(2) + ' Å in ' + positionEffect.models[index] : null))
       .filter(Boolean);
@@ -14245,7 +14470,9 @@ applyBackground();
      every one of them becomes a site row, and the neighbourhood is the union of theirs, with a
      residue that is itself a site never counted as somebody else's neighbour. */
   function computePositionEffect(spot) {
-    const asked = (Array.isArray(spot) ? spot : [spot]).map(item => ({ chain: item.chain || '', resi: item.resi }));
+    /* Each site keeps its insertion code: rebuilt from chain and number alone, 100A was measured
+       around 100 (or not at all when there is no plain 100), and the readout lost "site moved". */
+    const asked = (Array.isArray(spot) ? spot : [spot]).map(item => ({ chain: item.chain || '', resi: item.resi, ...(insertionCodeOf(item) ? { icode: insertionCodeOf(item) } : {}) }));
     if (!asked.length) return null;
     const reference = positionReference();
     if (!reference) return null;
@@ -14282,11 +14509,11 @@ applyBackground();
     const rowFor = (atom, isSite) => {
       const deviations = deviationsOf(atom);
       const finite = deviations.filter(Number.isFinite);
-      return { chain: atom.chain || '', resi: atom.resi, resn: atom.resn || 'RES', isSite, deviations, mean: finite.length ? mean(finite) : null };
+      return { chain: atom.chain || '', resi: atom.resi, ...(insertionCodeOf(atom) ? { icode: insertionCodeOf(atom) } : {}), resn: atom.resn || 'RES', isSite, deviations, mean: finite.length ? mean(finite) : null };
     };
     const rank = row => (row.mean === null ? -1 : row.mean);
     const neighbours = [...found.values()].map(atom => rowFor(atom, false))
-      .sort((a, b) => rank(b) - rank(a) || compareChains(a.chain, b.chain) || a.resi - b.resi);
+      .sort((a, b) => rank(b) - rank(a) || compareChains(a.chain, b.chain) || a.resi - b.resi || (insertionCodeOf(a) < insertionCodeOf(b) ? -1 : insertionCodeOf(a) > insertionCodeOf(b) ? 1 : 0));
     const siteRows = sites.map(item => rowFor(item.atom, true));
     const siteDeviations = siteRows.map(row => row.deviations);
     const acrossModels = values => others.map((entry, index) => {
@@ -14305,7 +14532,7 @@ applyBackground();
     return {
       spots: sites.map(item => ({ chain: item.spot.chain, resi: item.spot.resi, ...(insertionCodeOf(item.spot) ? { icode: insertionCodeOf(item.spot) } : {}) })),
       spot: { chain: sites[0].spot.chain, resi: sites[0].spot.resi, ...(insertionCodeOf(sites[0].spot) ? { icode: insertionCodeOf(sites[0].spot) } : {}) }, cutoff,
-      reference: allNames[0], models: allNames.slice(1),
+      reference: allNames[0], models: allNames.slice(1), entryIds: [reference.id, ...others.map(entry => entry.id)],
       rows: [...siteRows, ...neighbours], summary
     };
   }
@@ -14347,7 +14574,7 @@ applyBackground();
     positionEffect.rows.forEach(row => {
       const tr = document.createElement('tr');
       const label = document.createElement('th'); label.scope = 'row';
-      label.textContent = (row.chain ? row.chain + ':' : '') + positionResidueName(row.resn) + row.resi + (row.isSite ? ' (site)' : '');
+      label.textContent = (row.chain ? row.chain + ':' : '') + positionResidueName(row.resn) + residueNumber(row) + (row.isSite ? ' (site)' : '');
       if (row.isSite) label.style.fontWeight = '700';
       tr.append(label);
       row.deviations.forEach(value => tr.append(numberCell(value, row.isSite)));
@@ -14369,13 +14596,17 @@ applyBackground();
     if (!reference) { announce('Align visible first — the neighbourhood is measured on the reference model', 'error'); return; }
     const neighbours = positionEffect.rows.filter(row => !row.isSite);
     if (!neighbours.length) { announce('No residues within ' + positionEffect.cutoff + ' Å of ' + positionEffectSubject() + ' to highlight'); return; }
-    remember('neighbourhood');
+    /* Annotate's Highlight colour, as every other highlight takes since 2.52.0 (this one was fixed
+       orange), with each neighbour's insertion code (100A highlights 100A, not 100 and 100B), and a
+       second press that would stack identical rows is refused rather than taking an undo step. */
+    const color = root.querySelector('#gpv-selection-color').value;
     const byChain = new Map();
-    neighbours.forEach(row => { if (!byChain.has(row.chain)) byChain.set(row.chain, []); byChain.get(row.chain).push(row.resi); });
-    byChain.forEach((residues, chain) => selectionRecords.push({
-      id: nextAnnotationId++, entryId: reference.id, chain,
-      residues: residues.sort((a, b) => a - b), action: 'highlight', color: '#f97316'
-    }));
+    neighbours.forEach(row => { if (!byChain.has(row.chain)) byChain.set(row.chain, []); byChain.get(row.chain).push(row); });
+    const byNumber = (a, b) => a.resi - b.resi || (insertionCodeOf(a) < insertionCodeOf(b) ? -1 : insertionCodeOf(a) > insertionCodeOf(b) ? 1 : 0);
+    const wanted = newHighlightRecords(reference.id, [...byChain].map(([chain, rows]) => ({ chain, ...selectionResidues(rows.sort(byNumber)) })), color);
+    if (!wanted.length) { updateStatus('The ' + plural(neighbours.length, 'residue') + ' within ' + positionEffect.cutoff + ' Å of ' + positionEffectSubject() + ' are already highlighted on ' + displayName(reference)); return; }
+    remember('neighbourhood');
+    wanted.forEach(made => selectionRecords.push({ id: nextAnnotationId++, entryId: reference.id, ...made, action: 'highlight', color }));
     renderSelectionList(); applyStyle();
     updateStatus(neighbours.length + ' residue' + (neighbours.length === 1 ? '' : 's') + ' within ' + positionEffect.cutoff + ' Å of '
       + positionEffectSubject() + ' highlighted on ' + displayName(reference) + ' · manage it in the Selections list');
@@ -14385,7 +14616,7 @@ applyBackground();
     if (!positionEffect) return;
     const quote = value => '"' + String(value ?? '').replace(/"/g, '""') + '"';
     const rows = [['chain', 'resi', 'resn', 'role', ...positionEffect.models.map(name => 'ca_deviation_angstrom_' + name)]];
-    positionEffect.rows.forEach(row => rows.push([row.chain, row.resi, row.resn, row.isSite ? 'site' : 'neighbour',
+    positionEffect.rows.forEach(row => rows.push([row.chain, residueNumber(row), row.resn, row.isSite ? 'site' : 'neighbour',
       ...row.deviations.map(value => (Number.isFinite(value) ? value.toFixed(3) : ''))]));
     downloadBlob(rows.map(row => row.map(quote).join(',')).join('\n'), 'text/csv', 'position-effect.csv');
     announce('Effect CSV downloaded · ' + positionEffect.summary.neighbourCount + ' neighbour' + (positionEffect.summary.neighbourCount === 1 ? '' : 's') + ' within ' + positionEffect.cutoff + ' Å');
@@ -14435,10 +14666,13 @@ applyBackground();
     if (!spotlightResidues.some(item => item.chain === spot.chain && item.resi === spot.resi && insertionCodeOf(item) === insertionCodeOf(spot))) spotlightResidues.push({ chain: spot.chain, resi: spot.resi, ...(insertionCodeOf(spot) ? { icode: insertionCodeOf(spot) } : {}) });
     found.forEach(({ entry, atom }) => {
       const key = residueKey(entry.id, atom.chain || '', atom.resi, insertionCodeOf(atom));
+      /* The atom the label hangs on is the one found — a nucleotide's has no Cα — so labelAnchor finds
+         it again after a superposition moves it; written as 'CA', the anchor fell back to the stored
+         point and the label stayed where the residue used to be. The text names the insertion code. */
       const record = {
-        entryId: entry.id, chain: atom.chain || '', resi: atom.resi, icode: insertionCodeOf(atom), resn: atom.resn || 'RES', atom: 'CA',
+        entryId: entry.id, chain: atom.chain || '', resi: atom.resi, icode: insertionCodeOf(atom), resn: atom.resn || 'RES', atom: atom.atom || 'CA',
         x: atom.x, y: atom.y, z: atom.z, key,
-        text: positionResidueName(atom.resn) + atom.resi, color: entry.color, size: 15, kind: 'position'
+        text: positionResidueName(atom.resn) + residueNumber(atom), color: entry.color, size: 15, kind: 'position'
       };
       const index = labelRecords.findIndex(label => label.key === key);
       if (index >= 0) labelRecords[index] = { ...labelRecords[index], ...record }; else labelRecords.push(record);
@@ -14490,7 +14724,7 @@ applyBackground();
      so a lower-case k finds chain K; an unknown name is kept as typed and simply finds nothing. */
   function parsePositionSet(text) {
     const value = String(text || '').trim();
-    const hint = 'write them as A:20-30, A:45, or 20-30 for the chain of the selected residue';
+    const hint = 'write them as A:20-30, A:45, H:100A, or 20-30 for the chain of the selected residue';
     if (!value) return { error: 'Type the positions to compare — ' + hint };
     const chains = new Map();
     displayedEntries().filter(entry => entry.model).forEach(entry => entry.atoms.forEach(atom => {
@@ -14505,8 +14739,11 @@ applyBackground();
     for (const part of value.split(',')) {
       const item = part.trim();
       if (!item) continue;
-      const match = item.match(/^(?:([A-Za-z0-9]{1,4})\s*:\s*)?(-?\d+)(?:\s*-\s*(-?\d+))?$/);
+      /* A single position may carry an insertion code (H:100A), as Go to and the card take it; a
+         range may not, since 100A-100C names no defined run. */
+      const match = item.match(/^(?:([A-Za-z0-9]{1,4})\s*:\s*)?(-?\d+)(?:([A-Za-z])|\s*-\s*(-?\d+))?$/);
       if (!match) return { error: 'Could not read "' + item + '" — ' + hint };
+      const icode = match[3] ? match[3].toUpperCase() : '';
       let chain;
       if (match[1] !== undefined) chain = chains.has(match[1].toLowerCase()) ? chains.get(match[1].toLowerCase()) : match[1];
       else {
@@ -14515,11 +14752,11 @@ applyBackground();
         chain = fallback;
       }
       const start = Number(match[2]);
-      const end = match[3] === undefined ? start : Number(match[3]);
+      const end = match[4] === undefined ? start : Number(match[4]);
       const step = start <= end ? 1 : -1;
       for (let resi = start; ; resi += step) {
-        const key = chain + '|' + resi;
-        if (!seen.has(key)) { seen.add(key); spots.push({ chain, resi }); }
+        const key = chain + '|' + resi + (icode ? '|' + icode : '');
+        if (!seen.has(key)) { seen.add(key); spots.push({ chain, resi, ...(icode ? { icode } : {}) }); }
         if (spots.length > positionSetLimit) return { error: 'That is more than ' + positionSetLimit + ' positions — compare a smaller set', spots: null };
         if (resi === end) break;
       }

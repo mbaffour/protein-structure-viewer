@@ -71,10 +71,11 @@
     }).filter(Boolean);
   }
 
-  /* Ala, or Ala17 when that model numbers the corresponding residue differently. */
+  /* Ala, or Ala17 when that model numbers the corresponding residue differently — by number and
+     insertion code, so a model whose partner of 100A is 100B says Ala100B. */
   function positionIdentity(spot, item) {
     const name = positionResidueName(item.atom.resn);
-    return item.atom.resi === spot.resi ? name : name + item.atom.resi;
+    return residueNumber(item.atom) === residueNumber(spot) ? name : name + residueNumber(item.atom);
   }
 
   function positionCutoff() {
@@ -117,7 +118,7 @@
     const found = positionAtoms(spot.chain, spot.resi, insertionCodeOf(spot));
     if (!found.length) return positionTag(spot) + ' · in none of the shown models';
     const identities = found.map(item => positionResidueName(item.atom.resn));
-    const renumbered = found.some(item => item.atom.resi !== spot.resi);
+    const renumbered = found.some(item => residueNumber(item.atom) !== residueNumber(spot));
     const tag = positionTag(spot);
     const tail = positionEffectTail(spot);
     if (new Set(identities).size === 1 && !renumbered) return tag + ' · ' + identities[0] + ' in all ' + found.length + ' model' + (found.length === 1 ? '' : 's') + tail;
@@ -134,7 +135,7 @@
     const drawn = root.querySelector('#gpv-position-sticks').checked ? 'is drawn as side-chain sticks and labelled' : 'is labelled';
     const identities = found.map(item => positionResidueName(item.atom.resn));
     const lead = 'Position ' + positionTag(spot) + ' ' + drawn + ' in every model; it is ';
-    if (new Set(identities).size === 1 && !found.some(item => item.atom.resi !== spot.resi)) return lead + identities[0] + ' in all ' + found.length + ' of them.';
+    if (new Set(identities).size === 1 && !found.some(item => residueNumber(item.atom) !== residueNumber(spot))) return lead + identities[0] + ' in all ' + found.length + ' of them.';
     const names = distinguishingNames(found.map(item => displayName(item.entry)));
     const parts = found.map((item, index) => positionIdentity(spot, item) + ' in ' + names[index]);
     return lead + parts.slice(0, -1).join(', ') + ' and ' + parts[parts.length - 1] + '.';
@@ -146,7 +147,7 @@
   function positionEffectLegend(spot) {
     if (!positionEffect) return null;
     const sites = positionEffectSites();
-    if ((sites[0].chain || '') !== (spot.chain || '') || sites[0].resi !== spot.resi) return null;
+    if ((sites[0].chain || '') !== (spot.chain || '') || residueNumber(sites[0]) !== residueNumber(spot)) return null;
     const site = positionEffect.summary.siteDeviation
       .map((value, index) => (Number.isFinite(value) ? value.toFixed(2) + ' Å in ' + positionEffect.models[index] : null))
       .filter(Boolean);
@@ -172,7 +173,9 @@
      every one of them becomes a site row, and the neighbourhood is the union of theirs, with a
      residue that is itself a site never counted as somebody else's neighbour. */
   function computePositionEffect(spot) {
-    const asked = (Array.isArray(spot) ? spot : [spot]).map(item => ({ chain: item.chain || '', resi: item.resi }));
+    /* Each site keeps its insertion code: rebuilt from chain and number alone, 100A was measured
+       around 100 (or not at all when there is no plain 100), and the readout lost "site moved". */
+    const asked = (Array.isArray(spot) ? spot : [spot]).map(item => ({ chain: item.chain || '', resi: item.resi, ...(insertionCodeOf(item) ? { icode: insertionCodeOf(item) } : {}) }));
     if (!asked.length) return null;
     const reference = positionReference();
     if (!reference) return null;
@@ -209,11 +212,11 @@
     const rowFor = (atom, isSite) => {
       const deviations = deviationsOf(atom);
       const finite = deviations.filter(Number.isFinite);
-      return { chain: atom.chain || '', resi: atom.resi, resn: atom.resn || 'RES', isSite, deviations, mean: finite.length ? mean(finite) : null };
+      return { chain: atom.chain || '', resi: atom.resi, ...(insertionCodeOf(atom) ? { icode: insertionCodeOf(atom) } : {}), resn: atom.resn || 'RES', isSite, deviations, mean: finite.length ? mean(finite) : null };
     };
     const rank = row => (row.mean === null ? -1 : row.mean);
     const neighbours = [...found.values()].map(atom => rowFor(atom, false))
-      .sort((a, b) => rank(b) - rank(a) || compareChains(a.chain, b.chain) || a.resi - b.resi);
+      .sort((a, b) => rank(b) - rank(a) || compareChains(a.chain, b.chain) || a.resi - b.resi || (insertionCodeOf(a) < insertionCodeOf(b) ? -1 : insertionCodeOf(a) > insertionCodeOf(b) ? 1 : 0));
     const siteRows = sites.map(item => rowFor(item.atom, true));
     const siteDeviations = siteRows.map(row => row.deviations);
     const acrossModels = values => others.map((entry, index) => {
@@ -232,7 +235,7 @@
     return {
       spots: sites.map(item => ({ chain: item.spot.chain, resi: item.spot.resi, ...(insertionCodeOf(item.spot) ? { icode: insertionCodeOf(item.spot) } : {}) })),
       spot: { chain: sites[0].spot.chain, resi: sites[0].spot.resi, ...(insertionCodeOf(sites[0].spot) ? { icode: insertionCodeOf(sites[0].spot) } : {}) }, cutoff,
-      reference: allNames[0], models: allNames.slice(1),
+      reference: allNames[0], models: allNames.slice(1), entryIds: [reference.id, ...others.map(entry => entry.id)],
       rows: [...siteRows, ...neighbours], summary
     };
   }
@@ -274,7 +277,7 @@
     positionEffect.rows.forEach(row => {
       const tr = document.createElement('tr');
       const label = document.createElement('th'); label.scope = 'row';
-      label.textContent = (row.chain ? row.chain + ':' : '') + positionResidueName(row.resn) + row.resi + (row.isSite ? ' (site)' : '');
+      label.textContent = (row.chain ? row.chain + ':' : '') + positionResidueName(row.resn) + residueNumber(row) + (row.isSite ? ' (site)' : '');
       if (row.isSite) label.style.fontWeight = '700';
       tr.append(label);
       row.deviations.forEach(value => tr.append(numberCell(value, row.isSite)));
@@ -296,13 +299,17 @@
     if (!reference) { announce('Align visible first — the neighbourhood is measured on the reference model', 'error'); return; }
     const neighbours = positionEffect.rows.filter(row => !row.isSite);
     if (!neighbours.length) { announce('No residues within ' + positionEffect.cutoff + ' Å of ' + positionEffectSubject() + ' to highlight'); return; }
-    remember('neighbourhood');
+    /* Annotate's Highlight colour, as every other highlight takes since 2.52.0 (this one was fixed
+       orange), with each neighbour's insertion code (100A highlights 100A, not 100 and 100B), and a
+       second press that would stack identical rows is refused rather than taking an undo step. */
+    const color = root.querySelector('#gpv-selection-color').value;
     const byChain = new Map();
-    neighbours.forEach(row => { if (!byChain.has(row.chain)) byChain.set(row.chain, []); byChain.get(row.chain).push(row.resi); });
-    byChain.forEach((residues, chain) => selectionRecords.push({
-      id: nextAnnotationId++, entryId: reference.id, chain,
-      residues: residues.sort((a, b) => a - b), action: 'highlight', color: '#f97316'
-    }));
+    neighbours.forEach(row => { if (!byChain.has(row.chain)) byChain.set(row.chain, []); byChain.get(row.chain).push(row); });
+    const byNumber = (a, b) => a.resi - b.resi || (insertionCodeOf(a) < insertionCodeOf(b) ? -1 : insertionCodeOf(a) > insertionCodeOf(b) ? 1 : 0);
+    const wanted = newHighlightRecords(reference.id, [...byChain].map(([chain, rows]) => ({ chain, ...selectionResidues(rows.sort(byNumber)) })), color);
+    if (!wanted.length) { updateStatus('The ' + plural(neighbours.length, 'residue') + ' within ' + positionEffect.cutoff + ' Å of ' + positionEffectSubject() + ' are already highlighted on ' + displayName(reference)); return; }
+    remember('neighbourhood');
+    wanted.forEach(made => selectionRecords.push({ id: nextAnnotationId++, entryId: reference.id, ...made, action: 'highlight', color }));
     renderSelectionList(); applyStyle();
     updateStatus(neighbours.length + ' residue' + (neighbours.length === 1 ? '' : 's') + ' within ' + positionEffect.cutoff + ' Å of '
       + positionEffectSubject() + ' highlighted on ' + displayName(reference) + ' · manage it in the Selections list');
@@ -312,7 +319,7 @@
     if (!positionEffect) return;
     const quote = value => '"' + String(value ?? '').replace(/"/g, '""') + '"';
     const rows = [['chain', 'resi', 'resn', 'role', ...positionEffect.models.map(name => 'ca_deviation_angstrom_' + name)]];
-    positionEffect.rows.forEach(row => rows.push([row.chain, row.resi, row.resn, row.isSite ? 'site' : 'neighbour',
+    positionEffect.rows.forEach(row => rows.push([row.chain, residueNumber(row), row.resn, row.isSite ? 'site' : 'neighbour',
       ...row.deviations.map(value => (Number.isFinite(value) ? value.toFixed(3) : ''))]));
     downloadBlob(rows.map(row => row.map(quote).join(',')).join('\n'), 'text/csv', 'position-effect.csv');
     announce('Effect CSV downloaded · ' + positionEffect.summary.neighbourCount + ' neighbour' + (positionEffect.summary.neighbourCount === 1 ? '' : 's') + ' within ' + positionEffect.cutoff + ' Å');
@@ -362,10 +369,13 @@
     if (!spotlightResidues.some(item => item.chain === spot.chain && item.resi === spot.resi && insertionCodeOf(item) === insertionCodeOf(spot))) spotlightResidues.push({ chain: spot.chain, resi: spot.resi, ...(insertionCodeOf(spot) ? { icode: insertionCodeOf(spot) } : {}) });
     found.forEach(({ entry, atom }) => {
       const key = residueKey(entry.id, atom.chain || '', atom.resi, insertionCodeOf(atom));
+      /* The atom the label hangs on is the one found — a nucleotide's has no Cα — so labelAnchor finds
+         it again after a superposition moves it; written as 'CA', the anchor fell back to the stored
+         point and the label stayed where the residue used to be. The text names the insertion code. */
       const record = {
-        entryId: entry.id, chain: atom.chain || '', resi: atom.resi, icode: insertionCodeOf(atom), resn: atom.resn || 'RES', atom: 'CA',
+        entryId: entry.id, chain: atom.chain || '', resi: atom.resi, icode: insertionCodeOf(atom), resn: atom.resn || 'RES', atom: atom.atom || 'CA',
         x: atom.x, y: atom.y, z: atom.z, key,
-        text: positionResidueName(atom.resn) + atom.resi, color: entry.color, size: 15, kind: 'position'
+        text: positionResidueName(atom.resn) + residueNumber(atom), color: entry.color, size: 15, kind: 'position'
       };
       const index = labelRecords.findIndex(label => label.key === key);
       if (index >= 0) labelRecords[index] = { ...labelRecords[index], ...record }; else labelRecords.push(record);
@@ -417,7 +427,7 @@
      so a lower-case k finds chain K; an unknown name is kept as typed and simply finds nothing. */
   function parsePositionSet(text) {
     const value = String(text || '').trim();
-    const hint = 'write them as A:20-30, A:45, or 20-30 for the chain of the selected residue';
+    const hint = 'write them as A:20-30, A:45, H:100A, or 20-30 for the chain of the selected residue';
     if (!value) return { error: 'Type the positions to compare — ' + hint };
     const chains = new Map();
     displayedEntries().filter(entry => entry.model).forEach(entry => entry.atoms.forEach(atom => {
@@ -432,8 +442,11 @@
     for (const part of value.split(',')) {
       const item = part.trim();
       if (!item) continue;
-      const match = item.match(/^(?:([A-Za-z0-9]{1,4})\s*:\s*)?(-?\d+)(?:\s*-\s*(-?\d+))?$/);
+      /* A single position may carry an insertion code (H:100A), as Go to and the card take it; a
+         range may not, since 100A-100C names no defined run. */
+      const match = item.match(/^(?:([A-Za-z0-9]{1,4})\s*:\s*)?(-?\d+)(?:([A-Za-z])|\s*-\s*(-?\d+))?$/);
       if (!match) return { error: 'Could not read "' + item + '" — ' + hint };
+      const icode = match[3] ? match[3].toUpperCase() : '';
       let chain;
       if (match[1] !== undefined) chain = chains.has(match[1].toLowerCase()) ? chains.get(match[1].toLowerCase()) : match[1];
       else {
@@ -442,11 +455,11 @@
         chain = fallback;
       }
       const start = Number(match[2]);
-      const end = match[3] === undefined ? start : Number(match[3]);
+      const end = match[4] === undefined ? start : Number(match[4]);
       const step = start <= end ? 1 : -1;
       for (let resi = start; ; resi += step) {
-        const key = chain + '|' + resi;
-        if (!seen.has(key)) { seen.add(key); spots.push({ chain, resi }); }
+        const key = chain + '|' + resi + (icode ? '|' + icode : '');
+        if (!seen.has(key)) { seen.add(key); spots.push({ chain, resi, ...(icode ? { icode } : {}) }); }
         if (spots.length > positionSetLimit) return { error: 'That is more than ' + positionSetLimit + ' positions — compare a smaller set', spots: null };
         if (resi === end) break;
       }

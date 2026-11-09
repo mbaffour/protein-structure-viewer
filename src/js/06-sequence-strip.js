@@ -203,7 +203,9 @@
     canvas.addEventListener('dblclick', () => {
       const found = sequenceRowFor(canvas);
       if (!found || !sequenceHover || !found.entry.model) return;
-      const selection = { model: found.entry.model.getID(), resi: sequenceHover.resi };
+      /* The cell's residue alone, by insertion code (blank included): 57 framed 57, 57A and 57B. */
+      const code = insertionCodeOf(sequenceHover);
+      const selection = { model: found.entry.model.getID(), resi: sequenceHover.resi, predicate: atom => insertionCodeOf(atom) === code };
       if (found.row.chain) selection.chain = found.row.chain;
       viewer.zoomTo(selection); viewer.render(); syncViewsFrom(viewer);
     });

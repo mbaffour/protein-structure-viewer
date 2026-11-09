@@ -40,6 +40,8 @@
     const name = root.querySelector('#gpv-domain-name').value.trim();
     const residues = parseResidueRange(root.querySelector('#gpv-domain-range').value);
     if (!name) { updateStatus('Give the domain a name'); root.querySelector('#gpv-domain-name').focus(); return; }
+    const unread = unreadableRangePart(root.querySelector('#gpv-domain-range').value);
+    if (unread !== null) { updateStatus('Could not read "' + unread + '" — enter a residue range such as 1-75 or 1-75,120-140'); root.querySelector('#gpv-domain-range').focus(); return; }
     if (!residues.length) { updateStatus('Enter a residue range such as 1-75 or 1-75,120-140'); root.querySelector('#gpv-domain-range').focus(); return; }
     remember('domain');
     domainRecords.push({ id: nextAnnotationId++, entryId: entry.id, name, color: root.querySelector('#gpv-domain-colour').value, chain: root.querySelector('#gpv-domain-chain').value.trim(), residues, scope: root.querySelector('#gpv-domain-scope').value });

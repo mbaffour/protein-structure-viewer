@@ -31,8 +31,10 @@
     const copy = { ...confidence }; delete copy.pae; delete copy.paeMaximum; copy.paeOmitted = true; return copy;
   }
 
+  /* applyScene sets both of a model's fades from its record, so a writer that leaves one out un-fades
+     it: an emphasised model (`faded`) came back solid after every session restore. */
   function sessionScene() {
-    return { type: 'protein-viewer-scene', schemaVersion: 1, viewerVersion, provenance: provenanceValues(), models: structures.map(entry => ({ name: entry.name, visible: entry.visible, color: entry.color, label: entry.label || '', hiddenChains: entry.hiddenChains || [], fadedChains: entry.fadedChains || [] })), settings: sceneSettings(), ...sceneOverlays(), savedViews: savedViews.map(view => ({ ...view })) };
+    return { type: 'protein-viewer-scene', schemaVersion: 1, viewerVersion, provenance: provenanceValues(), models: structures.map(entry => ({ name: entry.name, visible: entry.visible, color: entry.color, label: entry.label || '', hiddenChains: entry.hiddenChains || [], fadedChains: entry.fadedChains || [], ...(entry.faded ? { faded: true } : {}) })), settings: sceneSettings(), ...sceneOverlays(), savedViews: savedViews.map(view => ({ ...view })) };
   }
 
   function sessionSnapshot(confidenceOf = sessionConfidence) {

@@ -284,9 +284,12 @@
     const entry = entryById(record.entryId);
     if (!entry || !entry.atoms.length) return [];
     const wanted = new Set(record.residues);
+    /* A record with insertion codes takes in exactly its residues, as it is drawn (selectionSpec): by
+       number alone a highlight of 57A labelled 57 and 57B too. One without codes keeps its old reading. */
+    const keys = Array.isArray(record.icodes) ? new Set(selectionResidueKeys(record)) : null;
     const found = new Map();
     entry.atoms.forEach(atom => {
-      if (atom.hetflag || !wanted.has(atom.resi) || (record.chain && (atom.chain || '') !== record.chain)) return;
+      if (atom.hetflag || !wanted.has(atom.resi) || (keys && !keys.has(residueNumber(atom))) || (record.chain && (atom.chain || '') !== record.chain)) return;
       const key = residueKey(entry.id, atom.chain, atom.resi, insertionCodeOf(atom));
       const current = found.get(key);
       if (!current || (atom.atom === 'CA' && current.atom !== 'CA')) found.set(key, atom);

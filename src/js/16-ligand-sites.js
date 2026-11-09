@@ -2,12 +2,14 @@
 
   let siteResults = null;
 
+  /* A group is one ligand: its chain, number, insertion code and name. Keyed without the code, two
+     copies at 101 and 101A were one group with both copies' atoms, where Composition counts two. */
   function ligandGroups(entry) {
     const groups = new Map();
     heavyAtoms(entry).forEach(atom => {
       if (!atom.hetflag || isWater(atom)) return;
-      const resn = String(atom.resn || '?').toUpperCase(); const key = (atom.chain || '') + '|' + atom.resi + '|' + resn;
-      if (!groups.has(key)) groups.set(key, { chain: atom.chain || '', resi: atom.resi, resn, atoms: [] });
+      const resn = String(atom.resn || '?').toUpperCase(); const key = (atom.chain || '') + '|' + atom.resi + '|' + insertionCodeOf(atom) + '|' + resn;
+      if (!groups.has(key)) groups.set(key, { chain: atom.chain || '', resi: atom.resi, ...(insertionCodeOf(atom) ? { icode: insertionCodeOf(atom) } : {}), resn, atoms: [] });
       groups.get(key).atoms.push(atom);
     });
     return [...groups.values()];
@@ -40,8 +42,9 @@
     const tokenIndex = paeTokenIndex(entry); const matrix = entry.confidence && entry.confidence.pae;
     const rows = groups.map(group => {
       const residues = new Map();
-      group.atoms.forEach(target => grid.near(target).forEach(i => { const atom = protein[i]; if (squaredDistance(atom, target) <= limit) { const tag = residueTag(atom); if (!residues.has(tag)) residues.set(tag, atom); } }));
-      const site = [...residues.values()].sort((a, b) => compareChains(a.chain || '', b.chain || '') || a.resi - b.resi);
+      /* Site residues by chain, number and insertion code: 57 and 57A are two residues of the site. */
+      group.atoms.forEach(target => grid.near(target).forEach(i => { const atom = protein[i]; if (squaredDistance(atom, target) <= limit) { const tag = residueCodeTag(atom); if (!residues.has(tag)) residues.set(tag, atom); } }));
+      const site = [...residues.values()].sort((a, b) => compareChains(a.chain || '', b.chain || '') || a.resi - b.resi || (insertionCodeOf(a) < insertionCodeOf(b) ? -1 : insertionCodeOf(a) > insertionCodeOf(b) ? 1 : 0));
       const plddt = entry.scores.length && site.length ? mean(site.map(atom => Number(atom.b) || 0)) : null;
       let pae = null;
       if (tokenIndex && matrix) {
@@ -60,8 +63,8 @@
     updateStatus(rows.length + ' ligand site' + (rows.length === 1 ? '' : 's') + ' analysed at ' + cutoff + ' Å on ' + displayName(entry));
   }
 
-  function siteLabel(group) { return group.resn + ' ' + (group.chain ? group.chain + ':' : '') + group.resi; }
-  function siteResidueList(site) { return site.map(atom => (atom.chain ? atom.chain + ':' : '') + (atom.resn || '') + atom.resi).join('; '); }
+  function siteLabel(group) { return group.resn + ' ' + (group.chain ? group.chain + ':' : '') + residueNumber(group); }
+  function siteResidueList(site) { return site.map(atom => (atom.chain ? atom.chain + ':' : '') + (atom.resn || '') + residueNumber(atom)).join('; '); }
 
   function renderLigandSites(entry) {
     const run = root.querySelector('#gpv-site-run'); const state = root.querySelector('#gpv-site-state');
@@ -82,9 +85,14 @@
       const action = document.createElement('td'); const highlight = document.createElement('button'); highlight.className = 'btn btn-ghost'; highlight.type = 'button'; highlight.textContent = 'Highlight';
       highlight.disabled = !row.site.length;
       highlight.addEventListener('click', () => {
+        /* With the site's insertion codes, so a site lined by 57 and 57A does not light 57B too; and a
+           press that would only repeat rows already there is refused, as the card's Highlight is. */
+        const color = root.querySelector('#gpv-selection-color').value;
+        const byChain = new Map(); row.site.forEach(atom => { const chain = atom.chain || ''; if (!byChain.has(chain)) byChain.set(chain, []); byChain.get(chain).push(atom); });
+        const wanted = newHighlightRecords(entry.id, [...byChain].map(([chain, atoms]) => ({ chain, ...selectionResidues(atoms) })), color);
+        if (!wanted.length) { updateStatus(siteLabel(row.group) + ' site is already highlighted · ' + row.site.length + ' residues'); return; }
         remember('ligand site');
-        const byChain = new Map(); row.site.forEach(atom => { const chain = atom.chain || ''; if (!byChain.has(chain)) byChain.set(chain, []); byChain.get(chain).push(atom.resi); });
-        byChain.forEach((residues, chain) => selectionRecords.push({ id: nextAnnotationId++, entryId: entry.id, chain, residues: residues.sort((a, b) => a - b), action: 'highlight', color: root.querySelector('#gpv-selection-color').value }));
+        wanted.forEach(made => selectionRecords.push({ id: nextAnnotationId++, entryId: entry.id, ...made, action: 'highlight', color }));
         renderSelectionList(); applyStyle();
         updateStatus(siteLabel(row.group) + ' site highlighted · ' + row.site.length + ' residues');
       });
@@ -96,7 +104,7 @@
     const entry = activeEntry(); if (!siteResults || !entry) return;
     const quote = value => '"' + String(value).replace(/"/g, '""') + '"';
     const rows = [['model', 'ligand', 'chain', 'resi', 'ligand_atoms', 'cutoff_angstrom', 'site_residue_count', 'site_mean_plddt', 'ligand_site_mean_pae', 'site_residues']];
-    siteResults.rows.forEach(row => rows.push([displayName(entry), row.group.resn, row.group.chain, row.group.resi, row.group.atoms.length, siteResults.cutoff, row.site.length, row.plddt === null ? '' : row.plddt.toFixed(2), row.pae === null ? '' : row.pae.toFixed(3), siteResidueList(row.site)]));
+    siteResults.rows.forEach(row => rows.push([displayName(entry), row.group.resn, row.group.chain, residueNumber(row.group), row.group.atoms.length, siteResults.cutoff, row.site.length, row.plddt === null ? '' : row.plddt.toFixed(2), row.pae === null ? '' : row.pae.toFixed(3), siteResidueList(row.site)]));
     downloadBlob(rows.map(row => row.map(quote).join(',')).join('\n'), 'text/csv', 'ligand-sites.csv');
     updateStatus('Ligand sites CSV downloaded');
   }

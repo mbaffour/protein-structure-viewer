@@ -52,6 +52,10 @@
 
   async function openSessionFile(file) {
     if (typeof JSZip === 'undefined') { announce('The ZIP reader did not load. Refresh the page and try again.', 'error'); return false; }
+    /* A session empties the page — removes every model and releases the export viewer — so opened
+       between a figure's awaits it pulled the models out from under the render, by the door a file
+       and a fetch already wait at (31, 40). */
+    if (exportRendering()) await afterExportRenders(file.name || 'the session');
     const snapshot = await readSessionZip(await JSZip.loadAsync(file));
     if (!snapshot) { announce('That ZIP is not a session file', 'error'); return false; }
     const restored = await restoreSession(snapshot);
@@ -143,8 +147,15 @@
       });
       renderList(); applyStyle();
       await applyScene(saved.scene);
+      /* The autosave banner offered the page as it was; Restore on it now would replace the session
+         just opened. Loading a file and a fetch take it down the same way. */
+      dismissSessionBanner();
       /* What is on the page now, which is what the session held. */
-      const message = 'Session restored · ' + structures.length + ' model' + (structures.length === 1 ? '' : 's') + ' from ' + new Date(saved.savedAt).toLocaleTimeString() + (open ? ' · replaced the ' + (open === 1 ? 'model that was open' : open + ' models that were open') : '');
+      /* The autosave leaves out a PAE over 1 500 tokens (sessionConfidence) and marks it; nothing said
+         so, and the heatmap, the PAE domains and ipSAE/LIS were simply gone after the restore. */
+      const omitted = saved.files.filter(file => file.confidence && file.confidence.paeOmitted).map(file => file.name);
+      const paeNote = omitted.length ? ' · the PAE of ' + (omitted.length === 1 ? omitted[0] : omitted.length + ' models (' + clipText(omitted.join(', '), 80) + ')') + ' was too large to autosave — reopen its files, or keep it with Save session file' : '';
+      const message = 'Session restored · ' + structures.length + ' model' + (structures.length === 1 ? '' : 's') + ' from ' + new Date(saved.savedAt).toLocaleTimeString() + (open ? ' · replaced the ' + (open === 1 ? 'model that was open' : open + ' models that were open') : '') + paeNote;
       announce(message);
       return { models: structures.length, message };
     } finally { done(); }

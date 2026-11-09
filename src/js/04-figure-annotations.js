@@ -109,6 +109,12 @@
     rebuildOverlays();
   }
 
+  /* Whether an annotation's text or leader is anywhere but where it started: what Reset puts back. */
+  function annotationMoved(record) {
+    const offset = record.offset || { x: 0, y: 0, z: 0 };
+    return Boolean(offset.x || offset.y || offset.z || record.dx || record.dy || Number.isFinite(record.distance));
+  }
+
   function annotationHasLabel(record) {
     return record.type === 'screen' || record.type === 'callout' || Boolean(record.text);
   }
@@ -172,18 +178,21 @@
         [['←', 'Move label left', -1, 0], ['→', 'Move label right', 1, 0], ['↑', 'Move label up', 0, 1], ['↓', 'Move label down', 0, -1]].forEach(([glyph, title, dx, dy]) => {
           const button = document.createElement('button'); button.className = 'btn btn-ghost'; button.type = 'button'; button.textContent = glyph;
           button.setAttribute('aria-label', title); button.title = title;
-          button.addEventListener('click', () => nudgeAnnotation(record, dx, dy));
+          button.addEventListener('click', () => { nudgeAnnotation(record, dx, dy); reset.disabled = !annotationMoved(record); });
           nudge.append(button);
         });
         if (record.type === 'callout') {
           const distance = document.createElement('input'); distance.className = 'form-control'; distance.type = 'number'; distance.min = '2'; distance.max = '60'; distance.step = '1';
           distance.value = String(Number.isFinite(record.distance) ? record.distance : Math.round(8 * record.size));
           distance.title = 'Leader length in Å'; distance.setAttribute('aria-label', 'Leader length in angstroms');
-          distance.addEventListener('change', () => { remember('leader length'); record.distance = Math.max(2, Math.min(60, Number(distance.value) || 8)); rebuildOverlays(); });
+          distance.addEventListener('change', () => { remember('leader length'); record.distance = Math.max(2, Math.min(60, Number(distance.value) || 8)); reset.disabled = !annotationMoved(record); rebuildOverlays(); });
           nudge.append(distance);
         }
+        /* Greyed out with nothing to put back, as the label and measurement rows' Reset are: pressed on an
+           arrow never moved it took an undo step ("Undid label reset") that changed nothing. */
         const reset = document.createElement('button'); reset.className = 'btn btn-ghost'; reset.type = 'button'; reset.textContent = 'Reset'; reset.title = 'Put the label back where it started'; reset.dataset.control = 'reset';
-        reset.addEventListener('click', () => { remember('label reset'); record.offset = { x: 0, y: 0, z: 0 }; record.dx = 0; record.dy = 0; record.distance = null; renderAnnotationList(); rebuildOverlays(); });
+        reset.disabled = !annotationMoved(record);
+        reset.addEventListener('click', () => { if (!annotationMoved(record)) return; remember('label reset'); record.offset = { x: 0, y: 0, z: 0 }; record.dx = 0; record.dy = 0; record.distance = null; renderAnnotationList(); rebuildOverlays(); });
         nudge.append(reset);
         row.append(nudge);
       }
@@ -520,8 +529,10 @@
 
   /* The two residues of a two-point distance, when both are in loaded models and are not the same
      residue — the only measurement whose atoms can be chosen again — and which pair it joins now:
-     'closest' when its atoms are the residues' closest heavy-atom pair, 'ca' when they are both Cα
-     atoms, 'measured' otherwise. */
+     'ca' when its atoms are the residues' own representative atoms (residueAlphaCarbon: the Cα, a
+     nucleotide's P — what the card's Measure to… joins by default), 'closest' when they are the
+     residues' closest heavy-atom pair, 'measured' otherwise. Tested by name, a P–P measurement the
+     card had just made read "as measured" under an option called Cα–Cα. */
   function measurementPairState(record) {
     if (!record || record.type !== 'distance' || record.points.length !== 2) return null;
     const [first, second] = record.points;
@@ -531,10 +542,11 @@
     const residueA = { chain: first.chain || '', resi: first.resi, icode: insertionCodeOf(first) }; const residueB = { chain: second.chain || '', resi: second.resi, icode: insertionCodeOf(second) };
     const atomA = resolvePoint(first); const atomB = resolvePoint(second);
     const nearest = closestHeavyAtomPair(entryA, residueA, entryB, residueB);
+    const alphaA = residueAlphaCarbon(entryA, residueA.chain, residueA.resi, residueA.icode); const alphaB = residueAlphaCarbon(entryB, residueB.chain, residueB.resi, residueB.icode);
     let state = 'measured';
-    if (nearest && atomA === nearest.a && atomB === nearest.b) state = 'closest';
-    else if (atomA && atomB && atomA === residueAlphaCarbon(entryA, residueA.chain, residueA.resi, residueA.icode) && atomB === residueAlphaCarbon(entryB, residueB.chain, residueB.resi, residueB.icode) && atomA.atom === 'CA' && atomB.atom === 'CA') state = 'ca';
-    return { entryA, entryB, residueA, residueB, nearest, state };
+    if (atomA && atomB && atomA === alphaA && atomB === alphaB) state = 'ca';
+    else if (nearest && atomA === nearest.a && atomB === nearest.b) state = 'closest';
+    return { entryA, entryB, residueA, residueB, nearest, state, alphaA, alphaB };
   }
 
   /* The same two residues joined by other atoms: their Cα atoms, their closest heavy-atom pair, or —
@@ -554,6 +566,9 @@
       if (first && second) points = [atomReference(pair.entryA, first), atomReference(pair.entryB, second)];
     }
     if (!points || points.some(point => !resolvePoint(point))) { updateStatus('Those atoms are not loaded'); return; }
+    /* The same atoms under another name (a pair whose closest atoms are its Cα atoms): nothing to
+       change, so no undo step that undoes nothing. */
+    if (points.every((point, index) => resolvePoint(point) === resolvePoint(record.points[index]))) { updateStatus('Measurement already joins ' + measurementAtomsText(record)); return; }
     remember('measurement atoms');
     if (pair.state === 'measured' && !record.measured) record.measured = record.points.map(point => ({ ...point }));
     record.points = points;
@@ -584,7 +599,9 @@
     const select = host.querySelector('#gpv-measure-editor-pair');
     wrap.hidden = !pair;
     if (!pair) return;
-    const options = [['ca', 'Cα–Cα'], ['closest', 'closest atoms']];
+    /* Named as the card names it: P–P for two nucleotides, Cα–Cα for two amino acids. */
+    const representative = pair.alphaA && pair.alphaB ? atomWord(pair.alphaA) + '–' + atomWord(pair.alphaB) : 'Cα–Cα';
+    const options = [['ca', representative], ['closest', 'closest atoms']];
     if (pair.state === 'measured' || Array.isArray(record.measured)) options.push(['measured', 'as measured']);
     select.replaceChildren(...options.map(([value, text]) => new Option(text, value)));
     select.value = pair.state;

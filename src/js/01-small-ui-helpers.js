@@ -74,6 +74,23 @@
     return scores;
   }
 
+  /* A residue's pLDDT, read from the atom modelScores averages: its Cα, or a nucleotide's C1′. The
+     per-residue lists (residueRows) stand a nucleotide by its P, and AlphaFold 3 and Boltz write a
+     per-atom pLDDT that differs along a nucleotide, so Composition, the FASTA header and the profile
+     gave one chain a mean that contradicted the header and the methods sentence ("C1′ for
+     nucleotides"). The C1′ atoms are indexed once per set of atoms. */
+  function residueConfidence(entry, atom) {
+    if (atom.atom !== 'CA') {
+      if (!entry.confidenceAtomCache || entry.confidenceAtomCache.atoms !== entry.atoms) {
+        const map = new Map();
+        entry.atoms.forEach(item => { if (item.atom === "C1'" && !item.hetflag) map.set(residueCodeTag(item), item); });
+        entry.confidenceAtomCache = { atoms: entry.atoms, map };
+      }
+      atom = entry.confidenceAtomCache.map.get(residueCodeTag(atom)) || atom;
+    }
+    return Number(atom.b) || 0;
+  }
+
   /* How an experimental structure says what it is: mmCIF _exptl.method or PDB EXPDTA. A crystal
      structure opened from disk has B-factors in the pLDDT column, as a fetched one does; predictions
      either say nothing or say THEORETICAL MODEL. */
@@ -89,7 +106,11 @@
     return values.length ? values.reduce((sum, value) => sum + value, 0) / values.length : null;
   }
 
+  /* A number, or null when there is none. Number(null) and Number('') are 0, which is finite: the
+     metrics table printed "0.0" for the mean pLDDT of a model with no pLDDT, and a blank CSV score
+     ranked as a real 0. Missing is missing. */
   function finiteNumber(value) {
+    if (value === null || value === undefined || (typeof value === 'string' && !value.trim())) return null;
     const number = Number(value);
     return Number.isFinite(number) ? number : null;
   }

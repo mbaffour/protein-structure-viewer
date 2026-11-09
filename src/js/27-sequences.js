@@ -13,7 +13,7 @@
     const records = [];
     entries.forEach(entry => residueRows(entry).forEach(row => {
       const sequence = row.residues.map(atom => residueLetter(atom.resn)).join('');
-      const confidence = entry.scores.length ? mean(row.residues.map(atom => Number(atom.b) || 0)) : null;
+      const confidence = entry.scores.length ? mean(row.residues.map(atom => residueConfidence(entry, atom))) : null;
       const header = '>' + displayName(entry).replace(/\s+/g, '_') + (row.chain ? '|chain_' + row.chain : '') + ' length=' + sequence.length + (confidence === null ? '' : ' mean_pLDDT=' + confidence.toFixed(1));
       records.push(header + '\n' + (sequence.match(/.{1,60}/g) || ['']).join('\n'));
     }));

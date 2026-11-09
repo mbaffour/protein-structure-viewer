@@ -63,14 +63,16 @@
 
   /* One axis of the map: a chain's residues, or every chain's end to end, each residue stood for
      by the atom the sequence strip uses (the Cα, else a nucleotide's P), with the chain blocks
-     for the dividers, a chain|resi index for the contact search, and the coordinates the Cα–Cα
-     distances are read from. */
+     for the dividers, a chain|resi|code index for the contact search, and the coordinates the Cα–Cα
+     distances are read from. The index takes the insertion code: keyed by chain and number, 100 and
+     100A both found 100B's row, so 100B was credited with 100A's contact at 100A's distance and the
+     pairs among 100, 100A and 100B fell onto the diagonal and vanished. */
   function contactAxis(entry, value) {
     const all = value === contactAllChains;
     const rows = residueRows(entry).filter(row => all || row.chain === value);
     const residues = []; const blocks = [];
     rows.forEach(row => { blocks.push({ chain: row.chain, start: residues.length, end: residues.length + row.residues.length }); residues.push(...row.residues); });
-    const index = new Map(residues.map((atom, i) => [(atom.chain || '') + '|' + atom.resi, i]));
+    const index = new Map(residues.map((atom, i) => [residueCodeTag(atom), i]));
     const x = new Float64Array(residues.length); const y = new Float64Array(residues.length); const z = new Float64Array(residues.length);
     residues.forEach((atom, i) => { x[i] = atom.x; y[i] = atom.y; z[i] = atom.z; });
     return { value, all, chain: value, residues, blocks, index, x, y, z };
@@ -116,10 +118,10 @@
     const grid = spatialGrid(atomsB, cutoff); const limit = cutoff * cutoff;
     const pairs = new Map();
     atomsA.forEach(a => {
-      const i = axisA.index.get((a.chain || '') + '|' + a.resi); if (i === undefined) return;
+      const i = axisA.index.get(residueCodeTag(a)); if (i === undefined) return;
       grid.near(a).forEach(k => {
         const b = atomsB[k];
-        const j = axisB.index.get((b.chain || '') + '|' + b.resi); if (j === undefined) return;
+        const j = axisB.index.get(residueCodeTag(b)); if (j === undefined) return;
         /* A residue is never in contact with itself (the diagonal stays empty), and a symmetric
            map keeps each unordered pair once. */
         if (symmetric ? j <= i : axisA.residues[i] === axisB.residues[j]) return;
@@ -329,7 +331,8 @@
     /* Positions along the axes are residue order, chain by chain, so they sort an all-chains map too. */
     [...contactResult.pairs.entries()].map(([key, d]) => { const [i, j] = key.split('|').map(Number); return { i, j, a: contactResult.rowA.residues[i], b: contactResult.rowB.residues[j], d }; })
       .sort((x, y) => x.i - y.i || x.j - y.j)
-      .forEach(pair => rows.push([entry ? displayName(entry) : '', pair.a.chain || '', pair.a.resi, pair.a.resn || '', pair.b.chain || '', pair.b.resi, pair.b.resn || '', pair.d.toFixed(3), contactResult.mode === 'ca' ? 'CA' : 'heavy', contactResult.cutoff]));
+      /* The number as the file writes it (100A), as the card's Distances CSV does: three rows of "100" cannot be told apart. */
+      .forEach(pair => rows.push([entry ? displayName(entry) : '', pair.a.chain || '', residueNumber(pair.a), pair.a.resn || '', pair.b.chain || '', residueNumber(pair.b), pair.b.resn || '', pair.d.toFixed(3), contactResult.mode === 'ca' ? 'CA' : 'heavy', contactResult.cutoff]));
     downloadBlob(rows.map(row => row.map(csvCell).join(',')).join('\n'), 'text/csv', 'contacts-' + contactFileTag() + '.csv');
     updateStatus('Contacts CSV downloaded · ' + contactResult.pairs.size + ' pairs');
   }
@@ -353,7 +356,7 @@
     const onB = new Set(rowB.residues);
     const total = symmetric ? n * (n - 1) / 2 : n * m - rowA.residues.filter(atom => onB.has(atom)).length;
     const model = csvCell(entry ? displayName(entry) : '');
-    const prefix = atom => csvCell(atom.chain || '') + ',' + csvCell(atom.resi) + ',' + csvCell(atom.resn || '');
+    const prefix = atom => csvCell(atom.chain || '') + ',' + csvCell(residueNumber(atom)) + ',' + csvCell(atom.resn || '');
     const columns = rowB.residues.map(prefix);
     const parts = [['model', 'chain_a', 'resi_a', 'resn_a', 'chain_b', 'resi_b', 'resn_b', 'ca_distance_angstrom', 'min_heavy_distance_angstrom'].map(csvCell).join(',')];
     let chunk = []; let written = 0;

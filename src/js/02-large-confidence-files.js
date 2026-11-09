@@ -128,7 +128,10 @@
     const entryKey = associationKey(entry.sourcePath || entry.name);
     if (assetKey === entryKey) return true;
     const assetBase = fileStem(asset.name).toLowerCase();
-    const entryBase = fileStem(entry.name).toLowerCase();
+    /* The member's own path, as associationKey reads it: an archive member is named by its last two
+       path parts with spaces ("job / ranked_0.pdb"), whose stem " ranked_0" never matched ranked_N,
+       and a second copy's "(2)" kept the extension on. */
+    const entryBase = fileStem(entry.sourcePath || entry.name).toLowerCase();
     const ranked = entryBase.match(/^ranked_(\d+)$/);
     if (ranked && asset.rankIndex === Number(ranked[1])) return true;
     if (asset.modelName && (entryBase === asset.modelName.toLowerCase() || entryBase.endsWith('_' + asset.modelName.toLowerCase()))) return true;
@@ -194,12 +197,27 @@
     if (!root.querySelector('[data-gpv-panel="confidence"]').hidden) renderConfidence();
   }
 
+  /* An archive's models after the first are read only when they are first shown (lazy loading), so until
+     then they have no pLDDT. Under Mean pLDDT order they were sorted as if theirs were the lowest, below
+     every viewed model, with nothing to say why. They are "not yet ranked": listed after the ranked
+     models in the order they were loaded, labelled so in the list and counted in the status bar. They are
+     not parsed to rank them — that would undo lazy loading for a 40-model archive. */
+  function notYetRanked(entry) {
+    return root.querySelector('#gpv-order').value === 'plddt' && !entry.model && !entry.scores.length;
+  }
+  function modelOrderNote() {
+    const count = structures.filter(notYetRanked).length;
+    return count ? ' · ' + count + ' not yet ranked' : '';
+  }
+
   function applyModelOrder() {
     const mode = root.querySelector('#gpv-order').value;
     const value = entry => mode === 'ranking' ? finiteNumber(entry.confidence && entry.confidence.rankingScore) : mode === 'plddt' ? mean(entry.scores) : -entry.loadIndex;
+    /* Ranked first, then not yet ranked, then models that have no pLDDT at all (an experimental structure). */
+    const tier = entry => (mode !== 'plddt' || value(entry) !== null ? 0 : notYetRanked(entry) ? 1 : 2);
     structures.sort((a, b) => {
       if (mode === 'loaded') return a.loadIndex - b.loadIndex;
-      return (value(b) ?? -Infinity) - (value(a) ?? -Infinity) || a.loadIndex - b.loadIndex;
+      return tier(a) - tier(b) || (value(b) ?? -Infinity) - (value(a) ?? -Infinity) || a.loadIndex - b.loadIndex;
     });
   }
 
@@ -431,7 +449,7 @@
       parts.push(text(left, y0 - 8 * k, chain ? 'Chain ' + chain : 'Chain —', fit ? 11 : 13, 'start', 600));
       parts.push(text(left - axisLabel, y0 + rowHeight / 2, 'pLDDT', 11, 'middle', 400, muted, ' transform="rotate(-90 ' + f(left - axisLabel) + ' ' + f(y0 + rowHeight / 2) + ')"'));
       rows.forEach(item => {
-        const d = item.row.residues.map((atom, position) => (position ? 'L' : 'M') + f(x(atom.resi)) + ' ' + f(y(Math.max(0, Math.min(100, Number(atom.b) || 0))))).join(' ');
+        const d = item.row.residues.map((atom, position) => (position ? 'L' : 'M') + f(x(atom.resi)) + ' ' + f(y(Math.max(0, Math.min(100, residueConfidence(item.entry, atom)))))).join(' ');
         parts.push('<path d="' + d + '" fill="none" stroke="' + item.entry.color + '" stroke-width="' + f((entries.length > 1 ? 1.6 : 2) * k) + '" stroke-linejoin="round"/>');
       });
       parts.push('</g>');
