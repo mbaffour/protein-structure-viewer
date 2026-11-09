@@ -3,7 +3,7 @@
 The core structural quantities below were compared with an independent implementation on three real
 AlphaFold 3 runs. Later sections record separate interaction-confidence checks on real and published
 predictor outputs. This file records the methods, results, limits and ways to rerun them. The core
-three-run check was last run on 2026-09-15 with viewer 2.37.0; the interaction-confidence check was
+three-run check was last run on 2026-11-08 with viewer 2.52.0 (175 comparisons: the original 130 plus the distance-map and residue-contacts checks added in 2.50.0 and 2.51.0, all within tolerance, re-run after batch L changed what counts as a residue and excluded water from interfaces — no recorded number moved); the interaction-confidence check was
 run on 2026-09-27 with viewer 2.48.0.
 
 ## Method
@@ -316,7 +316,7 @@ statement about the alignment, reported so nobody mistakes the weighting for a r
 | A — M13 virion tip | n_l_o_k_m (γ) | 90 | 73 | 5.0 × 10⁻⁷ | 5.0 × 10⁻⁷ | 4.9 × 10⁻⁷ | exact | 0.121 |
 | B — MS2 maturation protein–coat | a | 1 875 | 393 | 5.0 × 10⁻⁷ | 5.0 × 10⁻⁷ | 5.0 × 10⁻⁷ | exact | 0.138 |
 | B — MS2 maturation protein–coat | b_c | 62 | 130 | 5.0 × 10⁻⁷ | 5.0 × 10⁻⁷ | 4.9 × 10⁻⁷ | exact | 0.130 |
-| C — phiX174 F–G | a | 2 048 | 427 | 5.0 × 10⁻⁷ | 5.0 × 10⁻⁷ | 5.0 × 10⁻⁷ | exact | 0.262 |
+| C — phiX174 F–G | a | 2 048 | 427 | 5.0 × 10⁻⁷ | 5.0 × 10⁻⁷ | 5.0 × 10⁻⁷ | exact | 0.261 |
 | C — phiX174 F–G | b | 798 | 175 | 5.0 × 10⁻⁷ | 4.9 × 10⁻⁷ | 5.0 × 10⁻⁷ | exact | 0.317 |
 
 Differences are the six-decimal rounding of the reference. Note the single-sequence alignment for the
