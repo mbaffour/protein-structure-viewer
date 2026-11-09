@@ -13,7 +13,7 @@ concurrency:
 jobs:
   playwright:
     name: playwright (${{ matrix.browser }})
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 40
     strategy:
       fail-fast: false
@@ -72,7 +72,7 @@ jobs:
 
   validate-scripts:
     name: validate scripts
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
