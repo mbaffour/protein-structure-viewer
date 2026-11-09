@@ -58,7 +58,7 @@
       const count = document.createElement('td'); count.className = 'text-end'; count.textContent = String(row.residues.length); tr.append(count);
       const range = document.createElement('td'); range.textContent = row.residues[0].resi + '–' + row.residues[row.residues.length - 1].resi; tr.append(range);
       const confidence = document.createElement('td'); confidence.className = 'text-end';
-      confidence.textContent = entry.scores.length ? (mean(row.residues.map(atom => Number(atom.b) || 0)) || 0).toFixed(1) : '—'; tr.append(confidence);
+      confidence.textContent = entry.scores.length ? (mean(row.residues.map(atom => residueConfidence(entry, atom))) || 0).toFixed(1) : '—'; tr.append(confidence);
       const toggleCell = document.createElement('td');
       const toggle = document.createElement('input'); toggle.type = 'checkbox'; toggle.className = 'form-check-input'; toggle.checked = !hidden.includes(row.chain);
       toggle.setAttribute('aria-label', 'Show chain ' + (row.chain || '—'));

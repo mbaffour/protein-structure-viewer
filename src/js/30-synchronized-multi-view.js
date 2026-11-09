@@ -274,12 +274,17 @@
     SEC: 'U', PYL: 'O', ASX: 'B', GLX: 'Z'
   };
 
+  /* Each chain's Cα atoms with their one-letter codes, for the sequence-aware pairings and the ipSAE
+     pooling (17a). A calcium ion is a HETATM atom named CA: as an "X residue" it paired with the other
+     model's ion and entered the fit, the RMSD and the identity as a Cα pair. A modified residue bonded
+     into its chain (TPO, MSE) has had its hetflag cleared (03b), so it stays, and it reads its parent's
+     letter, as the strip and the FASTA write it — as X it mis-scored against its own copy. */
   function residueChains(entry) {
     const chains = new Map();
-    entry.atoms.filter(atom => atom.atom === 'CA').forEach(atom => {
+    entry.atoms.filter(atom => atom.atom === 'CA' && !atom.hetflag).forEach(atom => {
       const chain = atom.chain || '';
       if (!chains.has(chain)) chains.set(chain, []);
-      chains.get(chain).push({ atom, letter: aminoAcids[String(atom.resn || '').toUpperCase()] || 'X' });
+      chains.get(chain).push({ atom, letter: residueLetter(atom.resn) });
     });
     return chains;
   }
@@ -406,6 +411,9 @@
     const named = parts.length > 1;
     const chain = named ? parts[0].trim() : (/^[A-Za-z][A-Za-z0-9]{0,3}$/.test(value) ? value : '');
     const rangeText = named ? parts.slice(1).join(':').trim() : (chain ? '' : value);
+    /* A part that cannot be read refuses the region, as Selections and Domains do, rather than fitting
+       on the parts that could be. */
+    if (rangeText && unreadableRangePart(rangeText) !== null) return null;
     const residues = rangeText ? new Set(parseResidueRange(rangeText)) : null;
     if (chain && !rangeText) return { chain, residues: null, label: 'chain ' + chain };
     if (!residues || !residues.size) return null;
@@ -1002,12 +1010,15 @@
        read exactly as before and older viewers ignore the field. */
     const icodeOf = item => { const icode = insertionCodeOf(item); return icode ? { icode } : {}; };
     const point = item => ({ model: nameOf(item.entryId), chain: item.chain, resi: item.resi, ...icodeOf(item), atom: item.atom, index: item.index });
+    /* An offset Separate labels chose is written as such (`autoPlaced`), so after a scene, a session or
+       a share link the next Separate labels may still move it; without the flag it read as placed by
+       hand and stayed put. Only with an offset: the flag means nothing on a label at its residue. */
     return {
-      labels: labelRecords.filter(kept).map(label => ({ model: nameOf(label.entryId), chain: label.chain, resi: label.resi, ...icodeOf(label), atom: label.atom, text: label.text, color: label.color, size: label.size, ...(label.kind === 'domain' || label.kind === 'position' ? { kind: label.kind } : {}), ...(labelOffsetLength(label) ? { offset: label.offset } : {}) })),
+      labels: labelRecords.filter(kept).map(label => ({ model: nameOf(label.entryId), chain: label.chain, resi: label.resi, ...icodeOf(label), atom: label.atom, text: label.text, color: label.color, size: label.size, ...(label.kind === 'domain' || label.kind === 'position' ? { kind: label.kind } : {}), ...(labelOffsetLength(label) ? { offset: label.offset } : {}), ...(label.autoPlaced && labelOffsetLength(label) ? { autoPlaced: true } : {}) })),
       selections: selectionRecords.filter(kept).map(record => ({ model: nameOf(record.entryId), chain: record.chain, residues: record.residues, ...(Array.isArray(record.icodes) ? { icodes: record.icodes } : {}), action: record.action, color: record.color })),
       /* A measurement's text, value switch, offset, colour and dash only when they differ from the
          defaults, so a scene with none of them reads exactly as it did before they existed. */
-      measurements: measurementRecords.filter(keptPoints).map(record => ({ type: record.type, points: record.points.map(point), ...(record.text ? { text: record.text } : {}), ...(record.showValue === false ? { showValue: false } : {}), ...(labelOffsetLength(record) ? { offset: record.offset } : {}), ...(measurementColor(record) ? { color: record.color } : {}), ...(record.dashed === false ? { dashed: false } : {}) })),
+      measurements: measurementRecords.filter(keptPoints).map(record => ({ type: record.type, points: record.points.map(point), ...(record.text ? { text: record.text } : {}), ...(record.showValue === false ? { showValue: false } : {}), ...(labelOffsetLength(record) ? { offset: record.offset } : {}), ...(record.autoPlaced && labelOffsetLength(record) ? { autoPlaced: true } : {}), ...(measurementColor(record) ? { color: record.color } : {}), ...(record.dashed === false ? { dashed: false } : {}) })),
       residueData: residueData && (residueData.scope === 'all' || keep(residueData.entryId)) ? { name: residueData.name, scale: residueData.scale, scope: residueData.scope, model: nameOf(residueData.entryId), rows: [...residueData.values.entries()].map(([key, value]) => [key.split('|')[0], Number(key.split('|')[1]), value]).concat([...residueData.byResi.entries()].map(([resi, value]) => ['', resi, value])) } : null,
       domains: domainRecords.filter(record => record.scope === 'all' || kept(record)).map(record => ({ name: record.name, color: record.color, chain: record.chain, residues: record.residues, scope: record.scope, model: nameOf(record.entryId) })),
       annotations: annotationRecords.filter(keptPoints).map(record => ({ type: record.type, text: record.text, color: record.color, size: record.size, dashed: record.dashed, corner: record.corner, offset: record.offset, distance: record.distance, dx: record.dx, dy: record.dy, points: record.points.map(point) })),
@@ -1026,6 +1037,9 @@
       color: entry.color,
       label: entry.label || '',
       hiddenChains: entry.hiddenChains || [],
+      /* Both fades, as the session writes them: applyScene sets each from the record, so a faded
+         chain left out here came back solid from every scene. */
+      fadedChains: entry.fadedChains || [],
       ...(entry.faded ? { faded: true } : {}),
       ...(entry.fetchId ? { fetch: entry.fetchId } : {})
     })));

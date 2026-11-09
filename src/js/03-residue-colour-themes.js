@@ -162,7 +162,8 @@
       spotlightResidues.forEach(spot => {
         if (spot.chain && (entry.hiddenChains || []).includes(spot.chain)) return;
         const selection = spot.chain ? { chain: spot.chain, resi: spot.resi } : { resi: spot.resi };
-        if (insertionCodeOf(spot)) selection.predicate = atom => insertionCodeOf(atom) === insertionCodeOf(spot);
+        /* Always by code, blank included: comparing plain 57 must not draw sticks on 57A and 57B. */
+        selection.predicate = atom => insertionCodeOf(atom) === insertionCodeOf(spot);
         model.setStyle(selection, { stick: { radius: 0.22, colorscheme: 'default' } }, true);
       });
     }
@@ -196,6 +197,15 @@
     return deviationBands.find(([limit]) => value < limit)[1];
   }
 
+  /* Whether Download one panel per model has models to draw, by the rule it draws by (34): the shown
+     models when there are two, otherwise the active model's whole collection. Enabled whenever two
+     models were loaded, it refused a fetched entry and a local file with one of them hidden. */
+  function modelPanelsAvailable() {
+    if (displayedEntries().filter(entry => entry.model).length >= 2) return true;
+    const active = activeEntry();
+    return Boolean(active) && structures.filter(entry => entry.collection === active.collection).length >= 2;
+  }
+
   function updateStatus(message = 'Ready') {
     if (!root.querySelector('[data-gpv-panel="publish"]').hidden) { setTimeout(renderPublicationChecks, 0); setTimeout(renderCompositeControls, 0); }
     const visible = displayedEntries();
@@ -212,7 +222,7 @@
       hiddenHint.append(title, show); root.querySelector('#gpv-stage-empty').after(hiddenHint);
     }
     if (hiddenHint) hiddenHint.hidden = !allHidden;
-    root.querySelector('#gpv-count').textContent = visible.length + ' displayed / ' + structures.length + ' loaded';
+    root.querySelector('#gpv-count').textContent = visible.length + ' displayed / ' + structures.length + ' loaded' + modelOrderNote();
     const scores = visible.flatMap(entry => entry.scores);
     const score = mean(scores);
     root.querySelector('#gpv-confidence').textContent = score === null ? 'Mean pLDDT —' : 'Mean pLDDT ' + score.toFixed(1);
@@ -231,7 +241,7 @@
     const scored = structures.some(entry => entry.visible && entry.scores.length);
     root.querySelector('#gpv-profile-svg').disabled = !scored;
     root.querySelector('#gpv-profile-png').disabled = !scored;
-    root.querySelector('#gpv-image').disabled = structures.length === 0; root.querySelector('#gpv-model-panels').disabled = structures.length < 2;
+    root.querySelector('#gpv-image').disabled = structures.length === 0; root.querySelector('#gpv-model-panels').disabled = !modelPanelsAvailable();
     root.querySelector('#gpv-rmsd-matrix-run').disabled = visible.filter(entry => entry.visible).length < 2;
     root.querySelector('#gpv-svg').disabled = structures.length === 0;
     if (typeof renderImageButton === 'function') renderImageButton();
@@ -265,7 +275,7 @@
     root.querySelector('#gpv-compare-image').disabled = !comparing;
     root.querySelector('#gpv-compare-svg').disabled = !comparing;
     /* Across the panels: three models in three panels is "3 displayed", not the primary's 1. */
-    if (comparing) root.querySelector('#gpv-count').textContent = new Set([...visible.map(entry => entry.id), ...comparePanels.map(panel => panel.entryId).filter(id => entryById(id))]).size + ' displayed / ' + structures.length + ' loaded · ' + (comparePanels.length + 1) + ' panels';
+    if (comparing) root.querySelector('#gpv-count').textContent = new Set([...visible.map(entry => entry.id), ...comparePanels.map(panel => panel.entryId).filter(id => entryById(id))]).size + ' displayed / ' + structures.length + ' loaded · ' + (comparePanels.length + 1) + ' panels' + modelOrderNote();
   }
 
   function materializeEntry(entry) {
@@ -442,7 +452,8 @@
       const score = document.createElement('span');
       score.className = 'gpv-entry-score text-small';
       const average = mean(entry.scores);
-      score.textContent = average === null ? (entry.model ? 'pLDDT —' : 'Not viewed') : average.toFixed(1);
+      score.textContent = average === null ? (entry.model ? 'pLDDT —' : notYetRanked(entry) ? 'Not yet ranked' : 'Not viewed') : average.toFixed(1);
+      if (average === null && notYetRanked(entry)) score.title = 'Not read yet, so it has no pLDDT to sort by: listed after the ranked models. Show it to read its pLDDT; the order is applied again when you choose it or load more files.';
 
       const color = document.createElement('input');
       color.className = 'form-control form-control-color';
@@ -497,6 +508,33 @@
      if they were its, the comparison that included it, and the modes when nothing is left to draw
      on. Otherwise Add or update would label a "Missing model", and the card would follow a residue
      that is no longer drawn. */
+  /* Removed models whose "same source" records moved to another model of their source, by id: undo
+     brings back snapshots taken before the move, and their records are moved the same way (05). */
+  const rehomedModels = new Map();
+  function rehomedRecord(record) {
+    if (!record || record.scope !== 'source') return record;
+    let id = record.entryId; const seen = new Set();
+    while (!entryById(id) && rehomedModels.has(id) && !seen.has(id)) { seen.add(id); id = rehomedModels.get(id); }
+    return id === record.entryId ? record : { ...record, entryId: id };
+  }
+
+  /* Named domains and per-residue data hang on the model they were made on. Scoped to the same
+     source, they colour every model of its collection — until that model was removed: domainApplies
+     found no owner and the domain silently stopped colouring the rest, its row still listed. Such a
+     record moves to a surviving model of the same source; a record of this model alone, or of a
+     source with no model left, goes with it. */
+  function rehomeModelRecords(entry) {
+    const successor = structures.find(item => item.collection === entry.collection) || null;
+    if (successor) rehomedModels.set(entry.id, successor.id);
+    const owned = record => record.scope !== 'all' && record.entryId === entry.id;
+    domainRecords = domainRecords.filter(record => !owned(record) || (record.scope === 'source' && successor)).map(record => (owned(record) ? { ...record, entryId: successor.id } : record));
+    domainVersion += 1; renderDomainList();
+    if (residueData && owned(residueData)) {
+      residueData = residueData.scope === 'source' && successor ? { ...residueData, entryId: successor.id } : null;
+      renderDataState();
+    }
+  }
+
   function removeModelEntry(entry) {
     const hadAlignment = alignmentResults.length > 0;
     const wasReference = hadAlignment && Number(root.querySelector('#gpv-reference').value) === entry.id;
@@ -518,6 +556,21 @@
     spotlightResidues = []; positionEffect = null; renderPositionEffect(); renderPositionState();
     if (siteResults && siteResults.entryId === entry.id) siteResults = null;
     if (nearbyResult && nearbyResult.entry === entry) { nearbyResult = null; root.querySelector('#gpv-near-copy').disabled = true; }
+    /* Its interface table: the rows named chain pairs of a model that was gone, Highlight did nothing
+       and the CSV wrote them with an empty model column. */
+    if (interfaceResults && interfaceResults.entryId === entry.id) { interfaceResults = null; renderInterfaceResults(); root.querySelector('#gpv-interface-state').textContent = ''; }
+    /* A measurement or a drawing half made on it: the next click on another model completed a record
+       whose first point was the removed model — made after its model had gone. */
+    const draftRequired = root.querySelector('#gpv-measure-type').value === 'angle' ? 3 : 2;
+    if (measurementDraft.some(point => !keeps(point))) {
+      measurementDraft = measurementDraft.filter(keeps);
+      if (measurementActive) root.querySelector('#gpv-measure-state').textContent = 'Selected ' + measurementDraft.length + ' of ' + draftRequired + ' atoms.';
+    }
+    if (annotationDraft.some(point => !keeps(point))) {
+      annotationDraft = annotationDraft.filter(keeps);
+      if (annotationActive) root.querySelector('#gpv-annotation-state').textContent = annotationPrompt();
+    }
+    rehomeModelRecords(entry);
     if (rmsdMatrix) { rmsdMatrix = null; renderRmsdMatrix(); }
     /* Its comparison panels close with it. They used to be handed silently to the first model, until
        every panel showed the same one; and with no panel left the multi-view has nothing to compare. */
@@ -803,7 +856,8 @@
       color.addEventListener('change', () => { delete color.dataset.remembered; });
       const show = document.createElement('button'); show.className = 'btn btn-ghost'; show.type = 'button'; show.textContent = 'Show'; show.dataset.control = 'show';
       show.title = 'Zoom to this residue';
-      show.addEventListener('click', () => { if (!entry || !entry.model) return; const selection = { model: entry.model.getID(), resi: label.resi }; if (label.chain) selection.chain = label.chain; viewer.zoomTo(selection); viewer.render(); syncViewsFrom(viewer); });
+      /* Frames the label's residue alone, by its insertion code too (blank included), as Go to does. */
+      show.addEventListener('click', () => { if (!entry || !entry.model) return; const selection = { model: entry.model.getID(), resi: label.resi, predicate: atom => insertionCodeOf(atom) === insertionCodeOf(label) }; if (label.chain) selection.chain = label.chain; viewer.zoomTo(selection); viewer.render(); syncViewsFrom(viewer); });
       const reset = document.createElement('button'); reset.className = 'btn btn-ghost'; reset.type = 'button'; reset.textContent = 'Reset';
       reset.title = 'Put the label back on its residue'; reset.disabled = labelOffsetLength(label) === 0;
       /* Reset greys itself out once used; the focus then goes to Show beside it rather than onto the page. */
@@ -909,6 +963,14 @@
     if (shouldRender) viewer.render();
   }
 
+  /* The first part of a residue range the reader below cannot read ("100A-100C", a typo "2O"), or
+     null. Such a part was skipped without a word, so "100A-100C, 105" made a selection of 105 alone
+     and said "Selection added". Ranges take numbers only: an insertion-code run names no defined set. */
+  function unreadableRangePart(value) {
+    const part = String(value || '').split(',').map(item => item.trim()).find(item => item && !/^(-?\d+)(?:\s*-\s*(-?\d+))?$/.test(item));
+    return part === undefined ? null : part;
+  }
+
   function parseResidueRange(value) {
     const residues = new Set();
     String(value || '').split(',').forEach(part => {
@@ -933,6 +995,14 @@
 
   function selectionResidueKeys(record) {
     return record.residues.map((resi, index) => resi + (Array.isArray(record.icodes) && record.icodes[index] ? record.icodes[index] : ''));
+  }
+
+  /* Of the highlight records a press would add ({ chain, residues, icodes? }), the ones not already
+     on the list for this model in this colour: a second press with nothing changed is refused rather
+     than stacking identical rows and undo steps (as Near's highlight does, 10). */
+  function newHighlightRecords(entryId, records, color) {
+    const same = (record, made) => record.entryId === entryId && record.action === 'highlight' && (record.chain || '') === (made.chain || '') && record.color === color && selectionResidueKeys(record).join() === selectionResidueKeys(made).join();
+    return records.filter(made => !selectionRecords.some(record => same(record, made)));
   }
 
   /* The atoms a record takes in, as a 3Dmol selection: by number, and by insertion code when it has them. */
@@ -988,6 +1058,8 @@
   function addSelection() {
     const entryId = Number(root.querySelector('#gpv-selection-model').value);
     const chain = root.querySelector('#gpv-selection-chain').value.trim();
+    const unread = unreadableRangePart(root.querySelector('#gpv-selection-range').value);
+    if (unread !== null) { updateStatus('Could not read "' + unread + '" — enter a valid residue number or range, such as 10-25, 40 (a residue with an insertion code, such as 100A, is selected with Shift-drag)'); return; }
     const residues = parseResidueRange(root.querySelector('#gpv-selection-range').value);
     if (!entryId || !residues.length) { updateStatus('Enter a valid residue number or range'); return; }
     remember('selection');
@@ -1003,8 +1075,14 @@
   function resolvePoint(reference) {
     const entry = structures.find(item => item.id === reference.entryId);
     if (!entry) return null;
-    return entry.atoms.find(atom => Number.isInteger(reference.index) && atom.index === reference.index)
-      || entry.atoms.find(atom => sameResidue(atom, reference.chain, reference.resi, insertionCodeOf(reference)) && (atom.atom || '') === reference.atom) || null;
+    /* The stored index is a shortcut, not the identity: a scene restored onto a file of the same name
+       but another atom order (a re-run, a remediated entry, waters stripped) put other atoms at those
+       indices, and the distance between them was shown under the scene's atom names. The index hit
+       counts only when it is the named atom; otherwise the atom is found by its name, or not at all. */
+    const named = atom => sameResidue(atom, reference.chain, reference.resi, insertionCodeOf(reference)) && (atom.atom || '') === reference.atom;
+    const indexed = Number.isInteger(reference.index) ? entry.atoms.find(atom => atom.index === reference.index) : null;
+    if (indexed && (typeof reference.atom !== 'string' || named(indexed))) return indexed;
+    return entry.atoms.find(named) || null;
   }
 
   function pointName(reference) {

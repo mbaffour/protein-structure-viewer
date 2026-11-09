@@ -48,7 +48,8 @@
     selectionRecords = state.selections.filter(alive);
     measurementRecords = state.measurements.filter(record => record.points.every(alive));
     annotationRecords = state.annotations.filter(record => record.points.every(alive));
-    domainRecords = (state.domains || []).filter(record => record.scope === 'all' || alive(record)); domainVersion += 1;
+    /* A "same source" record taken before its model was removed comes back on the model it was moved to (03). */
+    domainRecords = (state.domains || []).map(rehomedRecord).filter(record => record.scope === 'all' || alive(record)); domainVersion += 1;
     spotlightResidues = state.positions || [];
     /* Saved views are records too: Make site figure adds two or three of them in one press, and undo
        has to take them back with the rest of the state that press changed. */
@@ -57,12 +58,18 @@
     if (state.figureLabels) { setFigureLabels(state.figureLabels); applyFigureLabels(); }
     /* The colour scheme is not itself an undo step; it goes back only with the data it showed. */
     if ('residueData' in state && state.residueData !== residueData) {
-      residueData = state.residueData; renderDataState();
+      const data = rehomedRecord(state.residueData);
+      residueData = data && data.scope !== 'all' && !alive(data) ? null : data; renderDataState();
       const mode = root.querySelector('#gpv-color-mode');
       if (mode.value !== state.colorMode) mode.value = state.colorMode;
     }
-    /* The neighbourhood table belongs to the compared positions it was measured around. */
-    positionEffect = spotlightResidues.length ? state.positionEffect || null : null; renderPositionEffect();
+    /* The neighbourhood table belongs to the compared positions it was measured around, and to the
+       superposition and the models it was measured on: put back after one of them was removed (which
+       clears the alignment), it listed a "Cα Δ vs" column for a model no longer loaded and the legend
+       said the site "moved" in it. */
+    const effect = state.positionEffect || null;
+    const effectLive = effect && alignmentResults.length > 0 && (!Array.isArray(effect.entryIds) || effect.entryIds.every(id => entryById(id)));
+    positionEffect = spotlightResidues.length && effectLive ? effect : null; renderPositionEffect();
     renderLabelList(); renderSelectionList(); renderMeasurementList(); renderAnnotationList(); renderDomainList(); renderPositionState(); renderSavedViews(); renderList(); renderSequenceSoon();
     applyStyle();
     /* A scene restore's step also holds the display it replaced (31, sceneDisplayState). */

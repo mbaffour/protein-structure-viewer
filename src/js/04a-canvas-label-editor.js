@@ -362,7 +362,7 @@
       const record = labelRecords.find(label => label.key === editor.key);
       closeLabelEditor(true);
       if (record) setActiveText('label', record);
-      updateStatus('Label added at ' + locationText(editor.atom.chain, editor.atom.resi) + ' · arrow keys move it, Esc lets go');
+      updateStatus('Label added at ' + locationText(editor.atom.chain, residueNumber(editor.atom)) + ' · arrow keys move it, Esc lets go');
       return;
     }
     const record = labelEditorRecord();
@@ -438,8 +438,24 @@
     return kind === 'measurement' ? 'measurement text move' : kind === 'label' ? 'label nudge' : 'annotation text move';
   }
 
+  /* Why the active text is drawn on no view, or null: the rows' arrows, Show and Edit already refuse a
+     measurement on a hidden model (measurementUndrawnReason, 04), and the arrow keys moved it anyway —
+     an undo step and "Measurement text moved" for text no one could see. A label on a hidden model is
+     refused the same way. */
+  function canvasTextUndrawnReason(resolved) {
+    if (resolved.kind === 'measurement') return measurementUndrawnReason(resolved.record);
+    if (resolved.kind !== 'label') return null;
+    const entry = entryById(resolved.record.entryId);
+    if (!entry) return 'Its model is no longer loaded';
+    if (displayedEntries().includes(entry)) return null;
+    if (root.querySelector('#gpv-side-by-side').checked && comparePanels.some(panel => panel.entryId === entry.id)) return null;
+    return 'Show ' + displayName(entry) + ' first — this label is not drawn while it is hidden';
+  }
+
   function nudgeActiveText(dx, dy, repeat) {
     const resolved = activeCanvasText(); if (!resolved) return;
+    const undrawn = canvasTextUndrawnReason(resolved);
+    if (undrawn) { updateStatus(undrawn); return; }
     /* Holding an arrow key is one move, not sixty undo steps. */
     if (!repeat) remember(canvasTextMoveStep(resolved.kind));
     nudgeCanvasText(resolved, dx, dy);

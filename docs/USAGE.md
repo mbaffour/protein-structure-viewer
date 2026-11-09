@@ -150,7 +150,9 @@ panel of the same model that line up exactly.
   status line names it (`Loaded 2 models from 1 source · showing hbdimer / hbdimer_model_0.cif`). A
   second copy of a file already open is named `1brs.cif (2)`.
 - **Model order** sorts by load order, ranking score, or mean pLDDT. Models without the chosen score
-  sort last.
+  sort last. An archive's models are read only when first shown, so under mean pLDDT the ones not yet
+  viewed read *Not yet ranked*, follow the ranked models, and are counted in the status bar
+  (*· 4 not yet ranked*); show one and choose the order again to place it.
 - **Cycle models** steps through the currently filtered, visible models at the chosen interval.
   Navigation (*Current model*, ← →, Previous/Next) and cycling switch the view to one at a time; the
   status line says so when it leaves an overlay, and the mode is remembered like a choice made in
@@ -450,7 +452,10 @@ unreadable for large ones.
 
 **Selections.** Pick a model, optionally a chain, and a residue range (`20-45`, or `20,24,31`, or a
 mix), then **Highlight** it in a chosen colour or **Hide** it. Leaving the chain blank applies the
-range to every chain.
+range to every chain. A range takes residue numbers only: one with a part that cannot be read
+(`100A-100C, 105`, or a typed `2O`) is refused and the part named, rather than kept in part; a residue
+with an insertion code, such as 100A, is selected with Shift-drag (below). Domains and the fit region
+read ranges the same way.
 
 **Selecting a region of the model.** Hold <kbd>Shift</kbd> and drag across the model: instead of
 turning, the view draws a box, and every residue whose Cα lies inside it — in every displayed model,
@@ -470,7 +475,9 @@ the sequence strip.
 one, residues `1-75` or `1-75,120-140`, a colour — and choose where it applies: **Every model from the
 same source** (the models of one AlphaFold run, which share a sequence), **This model only**, or
 **Every loaded model**. **Add domain** stores it; the list lets you rename, recolour, re-scope or
-remove it, and every change can be undone. **Colour by annotated domains** switches the colour scheme
+remove it, and every change can be undone. Removing the model a domain was added on moves a *same
+source* domain to another model of that source (per-residue data likewise), and takes a *this model
+only* domain with it. **Colour by annotated domains** switches the colour scheme
 so the domains are painted in their colours and everything else is grey; the legend under the viewer
 and on every export lists the domains by name, so a figure legend can point at "the N-lobe in blue"
 and the picture agrees. Where two definitions overlap, the earlier one wins. **Adopt PAE domains**
@@ -928,8 +935,9 @@ after the fit, the rows ordered by how far they moved and closed by a **Neighbou
 readout adds `site moved 0.42 Å in model_mutant · 7 neighbours within 5 Å moved 0.31 Å on average`.
 A substitution that only swaps a side chain leaves a table of near-zero deviations; one that shifts a
 helix shows it residue by residue. **Highlight neighbourhood** puts the neighbours into the Selections
-list as an ordinary orange highlight on the reference model — one row per chain, so it can be
-recoloured, removed or undone — and **Download effect CSV** writes `chain,resi,resn,role` with
+list as an ordinary highlight in Annotate's *Highlight colour* on the reference model — one row per
+chain, so it can be recoloured, removed or undone; pressing it again with nothing changed adds nothing —
+and **Download effect CSV** writes `chain,resi,resn,role` with
 `role` reading `site` or `neighbour`, plus one deviation column per model. Change the cutoff and the
 table is measured again; the value is remembered between sessions and travels in scenes and share
 links. The figure legend gains the sentence *After superposition the Cα at A:15 moved 0.42 Å in
@@ -938,8 +946,9 @@ neighbourhood rule.
 
 **A whole set of positions at once.** A binding site, an interface or a loop is several residues, and
 comparing them one press at a time leaves an effect table about the last one rather than about the site.
-Type the set into **Positions** — `A:20-30, A:45`, `K:12`, or bare numbers and ranges like `20-30, 45`,
-which take the chain of the selected residue or the only chain the models have — and press **Compare
+Type the set into **Positions** — `A:20-30, A:45`, `K:12`, `H:100A` for a residue with an insertion code
+(a single position, not a range), or bare numbers and ranges like `20-30, 45`, which take the chain of the
+selected residue or the only chain the models have — and press **Compare
 these positions**. Spacing is free and chain names are matched case-insensitively against the chains the
 models carry. Each position is then compared exactly as a single one is: the side chain drawn in every
 shown model, a label naming that model's own residue, and the position added to the compared set; a
@@ -1402,8 +1411,9 @@ Archives with hundreds of predictions are handled with a few deliberate compromi
   eight seconds and keeps the browser well under a gigabyte.
 - Above 25 models in one archive, the `*_full_data_*.json` PAE payloads are skipped altogether. Drop the
   specific ones you need separately.
-- PAE matrices above 1 500 tokens are not written to the session autosave; everything else is. Reopen
-  the archive to get them back.
+- PAE matrices above 1 500 tokens are not written to the session autosave; everything else is. The
+  restore says so, naming the models (*the PAE of … was too large to autosave*); reopen the archive to
+  get them back, or keep them with **Save session file**.
 - The model list renders 60 rows at a time.
 
 ## Validation

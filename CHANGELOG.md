@@ -446,6 +446,48 @@ All notable changes to this project are recorded here.
   or a measurement's *Reset* (the focus goes to *Show* beside it once Reset greys out), a domain's
   scope, and the figure builder's tick and ↑/↓ keep the keyboard focus instead of dropping it on the
   page; the site-figure tip in Help names *Download built figure PNG or SVG*.
+- **Stress loop, round 3 (batch J): insertion codes everywhere else a residue is named.** The contact map
+  indexed residues by chain and number, so 100 and 100A both found 100B's row — one pair, on 100B, at
+  100A's distance — and its two CSVs wrote *100* three times; Interfaces counted 100, 100A and 100B as one
+  interface residue, highlighted all three for a contact at one and wrote *100*; *Compare this position*
+  at 100A measured around 100 (or gave no table) and labelled it *Ala100*; a ligand site lined by 57 and
+  57A counted one residue; a motif matched at 100A highlighted 100 too and said *H:100*; *Label residues*
+  on a highlight of 57A labelled 57 and 57B; comparing plain 57 drew sticks on 57A and 57B, and a label's
+  *Show* and a strip double-click framed all three; per-residue data painted 100A with 100's value; the
+  card's status said *Label added at A:57* for 57A. Each now keeps the code, as PDB and as mmCIF. *Compare
+  a set of positions* takes `H:100A`.
+- **Sequence-aware superposition paired calcium ions as Cα atoms** (an ion is a HETATM named CA), and read
+  a phosphothreonine as X, so it mis-scored against its own unmodified copy; ions are left out and a
+  modified residue reads as its parent.
+- **Removing a model left work behind**: its Interfaces table, a measurement or a drawing half made on it
+  (the next click finished it on a model that was gone), and named domains and per-residue data of *Same
+  source*, which stopped colouring the rest of the archive. The table and the half go with it; a *Same
+  source* record moves to a surviving model of its source. Undo no longer brings back an effect table
+  measured against the removed model.
+- **A session file restored every model solid and a scene un-faded every chain**: each wrote one of the
+  two fades. Both write both. A scene also writes which label offsets *Separate labels* chose.
+- **A session file opened during a figure export** emptied the page under the render; it now waits, as a
+  file and a fetch do, and any restore takes the autosave banner down. A restored autosave says when a
+  model's PAE was too large to keep.
+- **Numbers that were missing read 0**: the metrics table gave *0.0* for the mean pLDDT of a model with
+  none, and a blank ranking score ranked as 0. An RNA or DNA chain's pLDDT in Composition, the FASTA and
+  the profile was its P's, while the header and the methods text use C1′; all use C1′.
+- **An AlphaFold 2 output folder zipped as `job/ranked_0.pdb`** never paired with `ranking_debug.json`, so
+  its models had no rank or ranking confidence.
+- **A header-less `chain,resi,value` table lost its first row**, taken as a header.
+- **Mean pLDDT order sank an archive's unviewed models below every viewed one** without a word, as if
+  their pLDDT were the lowest. They now read *Not yet ranked*, follow the ranked models (before any model
+  with no pLDDT at all), and the status bar counts them; nothing is parsed to rank them.
+- **A scene restored onto a file of the same name but another atom order** measured between whatever atoms
+  now sat at the stored indices; a point is the named atom, or nothing.
+- **Polish, round 3**: a range with a part that cannot be read (`100A-100C, 105`) is refused and the part
+  named, in Selections, Domains and the fit region, instead of keeping the rest; *Highlight neighbourhood*
+  uses Annotate's *Highlight colour*, and it and a ligand site's *Highlight* refuse a press that would add
+  the same rows again; a compared nucleotide's label hangs on its P and follows a superposition; the
+  measurement editor names a nucleotide pair *P–P*, shows a measurement *Measure to…* made as such, and
+  choosing the atoms it already joins takes no undo step; the arrow keys refuse to move a label or a
+  measurement on a hidden model, and say why; an annotation's *Reset* is greyed out until it has moved;
+  *Download one panel per model* is off unless two models are shown or the active one's source has two.
 - **One export at a time.** A second export pressed while one rendered — another *Download built figure*
   press, *Download all views (ZIP)*, *Download figure SVG*, the composite — ran on the same export
   surface: it emptied the first one's scene between its awaits, shrank the surface under it, and took a
