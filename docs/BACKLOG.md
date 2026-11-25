@@ -11,19 +11,13 @@ Known defects, warts and design questions deferred from a stress round: what is 
 
 ## Round 3 — Fixer I (publish, export, share)
 
-- **FC-13 · measurement lines in a PNG are hairlines — measured, fix in batch M.** On headless
-  Chromium (SwiftShader, `ALIASED_LINE_WIDTH_RANGE` [1, 1]) the PNG's measurement line is 0.6 px wide at
-  85 mm/300 dpi, 178 mm/300 dpi and 178 mm/600 dpi, where the SVG draws 5.56, 5.56 and 9.31 px. The
-  helper is in 32 (`exportStrokeRadius`); the drawing is 03 (`drawMeasurements`, `drawLabels`' leader),
-  so the cylinder lines are batch M, with the step "a measurement line in an exported PNG is as wide as
-  in the SVG…" (5.59 px against 5.56 with them). Remove this entry when batch M lands.
 - **FC-14 · the busy badge keeps one label.** `setBusy` (01) overwrites the label and never restores
   it, so a job started during an export leaves the badge naming that job. Since round 3 the export
   guard no longer reads the label (an explicit count in 40), so this is cosmetic; a label stack in
   `setBusy` would fix it.
-- **The badge-label test in `exportRendering()` (40).** Kept for the exports that do not call
-  `beginExport` yet (views ZIP 13, Copy image 24, Save session 12, batch M). Once they do, the label
-  test can go.
+- **The badge-label test in `exportRendering()` (40).** Kept for the exports that did not call
+  `beginExport` (views ZIP 13, Copy image 24, Save session 12). Since batch M they do, so the label
+  test can go once nothing else is found to rely on it.
 - **PNG label leaders follow the interface theme.** A label with no colour of its own draws its leader
   in `leaderColor()` (03), the theme's muted foreground — light grey in the dark theme, on a white
   figure. The SVG draws it `#94a3b8` whatever the theme. Same family as FC-2; 03 is not area C.

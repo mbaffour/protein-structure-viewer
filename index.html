@@ -3137,6 +3137,9 @@ html>body{padding:0}</style>
     root.querySelector('#gpv-compare-svg').disabled = !comparing;
     /* Across the panels: three models in three panels is "3 displayed", not the primary's 1. */
     if (comparing) root.querySelector('#gpv-count').textContent = new Set([...visible.map(entry => entry.id), ...comparePanels.map(panel => panel.entryId).filter(id => entryById(id))]).size + ' displayed / ' + structures.length + ' loaded · ' + (comparePanels.length + 1) + ' panels' + modelOrderNote();
+    /* The buttons set above (the contact sheet, the views ZIP, the comparison) come after
+       renderImageButton's hold, so an export in flight holds them again here (40). */
+    holdExportButtons();
   }
 
   function materializeEntry(entry) {
@@ -3780,7 +3783,12 @@ html>body{padding:0}</style>
     labelRecords.filter(label => shownIds.has(label.entryId)).forEach(label => {
       const anchor = labelAnchor(label, byId);
       const position = (placement && placement.get(label)) || shiftBy(anchor, label.offset);
-      if (leaderLength(anchor, position) > leaderMinimum) target.addLine({ start: anchor, end: position, color: label.color || leaderColor(), linewidth: Math.max(1, Math.round(scale)) });
+      if (leaderLength(anchor, position) > leaderMinimum) {
+        /* A cylinder in an export, as a measurement's line is (drawMeasurements). */
+        const leader = { start: anchor, end: position, color: label.color || leaderColor() };
+        const radius = exportStrokeRadius(target, midpoint(anchor, position), Math.max(1, scale));
+        if (radius) target.addCylinder({ ...leader, radius, fromCap: 1, toCap: 1 }); else target.addLine({ ...leader, linewidth: Math.max(1, Math.round(scale)) });
+      }
       const style = labelStyle(position, { color: label.color, size: label.size, scale });
       target.addLabel(label.text, label === active ? activeLabelStyle(style) : style);
     });
@@ -4030,12 +4038,19 @@ html>body{padding:0}</style>
       if (points.some(point => !point)) return;
       const color = measurementColor(record) || '#e11d48';
       const linewidth = hovered !== null && hovered === record.id ? 4 : 2;
-      const line = (start, end) => target.addLine({ start, end, color, dashed: record.dashed !== false, linewidth });
+      /* An export draws the line as a cylinder at the SVG's stroke (32 exportStrokeRadius): a GL line
+         is clamped to one device pixel, a 0.6 px hairline in a 300 dpi figure. Dashes as the SVG's. */
+      const stroke = (start, end, px, dashed) => {
+        const radius = exportStrokeRadius(target, midpoint(start, end), px); if (!radius) return false;
+        target.addCylinder({ start, end, radius, color, fromCap: 1, toCap: 1, dashed, dashLength: radius * 6, gapLength: radius * 4 });
+        return true;
+      };
+      const line = (start, end) => { if (!stroke(start, end, 2 * scale, record.dashed !== false)) target.addLine({ start, end, color, dashed: record.dashed !== false, linewidth }); };
       line(points[0], points[1]);
       if (record.type === 'angle') line(points[1], points[2]);
       const anchor = measurementAnchor(points, record);
       const position = (placement && placement.get(record)) || shiftBy(anchor, record.offset);
-      if (leaderLength(anchor, position) > leaderMinimum) target.addLine({ start: anchor, end: position, color, linewidth: Math.max(1, Math.round(scale)) });
+      if (leaderLength(anchor, position) > leaderMinimum && !stroke(anchor, position, Math.max(1, scale), false)) target.addLine({ start: anchor, end: position, color, linewidth: Math.max(1, Math.round(scale)) });
       const style = labelStyle(position, { color: measurementColor(record), scale });
       target.addLabel(measurementLabelText(record), record === active ? activeLabelStyle(style) : style);
     });
@@ -7851,6 +7866,7 @@ html>body{padding:0}</style>
   async function downloadSessionFile() {
     if (!structures.length) return;
     if (typeof JSZip === 'undefined') { announce('The ZIP writer did not load. Refresh the page and try again.', 'error'); return; }
+    const finish = beginExport(); if (!finish) return;
     const done = setBusy('Saving session…');
     try {
       const zip = new JSZip(); const snapshot = sessionSnapshot(confidence => confidence);
@@ -7874,7 +7890,7 @@ html>body{padding:0}</style>
       downloadBlob(blob, 'application/zip', (title || 'protein-session') + '-' + new Date().toISOString().slice(0, 10) + '.zip');
       announce('Session saved · ' + structures.length + ' model' + (structures.length === 1 ? '' : 's') + ' · ' + formatBytes(blob.size) + ' · reopen it with Open session file or by dropping it on the page');
     } catch (error) { announce('Could not save the session: ' + error.message, 'error'); }
-    finally { done(); }
+    finally { done(); finish(); }
   }
 
   async function readSessionZip(zip) {
@@ -8011,6 +8027,7 @@ html>body{padding:0}</style>
   async function downloadViewsZip() {
     if (!savedViews.length) { announce('Save a view first (Publish → Save current view)', 'error'); return; }
     if (typeof JSZip === 'undefined') { announce('The ZIP writer did not load. Refresh the page and try again.', 'error'); return; }
+    const finish = beginExport(); if (!finish) return;
     let plan = exportDimensions(); const button = root.querySelector('#gpv-views-zip');
     const done = setBusy('Rendering views…'); button.disabled = true;
     const restore = captureViewState();
@@ -8053,6 +8070,7 @@ html>body{padding:0}</style>
     } finally {
       releaseExportViewer(); applyViewState(restore, { panels: false }); done(); button.disabled = savedViews.length === 0; button.textContent = 'Download all views (ZIP)';
       if (outcome) announce(...outcome);
+      finish();
     }
   }
   /* ---------- Annotated domains ---------- */
@@ -9881,6 +9899,7 @@ html>body{padding:0}</style>
       announce('This browser cannot put images on the clipboard — download the PNG instead', 'error');
       return;
     }
+    const finish = beginExport(); if (!finish) return;
     const requested = exportDimensions();
     const button = root.querySelector('#gpv-copy-image');
     const done = setBusy('Rendering for the clipboard…');
@@ -9899,6 +9918,7 @@ html>body{padding:0}</style>
       releaseExportViewer();
       done();
       button.disabled = structures.length === 0;
+      finish();
     }
   }
 
@@ -13391,7 +13411,7 @@ html>body{padding:0}</style>
     const camera = typeof viewer.getView === 'function' ? viewer.getView() : null;
     await renderPanelFigure(ready.map(entry => ({ entry, camera })), root.querySelector('#gpv-model-panels'), {
       idle: 'Download one panel per model', noun: 'Per-model figure', fitWidth: true, filename: exportFileName('protein-models-' + ready.length + '-panels', exportDimensions(), 'png'),
-      disabledAfter: () => structures.length < 2
+      disabledAfter: () => !modelPanelsAvailable()
     });
   }
 
@@ -15859,7 +15879,7 @@ applyBackground();
     applyModelOrder();
     renderList();
     applyStyle();
-    updateStatus('Model order updated');
+    updateStatus('Model order updated' + modelOrderNote());
   });
   root.querySelector('#gpv-source-filter').addEventListener('change', () => {
     stopCycle(); listLimit = listPageSize; renderList();

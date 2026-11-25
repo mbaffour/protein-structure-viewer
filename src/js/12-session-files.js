@@ -6,6 +6,7 @@
   async function downloadSessionFile() {
     if (!structures.length) return;
     if (typeof JSZip === 'undefined') { announce('The ZIP writer did not load. Refresh the page and try again.', 'error'); return; }
+    const finish = beginExport(); if (!finish) return;
     const done = setBusy('Saving session…');
     try {
       const zip = new JSZip(); const snapshot = sessionSnapshot(confidence => confidence);
@@ -29,7 +30,7 @@
       downloadBlob(blob, 'application/zip', (title || 'protein-session') + '-' + new Date().toISOString().slice(0, 10) + '.zip');
       announce('Session saved · ' + structures.length + ' model' + (structures.length === 1 ? '' : 's') + ' · ' + formatBytes(blob.size) + ' · reopen it with Open session file or by dropping it on the page');
     } catch (error) { announce('Could not save the session: ' + error.message, 'error'); }
-    finally { done(); }
+    finally { done(); finish(); }
   }
 
   async function readSessionZip(zip) {

@@ -141,7 +141,7 @@
     applyModelOrder();
     renderList();
     applyStyle();
-    updateStatus('Model order updated');
+    updateStatus('Model order updated' + modelOrderNote());
   });
   root.querySelector('#gpv-source-filter').addEventListener('change', () => {
     stopCycle(); listLimit = listPageSize; renderList();

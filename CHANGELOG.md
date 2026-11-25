@@ -539,6 +539,10 @@ All notable changes to this project are recorded here.
 - ***Score all shown* scores every shown model.** An archive's models after the first are read only when
   shown, and a Chai-1 run writes no PAE, so the second sample counted as unscorable and was left out;
   they are read first now.
+- **Measurement lines in a PNG were hairlines.** WebGL draws a line one device pixel wide whatever
+  width it is given, so a measurement's line and a label's leader in a 300 dpi PNG, TIFF or PDF were 0.6 px
+  wide where the SVG strokes 5.56 px (9.31 px at 600 dpi). Exports now draw them as thin cylinders at the
+  SVG's stroke width, dashed as the SVG dashes them; on screen and in comparison panels they stay lines.
 - **Smaller things**: an export says when it left the scale bar out of a panel (and which) because the bar
   did not fit, and the checklist stops ticking it; a comparison or per-model figure capped at 24
   megapixels says how wide each panel now prints; the checklist's *Switch to orthographic* is remembered

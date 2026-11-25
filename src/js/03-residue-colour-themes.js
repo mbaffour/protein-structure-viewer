@@ -276,6 +276,9 @@
     root.querySelector('#gpv-compare-svg').disabled = !comparing;
     /* Across the panels: three models in three panels is "3 displayed", not the primary's 1. */
     if (comparing) root.querySelector('#gpv-count').textContent = new Set([...visible.map(entry => entry.id), ...comparePanels.map(panel => panel.entryId).filter(id => entryById(id))]).size + ' displayed / ' + structures.length + ' loaded · ' + (comparePanels.length + 1) + ' panels' + modelOrderNote();
+    /* The buttons set above (the contact sheet, the views ZIP, the comparison) come after
+       renderImageButton's hold, so an export in flight holds them again here (40). */
+    holdExportButtons();
   }
 
   function materializeEntry(entry) {
@@ -919,7 +922,12 @@
     labelRecords.filter(label => shownIds.has(label.entryId)).forEach(label => {
       const anchor = labelAnchor(label, byId);
       const position = (placement && placement.get(label)) || shiftBy(anchor, label.offset);
-      if (leaderLength(anchor, position) > leaderMinimum) target.addLine({ start: anchor, end: position, color: label.color || leaderColor(), linewidth: Math.max(1, Math.round(scale)) });
+      if (leaderLength(anchor, position) > leaderMinimum) {
+        /* A cylinder in an export, as a measurement's line is (drawMeasurements). */
+        const leader = { start: anchor, end: position, color: label.color || leaderColor() };
+        const radius = exportStrokeRadius(target, midpoint(anchor, position), Math.max(1, scale));
+        if (radius) target.addCylinder({ ...leader, radius, fromCap: 1, toCap: 1 }); else target.addLine({ ...leader, linewidth: Math.max(1, Math.round(scale)) });
+      }
       const style = labelStyle(position, { color: label.color, size: label.size, scale });
       target.addLabel(label.text, label === active ? activeLabelStyle(style) : style);
     });
@@ -1169,12 +1177,19 @@
       if (points.some(point => !point)) return;
       const color = measurementColor(record) || '#e11d48';
       const linewidth = hovered !== null && hovered === record.id ? 4 : 2;
-      const line = (start, end) => target.addLine({ start, end, color, dashed: record.dashed !== false, linewidth });
+      /* An export draws the line as a cylinder at the SVG's stroke (32 exportStrokeRadius): a GL line
+         is clamped to one device pixel, a 0.6 px hairline in a 300 dpi figure. Dashes as the SVG's. */
+      const stroke = (start, end, px, dashed) => {
+        const radius = exportStrokeRadius(target, midpoint(start, end), px); if (!radius) return false;
+        target.addCylinder({ start, end, radius, color, fromCap: 1, toCap: 1, dashed, dashLength: radius * 6, gapLength: radius * 4 });
+        return true;
+      };
+      const line = (start, end) => { if (!stroke(start, end, 2 * scale, record.dashed !== false)) target.addLine({ start, end, color, dashed: record.dashed !== false, linewidth }); };
       line(points[0], points[1]);
       if (record.type === 'angle') line(points[1], points[2]);
       const anchor = measurementAnchor(points, record);
       const position = (placement && placement.get(record)) || shiftBy(anchor, record.offset);
-      if (leaderLength(anchor, position) > leaderMinimum) target.addLine({ start: anchor, end: position, color, linewidth: Math.max(1, Math.round(scale)) });
+      if (leaderLength(anchor, position) > leaderMinimum && !stroke(anchor, position, Math.max(1, scale), false)) target.addLine({ start: anchor, end: position, color, linewidth: Math.max(1, Math.round(scale)) });
       const style = labelStyle(position, { color: measurementColor(record), scale });
       target.addLabel(measurementLabelText(record), record === active ? activeLabelStyle(style) : style);
     });

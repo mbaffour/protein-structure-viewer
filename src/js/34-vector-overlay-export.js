@@ -292,7 +292,7 @@
     const camera = typeof viewer.getView === 'function' ? viewer.getView() : null;
     await renderPanelFigure(ready.map(entry => ({ entry, camera })), root.querySelector('#gpv-model-panels'), {
       idle: 'Download one panel per model', noun: 'Per-model figure', fitWidth: true, filename: exportFileName('protein-models-' + ready.length + '-panels', exportDimensions(), 'png'),
-      disabledAfter: () => structures.length < 2
+      disabledAfter: () => !modelPanelsAvailable()
     });
   }
 

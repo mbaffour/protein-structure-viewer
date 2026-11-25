@@ -3,6 +3,7 @@
   async function downloadViewsZip() {
     if (!savedViews.length) { announce('Save a view first (Publish → Save current view)', 'error'); return; }
     if (typeof JSZip === 'undefined') { announce('The ZIP writer did not load. Refresh the page and try again.', 'error'); return; }
+    const finish = beginExport(); if (!finish) return;
     let plan = exportDimensions(); const button = root.querySelector('#gpv-views-zip');
     const done = setBusy('Rendering views…'); button.disabled = true;
     const restore = captureViewState();
@@ -45,5 +46,6 @@
     } finally {
       releaseExportViewer(); applyViewState(restore, { panels: false }); done(); button.disabled = savedViews.length === 0; button.textContent = 'Download all views (ZIP)';
       if (outcome) announce(...outcome);
+      finish();
     }
   }

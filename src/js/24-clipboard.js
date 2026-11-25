@@ -22,6 +22,7 @@
       announce('This browser cannot put images on the clipboard — download the PNG instead', 'error');
       return;
     }
+    const finish = beginExport(); if (!finish) return;
     const requested = exportDimensions();
     const button = root.querySelector('#gpv-copy-image');
     const done = setBusy('Rendering for the clipboard…');
@@ -40,6 +41,7 @@
       releaseExportViewer();
       done();
       button.disabled = structures.length === 0;
+      finish();
     }
   }
 

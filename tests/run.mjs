@@ -8977,17 +8977,31 @@ await step('one export at a time: a second export started while a built figure r
     const before = await fresh.evaluate(() => ({ scheme: document.querySelector('#gpv-color-mode').value, camera: window.__viewerDebug.viewer.getView() }));
     await i3Statuses(fresh);
     let downloads = 0; fresh.on('download', () => { downloads += 1; });
+    /* Polled through the whole render: each panel's restyle runs updateStatus, which set the contact
+       sheet and the views ZIP from the page after renderImageButton's hold, so they came back on
+       mid-render (batch M: updateStatus holds them last). */
+    await fresh.evaluate(() => {
+      window.__held = { samples: 0, enabled: [] };
+      window.__heldTimer = setInterval(() => {
+        if (!window.__viewerDebug.exportRendering()) return;
+        window.__held.samples += 1;
+        ['#gpv-contact-sheet', '#gpv-views-zip'].forEach(selector => { if (!document.querySelector(selector).disabled && !window.__held.enabled.includes(selector)) window.__held.enabled.push(selector); });
+      }, 10);
+    });
     const first = fresh.waitForEvent('download', { timeout: 180000 });
     await fresh.click('#gpv-contact-sheet', { noWaitAfter: true });
     await fresh.waitForFunction(() => /^Rendering [12] \/ 3/.test(document.querySelector('#gpv-contact-sheet').textContent.trim()), null, { timeout: 60000 });
-    const held = await fresh.evaluate(() => ({ image: document.querySelector('#gpv-image').disabled, svg: document.querySelector('#gpv-svg').disabled, rendering: window.__viewerDebug.exportRendering() }));
+    const held = await fresh.evaluate(() => ({ image: document.querySelector('#gpv-image').disabled, svg: document.querySelector('#gpv-svg').disabled, sheet: document.querySelector('#gpv-contact-sheet').disabled, zip: document.querySelector('#gpv-views-zip').disabled, rendering: window.__viewerDebug.exportRendering() }));
     /* The second press, as one that got through a re-enabled button would arrive. */
     await fresh.evaluate(() => { window.__second = window.__viewerDebug.downloadPublicationSvg(); });
     await first; await fresh.waitForTimeout(1500);
+    const polled = await fresh.evaluate(() => { clearInterval(window.__heldTimer); return window.__held; });
     await fresh.evaluate(() => window.__second);
     await fresh.waitForTimeout(500);
     const after = await fresh.evaluate(() => ({ scheme: document.querySelector('#gpv-color-mode').value, camera: window.__viewerDebug.viewer.getView(), rendering: window.__viewerDebug.exportRendering(), image: document.querySelector('#gpv-image').disabled, statuses: window.__statuses }));
-    if (!held.rendering || !held.image || !held.svg) throw new Error('mid-render: ' + JSON.stringify(held));
+    if (!held.rendering || !held.image || !held.svg || !held.sheet || !held.zip) throw new Error('mid-render: ' + JSON.stringify(held));
+    if (!polled.samples) throw new Error('setup: the poll never saw the export rendering');
+    if (polled.enabled.length) throw new Error('enabled mid-render: ' + polled.enabled.join(', ') + ' (' + polled.samples + ' samples)');
     if (!after.statuses.some(line => /^An export is still rendering · wait for it to finish, then press again$/.test(line))) throw new Error('the second export was not refused: ' + JSON.stringify(after.statuses.slice(-6)));
     if (downloads !== 1) throw new Error(downloads + ' downloads for one built figure and one refused press');
     if (after.scheme !== before.scheme) throw new Error('the page was left in colour scheme ' + after.scheme + ', not ' + before.scheme);
