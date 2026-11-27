@@ -245,9 +245,11 @@ Notes on the colour schemes:
     its word: chains named for one entity are one entity, however much of each copy was built — 1BRS is
     barnase ×3 and barstar ×3 although its copies end at different residues. The table is used when it
     names every polymer chain of the model (otherwise the rule below decides for all of them), and two
-    of its entities whose copies read exactly the same observed sequence are shown as one — the
+    of its entities whose copies read exactly the same observed sequence are shown as one, through any
+    chain of such links (entity 1 reads as a copy of 2, and 2 as a copy of 3: all three are one) — the
     AlphaFold 3 server gives every chain an entity of its own, so a homopentamer would otherwise read as
-    five entities. Ligands and water are never entities here.
+    five entities. Comment lines (`#`) inside or between the file's tables are skipped. Ligands and
+    water are never entities here.
   - **Otherwise** — a PDB file (ColabFold's, for one), or an mmCIF of atom records alone — chains are
     grouped by their observed sequence. Two chains of the same kind (protein, or nucleic acid) are one
     entity when the shorter has at least 80 % of the longer's residues and either its sequence is an
@@ -732,14 +734,21 @@ of chains in contact. They show in three places:
 
 1. **Confidence → Interfaces.** Each row counts them and has **Show interactions**: one press, one undo
    step, draws every hydrogen bond (blue, `#0284c7`) and salt bridge (red, `#dc2626`) of the pair as a
-   dashed measurement with its distance, and the side chains of the residues involved as sticks. The
+   dashed measurement with its distance, and the side chains of the residues involved as sticks — side
+   chain and Cα, and a residue's N, C and O as well where one of them takes part (a backbone hydrogen
+   bond); a proline keeps its ring, and a nucleotide or ligand is drawn whole. The
    status says what was drawn ("9 hydrogen bonds and 3 salt bridges drawn between A and D"); a second
-   press adds nothing and says so; with more than 40 at once they are drawn without their values (a
-   row's *Show value* brings one back). **Hide interactions** removes that pair's interaction lines and
+   press adds nothing and says so; when one press adds more than 40 lines they are drawn without their
+   values (lines already drawn do not count; a row's *Show value* brings one back). **Hide interactions** removes that pair's interaction lines and
    nothing else, in one undo step. **Download interactions CSV** writes one row per interaction of every
    analysed pair: `model, chain_a, resi_a, resn_a, atom_a, chain_b, resi_b, resn_b, atom_b, type,
    distance_angstrom, donor, by_element` — `donor` is `a`, `b` or `either` (for a salt bridge, the
-   cation). **Count histidine as charged** recounts the table at once.
+   cation). **Count histidine as charged** recounts the table at once; it is remembered as a
+   preference and saved in scenes, sessions and share links, and the figure legend and the methods text
+   say histidine was counted as charged while the box is on or any drawn salt bridge has a histidine at
+   an end. **Align visible** or **Restore coordinates** on the analysed model dims the table and says
+   *Model moved … Analyse interfaces to update* (a rigid move changes none of its numbers), and the next
+   search for that model starts from where its atoms now are.
 2. **The residue card's Contacts list** tags each contact that makes one: *H-bond* or *salt bridge*,
    whose tooltip names the two atoms and their distance (the closest-atom column still gives the
    closest heavy-atom pair). **Copy** gains an `interaction` column after `bond`. **Polar contacts** on
@@ -750,8 +759,9 @@ of chains in contact. They show in three places:
    sessions, share links, the PNG, SVG and PDF exports and the HTML report (which prints the type on
    the line) all carry them. While any is drawn, the figure's legend, the standalone legend key and its
    text name them ("Hydrogen bond (blue, dashed line); Salt bridge (red, dashed line)"), one entry per
-   colour if you recolour some; the figure legend text adds "Dashed lines: … by geometry" and the
-   methods text states the criteria.
+   colour if you recolour some, each renamed on its own in *Figure labels*; a comparison or per-model
+   figure's key names the lines drawn in its panels. The figure legend text adds "Dashed lines: … by
+   geometry" and the methods text states the criteria.
 
 Definitions (heavy atoms only — most structures and every prediction carry no hydrogens):
 
@@ -764,13 +774,17 @@ Definitions (heavy atoms only — most structures and every prediction carry no 
   OG1, Tyr OH (both), Asn OD1 (acceptor) ND2 (donor), Gln OE1 (acceptor) NE2 (donor), His ND1 and NE2
   (both), Trp NE1 (donor), Lys NZ (donor), Arg NE NH1 NH2 (donors), Asp OD1 OD2 and Glu OE1 OE2
   (acceptors); Cys SG and Met SD take no part. Standard nucleotides: a table for the bases, the ribose
-  O2′ (both), O3′/O5′/O4′ (acceptors), phosphate OP1/OP2 (acceptors). Water O: both. Any other residue
-  (ligand, modified residue): every N and O is both donor and acceptor, and the row is marked "by
-  element". The N-terminal N is a donor; it is also a cation for salt bridges.
+  O2′ (both), O3′/O5′/O4′ (acceptors — but a free end's hydroxyl, an O3′ with no next phosphate bonded
+  to it or the O5′ of a residue with no phosphate, is both), phosphate OP1/OP2/OP3 (acceptors). Water O:
+  both. Any other residue (ligand, modified residue): every N and O is both donor and acceptor, and the
+  row is marked "by element". The N-terminal N is a donor; it is also a cation for salt bridges.
 - **Salt bridge.** A cationic N (Lys NZ; Arg NE, NH1, NH2; the chain's N-terminal N; His ND1/NE2 only
   with **Count histidine as charged** on — default off) within 4.0 Å of an anionic O (Asp OD1/OD2; Glu
-  OE1/OE2; the chain's C-terminal O/OXT; nucleotide OP1/OP2). One salt bridge per residue pair, reported
-  at its shortest N–O distance, with those two atoms (Barlow & Thornton 1983 criterion).
+  OE1/OE2; the chain's C-terminal O/OXT; nucleotide OP1/OP2/OP3). One salt bridge per residue pair,
+  reported at its shortest N–O distance, with those two atoms (Barlow & Thornton 1983 criterion).
+- A **capped** chain end is not a charged terminus: an N-terminal N bonded to another residue (an
+  acetyl or formyl cap's C) is an ordinary backbone donor, and a C-terminal residue whose C is bonded to
+  another residue's N (an amide cap, NH2) has an ordinary carbonyl O.
 - A residue pair that is a salt bridge is reported once as a salt bridge, not also as hydrogen bonds
   between its charged atoms (an N–O pair whose N is cationic and O anionic); hydrogen bonds between
   *other* atoms of the same two residues are still listed. Hydrogen bonds are per atom pair; backbone
@@ -779,13 +793,14 @@ Definitions (heavy atoms only — most structures and every prediction carry no 
   peptide-bond tag is: two heavy atoms of one residue within 1.9 Å, or the backbone link to another
   residue of the same chain (C–N peptide, O3′–P phosphodiester) within 1.9 Å. Hydrogens are ignored,
   water is left out, and an atom with alternate locations is read at its first. The chain's termini
-  are its first and last amino-acid residues in the file.
+  are its first and last amino-acid residues in the file, unless capped.
 
 Limits: with no hydrogens the angles are heavy-atom proxies, so a hydrogen bond here is a geometric
 candidate, not an energy; no water-mediated bridges are counted in this version; histidine is neutral
 unless you say otherwise; ligands and modified residues are taken by element, with no chemistry
 assumed; the termini are the first and last residues the file models, so a crystal structure with a
-disordered end calls its first modelled residue the N-terminus. Validated against an independent
+disordered end calls its first modelled residue the N-terminus (a modelled acetyl or amide cap is
+recognised and makes the end uncharged). Validated against an independent
 Biopython implementation and against PDBePISA on barnase–barstar (VALIDATION.md).
 
 ### Interaction confidence

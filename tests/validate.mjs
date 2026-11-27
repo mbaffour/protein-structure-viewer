@@ -290,7 +290,10 @@ for (const msa of (reference.msa || [])) {
   await page.setChecked('#gpv-msa-weights', true);
 }
 
-/* Kabsch superposition of every model onto model 0 and per-residue RMSF */
+/* Kabsch superposition of every model onto model 0 and per-residue RMSF — a run of one model has
+   nothing to superpose (Align visible stays disabled), so those comparisons are skipped and said so. */
+if (expected < 2) console.log('  note: one model in this folder — RMSD and RMSF need two or more, so they are not compared');
+else {
 await page.click('[data-gpv-tab="compare"]');
 await page.selectOption('#gpv-alignment-mode', 'identifier');
 await page.evaluate(() => { const entry = window.__viewerDebug.entries().find(item => /_model_0\./.test(item.name)); const select = document.querySelector('#gpv-reference'); select.value = String(entry.id); select.dispatchEvent(new Event('change', { bubbles: true })); });
@@ -306,8 +309,9 @@ if (spread) {
   const lookup = new Map(spread.entries);
   Object.entries(reference.rmsf.sample).forEach(([tag, value]) => check('RMSF ' + tag.replace('|', ':') + ' (Å)', lookup.get(tag), value, tolerance.rmsf));
 } else { rows.push({ label: 'RMSF', viewer: NaN, reference: reference.rmsf.count, delta: NaN, ok: false }); failed += 1; }
+}
 
-/* mean Cα pLDDT per model — after alignment, which parses every model of an archive (they load lazily) */
+/* mean Cα pLDDT per model — after alignment, which parses every model of an archive (they load lazily; one model is parsed already) */
 const plddt = await page.evaluate(() => window.__viewerDebug.entries().map(entry => ({ name: entry.name, mean: entry.scores.reduce((a, b) => a + b, 0) / entry.scores.length, atoms: entry.atoms ? entry.atoms.length : 0, pae: entry.confidence && entry.confidence.pae ? entry.confidence.pae.length : 0 })));
 plddt.forEach(item => { const index = modelIndex(item.name); if (Number.isFinite(index) && reference.plddt_mean_ca[index] !== undefined) check('mean Cα pLDDT · model ' + index, item.mean, reference.plddt_mean_ca[index], tolerance.plddt); });
 console.log('PAE matrices attached: ' + plddt.map(item => item.pae).join(', '));

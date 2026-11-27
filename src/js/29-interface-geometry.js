@@ -98,6 +98,7 @@
     const button = root.querySelector('#gpv-interface-run'); const state = root.querySelector('#gpv-interface-state');
     const done = setBusy('Analysing interfaces…');
     button.disabled = true; state.textContent = 'Finding contacts…';
+    root.querySelector('#gpv-contacts-wrap').classList.remove('is-stale');
     await afterPaint();
     try {
       if (!entry.model) materializeEntry(entry);
@@ -153,7 +154,7 @@
       highlight.addEventListener('click', () => highlightInterface(row));
       /* Highlight stays the row's first button (the suite presses it as the first). */
       const show = document.createElement('button'); show.className = 'btn btn-ghost'; show.type = 'button'; show.textContent = 'Show interactions';
-      show.title = 'Draw this pair’s hydrogen bonds (blue) and salt bridges (red) as dashed lines with their side chains as sticks, in one undo step';
+      show.title = 'Draw this pair’s hydrogen bonds (blue) and salt bridges (red) as dashed lines with their side chains, and the backbone atoms that take part, as sticks, in one undo step';
       show.disabled = !row.polar || !row.polar.length;
       show.addEventListener('click', () => showInterfaceInteractions(row));
       const hide = document.createElement('button'); hide.className = 'btn btn-ghost'; hide.type = 'button'; hide.textContent = 'Hide interactions';
@@ -197,13 +198,28 @@
     announce('Interface CSV downloaded');
   }
 
+  /* Called by Align visible and Restore coordinates (30) for a model whose atoms they moved: its
+     interaction search starts again from the new coordinates (29a polarForget), and an Interfaces
+     table of that model is dimmed and says so, as a contact map whose settings change is (19). A rigid
+     move changes none of the table's numbers; Analyse interfaces makes it current again. */
+  function interfaceModelMoved(entry) {
+    polarForget(entry);
+    if (!interfaceResults || interfaceResults.entryId !== entry.id || !interfaceResults.rows.length) return;
+    const wrap = root.querySelector('#gpv-contacts-wrap');
+    if (wrap.classList.contains('is-stale')) return;
+    wrap.classList.add('is-stale');
+    const state = root.querySelector('#gpv-interface-state');
+    state.textContent = 'Model moved (Align visible or Restore coordinates) · Analyse interfaces to update · shown: ' + state.textContent;
+  }
+
 
   /* ---------- Hydrogen bonds and salt bridges, drawn (2.53.0) ----------
      29a finds them; this draws them. An interaction is an ordinary measurement record — a two-atom
      distance — that also says what it is (`interaction: 'hbond'|'salt'`) and carries its type's colour,
      dashed, with its value: so the list, the editor, Clear, undo, scenes, sessions, share links, the
      PNG, the SVG and the report treat it as they treat any measurement, and the legend names it (31).
-     The side chains of the residues it joins are drawn as sticks for as long as it exists: derived
+     The side chains of the residues it joins (and the backbone atoms that take part) are drawn as
+     sticks for as long as it exists: derived
      from the records each time a model is styled (polarStyleSticks), so nothing else is stored. */
 
   /* Annotate → Interfaces' "Count histidine as charged": off unless ticked. */
@@ -236,12 +252,14 @@
   /* Draws a list of interactions in one undo step and says what it drew — "12 hydrogen bonds and 3
      salt bridges drawn between A and D". A pair of atoms already measured (an earlier press, the card,
      a measurement made by hand) is not drawn again on top of itself; with nothing new the press adds
-     nothing and says so, as Measure all does. */
+     nothing and says so, as Measure all does. "More than 40" counts the lines this press adds: 5 new
+     beside 40 already drawn keep their values, as a press of 5 would. */
   function drawPolarInteractions(entry, list, where) {
     if (!list.length) { updateStatus('No hydrogen bonds or salt bridges ' + where); return; }
     const measured = new Set(measurementRecords.map(measuredPairKey).filter(Boolean));
-    const many = list.length > polarValueLimit;
-    const fresh = list.map(item => polarRecord(entry, item, !many)).filter(record => { const key = measuredPairKey(record); if (measured.has(key)) return false; measured.add(key); return true; });
+    const fresh = list.map(item => polarRecord(entry, item, true)).filter(record => { const key = measuredPairKey(record); if (measured.has(key)) return false; measured.add(key); return true; });
+    const many = fresh.length > polarValueLimit;
+    if (many) fresh.forEach(record => { record.showValue = false; });
     if (!fresh.length) { updateStatus('Already drawn: ' + polarCountText(polarCounts(list)) + ' ' + where + ' · nothing added'); return; }
     remember('hydrogen bonds and salt bridges');
     fresh.forEach(record => measurementRecords.push(record));
@@ -291,10 +309,19 @@
     announce('Interactions CSV downloaded · ' + count + ' row' + (count === 1 ? '' : 's'));
   }
 
-  /* A new histidine rule is a new answer: the analysed pairs are counted again on the spot. */
+  /* A new histidine rule is a new answer: the analysed pairs are counted again on the spot. The box is
+     a preference (41) and part of a scene (30 sceneSettings), so the rule a figure was drawn under
+     comes back with it. */
   function polarHistidineChanged() {
+    polarHistidineRecount();
+    updateStatus('Histidine is ' + (polarHistidineCharged() ? 'now counted as charged: its ND1 and NE2 can make salt bridges' : 'no longer counted as charged: its ND1 and NE2 make hydrogen bonds only'));
+  }
+
+  /* The Interfaces table and an open card counted again under the box's rule — after the box changes,
+     or a scene sets it (31 applySceneSettings) to another rule than the table was counted with. */
+  function polarHistidineRecount() {
     const entry = interfaceResults && entryById(interfaceResults.entryId);
-    if (entry && entry.model && interfaceResults.rows.length) {
+    if (entry && entry.model && interfaceResults.rows.length && interfaceResults.histidineCharged !== polarHistidineCharged()) {
       const atoms = heavyAtoms(entry).filter(atom => !isWater(atom));
       const byChain = new Map();
       atoms.forEach(atom => { const chain = atom.chain || ''; if (!byChain.has(chain)) byChain.set(chain, []); byChain.get(chain).push(atom); });
@@ -304,49 +331,73 @@
     }
     /* The card's tags follow too. */
     if (contactsPanelOpen()) { cardContacts = null; openResidueContacts(); }
-    updateStatus('Histidine is ' + (polarHistidineCharged() ? 'now counted as charged: its ND1 and NE2 can make salt bridges' : 'no longer counted as charged: its ND1 and NE2 make hydrogen bonds only'));
   }
 
-  /* The residues joined by interaction records, per model — `entryId|chain|resi|icode` — and the
-     signature that says whether they changed since the models were last styled. */
+  /* An amino acid's main-chain atoms other than its Cα, drawn as sticks only where they take part. A
+     function, not a list, for the reason polarSticksStale keeps its signature on itself. */
+  function polarMainChainAtom(name) {
+    return name === 'N' || name === 'C' || name === 'O' || name === 'OXT';
+  }
+
+  /* The residues joined by interaction records, per model — `chain|resi|icode` — with, apart, those
+     whose own main-chain atom (N, C, O, OXT) is an end of one; and the signature that says whether
+     either changed since the models were last styled. */
   function polarStickKeys() {
     const keys = new Map();
     measurementRecords.forEach(record => {
       if (!record.interaction) return;
       record.points.forEach(point => {
-        if (!keys.has(point.entryId)) keys.set(point.entryId, new Set());
-        keys.get(point.entryId).add((point.chain || '') + '|' + point.resi + '|' + insertionCodeOf(point));
+        if (!keys.has(point.entryId)) keys.set(point.entryId, { residues: new Set(), mainChain: new Set() });
+        const key = (point.chain || '') + '|' + point.resi + '|' + insertionCodeOf(point);
+        keys.get(point.entryId).residues.add(key);
+        if (polarMainChainAtom(point.atom)) keys.get(point.entryId).mainChain.add(key);
       });
     });
     return keys;
   }
 
-  /* Called by applyModelStyle (03): the residues an interaction joins drawn as sticks over whatever
-     the model is drawn as, on the main view, every panel and every export, as compared positions are.
-     A hidden chain stays hidden. */
+  /* Called by applyModelStyle (03): the side chains (and Cα) of the residues an interaction joins
+     drawn as sticks over whatever the model is drawn as, on the main view, every panel and every export,
+     as compared positions are; a residue's N, C and O too where one of them is itself an end of an
+     interaction (a backbone hydrogen bond), and a proline's N always, which closes its ring. A
+     nucleotide, a ligand or a modified residue is drawn whole. A hidden chain stays hidden. */
   function polarStyleSticks(model, entry) {
     const keys = polarStickKeys().get(entry.id);
-    if (!keys || !keys.size) return;
+    if (!keys || !keys.residues.size) return;
     const hidden = entry.hiddenChains || [];
-    model.setStyle({ predicate: atom => !hidden.includes(atom.chain || '') && keys.has((atom.chain || '') + '|' + atom.resi + '|' + insertionCodeOf(atom)) }, { stick: { radius: 0.22, colorscheme: 'default' } }, true);
+    model.setStyle({ predicate: atom => {
+      if (hidden.includes(atom.chain || '')) return false;
+      const key = (atom.chain || '') + '|' + atom.resi + '|' + insertionCodeOf(atom);
+      if (!keys.residues.has(key)) return false;
+      const resn = String(atom.resn || '').toUpperCase(); const name = atom.atom || '';
+      if (atom.hetflag || !polarAminoSide[resn] || !polarMainChainAtom(name)) return true;
+      return keys.mainChain.has(key) || (resn === 'PRO' && name === 'N');
+    } }, { stick: { radius: 0.22, colorscheme: 'default' } }, true);
   }
 
-  /* Called first by rebuildOverlays (03): true, once, when the residues the interaction records join
-     are not the ones the models were last styled with — a row's Remove, Clear measurements and the
-     editor's Remove change the records and redraw only the overlays — so the sticks follow. Kept on
-     the function itself: rebuildOverlays can run before this part's own declarations have. */
+  /* Called at the start of applyStyle and first by rebuildOverlays (03): true, once, when the
+     residues the interaction records join are not the ones the models were last styled with — a
+     row's Remove, Clear measurements and the editor's Remove change the records and redraw only the
+     overlays — so the sticks follow. applyStyle calls it first so that the overlays it rebuilds do not
+     style every model a second time. Kept on the function itself: rebuildOverlays can run before
+     this part's own declarations have. */
   function polarSticksStale() {
     const keys = polarStickKeys();
-    const signature = [...keys.entries()].map(([id, set]) => id + ':' + [...set].sort().join(',')).sort().join(';');
+    const signature = [...keys.entries()].map(([id, sets]) => id + ':' + [...sets.residues].sort().join(',') + '/' + [...sets.mainChain].sort().join(',')).sort().join(';');
     if (signature === (polarSticksStale.signature || '')) return false;
     polarSticksStale.signature = signature;
     return true;
   }
 
   /* The interaction records a view draws: every point in a model the figure (or, for 'screen', the
-     page) shows. */
+     page) shows. A comparison or per-model figure draws each panel's own model, so its key reads the
+     panels' models (34 panelLegendIds, set while the figure is laid out; the comparison's panes
+     otherwise), as the chain key does. */
   function polarShownRecords(kind = 'figure') {
-    const shown = new Set((kind === 'screen' ? displayedEntries() : figureEntries()).map(entry => entry.id));
+    const ids = kind === 'screen' ? displayedEntries().map(entry => entry.id)
+      : kind === 'comparison' ? (panelLegendIds ? [...panelLegendIds] : comparisonPanes().map(pane => pane.entry.id))
+        : figureEntries().map(entry => entry.id);
+    const shown = new Set(ids);
     return measurementRecords.filter(record => record.interaction && record.points.every(point => shown.has(point.entryId)));
   }
 
@@ -385,15 +436,27 @@
       return own.length + ' ' + (type === 'hbond' ? 'hydrogen bond' : 'salt bridge') + (own.length === 1 ? '' : 's') + ' (' + colours.join(', ') + ')';
     };
     const dashed = records.every(record => record.dashed !== false); const solid = records.every(record => record.dashed === false);
-    return (dashed ? 'Dashed lines' : solid ? 'Solid lines' : 'Lines') + ': ' + ['hbond', 'salt'].map(part).filter(Boolean).join(' and ') + ', by geometry (donor–acceptor ≤ 3.5 Å, angles ≥ 90°; N–O ≤ 4.0 Å between charged groups).';
+    return (dashed ? 'Dashed lines' : solid ? 'Solid lines' : 'Lines') + ': ' + ['hbond', 'salt'].map(part).filter(Boolean).join(' and ') + ', by geometry (donor–acceptor ≤ 3.5 Å, angles ≥ 90°; N–O ≤ 4.0 Å between charged groups' + (polarHistidineStated(records) ? ', histidine counted as charged' : '') + ').';
+  }
+
+  /* Whether the words beside the lines say histidine was counted as charged: when the box is ticked,
+     or when any drawn salt bridge has a histidine's ND1 or NE2 at an end — a line drawn under that
+     rule, from a scene or before the box was cleared, is a charged histidine whatever the box says now. */
+  function polarHistidineStated(records) {
+    if (polarHistidineCharged()) return true;
+    return records.some(record => record.interaction === 'salt' && record.points.some(point => {
+      if (!polarHistidineCations.includes(point.atom)) return false;
+      const atom = resolvePoint(point);
+      return Boolean(atom) && String(atom.resn || '').toUpperCase() === 'HIS';
+    }));
   }
 
   /* The methods text's sentence (28): the definitions behind the lines, once any is drawn. */
   function polarMethodsSentence(shownIds) {
     const records = measurementRecords.filter(record => record.interaction && record.points.every(point => shownIds.has(point.entryId)));
     if (!records.length) return '';
-    const histidine = polarHistidineCharged() ? 'histidine ND1 and NE2 counted as charged' : 'histidine treated as neutral';
-    return 'Hydrogen bonds and salt bridges were identified from heavy-atom geometry (no hydrogens were placed): a hydrogen bond joined a donor and an acceptor N or O of different residues at ≤ 3.5 Å with every antecedent–donor···acceptor and donor···acceptor–antecedent angle ≥ 90°, roles being assigned by atom name for the standard amino acids and nucleotides and by element otherwise; a salt bridge joined a charged N (Lys NZ, Arg NE/NH1/NH2, the chain N-terminus) and a charged O (Asp OD1/OD2, Glu OE1/OE2, the C-terminus, nucleotide phosphate) at ≤ 4.0 Å, one per residue pair (' + histidine + '; water excluded).';
+    const histidine = polarHistidineStated(records) ? 'histidine ND1 and NE2 counted as charged' : 'histidine treated as neutral';
+    return 'Hydrogen bonds and salt bridges were identified from heavy-atom geometry (no hydrogens were placed): a hydrogen bond joined a donor and an acceptor N or O of different residues at ≤ 3.5 Å with every antecedent–donor···acceptor and donor···acceptor–antecedent angle ≥ 90°, roles being assigned by atom name for the standard amino acids and nucleotides and by element otherwise; a salt bridge joined a charged N (Lys NZ, Arg NE/NH1/NH2, an uncapped chain N-terminus) and a charged O (Asp OD1/OD2, Glu OE1/OE2, an uncapped C-terminus, nucleotide phosphate) at ≤ 4.0 Å, one per residue pair (' + histidine + '; water excluded).';
   }
 
   /* The debug hook's view (validate.mjs, validate-experimental.mjs, the suite): the hydrogen bonds and

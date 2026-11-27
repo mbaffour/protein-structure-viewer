@@ -182,6 +182,9 @@
     });
     if (['bottom-left', 'bottom-right', 'top-left', 'top-right', 'left', 'right'].includes(settings.legendPosition)) root.querySelector('#gpv-legend-position').value = settings.legendPosition;
     if (typeof settings.chainsByPosition === 'boolean') root.querySelector('#gpv-chain-position').checked = settings.chainsByPosition;
+    /* The histidine rule the scene's salt bridges were drawn under (2.53.0); an older scene leaves the
+       box as it is. A table counted under the other rule is counted again. */
+    if (typeof settings.histidineCharged === 'boolean') { root.querySelector('#gpv-interface-histidine').checked = settings.histidineCharged; polarHistidineRecount(); }
     if (['all', 'region', 'selection'].includes(settings.fitScope)) root.querySelector('#gpv-fit-scope').value = settings.fitScope;
     if (typeof settings.fitRegion === 'string') root.querySelector('#gpv-fit-region').value = settings.fitRegion.slice(0, 120);
     if (Number.isFinite(Number(settings.positionCutoff))) root.querySelector('#gpv-position-cutoff').value = String(Math.min(12, Math.max(3, Number(settings.positionCutoff))));
@@ -1017,7 +1020,7 @@
     const title = figureLabels[mode + '|title'];
     const renamed = item => {
       const [color, short, long] = item;
-      const custom = figureLabels[mode + '|' + short];
+      const custom = figureLabels[legendLabelKey(mode, item)];
       if (!custom) return item;
       const detail = long && long.includes(' · ') ? long.slice(long.indexOf(' · ')) : '';
       return [color, custom, custom + detail, ...item.slice(3)];
@@ -1026,6 +1029,18 @@
     /* `full`: every entry, renamed, even when the drawn key stopped at '+N more' — the list the
        legend key's text starter writes out. */
     return { title: title || legend.title, items, full: legend.all ? legend.all.map(renamed) : items, defaults: legend };
+  }
+  /* The Figure labels key of a legend entry: its scheme and its name ('chain|A', 'entity|α ×2'). A line
+     entry (a hydrogen bond or salt bridge, 29) in its type's own colour and dash keeps that plain key;
+     one recoloured or made solid adds its colour and line ('element|Hydrogen bond|#16a34a'), so two
+     entries of one type in two colours are renamed one at a time. */
+  function legendLabelKey(mode, item) {
+    const [color, short, , line] = item;
+    if (!line) return mode + '|' + short;
+    const type = short === polarTypeName('hbond') ? 'hbond' : short === polarTypeName('salt') ? 'salt' : null;
+    const own = String(color || '').toLowerCase();
+    if (type && own === polarTypeColor(type) && line === 'dashed') return mode + '|' + short;
+    return mode + '|' + short + '|' + own + (line === 'dashed' ? '' : '|' + line);
   }
   function figureLabelsCustomised(legend = legendItems('figure')) {
     return Boolean(legend && (legend.title !== legend.defaults.title || legend.items.some((item, index) => item[1] !== legend.defaults.items[index][1])));
@@ -1082,7 +1097,7 @@
       td.append(input); tr.append(td); body.append(tr);
     };
     row(mode + '|title', legend.defaults.title, null);
-    legend.defaults.items.forEach(item => row(mode + '|' + item[1], item[1], item[0], item[3] || null));
+    legend.defaults.items.forEach(item => row(legendLabelKey(mode, item), item[1], item[0], item[3] || null));
     renderFigureLabelsState();
   }
   function renderFigureLabelsState() {

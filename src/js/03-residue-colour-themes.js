@@ -321,10 +321,22 @@
       entry.model = null;
       entry.atoms = [];
       entry.originalAtoms = [];
+      /* What was worked out from the atoms goes with them: the interaction search's copy of every heavy
+         atom (29a), the entity groups (08) and the confidence atoms (01) are built again if it returns. */
+      polarForget(entry); entry.entityCache = null; entry.confidenceAtomCache = null;
     });
   }
 
   function applyStyle() {
+    /* Every model is styled below with the interaction sticks as the records are now (29): the
+       signature is brought up to date first, so the overlays rebuilt at the end do not find it stale
+       and style every model a second time from inside this one. */
+    polarSticksStale();
+    applyStyle.depth = (applyStyle.depth || 0) + 1;
+    try { applyStyleNow(); } finally { applyStyle.depth -= 1; }
+  }
+
+  function applyStyleNow() {
     if (typeof viewer.removeAllSurfaces === 'function') viewer.removeAllSurfaces();
     let shown = new Set(displayedEntries());
     const broken = [];
@@ -969,7 +981,7 @@
   function rebuildOverlays(shouldRender = true) {
     /* A hydrogen bond or salt bridge removed from the list takes its side-chain sticks with it: the
        models are styled again, which rebuilds the overlays itself (29 polarSticksStale). */
-    if (polarSticksStale()) { applyStyle(); return; }
+    if (!applyStyle.depth && polarSticksStale()) { applyStyle(); return; }
     /* A hydrogen bond recoloured or made solid changes the legend's entries, and so the key and its text. */
     if (polarLegendStale()) renderScreenLegend();
     viewer.removeAllLabels();

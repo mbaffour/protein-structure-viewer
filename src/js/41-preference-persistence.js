@@ -8,7 +8,9 @@
     '#gpv-position-figure-deviation', '#gpv-ipsae-pae', '#gpv-ipsae-dist',
     /* Depth cueing, the surface, the Okabe–Ito palette, Low confidence and the legend on exports: USAGE
        promised these were remembered and they came back at their defaults. */
-    '#gpv-fog', '#gpv-surface', '#gpv-safe-palette', '#gpv-hide-below', '#gpv-export-legend'
+    '#gpv-fog', '#gpv-surface', '#gpv-safe-palette', '#gpv-hide-below', '#gpv-export-legend',
+    /* Interfaces' Count histidine as charged (2.53.0), so the rule stays as chosen. */
+    '#gpv-interface-histidine'
   ];
 
   function savePreferences() {

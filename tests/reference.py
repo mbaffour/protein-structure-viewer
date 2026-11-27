@@ -241,13 +241,16 @@ print('msa', [(m['file'][-30:], m['sequences'], len(m['query'])) for m in out['m
 # out, the first alternate location of an atom. Roles by atom name for the 20 amino acids and the
 # standard nucleotides; any other residue (a ligand, a modified residue) has every N and O as donor and
 # acceptor ("by element"). The chain's first amino-acid residue's N is a donor and a cation, its last
-# one's O and OXT acceptors and anions. Covalent neighbours (antecedents) from geometry: atoms of the
+# one's O and OXT acceptors and anions -- unless that end is capped: an N bonded to another residue (an
+# acetyl cap's C), or a last C bonded to another residue's N (an NH2 cap), is no charged terminus. A
+# nucleotide's O3' with no next P bonded to it, and the O5' of a residue with no P, are free hydroxyls
+# (donor and acceptor); OP3 is an anion like OP1/OP2. Covalent neighbours (antecedents) from geometry: atoms of the
 # same residue within 1.9 A, and the backbone link to another residue of the chain (C-N, O3'-P) within
 # 1.9 A. Hydrogen bond: donor-acceptor <= 3.5 A, different residues, not bonded, and every
 # antecedent-donor...acceptor and donor...acceptor-antecedent angle >= 90 deg (dot product <= 0).
 # Salt bridge: cationic N (LYS NZ, ARG NE/NH1/NH2, N-terminal N; HIS ND1/NE2 only with histidine
 # charged) within 4.0 A of an anionic O (ASP OD1/OD2, GLU OE1/OE2, C-terminal O/OXT, nucleotide
-# OP1/OP2), one per residue pair at its shortest N-O distance; a salt-bridged pair's cation-anion
+# OP1/OP2/OP3), one per residue pair at its shortest N-O distance; a salt-bridged pair's cation-anion
 # atom pairs are not also hydrogen bonds.
 POLAR_WATER = {'HOH', 'WAT', 'DOD', 'H2O', 'TIP', 'SOL'}
 POLAR_SIDE = {'SER': {'OG': 'B'}, 'THR': {'OG1': 'B'}, 'TYR': {'OH': 'B'}, 'ASN': {'OD1': 'A', 'ND2': 'D'},
@@ -291,13 +294,24 @@ def polar_interactions(model, chain_a, chain_b, histidine_charged=False):
     for chain in model:
         for res in chain:
             if rkey(res) in residues: ligand[rkey(res)] = res.id[0] != ' ' and not linked(res)
+    link = {'N': 'C', 'C': 'N', "O3'": 'P', 'P': "O3'"}
+    def antecedents(atom):
+        res = atom.get_parent(); out = []
+        for other in near.search(atom.coord, 1.9 + 0.01):
+            if other is atom or dist(atom, other) > 1.9: continue
+            if other.get_parent() is res: out.append(other)
+            elif link.get(name(atom)) == name(other) and other.get_parent().get_parent() is res.get_parent(): out.append(other)
+        return out
+    def linked_out(atom): return any(o.get_parent() is not atom.get_parent() for o in antecedents(atom))
     n_term, c_term = set(), set()
     for chain in model:
         amino = [res for res in chain if rkey(res) in residues and not ligand[rkey(res)] and {'N', 'CA', 'C'} <= set(by_res[rkey(res)])]
         if amino:
-            n_term.add(id(by_res[rkey(amino[0])]['N']))
-            for nm in ('O', 'OXT'):
-                if nm in by_res[rkey(amino[-1])]: c_term.add(id(by_res[rkey(amino[-1])][nm]))
+            first, last = by_res[rkey(amino[0])], by_res[rkey(amino[-1])]
+            if not linked_out(first['N']): n_term.add(id(first['N']))
+            if not linked_out(last['C']):
+                for nm in ('O', 'OXT'):
+                    if nm in last: c_term.add(id(last[nm]))
     def role(atom):
         el = element(atom)
         if el not in ('N', 'O'): return None
@@ -313,19 +327,13 @@ def polar_interactions(model, chain_a, chain_b, histidine_charged=False):
                 made['anion'] = nm in POLAR_ANION.get(resn, set())
         elif not ligand[rkey(res)] and resn in POLAR_NUC:
             c = POLAR_SUGAR.get(nm) or POLAR_BASES[POLAR_NUC[resn]].get(nm)
-            if c: made = code(c); made['anion'] = nm in ('OP1', 'OP2', 'O1P', 'O2P')
+            if nm == "O3'" and not any(name(o) == 'P' and o.get_parent() is not res for o in antecedents(atom)): c = 'B'
+            if nm == "O5'" and 'P' not in by_res[rkey(res)]: c = 'B'
+            if c: made = code(c); made['anion'] = nm in ('OP1', 'OP2', 'OP3', 'O1P', 'O2P', 'O3P')
         else: made = {'donor': True, 'acceptor': True, 'cation': False, 'anion': False, 'by_element': True}
         if id(atom) in n_term: made = made or code('D'); made['donor'] = True; made['cation'] = True
         if id(atom) in c_term: made = made or code('A'); made['acceptor'] = True; made['anion'] = True
         return made
-    link = {'N': 'C', 'C': 'N', "O3'": 'P', 'P': "O3'"}
-    def antecedents(atom):
-        res = atom.get_parent(); out = []
-        for other in near.search(atom.coord, 1.9 + 0.01):
-            if other is atom or dist(atom, other) > 1.9: continue
-            if other.get_parent() is res: out.append(other)
-            elif link.get(name(atom)) == name(other) and other.get_parent().get_parent() is res.get_parent(): out.append(other)
-        return out
     def open_angles(x, y):
         for p in antecedents(x):
             if float(np.dot(p.coord.astype(float) - x.coord.astype(float), y.coord.astype(float) - x.coord.astype(float))) > 0: return False

@@ -191,7 +191,12 @@
     const score = mean(pane.entry.scores);
     return displayName(pane.entry) + (score === null ? '' : ' · mean pLDDT ' + score.toFixed(1));
   }
+  /* The models a panel figure being laid out draws, one per pane: its footer key names the hydrogen
+     bonds and salt bridges drawn in those panels (29 polarShownRecords), whichever model the main view
+     shows. Set for each comparison or per-model figure before its key is measured and drawn. */
+  let panelLegendIds = null;
   function panelFigureLayout(panes, fitWidth = false) {
+    panelLegendIds = new Set(panes.map(pane => pane.entry.id));
     const requested = exportDimensions();
     const columns = panelColumns(panes.length); const rows = Math.ceil(panes.length / columns);
     let cellWidth = requested.width; let cellHeight = requested.height;

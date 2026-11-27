@@ -234,6 +234,8 @@
   }
 
   function restoreCoordinates(shouldRender = true) {
+    /* A model that was superposed moves back: what was worked out from where its atoms were goes (29). */
+    structures.filter(entry => entry.superposed && entry.model).forEach(interfaceModelMoved);
     structures.forEach(entry => { entry.deviations = null; entry.alignedPairs = null; entry.superposed = false; });
     ensembleSpread = null;
     structures.filter(entry => entry.model).forEach(entry => entry.atoms.forEach((atom, index) => {
@@ -484,8 +486,10 @@
       atom.z = transformed[2] + referenceCenter[2];
     });
     target.deviations = new Map();
-    /* Moved off its own coordinates: Restore coordinates has something to put back. */
+    /* Moved off its own coordinates: Restore coordinates has something to put back. The interaction
+       search's grid was binned where the atoms were, so it is built again from here (29). */
     target.superposed = true;
+    interfaceModelMoved(target);
     /* The pairing this fit used, kept as reference residue tag → the target's own atom: the
        correspondence behind every deviation, and what Compare this position looks a residue up
        through when the two models number their residues differently. */
@@ -981,6 +985,8 @@
       labelStyle: root.querySelector('#gpv-label-style').value,
       legendPosition: root.querySelector('#gpv-legend-position').value,
       chainsByPosition: root.querySelector('#gpv-chain-position').checked,
+      /* Interfaces' Count histidine as charged (2.53.0): the rule the drawn salt bridges were found under. */
+      histidineCharged: polarHistidineCharged(),
       fitScope: root.querySelector('#gpv-fit-scope').value,
       fitRegion: root.querySelector('#gpv-fit-region').value,
       positionCutoff: positionCutoff(),

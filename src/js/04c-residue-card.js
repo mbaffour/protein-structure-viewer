@@ -105,7 +105,7 @@
     distances.addEventListener('click', downloadResidueDistancesFromCard);
     const polar = document.createElement('button');
     polar.type = 'button'; polar.className = 'btn btn-ghost'; polar.id = 'gpv-label-editor-polar'; polar.textContent = 'Polar contacts';
-    polar.title = 'Draw this residue’s hydrogen bonds (blue) and salt bridges (red) as dashed lines, with the side chains as sticks, in one undo step';
+    polar.title = 'Draw this residue’s hydrogen bonds (blue) and salt bridges (red) as dashed lines, with the side chains (and the backbone atoms that take part) as sticks, in one undo step';
     polar.addEventListener('click', drawCardPolarContacts);
     const atoms = document.createElement('label');
     atoms.className = 'gpv-residue-card-atoms text-small'; atoms.id = 'gpv-label-editor-measure-atoms-wrap';
@@ -705,11 +705,12 @@
   }
 
   /* A residue's hydrogen bonds and salt bridges with every other residue of its model (water out),
-     this residue's atom first in each. */
+     this residue's atom first in each — searched among the atoms within reach of it (29a polarNear),
+     not the whole model, so a card on a capsid opens as fast as one on a dimer. */
   function residuePolarInteractions(entry, chain, resi, icode = '') {
     const context = polarModel(entry);
     const own = context.all.filter(atom => sameResidue(atom, chain, resi, icode));
-    return own.length ? polarInteractions(own, context.all, { context }) : [];
+    return own.length ? polarInteractions(own, polarNear(own, context), { context }) : [];
   }
 
   /* The card's Polar contacts: this residue's hydrogen bonds and salt bridges drawn as Show

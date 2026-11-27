@@ -521,6 +521,19 @@ Clear. One step checks J3-2: a nucleotide's pLDDT on the card and the marker is 
 `validate.mjs` compares the interactions with `reference.py`'s, and `validate-experimental.mjs` with
 PDBePISA's list for 1BRS.
 
+The review's fixes (helpers prefixed `r53`; each step's name starts with its finding, so
+`PSV_ONLY='\[r53'` runs them all, and each fails on the build before the fix): after Align visible and
+Restore coordinates a bad-angle pair is still no hydrogen bond and the moved model's Interfaces table is
+marked (B1); acetyl- and amide-capped ends make hydrogen bonds, not salt bridges, beside uncapped
+controls (LB1); the histidine rule comes back with a scene, is a preference, and an old scene with a His
+salt bridge says so (LB2); the comparison SVG's key names the lines in its panels only (LB3); one Show
+interactions press styles the models once and a row's Remove still drops its sticks (LB4); sticks on
+side chains and Cα, backbone only where it takes part (D3); a released model drops its caches (W2); a
+free 3′ hydroxyl donates and OP3 is an anion (W3); 5 new lines beside 40 drawn keep their values (W4);
+entities linked through shared sequences merge transitively (W5); comment lines in an mmCIF table
+(W6); two hydrogen-bond colours renamed one at a time (W7). `r53Pdb`, `r53Put`, `r53Polar`, `r53Stick`
+and `r53Moved` build the hand-made models and read the results.
+
 ## Continuous integration
 
 `.github/workflows/tests.yml` runs on every push and pull request to `main`. A `playwright` job runs this

@@ -12,7 +12,10 @@
      Salt bridge: a cationic N within 4.0 Å of an anionic O, in different residues; one per residue
      pair, reported at its shortest N–O distance. A salt-bridged residue pair is not also listed as
      hydrogen bonds between its charged atoms (an N–O pair whose N is cationic and whose O is
-     anionic); hydrogen bonds between its other atoms still are.
+     anionic); hydrogen bonds between its other atoms still are. A chain's N-terminal N is a cation
+     and its C-terminal O and OXT anions unless the end is capped (bonded to another residue); a
+     nucleotide's free 3′ or 5′ hydroxyl donates as well as accepts, and every free phosphate O
+     (OP1, OP2, a 5′ phosphate's OP3) is an anion.
 
      Covalent bonds are read from geometry, as the residue card's peptide-bond tag is (04c
      contactBond): two heavy atoms of one residue within 1.9 Å, or the backbone link between two
@@ -47,12 +50,16 @@
     T: { O2: 'A', N3: 'D', O4: 'A' }
   };
   const polarNucleotideBase = { A: 'A', G: 'G', C: 'C', U: 'U', T: 'T', DA: 'A', DG: 'G', DC: 'C', DT: 'T', DU: 'U' };
-  /* Sugar and phosphate, by the remediated names; the older O1P/O2P/O3P are the same atoms. */
+  /* Sugar and phosphate, by the remediated names; the older O1P/O2P/O3P are the same atoms. O3′ and
+     O5′ are the ester oxygens of a phosphodiester, acceptors only — except at a free end, where they
+     are hydroxyls that donate as well (polarRole): a 3′ end's O3′ (no P of the next residue bonded to
+     it) and a 5′ end's O5′ (its residue has no P). */
   const polarNucleotideBackbone = { "O2'": 'B', "O3'": 'A', "O4'": 'A', "O5'": 'A', OP1: 'A', OP2: 'A', OP3: 'A', O1P: 'A', O2P: 'A', O3P: 'A' };
   const polarCations = { LYS: ['NZ'], ARG: ['NE', 'NH1', 'NH2'] };
   const polarHistidineCations = ['ND1', 'NE2'];
   const polarAnions = { ASP: ['OD1', 'OD2'], GLU: ['OE1', 'OE2'] };
-  const polarPhosphateAnions = ['OP1', 'OP2', 'O1P', 'O2P'];
+  /* Every free phosphate oxygen, a 5′-terminal phosphate's OP3 among them. */
+  const polarPhosphateAnions = ['OP1', 'OP2', 'OP3', 'O1P', 'O2P', 'O3P'];
 
   /* An atom's name with the older '*' for a prime written as one, so O2* and O2′ are the same atom. */
   function polarAtomName(atom) {
@@ -83,7 +90,12 @@
      had hetflag cleared, 03b) with N, CA and C; a chain's first such residue's N is its N-terminus,
      its last such residue's O and OXT its C-terminus. These are the first and last residues in the
      file: where a crystal structure leaves a disordered end out, the residue taken for a terminus is
-     not the real one (USAGE says so). */
+     not the real one (USAGE says so). A capped end is not charged: an N bonded to another residue (an
+     acetyl or formyl cap's C) is no N-terminus, and a C bonded to another residue's N (an amide cap,
+     NH2) makes no C-terminus — otherwise a neutral amide N or carbonyl O makes salt bridges.
+     The context's atoms are its own copies (`own`), kept once so a search need not rebuild them.
+     Its grid is binned where the atoms were when it was built: whatever moves a model's atoms in
+     place (Align visible, Restore coordinates) forgets it (polarForget). */
   function polarContext(atoms, options = {}) {
     const all = polarAtomsOf(atoms, options);
     const residues = new Map();
@@ -100,10 +112,21 @@
       if (!firstOfChain.has(chain)) firstOfChain.set(chain, key);
       lastOfChain.set(chain, key);
     });
-    const nTermini = new Set(); const cTermini = new Set();
-    firstOfChain.forEach(key => residues.get(key).forEach(atom => { if (polarAtomName(atom) === 'N') nTermini.add(atom); }));
-    lastOfChain.forEach(key => residues.get(key).forEach(atom => { if (['O', 'OXT'].includes(polarAtomName(atom))) cTermini.add(atom); }));
-    return { all, grid: spatialGrid(all, 2), nTermini, cTermini, histidineCharged: Boolean(options.histidineCharged), water: Boolean(options.water), antecedentCache: new Map(), roleCache: new Map() };
+    const context = { all, own: new Set(all), residues, grid: spatialGrid(all, 2), nTermini: new Set(), cTermini: new Set(), histidineCharged: Boolean(options.histidineCharged), water: Boolean(options.water), antecedentCache: new Map(), roleCache: new Map() };
+    const named = (key, name) => residues.get(key).find(atom => polarAtomName(atom) === name);
+    const linkedOut = atom => Boolean(atom) && polarAntecedents(atom, context).some(other => polarResidueKey(other) !== polarResidueKey(atom));
+    firstOfChain.forEach(key => { const n = named(key, 'N'); if (n && !linkedOut(n)) context.nTermini.add(n); });
+    lastOfChain.forEach(key => {
+      if (linkedOut(named(key, 'C'))) return;
+      residues.get(key).forEach(atom => { if (['O', 'OXT'].includes(polarAtomName(atom))) context.cTermini.add(atom); });
+    });
+    return context;
+  }
+
+  /* A model's cached context, forgotten: its atoms moved in place (Align visible, Restore
+     coordinates) or were let go (03 releaseHiddenModels). The next search builds a new one. */
+  function polarForget(entry) {
+    if (entry) entry.polarCache = null;
   }
 
   /* An N or O atom's part: { donor, acceptor, cation, anion, byElement }, or null when it takes none
@@ -128,7 +151,10 @@
           made.anion = Boolean(polarAnions[resn] && polarAnions[resn].includes(name));
         }
       } else if (!atom.hetflag && polarNucleotideBase[resn]) {
-        const code = polarNucleotideBackbone[name] || polarBases[polarNucleotideBase[resn]][name];
+        let code = polarNucleotideBackbone[name] || polarBases[polarNucleotideBase[resn]][name];
+        /* A free end's hydroxyl: O3′ with no next residue's P bonded to it, O5′ of a residue with no P. */
+        if (name === "O3'" && !polarAntecedents(atom, context).some(other => polarAtomName(other) === 'P' && polarResidueKey(other) !== polarResidueKey(atom))) code = 'B';
+        if (name === "O5'" && !(context.residues.get(polarResidueKey(atom)) || []).some(other => polarAtomName(other) === 'P')) code = 'B';
         if (code) { made = role(code); made.anion = polarPhosphateAnions.includes(name); }
       } else made = { donor: true, acceptor: true, cation: false, anion: false, byElement: true };
       /* The chain's ends, whatever the residue: its N-terminal N is a donor and a cation (PRO's too),
@@ -165,8 +191,16 @@
   /* The context's own copy of each atom (the first alternate location), so a set chosen from a
      model's atoms is searched as the context knows it. */
   function polarPick(atoms, context) {
-    const own = new Set(context.all);
-    return atoms.filter(atom => own.has(atom)).map(atom => ({ atom, role: polarRole(atom, context) })).filter(item => item.role);
+    return atoms.filter(atom => context.own.has(atom)).map(atom => ({ atom, role: polarRole(atom, context) })).filter(item => item.role);
+  }
+
+  /* The context's atoms within reach of a few atoms (a residue): inside their box widened by the salt-
+     bridge cutoff, so a search from one residue looks at its neighbourhood, not at the whole model. */
+  function polarNear(atoms, context) {
+    if (!atoms.length) return [];
+    const low = ['x', 'y', 'z'].map(axis => Math.min(...atoms.map(atom => atom[axis])) - polarSaltCutoff);
+    const high = ['x', 'y', 'z'].map(axis => Math.max(...atoms.map(atom => atom[axis])) + polarSaltCutoff);
+    return context.all.filter(atom => atom.x >= low[0] && atom.x <= high[0] && atom.y >= low[1] && atom.y <= high[1] && atom.z >= low[2] && atom.z <= high[2]);
   }
 
   /* Every hydrogen bond and salt bridge between the atoms of `atomsA` and those of `atomsB` (the same

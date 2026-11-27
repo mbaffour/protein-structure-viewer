@@ -2175,6 +2175,8 @@ await step('in the multi-view → swaps the next model into the primary panel in
   } finally { await fresh.close(); }
 });
 /* j2-block-A end */
+/* The fresh pages above leave the main page in the background, where its animation frames are held back. */
+await page.bringToFront();
 
 group('annotate');
 await tab('annotate');
@@ -2250,8 +2252,12 @@ await step('a residue label is added by clicking and edited from its list row', 
   if (await page.locator('#gpv-label-list .gpv-entry').count()) throw new Error('label was not removed');
 });
 await step('a label is dragged with the mouse, keeps a model-space offset, and resets back onto its residue', async () => {
+  /* The hover hint waits on an animation frame, which a background page may hold back under load. */
+  await page.bringToFront();
   await tapStageCentre();
   await page.fill('#gpv-label-text', 'Drag me'); await page.click('#gpv-add-label'); await page.waitForTimeout(400);
+  /* The residue card the click opened can sit over the label: the pointer would hover the card, not the label. */
+  if (await page.locator('#gpv-label-editor').isVisible()) { await page.click('#gpv-label-editor .gpv-label-editor-close'); await page.waitForTimeout(200); }
   const read = () => page.evaluate(() => {
     const d = window.__viewerDebug; const label = d.labelRecords()[0];
     const screen = d.viewer.modelToScreen(d.labelPosition(label));
@@ -9904,6 +9910,315 @@ await step('A nucleotide’s pLDDT on the residue card and its marker is its C1�
   } finally { await fresh.close(); }
 });
 /* batch-p53 end */
+/* batch-r53 start */
+/* ---- 2.53.0, the review's fixes (findings B1, LB1–LB4, W2–W7, D3). Each step names its finding in
+   brackets, so PSV_ONLY='\[r53' runs them all; each fails on the build before the fix. Helpers are
+   prefixed r53. ---- */
+/* A small hand-made model as a PDB file from fixed-column lines. */
+const r53Pdb = (name, lines) => ({ name, mimeType: 'chemical/x-pdb', buffer: Buffer.from(lines.join('\n') + '\nEND\n') });
+/* Hand-placed atoms, `[name, resn, chain, resi, [x, y, z], element, record]` rows, shifted along x. */
+const r53Put = (lines, rows, shift = [0, 0, 0]) => rows.forEach(([name, resn, chain, resi, xyz, element, record = 'ATOM']) => lines.push(pdbAtom(record, lines.length + 1, name, resn, chain, resi, xyz.map((value, axis) => value + shift[axis]), element)));
+/* The hydrogen bonds and salt bridges the debug hook finds between two chains of a page's model. */
+const r53Polar = (fresh, index, a, b) => fresh.evaluate(([index, a, b]) => {
+  const d = window.__viewerDebug; const r = d.polarInteractions(d.entries()[index].id, a, b);
+  return { hbonds: r.hbonds.length, salts: r.salt_bridges.length, rows: [...r.hbonds.map(row => 'hbond ' + row.slice(0, 6).join(':')), ...r.salt_bridges.map(row => 'salt ' + row.slice(0, 6).join(':'))] };
+}, [index, a, b]);
+/* Whether an atom of the page's first model is drawn with a stick. */
+const r53Stick = (fresh, chain, resi, name) => fresh.evaluate(([chain, resi, name]) => {
+  const atom = window.__viewerDebug.entries()[0].atoms.find(item => item.chain === chain && item.resi === resi && item.atom === name);
+  return atom ? Boolean(atom.style && atom.style.stick) : null;
+}, [chain, resi, name]);
+/* The bad-angle pair of the hand-made pairs step (Ser OG and Thr OG1 3.0 Å apart, Ser's CB between
+   them) beside a six-residue backbone to align on, all moved by `shift`. */
+const r53Moved = shift => {
+  const lines = j3Backbone([], [[1], [2], [3], [4], [5], [6]], { chain: 'A', x0: shift, y: shift, z: shift });
+  r53Put(lines, [['CB', 'SER', 'C', 1, [1.0, 0.3, 0], 'C'], ['OG', 'SER', 'C', 1, [0, 0, 0], 'O'], ['CB', 'THR', 'D', 1, [4.4, 0.3, 0], 'C'], ['OG1', 'THR', 'D', 1, [3.0, 0, 0], 'O']], [30 + shift, 20 + shift, shift]);
+  return lines;
+};
+
+await step('[r53 B1] Align visible and Restore coordinates move a model in place: its hydrogen-bond search starts again from where the atoms are, so a bad angle stays no hydrogen bond, and its Interfaces table is marked as moved', async () => {
+  const fresh = await freshViewer([r53Pdb('r53_fixed.pdb', r53Moved(0)), r53Pdb('r53_moved.pdb', r53Moved(40))]);
+  try {
+    /* The control on the model that stays put (asking the moved one would look its pair up before the move). */
+    if ((await r53Polar(fresh, 0, 'C', 'D')).hbonds !== 0) throw new Error('setup: the bad angle is a hydrogen bond before anything moved');
+    /* The search's context is built (as a card or an analysis would) on chain A only, so the bad pair's
+       neighbours are not looked up before the move. */
+    await r53Polar(fresh, 1, 'A', 'A');
+    const at = () => fresh.evaluate(() => { const atom = window.__viewerDebug.entries()[1].atoms.find(item => item.chain === 'C' && item.atom === 'OG'); return [atom.x, atom.y, atom.z]; });
+    const before = await at();
+    await fresh.click('[data-gpv-tab="compare"]');
+    await fresh.evaluate(() => { const select = document.querySelector('#gpv-reference'); select.value = String(window.__viewerDebug.entries()[0].id); select.dispatchEvent(new Event('change', { bubbles: true })); });
+    await fresh.click('#gpv-align'); await fresh.waitForTimeout(1500);
+    const after = await at();
+    if (Math.hypot(after[0] - before[0], after[1] - before[1], after[2] - before[2]) < 30) throw new Error('setup: the model did not move · ' + JSON.stringify([before, after]));
+    const aligned = await r53Polar(fresh, 1, 'C', 'D');
+    if (aligned.hbonds || aligned.salts) throw new Error('after Align visible the bad angle is ' + JSON.stringify(aligned.rows));
+    await fresh.click('#gpv-restore'); await fresh.waitForTimeout(800);
+    const restored = await r53Polar(fresh, 1, 'C', 'D');
+    if (restored.hbonds || restored.salts) throw new Error('after Restore coordinates the bad angle is ' + JSON.stringify(restored.rows));
+    /* The Interfaces table of the moved model: dimmed and saying so; its numbers are those of a rigid move. */
+    await fresh.click('[data-gpv-tab="confidence"]');
+    await fresh.evaluate(() => { const select = document.querySelector('#gpv-interface-model'); select.value = String(window.__viewerDebug.entries()[1].id); select.dispatchEvent(new Event('change', { bubbles: true })); });
+    await p53Analyse(fresh);
+    const counted = await fresh.evaluate(() => window.__viewerDebug.interfaceResults().rows.map(row => row.chains.join('') + ':' + row.contacts).join(' '));
+    await fresh.click('[data-gpv-tab="compare"]'); await fresh.click('#gpv-align'); await fresh.waitForTimeout(1500);
+    const marked = await fresh.evaluate(() => ({ stale: document.querySelector('#gpv-contacts-wrap').classList.contains('is-stale'), state: document.querySelector('#gpv-interface-state').textContent, rows: window.__viewerDebug.interfaceResults().rows.map(row => row.chains.join('') + ':' + row.contacts).join(' ') }));
+    if (!marked.stale || !/^Model moved \(Align visible or Restore coordinates\) · Analyse interfaces to update · shown: /.test(marked.state)) throw new Error('the Interfaces table after Align: ' + JSON.stringify(marked));
+    if (marked.rows !== counted) throw new Error('the table changed: ' + counted + ' → ' + marked.rows);
+    await fresh.click('[data-gpv-tab="confidence"]'); await p53Analyse(fresh);
+    if (await fresh.evaluate(() => document.querySelector('#gpv-contacts-wrap').classList.contains('is-stale'))) throw new Error('Analyse interfaces left the table marked');
+    console.log('       moved ' + Math.hypot(after[0] - before[0], after[1] - before[1], after[2] - before[2]).toFixed(1) + ' Å · no hydrogen bond after Align or Restore · table ' + counted);
+  } finally { await fresh.close(); }
+});
+
+await step('[r53 LB1] A capped chain end is no charged terminus: an acetyl-capped N and an amidated C-terminal O make hydrogen bonds, not salt bridges; uncapped ends still do', async () => {
+  const lines = [];
+  /* A: ACE–Ala1, Ala1's N 2.9 Å from B's Asp OD1 with every angle open; C, D: the same without the cap. */
+  const nEnd = (chain, partner, shift, cap) => {
+    if (cap) r53Put(lines, [['C', 'ACE', chain, 0, [-1.33, 0, 0], 'C', 'HETATM'], ['O', 'ACE', chain, 0, [-1.95, 1.07, 0], 'O', 'HETATM'], ['CH3', 'ACE', chain, 0, [-2.1, -1.25, 0], 'C', 'HETATM']], shift);
+    r53Put(lines, [['N', 'ALA', chain, 1, [0, 0, 0], 'N'], ['CA', 'ALA', chain, 1, [0.75, 1.2, 0], 'C'], ['C', 'ALA', chain, 1, [2.2, 0.9, 0], 'C'], ['O', 'ALA', chain, 1, [2.8, 1.9, 0], 'O'], ['CB', 'ALA', chain, 1, [0.2, 2.5, 0.5], 'C']], shift);
+    r53Put(lines, [['CB', 'ASP', partner, 1, [-0.3, -5.2, 0], 'C'], ['CG', 'ASP', partner, 1, [0.5, -4.1, 0], 'C'], ['OD1', 'ASP', partner, 1, [0.3, -2.9, 0], 'O'], ['OD2', 'ASP', partner, 1, [1.4, -4.8, 0], 'O']], shift);
+  };
+  /* E: Ala1–NH2, Ala1's O 2.9 Å from F's Lys NZ; G, H: the same without the cap. */
+  const cEnd = (chain, partner, shift, cap) => {
+    r53Put(lines, [['N', 'ALA', chain, 1, [-2.45, 1.3, 0], 'N'], ['CA', 'ALA', chain, 1, [-1.25, 1.95, 0], 'C'], ['C', 'ALA', chain, 1, [0, 1.23, 0], 'C'], ['O', 'ALA', chain, 1, [0, 0, 0], 'O']], shift);
+    if (cap) r53Put(lines, [['N', 'NH2', chain, 2, [1.15, 1.9, 0], 'N', 'HETATM']], shift);
+    r53Put(lines, [['CD', 'LYS', partner, 1, [-0.5, -5.5, 0], 'C'], ['CE', 'LYS', partner, 1, [0.3, -4.3, 0], 'C'], ['NZ', 'LYS', partner, 1, [0, -2.9, 0], 'N']], shift);
+  };
+  nEnd('A', 'B', [0, 0, 0], true); nEnd('C', 'D', [30, 0, 0], false); cEnd('E', 'F', [60, 0, 0], true); cEnd('G', 'H', [90, 0, 0], false);
+  const fresh = await freshViewer([r53Pdb('r53_caps.pdb', lines)]);
+  try {
+    const found = { acetyl: await r53Polar(fresh, 0, 'A', 'B'), free: await r53Polar(fresh, 0, 'C', 'D'), amide: await r53Polar(fresh, 0, 'E', 'F'), freeC: await r53Polar(fresh, 0, 'G', 'H') };
+    if (found.acetyl.salts || found.acetyl.hbonds !== 1) throw new Error('the acetyl-capped N: ' + JSON.stringify(found.acetyl.rows));
+    if (found.amide.salts || found.amide.hbonds !== 1) throw new Error('the amidated C-terminus: ' + JSON.stringify(found.amide.rows));
+    if (found.free.salts !== 1 || found.free.hbonds || found.freeC.salts !== 1 || found.freeC.hbonds) throw new Error('the uncapped controls: ' + JSON.stringify([found.free.rows, found.freeC.rows]));
+    console.log('       capped: ' + found.acetyl.rows.concat(found.amide.rows).join(', ') + ' · uncapped: ' + found.free.rows.concat(found.freeC.rows).join(', '));
+  } finally { await fresh.close(); }
+});
+
+await step('[r53 LB2] The histidine rule travels with the figure: a scene drawn with histidine charged comes back with the box on and says so, an old scene with a histidine salt bridge says so too, and the box is a preference', async () => {
+  const fresh = await freshViewer([experimentalFile('1brs.cif')]);
+  let scene; let remembered = false;
+  try {
+    await fresh.evaluate(() => { const box = document.querySelector('#gpv-interface-histidine'); box.checked = true; box.dispatchEvent(new Event('change', { bubbles: true })); });
+    await p53Analyse(fresh);
+    await p53Press(fresh, 'Show interactions'); await fresh.waitForTimeout(600);
+    if (!/^8 hydrogen bonds and 4 salt bridges drawn between A and D/.test(await freshStatus(fresh))) throw new Error('setup: ' + await freshStatus(fresh));
+    await fresh.click('[data-gpv-tab="publish"]'); await fresh.waitForTimeout(200);
+    scene = JSON.parse((await freshDownload(fresh, '#gpv-save-scene')).toString('utf8'));
+    await fresh.reload(); await fresh.waitForTimeout(2000);
+    remembered = await fresh.isChecked('#gpv-interface-histidine');
+  } finally { await fresh.close(); }
+  const second = await freshViewer([experimentalFile('1brs.cif')]);
+  try {
+    await c2Scene(second, scene); await second.waitForTimeout(1500);
+    const methods = await second.evaluate(() => window.__viewerDebug.methodsText());
+    if (!/histidine ND1 and NE2 counted as charged/.test(methods)) throw new Error('the scene reopened, the methods text says: ' + (methods.match(/\(histidine[^;]*;/) || [''])[0]);
+    if (!(await second.isChecked('#gpv-interface-histidine')) || scene.settings.histidineCharged !== true) throw new Error('the box after the scene: ' + await second.isChecked('#gpv-interface-histidine') + ' · written ' + scene.settings.histidineCharged);
+    if (!remembered) throw new Error('the box was not remembered over a reload');
+  } finally { await second.close(); }
+  /* A scene from before the setting: no histidineCharged, a His102 NE2 salt bridge, the box off. */
+  const third = await freshViewer([experimentalFile('1brs.cif')]);
+  try {
+    const point = (chain, resi, atom) => ({ model: '1brs.cif', chain, resi, atom });
+    await c2Scene(third, { type: 'protein-viewer-scene', schemaVersion: 1, models: [{ name: '1brs.cif' }], settings: { colorMode: 'element' }, measurements: [{ type: 'distance', interaction: 'salt', points: [point('A', 102, 'NE2'), point('D', 39, 'OD2')] }] });
+    await third.waitForTimeout(1200);
+    if (await third.isChecked('#gpv-interface-histidine')) throw new Error('setup: the box is on');
+    const methods = await third.evaluate(() => window.__viewerDebug.methodsText());
+    await third.click('[data-gpv-tab="publish"]'); await third.click('#gpv-figure-legend'); await third.waitForTimeout(300);
+    const legend = await third.inputValue('#gpv-legend-text');
+    if (!/histidine ND1 and NE2 counted as charged/.test(methods) || !/N–O ≤ 4\.0 Å between charged groups, histidine counted as charged\)/.test(legend)) throw new Error('an old scene with a His salt bridge: ' + (methods.match(/\(histidine[^;]*;/) || [''])[0] + ' · ' + (legend.match(/by geometry \([^)]*\)/) || [''])[0]);
+    console.log('       scene histidineCharged ' + scene.settings.histidineCharged + ' · remembered over a reload · old scene: ' + (legend.match(/by geometry \([^)]*\)/) || [''])[0]);
+  } finally { await third.close(); }
+});
+
+await step('[r53 LB3] The comparison figure\'s key names the hydrogen bonds drawn in its panels, and not lines on a model no panel shows', async () => {
+  const fresh = await freshViewer([models[0], models[1], models[2]]);
+  try {
+    await fresh.click('[data-gpv-tab="appearance"]'); await fresh.selectOption('#gpv-color-mode', 'element'); await fresh.waitForTimeout(300);
+    await fresh.click('[data-gpv-tab="publish"]'); if (!(await fresh.isChecked('#gpv-export-legend'))) await fresh.check('#gpv-export-legend');
+    await fresh.click('[data-gpv-tab="compare"]'); await fresh.check('#gpv-side-by-side'); await fresh.waitForTimeout(1500);
+    const setup = await fresh.evaluate(() => {
+      const d = window.__viewerDebug; const entries = d.entries(); const panes = d.comparisonPanes().map(pane => pane.entry.name);
+      const shown = new Set(d.comparisonPanes().map(pane => pane.entry.id));
+      const panel = entries.find(entry => entry.id === d.comparisonPanes()[1].entry.id); const elsewhere = entries.find(entry => !shown.has(entry.id));
+      const point = (entry, chain, atom) => ({ entryId: entry.id, chain, resi: 5, atom, index: null });
+      d.measurementRecords().push({ id: 9101, type: 'distance', interaction: 'hbond', color: '#0284c7', dashed: true, points: [point(panel, 'A', 'N'), point(panel, 'B', 'O')] });
+      if (elsewhere) d.measurementRecords().push({ id: 9102, type: 'distance', interaction: 'salt', color: '#dc2626', dashed: true, points: [point(elsewhere, 'A', 'N'), point(elsewhere, 'B', 'O')] });
+      return { panes, panel: panel.name, elsewhere: elsewhere ? elsewhere.name : null, main: d.displayedEntries().map(entry => entry.name) };
+    });
+    if (setup.panes.length !== 2 || !setup.elsewhere) throw new Error('setup: ' + JSON.stringify(setup));
+    await fresh.click('[data-gpv-tab="publish"]');
+    const svg = (await freshDownload(fresh, '#gpv-compare-svg', 180000)).toString('utf8');
+    if (!/>Hydrogen bond</.test(svg)) throw new Error('the comparison SVG\'s key does not name the hydrogen bond drawn in ' + setup.panel + ' · main view ' + setup.main.join(', '));
+    if (/>Salt bridge</.test(svg)) throw new Error('the comparison SVG\'s key names a salt bridge on ' + setup.elsewhere + ', which no panel draws');
+    if (!new RegExp('<line [^>]*stroke="#0284c7"[^>]*stroke-dasharray="[^"]+" data-legend-line="dashed"/>').test(svg)) throw new Error('no dashed legend line in the comparison SVG');
+    console.log('       panes ' + setup.panes.join(' + ') + ' · main view ' + setup.main.join(', ') + ' · key: Hydrogen bond only');
+  } finally { await fresh.close(); }
+});
+
+await step('[r53 LB4] One Show interactions press styles the models once, not twice; a row\'s Remove still takes its residues\' sticks away', async () => {
+  const fresh = await freshViewer([experimentalFile('1brs.cif')]);
+  try {
+    await p53Analyse(fresh);
+    /* applyStyle is the only caller of the main viewer's removeAllSurfaces (03): one call per styling. */
+    await fresh.evaluate(() => { const viewer = window.__viewerDebug.viewer; const original = viewer.removeAllSurfaces.bind(viewer); window.__r53Styled = 0; viewer.removeAllSurfaces = (...args) => { window.__r53Styled += 1; return original(...args); }; });
+    await p53Press(fresh, 'Show interactions'); await fresh.waitForTimeout(800);
+    const styled = await fresh.evaluate(() => window.__r53Styled);
+    if (styled !== 1) throw new Error('one Show interactions press styled the models ' + styled + ' times');
+    if (!(await r53Stick(fresh, 'A', 27, 'CE'))) throw new Error('setup: no stick on Lys27 · A');
+    /* Lys27 · A takes part in one interaction only (NZ–Thr42 OG1): its row's Remove takes its stick away. */
+    await fresh.click('[data-gpv-tab="annotate"]'); await fresh.waitForTimeout(200);
+    const removed = await fresh.evaluate(() => {
+      const rows = [...document.querySelectorAll('#gpv-measurement-list .gpv-entry')];
+      const row = rows.find(item => /^H-bond · LYS27 · A NZ/.test(item.querySelector('.gpv-entry-source').textContent));
+      if (!row) return false; row.querySelector('[data-control="remove"]').click(); return true;
+    });
+    await fresh.waitForTimeout(600);
+    if (!removed) throw new Error('setup: no Lys27 row');
+    if (await r53Stick(fresh, 'A', 27, 'CE')) throw new Error('Lys27 · A kept its stick after its row was removed');
+    const again = (await fresh.evaluate(() => window.__r53Styled)) - styled;
+    console.log('       styled ' + styled + ' time(s) for one press · Remove restyled ' + again + ' time(s)');
+  } finally { await fresh.close(); }
+});
+
+await step('[r53 D3] Show interactions draws side chains and Cα as sticks, and a residue\'s N, C and O only where one of them takes part', async () => {
+  const fresh = await freshViewer([experimentalFile('1brs.cif')]);
+  try {
+    await p53Analyse(fresh);
+    await p53Press(fresh, 'Show interactions'); await fresh.waitForTimeout(800);
+    /* Asp39 · D bonds through OD1 and OD2 only; Ile59 · A's N donates to Asp35 OD1, Gly34 · D's N to Glu60 OE2. */
+    const seen = {};
+    for (const [chain, resi, name] of [['D', 39, 'N'], ['D', 39, 'O'], ['D', 39, 'C'], ['D', 39, 'CG'], ['D', 39, 'CA'], ['A', 59, 'N'], ['A', 59, 'C'], ['A', 59, 'O'], ['D', 34, 'N']]) seen[chain + resi + ' ' + name] = await r53Stick(fresh, chain, resi, name);
+    if (seen['D39 N'] || seen['D39 O'] || seen['D39 C']) throw new Error('Asp39 · D\'s backbone is drawn as sticks though it takes no part: ' + JSON.stringify(seen));
+    if (!seen['D39 CG'] || !seen['D39 CA']) throw new Error('Asp39 · D\'s side chain or Cα has no stick: ' + JSON.stringify(seen));
+    if (!seen['A59 N'] || !seen['A59 C'] || !seen['A59 O'] || !seen['D34 N']) throw new Error('a backbone atom that takes part has no stick: ' + JSON.stringify(seen));
+    console.log('       ' + Object.entries(seen).map(([key, value]) => key + (value ? ' stick' : ' —')).join(' · '));
+  } finally { await fresh.close(); }
+});
+
+await step('[r53 W2] A model let go to save memory lets its interaction search go with it', async () => {
+  /* releaseHiddenModels (03) drops the atoms of models not shown once forty or more are loaded, one at a time. */
+  const files = Array.from({ length: 41 }, (_, index) => r53Pdb('r53_many_' + String(index).padStart(2, '0') + '.pdb', j3Backbone([], [[1], [2], [3]], { chain: 'A' })));
+  const fresh = await freshViewer(files);
+  try {
+    await fresh.waitForFunction(() => window.__viewerDebug.entries().length === 41, null, { timeout: 60000 });
+    await fresh.click('[data-gpv-tab="models"]'); await fresh.selectOption('#gpv-view-mode', 'single'); await fresh.waitForTimeout(600);
+    const target = await fresh.evaluate(() => {
+      const d = window.__viewerDebug; const shown = new Set(d.displayedEntries().map(entry => entry.id));
+      const index = d.entries().findIndex(entry => !shown.has(entry.id));
+      d.polarInteractions(d.entries()[index].id, 'A', 'A');
+      return { index, cached: Boolean(d.entries()[index].polarCache) };
+    });
+    if (!target.cached) throw new Error('setup: no cache built');
+    await fresh.click('[data-gpv-tab="appearance"]'); await fresh.selectOption('#gpv-color-mode', 'element'); await fresh.waitForTimeout(600);
+    const after = await fresh.evaluate(index => { const entry = window.__viewerDebug.entries()[index]; return { model: Boolean(entry.model), atoms: entry.atoms.length, polar: Boolean(entry.polarCache), entity: Boolean(entry.entityCache) }; }, target.index);
+    if (after.model || after.atoms) throw new Error('setup: the model was not let go · ' + JSON.stringify(after));
+    if (after.polar || after.entity) throw new Error('a released model kept ' + JSON.stringify(after));
+  } finally { await fresh.close(); }
+});
+
+await step('[r53 W3] A nucleotide\'s free 3′ hydroxyl donates a hydrogen bond and a 5′ phosphate\'s OP3 makes a salt bridge', async () => {
+  const lines = [];
+  /* R: two nucleotides, a 5′ phosphate (P, OP1–3) on the first and a free 3′ O3′ on the second. */
+  r53Put(lines, [['P', 'A', 'R', 1, [0, 0, 0], 'P'], ['OP1', 'A', 'R', 1, [0, 1.48, 0], 'O'], ['OP2', 'A', 'R', 1, [1.28, -0.74, 0], 'O'], ['OP3', 'A', 'R', 1, [-1.28, -0.74, 0], 'O'], ["O5'", 'A', 'R', 1, [0, 0, 1.6], 'O'], ["C5'", 'A', 'R', 1, [0, 0, 3.0], 'C'], ["C4'", 'A', 'R', 1, [0, 0, 4.5], 'C'], ["C3'", 'A', 'R', 1, [0, 0, 6.0], 'C'], ["O3'", 'A', 'R', 1, [0, 0, 7.4], 'O']]);
+  r53Put(lines, [['P', 'U', 'R', 2, [0, 0, 9.0], 'P'], ['OP1', 'U', 'R', 2, [0, 1.48, 9.0], 'O'], ['OP2', 'U', 'R', 2, [1.28, -0.74, 9.0], 'O'], ["O5'", 'U', 'R', 2, [0, 0, 10.6], 'O'], ["C5'", 'U', 'R', 2, [0, 0, 12.0], 'C'], ["C4'", 'U', 'R', 2, [0, 0, 13.5], 'C'], ["C3'", 'U', 'R', 2, [0, 0, 15.0], 'C'], ["O3'", 'U', 'R', 2, [0, 0, 16.4], 'O']]);
+  /* K: a Lys NZ 3.0 Å out from OP3; D: an Asp OD1 2.8 Å out from the 3′ O3′; every angle open. */
+  r53Put(lines, [['CD', 'LYS', 'K', 1, [-6.4, -3.7, 0], 'C'], ['CE', 'LYS', 'K', 1, [-5.14, -2.97, 0], 'C'], ['NZ', 'LYS', 'K', 1, [-3.88, -2.24, 0], 'N']]);
+  r53Put(lines, [['CB', 'ASP', 'D', 1, [-1.0, 0, 21.3], 'C'], ['CG', 'ASP', 'D', 1, [0, 0, 20.45], 'C'], ['OD1', 'ASP', 'D', 1, [0, 0, 19.2], 'O'], ['OD2', 'ASP', 'D', 1, [1.1, 0, 21.0], 'O']]);
+  const fresh = await freshViewer([r53Pdb('r53_rna_ends.pdb', lines)]);
+  try {
+    const phosphate = await r53Polar(fresh, 0, 'R', 'K'); const hydroxyl = await r53Polar(fresh, 0, 'R', 'D');
+    if (hydroxyl.hbonds !== 1 || !/O3'/.test(hydroxyl.rows[0])) throw new Error('the 3′ hydroxyl and the Asp: ' + JSON.stringify(hydroxyl.rows));
+    if (phosphate.salts !== 1 || phosphate.hbonds || !/OP3/.test(phosphate.rows[0])) throw new Error('OP3 and the Lys: ' + JSON.stringify(phosphate.rows));
+    console.log('       ' + hydroxyl.rows.concat(phosphate.rows).join(' · '));
+  } finally { await fresh.close(); }
+});
+
+await step('[r53 W4] "More than 40" counts the lines a press adds: 5 new beside 40 already drawn keep their values; 45 at once do not', async () => {
+  const lines = [];
+  for (let index = 1; index <= 45; index += 1) {
+    const shift = [index * 12, 0, 0];
+    r53Put(lines, [['CD', 'LYS', 'A', index, [-2.5, 1.2, 0], 'C'], ['CE', 'LYS', 'A', index, [-1.5, 0, 0], 'C'], ['NZ', 'LYS', 'A', index, [0, 0, 0], 'N']], shift);
+    r53Put(lines, [['CB', 'ASP', 'B', index, [5.5, 1.2, 0], 'C'], ['CG', 'ASP', 'B', index, [4.2, 0.4, 0], 'C'], ['OD1', 'ASP', 'B', index, [3.0, 0, 0], 'O'], ['OD2', 'ASP', 'B', index, [4.3, -0.9, 0], 'O']], shift);
+  }
+  const fresh = await freshViewer([r53Pdb('r53_many_bridges.pdb', lines)]);
+  try {
+    await p53Analyse(fresh);
+    if ((await p53Row(fresh, 'A–B')).cells[6] !== '45') throw new Error('setup: ' + JSON.stringify((await p53Row(fresh, 'A–B')).cells));
+    await fresh.evaluate(() => {
+      const d = window.__viewerDebug; const id = d.entries()[0].id;
+      for (let index = 1; index <= 40; index += 1) d.measurementRecords().push({ id: 9200 + index, type: 'distance', interaction: 'salt', color: '#dc2626', dashed: true, points: [{ entryId: id, chain: 'A', resi: index, atom: 'NZ', index: null }, { entryId: id, chain: 'B', resi: index, atom: 'OD1', index: null }] });
+    });
+    await p53Press(fresh, 'Show interactions', 'A–B'); await fresh.waitForTimeout(600);
+    const said = await freshStatus(fresh);
+    const added = (await p53Records(fresh)).filter(record => record.id < 9200 || record.id > 9240);
+    if (added.length !== 5 || added.some(record => !record.showValue)) throw new Error('5 new beside 40 drawn: ' + added.length + ' added, values ' + JSON.stringify(added.map(record => record.showValue)) + ' · ' + said);
+    if (!/^5 salt bridges drawn between A and B · 40 already drawn · Separate labels if the values crowd · one undo step$/.test(said)) throw new Error('status: ' + said);
+    /* All 45 in one press: drawn without their values. */
+    await p53Press(fresh, 'Hide interactions', 'A–B'); await fresh.waitForTimeout(400);
+    await p53Press(fresh, 'Show interactions', 'A–B'); await fresh.waitForTimeout(600);
+    const all = (await p53Records(fresh)).filter(record => record.interaction);
+    if (all.length !== 45 || all.some(record => record.showValue)) throw new Error('45 at once: ' + all.length + ' records, ' + all.filter(record => record.showValue).length + ' with values');
+    console.log('       ' + said);
+  } finally { await fresh.close(); }
+});
+
+await step('[r53 W5] Entities linked through a shared sequence are one, however the links run: 1 {A}, 2 {B, C}, 3 {D} with B as A and D as C is α ×4', async () => {
+  const a = 'MKTAYIAKQRQISFVKSHFS';
+  const rows = (sequence, from = 1) => [...sequence].map((letter, index) => [from + index, letter]);
+  const lines = [];
+  e53Chain(lines, 'A', rows(a), 0); e53Chain(lines, 'B', rows(a), 12); e53Chain(lines, 'C', rows(a.slice(3), 4), 24); e53Chain(lines, 'D', rows(a.slice(3), 4), 36);
+  const table = 'loop_\n_entity_poly.entity_id\n_entity_poly.pdbx_strand_id\n_entity_poly.type\n1 A polypeptide(L)\n2 B,C polypeptide(L)\n3 D polypeptide(L)\n#\n';
+  const fresh = await freshViewer([{ name: 'r53_linked.cif', mimeType: 'chemical/x-mmcif', buffer: Buffer.from(j3Cif(j3Text(lines)) + table) }]);
+  try {
+    const summary = await e53Stoichiometry(fresh);
+    if (!/Stoichiometry: α ×4 \(A, B, C, D, 20 aa\) · Cα/.test(summary)) throw new Error(summary);
+    console.log('       ' + summary.split(' · Cα')[0]);
+  } finally { await fresh.close(); }
+});
+
+await step('[r53 W6] The mmCIF reader skips comment lines: a comment between loop_ and its tags, or among its rows, leaves the entity table whole', async () => {
+  const a = 'MKTAYIAKQRQISFVKSHFSRQLEERLGLI'; const c = 'GWDEPLNHRQISFVNTEYHGCDPWMNEGHT';
+  const rows = (sequence, from = 1) => [...sequence].map((letter, index) => [from + index, letter]);
+  const lines = [];
+  e53Chain(lines, 'A', rows(a), 0); e53Chain(lines, 'B', rows(a.slice(3, 28), 4), 12); e53Chain(lines, 'C', rows(c), 24); e53Chain(lines, 'D', rows(a).filter(([resi]) => resi !== 14 && resi !== 15), 36);
+  /* The table pairs A with C and B with D, against every sequence rule, so it is seen only if it is read. */
+  const tables = {
+    'comment after loop_': 'loop_\n# entities of this file\n_entity_poly.entity_id\n_entity_poly.pdbx_strand_id\n1 A,C\n2 B,D\n#\n',
+    'comment among the rows': 'loop_\n_entity_poly.entity_id\n_entity_poly.pdbx_strand_id\n1 A,C\n  # the second entity\n2 B,D\n#\n'
+  };
+  for (const [what, table] of Object.entries(tables)) {
+    const fresh = await freshViewer([{ name: 'r53_comments.cif', mimeType: 'chemical/x-mmcif', buffer: Buffer.from(j3Cif(j3Text(lines)) + table) }]);
+    try {
+      const summary = await e53Stoichiometry(fresh);
+      if (!/Stoichiometry: α ×2 \(A, C, 30 aa\) · β ×2 \(B, D, 28 aa\) · Cα/.test(summary)) throw new Error(what + ': ' + summary);
+      console.log('       ' + what + ': ' + summary.split(' · Cα')[0]);
+    } finally { await fresh.close(); }
+  }
+});
+
+await step('[r53 W7] Two hydrogen-bond entries in two colours are renamed one at a time in Figure labels', async () => {
+  const fresh = await freshViewer([experimentalFile('1brs.cif')]);
+  try {
+    const point = (chain, resi, atom) => ({ model: '1brs.cif', chain, resi, atom });
+    await c2Scene(fresh, { type: 'protein-viewer-scene', schemaVersion: 1, models: [{ name: '1brs.cif' }], settings: { colorMode: 'element', figureLabels: { 'element|Hydrogen bond': 'Blue H-bond' } },
+      measurements: [
+        { type: 'distance', interaction: 'hbond', color: '#0284c7', points: [point('A', 102, 'NE2'), point('D', 39, 'OD2')] },
+        { type: 'distance', interaction: 'hbond', color: '#16a34a', points: [point('A', 83, 'O'), point('D', 29, 'OH')] }
+      ] });
+    await fresh.waitForTimeout(1200);
+    const names = await fresh.evaluate(() => window.__viewerDebug.legendItems('figure').items.map(item => item[0] + ' ' + item[1]));
+    if (names.join() !== '#0284c7 Blue H-bond,#16a34a Hydrogen bond') throw new Error('renaming the blue entry renamed: ' + JSON.stringify(names));
+    await fresh.click('#gpv-legend-edit'); await fresh.waitForTimeout(400);
+    const keys = await fresh.evaluate(() => [...document.querySelectorAll('#gpv-labels-rows [data-gpv-label-key]')].map(input => input.dataset.gpvLabelKey));
+    if (keys.join() !== 'element|title,element|Hydrogen bond,element|Hydrogen bond|#16a34a') throw new Error('label keys: ' + JSON.stringify(keys));
+    console.log('       ' + names.join(' · ') + ' · keys ' + keys.slice(1).join(', '));
+  } finally { await fresh.close(); }
+});
+/* The main page to the front again after these fresh pages. */
+await page.bringToFront();
+/* batch-r53 end */
 await browser.close();
 server.close();
 

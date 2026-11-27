@@ -392,13 +392,17 @@ Definitions, as the viewer implements them (`src/js/29a-polar-interactions.js`) 
   OG1, Tyr OH (both), Asn OD1 (acceptor) ND2 (donor), Gln OE1 (acceptor) NE2 (donor), His ND1 and NE2
   (both), Trp NE1 (donor), Lys NZ (donor), Arg NE NH1 NH2 (donors), Asp OD1 OD2 and Glu OE1 OE2
   (acceptors); Cys SG and Met SD take no part. Standard nucleotides: a table for the bases, the ribose
-  O2′ (both), O3′/O5′/O4′ (acceptors), phosphate OP1/OP2 (acceptors). Water O: both. Any other residue
-  (ligand, modified residue): every N and O is both donor and acceptor, and the row is marked "by
-  element". The N-terminal N is a donor; it is also a cation for salt bridges.
+  O2′ (both), O3′/O5′/O4′ (acceptors — but a free end's hydroxyl, an O3′ with no next phosphate bonded
+  to it or the O5′ of a residue with no phosphate, is both), phosphate OP1/OP2/OP3 (acceptors). Water O:
+  both. Any other residue (ligand, modified residue): every N and O is both donor and acceptor, and the
+  row is marked "by element". The N-terminal N is a donor; it is also a cation for salt bridges.
 - **Salt bridge.** A cationic N (Lys NZ; Arg NE, NH1, NH2; the chain's N-terminal N; His ND1/NE2 only
   with **Count histidine as charged** on — default off) within 4.0 Å of an anionic O (Asp OD1/OD2; Glu
-  OE1/OE2; the chain's C-terminal O/OXT; nucleotide OP1/OP2). One salt bridge per residue pair, reported
-  at its shortest N–O distance, with those two atoms (Barlow & Thornton 1983 criterion).
+  OE1/OE2; the chain's C-terminal O/OXT; nucleotide OP1/OP2/OP3). One salt bridge per residue pair,
+  reported at its shortest N–O distance, with those two atoms (Barlow & Thornton 1983 criterion).
+- A **capped** chain end is not a charged terminus: an N-terminal N bonded to another residue (an
+  acetyl or formyl cap's C) is an ordinary backbone donor, and a C-terminal residue whose C is bonded to
+  another residue's N (an amide cap, NH2) has an ordinary carbonyl O.
 - A residue pair that is a salt bridge is reported once as a salt bridge, not also as hydrogen bonds
   between its charged atoms (an N–O pair whose N is cationic and O anionic); hydrogen bonds between
   *other* atoms of the same two residues are still listed. Hydrogen bonds are per atom pair; backbone
@@ -407,7 +411,7 @@ Definitions, as the viewer implements them (`src/js/29a-polar-interactions.js`) 
   peptide-bond tag is: two heavy atoms of one residue within 1.9 Å, or the backbone link to another
   residue of the same chain (C–N peptide, O3′–P phosphodiester) within 1.9 Å. Hydrogens are ignored,
   water is left out, and an atom with alternate locations is read at its first. The chain's termini
-  are its first and last amino-acid residues in the file.
+  are its first and last amino-acid residues in the file, unless capped.
 
 **Against a second implementation.** `tests/reference.py` writes `interactions` for the contact-map
 chain pair of model 0 (its own role tables, antecedents by the 1.9 Å rule within a residue plus the
@@ -421,6 +425,12 @@ and every distance within 0.005 Å.
 | B — MS2 maturation protein–coat | A–B | 3 / 3 | 0 / 0 | 5.7 × 10⁻⁷ Å | ✓ |
 | C — phiX174 F–G | A–B | 4 / 4 | 0 / 0 | 7.3 × 10⁻⁷ Å | ✓ |
 | AF3 fixture `hbdimer` | A–B | 2 / 2 | 0 / 0 | 1.2 × 10⁻⁶ Å | ✓ |
+
+The review of 2.53.0 added the capped-terminus rule and the nucleotide-end roles to both implementations;
+none of these runs or measured structures has a cap or a nucleic acid at an interface, and every number
+above is unchanged (re-run: the three runs 57, 61 and 61 comparisons within tolerance; 1BRS's 670
+interactions over all 21 chain pairs identical before and after). The new rules are checked on
+hand-made models in the suite (`[r53 LB1]`, `[r53 W3]`), where `reference.py` gives the same pairs.
 
 Beyond the pairs the validator compares, the two implementations were run against each other in pure
 node and Python on model 0 of each run and on the measured structures, chain pairs and single chains

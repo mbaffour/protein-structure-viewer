@@ -39,8 +39,10 @@
      follows, so C1' stays one value) or a text field: a line starting with ';' opens it and the next
      line starting with ';' closes it, the lines between joined with newlines. A text field that never
      closes gives null, so nothing is guessed. Returns { loop, columns, count, values, textFields } or null when
-     the category is not in the file. The data of a loop end at the next tag, loop_, data_, save_ or
-     '#' line, as the PDB's own files separate categories with '#'. */
+     the category is not in the file. The data of a loop end at the next tag, loop_, data_ or save_. A
+     line starting with '#' is a comment wherever it stands — the PDB's own files put one between
+     categories, and a hand-edited file may put one between loop_ and its tags or among a loop's rows —
+     and is skipped: read as the end of the table, it cut the rows after it off. */
   function mmcifCategory(text, category, items = null) {
     if (typeof text !== 'string') return null;
     const name = String(category).toLowerCase();
@@ -54,12 +56,14 @@
       const line = text.slice(at, end); at = end + 1;
       return line.endsWith('\r') ? line.slice(0, -1) : line;
     };
-    /* A loop_ header is the line before the first tag (blank lines aside). */
+    /* A loop_ header is the line before the first tag (blank and comment lines aside). */
+    const comment = line => line.trim().startsWith('#');
     let back = found.index - 1; let previous = '';
     while (back > 0) {
       const start = text.lastIndexOf('\n', back - 1) + 1;
       previous = text.slice(start, back).trim();
-      if (previous) break;
+      if (previous && !comment(previous)) break;
+      previous = '';
       back = start - 1;
     }
     const loop = /^loop_$/i.test(previous);
@@ -80,6 +84,7 @@
       let line;
       while (at < text.length) {
         const mark = at; line = readLine();
+        if (comment(line)) continue;
         if (!line.trim().toLowerCase().startsWith(prefix)) { at = mark; break; }
         columns.push(line.trim().split(/\s/)[0].slice(prefix.length).toLowerCase());
       }
@@ -89,7 +94,8 @@
       let cell = 0;
       const take = value => { const item = wanted.get(cell % columns.length); if (item !== undefined) values[item][Math.floor(cell / columns.length)] = value; cell += 1; };
       while ((line = readLine()) !== null) {
-        if (/^(_|loop_|data_|save_|#)/i.test(line.trim())) break;
+        if (comment(line)) continue;
+        if (/^(_|loop_|data_|save_)/i.test(line.trim())) break;
         if (line.startsWith(';')) {
           const field = textField(line); if (!field) return null;
           textFields = true; take(field.value); tokens(field.rest).forEach(item => take(item.value));
@@ -107,7 +113,8 @@
         textFields = true;
         if (item !== null) { row[item] = field.value; item = null; }
         line = field.rest;
-      } else if (/^(loop_|data_|save_|#)/i.test(line.trim())) break;
+      } else if (comment(line)) continue;
+      else if (/^(loop_|data_|save_)/i.test(line.trim())) break;
       for (const part of tokens(line)) {
         if (part.bare && part.value.startsWith('_')) {
           if (!part.value.toLowerCase().startsWith(prefix)) { done = true; break; }

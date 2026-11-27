@@ -70,11 +70,19 @@
     const sets = [];
     if (fromFile) {
       const byId = new Map();
-      chains.forEach(item => { const id = fileEntities.get(item.chain); if (!byId.has(id)) { byId.set(id, []); sets.push(byId.get(id)); } byId.get(id).push(item); });
-      /* One group for entities whose copies read the same sequence, as sequence grouping gives. */
-      for (let i = 0; i < sets.length; i += 1) for (let j = sets.length - 1; j > i; j -= 1) {
-        if (sets[j].some(b => sets[i].some(a => a.unit === b.unit && a.sequence === b.sequence))) { sets[i].push(...sets[j]); sets.splice(j, 1); }
+      const tables = [];
+      chains.forEach(item => { const id = fileEntities.get(item.chain); if (!byId.has(id)) { byId.set(id, []); tables.push(byId.get(id)); } byId.get(id).push(item); });
+      /* One group for entities whose copies read the same sequence, as sequence grouping gives — and
+         through any chain of such links (union–find): entity 1 {A}, 2 {B, C} and 3 {D} with B reading as
+         A and D as C are one group, though D reads nothing like A. A single pass compared each entity
+         only with the group as it stood and left D apart. */
+      const parent = tables.map((_, index) => index);
+      const find = index => { while (parent[index] !== index) { parent[index] = parent[parent[index]]; index = parent[index]; } return index; };
+      for (let i = 0; i < tables.length; i += 1) for (let j = i + 1; j < tables.length; j += 1) {
+        if (tables[j].some(b => tables[i].some(a => a.unit === b.unit && a.sequence === b.sequence))) parent[find(j)] = find(i);
       }
+      const merged = new Map();
+      tables.forEach((set, index) => { const top = find(index); if (!merged.has(top)) { merged.set(top, []); sets.push(merged.get(top)); } merged.get(top).push(...set); });
     } else {
       [...chains].sort((a, b) => b.sequence.length - a.sequence.length || a.order - b.order).forEach(item => {
         const home = sets.find(set => sameEntitySequence(set[0], item));
