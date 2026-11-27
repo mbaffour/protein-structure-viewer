@@ -389,7 +389,15 @@ const step = async (name, body) => {
 };
 const group = name => console.log('\n' + name);
 
+/* Every action first waits for the page to answer: a page still restoring the view after an export
+   (seconds, on a slow renderer) is busy, not missing the control, and the six seconds of ACTION_MS
+   are for the control alone. */
 const driver = page => {
+  const actions = driverActions(page);
+  const idle = () => page.evaluate(() => 0);
+  return Object.fromEntries(Object.entries(actions).map(([name, action]) => [name, typeof action === 'function' ? async (...args) => { await idle(); return action(...args); } : action]));
+};
+const driverActions = page => {
   const button = name => page.locator('#generic-protein-viewer button', { hasText: new RegExp('^\\s*' + name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '\\s*$') });
   return {
     page,
