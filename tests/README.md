@@ -22,7 +22,10 @@ a substituted library.
 
 Set `PSV_BROWSER=firefox` or `PSV_BROWSER=webkit` to run the same suite in another engine (Playwright's
 WebKit is the closest headless stand-in for Safari; install them once with `npx playwright install
-firefox webkit`). Set `PSV_HEADED=1` to watch the run in a visible browser. Set `PSV_CHROMIUM` to an existing
+firefox webkit`). Set `PSV_HEADED=1` to watch the run in a visible browser. Set `PSV_ONLY='<regexp>'` to run
+only the steps whose name matches (`PSV_ONLY='under a GPU cap' node run.mjs`): the others are skipped and
+counted, so it suits a step that opens its own page or a run of steps the pattern names together — a
+quick check while writing a step, never a gate. Set `PSV_CHROMIUM` to an existing
 Chromium binary to skip Playwright's own download — useful in CI images that already ship one:
 
 ```
@@ -341,6 +344,18 @@ The two emphasised checks are regressions against bugs that shipped in 2.0.
   captions use the figure's letters; a refused clipboard fills its own box, not the paste box; a fetch
   keeps an overlay, and → from an overlay says it shows one model and saves the mode.
 
+- 2.53.0 fixes (builder B, on pages of their own, helpers `e53`): 1BRS reads α ×3 (A, B, C) · β ×3 (D, E, F) in
+  the Stoichiometry line, the entity colours, the legend and the legend key text, by its `_entity_poly` table;
+  2HHB α₂β₂ and 5CHA's two three-chain molecules likewise; without an entity table, a ragged-ended copy and a copy
+  missing a loop join their full-length chain while a chain sharing a six-residue motif does not (PDB and mmCIF),
+  an `_entity_poly` table that contradicts the sequence wins, and one that gives each identical copy its own
+  entity (as the AlphaFold 3 server writes it) still reads α ×3 · β ×1;
+  the contact map's axis prints 100, 100A and 100B as such, never "100" three times; a ligand site's mean pLDDT is
+  its residues' Cα values when every other atom differs; a 50 Å scale bar too wide for the figure is drawn at a
+  shorter offered length and said so, and left out (and said so) only when none fits; the busy badge names the
+  fetch again once an import started during it has finished; an uncoloured label's leader is `#94a3b8` in an
+  exported PNG in the dark theme, as in the SVG, and the theme's colour on screen.
+
 ## Recovering from a failed step
 
 Every stateful step captures what it changes and puts it back in its own `finally` — loading a
@@ -454,7 +469,9 @@ viewer's atom-pair distances and residue contacts against numbers measured by ot
 `fixtures/experimental/` (sources in its README): every hydrogen bond and salt bridge PDBePISA lists across the
 interfaces of 2HHB and 1BRS — the distance between the two named atoms within 10⁻³ Å of PISA's, and the bonded
 residue in the first residue's contacts list at 4.5 Å no farther than the bond — and the published 5CHA
-catalytic-triad distances to 0.01 Å, each the closest atom pair of its two residues. It prints a table and exits
+catalytic-triad distances to 0.01 Å, each the closest atom pair of its two residues — and, since 2.53.0, the polymer
+composition each paper gives (2HHB α₂β₂, 1BRS three barnase–barstar pairs, 5CHA two three-chain molecules) against
+the viewer's Stoichiometry line, chain by chain. It prints a table and exits
 non-zero on any failure; CI runs it in the Chromium leg after `npm test`.
 
 ## Notes

@@ -70,22 +70,16 @@
     return { entry, source, note };
   }
 
-  /* An export renders one state of the page. Every export path sets the busy badge to "Rendering …"
-     (or "Embedding …" for the report, "Saving session…") from its first line to its last, and a model
-     added between its awaits used to reach its legend but not its image. While that badge is up, an
-     import (31 loadFiles) or a fetch waits for it to come down, and says so. */
-  const exportBusyLabel = /^(Rendering|Embedding|Saving session)/;
-  /* The badge label alone was not enough: one label for the whole page, and any job started during an
-     export (Align visible, Segment PAE) wrote its own over it and never put it back, so the export
-     stopped counting as one and a dropped file loaded halfway through it. An export that began with
-     beginExport is counted here instead, whatever the badge says; the label test stays for the paths
-     that do not go through beginExport yet. */
+  /* An export renders one state of the page, and a model added between its awaits used to reach its
+     legend but not its image. While an export runs, an import (31 loadFiles) or a fetch waits for it
+     to finish, and says so. The busy badge's label was once the test ("Rendering …"); one label for
+     the whole page, which any job started during an export wrote over. Every export now goes through
+     beginExport (batch M: views ZIP 13, Copy image 24 and Save session 12 were the last), so the count
+     is the test, whatever the badge says. */
   let exportsInFlight = 0;
   const exportWaiters = new Set();
   function exportRendering() {
-    if (exportsInFlight > 0) return true;
-    const badge = root.querySelector('#gpv-busy');
-    return Boolean(badge && !badge.hidden && exportBusyLabel.test(root.querySelector('#gpv-busy-label').textContent));
+    return exportsInFlight > 0;
   }
 
   /* Every export renders on the one shared export viewer (31) and most of them move the page through

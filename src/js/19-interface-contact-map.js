@@ -246,9 +246,26 @@
     if (!figure) return;
     const font = figureFont(); const size = 11 * scale;
     context.fillStyle = palette.ink; context.font = size + 'px ' + font; context.textAlign = 'center'; context.textBaseline = 'top';
-    rowB.residues.forEach((atom, j) => { if (atom.resi % step === 0) context.fillText(String(atom.resi), margin.left + j * cell + cell / 2, margin.top + n * cell + 6 * scale); });
+    /* A tick names its residue as the strip does — 100, 100A, 100B, not "100" three times — and one
+       whose text would run into the tick before it is left out, so 100A and 100B, one cell apart,
+       print only when the cells are wide enough to hold them. What was printed is kept for the suite. */
+    const ticks = { columns: [], rows: [] };
+    let lastRight = -Infinity;
+    rowB.residues.forEach((atom, j) => {
+      if (atom.resi % step !== 0) return;
+      const text = residueNumber(atom); const x = margin.left + j * cell + cell / 2; const half = context.measureText(text).width / 2;
+      if (x - half < lastRight + 2 * scale) return;
+      context.fillText(text, x, margin.top + n * cell + 6 * scale); lastRight = x + half; ticks.columns.push(text);
+    });
     context.textAlign = 'right'; context.textBaseline = 'middle';
-    rowA.residues.forEach((atom, i) => { if (atom.resi % step === 0) context.fillText(String(atom.resi), margin.left - 6 * scale, margin.top + i * cell + cell / 2); });
+    let lastBottom = -Infinity;
+    rowA.residues.forEach((atom, i) => {
+      if (atom.resi % step !== 0) return;
+      const text = residueNumber(atom); const y = margin.top + i * cell + cell / 2;
+      if (y - size / 2 < lastBottom + scale) return;
+      context.fillText(text, margin.left - 6 * scale, y); lastBottom = y + size / 2; ticks.rows.push(text);
+    });
+    contactResult.lastTicks = ticks;
     const axisTitle = axis => (axis.all ? 'Residue · chains ' + axis.blocks.map(block => block.chain || '—').join(' | ') : 'Chain ' + (axis.chain || '—') + ' residue');
     context.font = '600 ' + (12 * scale) + 'px ' + font; context.textAlign = 'center'; context.textBaseline = 'alphabetic';
     context.fillText(truncateToWidth(context, axisTitle(contactResult.axisB), Math.max(60, m * cell)), margin.left + m * cell / 2, canvas.height - 14 * scale);

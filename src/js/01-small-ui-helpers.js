@@ -19,14 +19,22 @@
     toast(message, kind);
   }
 
+  /* The busy badge, for every job running at once: each job's label is kept until that job ends, and
+     the badge names the latest job still running — so an Align started during an export, ending first,
+     puts "Rendering …" back rather than leaving "Aligning…" up for the rest of the export. The function
+     returned ends this job (once, however often it is called). */
+  const busyLabels = [];
   function setBusy(label) {
-    busyDepth += 1;
+    const job = { label };
+    busyLabels.push(job); busyDepth = busyLabels.length;
     const badge = root.querySelector('#gpv-busy');
     root.querySelector('#gpv-busy-label').textContent = label;
     badge.hidden = false;
     return () => {
-      busyDepth = Math.max(0, busyDepth - 1);
+      const at = busyLabels.indexOf(job); if (at < 0) return;
+      busyLabels.splice(at, 1); busyDepth = busyLabels.length;
       if (busyDepth === 0) badge.hidden = true;
+      else root.querySelector('#gpv-busy-label').textContent = busyLabels[busyLabels.length - 1].label;
     };
   }
 
@@ -78,15 +86,21 @@
      per-residue lists (residueRows) stand a nucleotide by its P, and AlphaFold 3 and Boltz write a
      per-atom pLDDT that differs along a nucleotide, so Composition, the FASTA header and the profile
      gave one chain a mean that contradicted the header and the methods sentence ("C1′ for
-     nucleotides"). The C1′ atoms are indexed once per set of atoms. */
+     nucleotides"). Any atom of the residue may be given — a ligand site meets a residue at whichever
+     heavy atom is nearest the ligand — and the residue's Cα (a polymer Cα, never a calcium ion's) or
+     C1′ is read; a residue with neither keeps the atom given. Indexed once per set of atoms. */
   function residueConfidence(entry, atom) {
-    if (atom.atom !== 'CA') {
+    if (atom.atom !== 'CA' || atom.hetflag) {
       if (!entry.confidenceAtomCache || entry.confidenceAtomCache.atoms !== entry.atoms) {
         const map = new Map();
-        entry.atoms.forEach(item => { if (item.atom === "C1'" && !item.hetflag) map.set(residueCodeTag(item), item); });
+        entry.atoms.forEach(item => {
+          if (item.hetflag || (item.atom !== 'CA' && item.atom !== "C1'")) return;
+          const tag = residueCodeTag(item);
+          if (item.atom === 'CA' || !map.has(tag)) map.set(tag, item);
+        });
         entry.confidenceAtomCache = { atoms: entry.atoms, map };
       }
-      atom = entry.confidenceAtomCache.map.get(residueCodeTag(atom)) || atom;
+      if (!atom.hetflag) atom = entry.confidenceAtomCache.map.get(residueCodeTag(atom)) || atom;
     }
     return Number(atom.b) || 0;
   }

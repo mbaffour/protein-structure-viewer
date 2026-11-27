@@ -196,8 +196,7 @@ ligands and ions alone has no table: the line reads *No polymer chains (ligands 
 it is given no pLDDT (a file without a header is otherwise read as a prediction, as ColabFold and
 AlphaFold write none).
 
-Under the table, a line gives the **stoichiometry** (entities by identical sequence with their chains
-and lengths) and the **Cα extent** (the exact maximum Cα–Cα distance, or a lower bound marked ≥ above 6 000 residues) and **radius of gyration**, both in
+Under the table, a line gives the **stoichiometry** (entities with their chains and lengths) and the **Cα extent** (the exact maximum Cα–Cα distance, or a lower bound marked ≥ above 6 000 residues) and **radius of gyration**, both in
 nanometres, so a capsid diameter or a filament length is read off directly.
 
 **Download FASTA** writes the sequences of the displayed models, one record per chain. Headers carry
@@ -237,10 +236,29 @@ Notes on the colour schemes:
   model shown, the legend under the viewport says so (*No pLDDT in 5cha.cif (experimental) — drawn in
   the model colour*). That line is a note for you, not a key: it is not printed on exports, and the
   publication checklist does not ask for a legend for it.
-- **Per entity** gives every chain with the same sequence one colour, so a sixty-copy capsid shows
-  its two or three distinct proteins; the legend names each entity with a Greek letter and its copy
-  count, chains and length (α ×60 · A, B, … · 426 aa), abbreviating with `+N more` past twenty
-  entities. The composition table carries the same line.
+- **Per entity** gives every copy of one protein (or nucleic acid) one colour, so a sixty-copy capsid
+  shows its two or three distinct proteins; the legend names each entity with a Greek letter and its
+  copy count, chains and length (α ×60 · A, B, … · 426 aa), abbreviating with `+N more` past twenty
+  entities. The composition table carries the same line. What counts as one entity:
+  - **An mmCIF file that lists its polymer entities** (`_entity_poly`, as every PDB entry and the
+    AlphaFold DB, AlphaFold 3 server, Boltz, Chai-1 and AlphaFold 2 multimer mmCIF files do) is taken at
+    its word: chains named for one entity are one entity, however much of each copy was built — 1BRS is
+    barnase ×3 and barstar ×3 although its copies end at different residues. The table is used when it
+    names every polymer chain of the model (otherwise the rule below decides for all of them), and two
+    of its entities whose copies read exactly the same observed sequence are shown as one — the
+    AlphaFold 3 server gives every chain an entity of its own, so a homopentamer would otherwise read as
+    five entities. Ligands and water are never entities here.
+  - **Otherwise** — a PDB file (ColabFold's, for one), or an mmCIF of atom records alone — chains are
+    grouped by their observed sequence. Two chains of the same kind (protein, or nucleic acid) are one
+    entity when the shorter has at least 80 % of the longer's residues and either its sequence is an
+    unbroken stretch of the longer's (copies whose disordered ends were built to different lengths) or
+    every residue it has is the same residue at the same number in the longer (a copy with a
+    disordered loop left out). Two chains that merely share a short motif are never one entity.
+  - Entities are lettered α, β, γ … in order of first appearance, and an entity's length is its longest
+    observed copy.
+  - Limit: the comparison is of one-letter sequences, so two entities that differ only by a
+    modification the one-letter code hides — a phosphorylated and an unmodified copy (TPO reads as T),
+    a selenomethionine and a methionine form — read as one entity, from a file's table as by sequence.
 - **Per chain** colouring assigns a palette colour in sorted chain order, so chain A is the same
   colour in every model, every synchronized panel, the sequence strip, the exported legend, and the
   report — unless you choose otherwise: the colour picker on each row of the **Composition** table
@@ -1060,7 +1078,11 @@ a footer with the legend and your project title.
 
 **Scale bar.** Choose 10, 20, 50 or 100 Å. The bar is measured along the screen's horizontal axis
 at the model centre, shown bottom-right on screen, and drawn into PNG, TIFF and SVG exports with the
-legend. In perspective projection the bar is exact only at the model's depth; use orthographic
+legend. A bar that does not fit a panel of an export — wider than 90 % of it, or under 8 px — is drawn
+at the nearest offered length that does (the longest shorter one for a bar too wide), labelled with
+the length it is, and the status line says so (*scale bar shortened to 20 Å in panel B*), as does the
+publication checklist, since the panels of one figure then carry bars of different lengths. Only when
+no offered length fits is the bar left out, and the status line says that instead. In perspective projection the bar is exact only at the model's depth; use orthographic
 projection for figures that carry one.
 
 **Vector figures.** **Download figure SVG** and **Download comparison SVG** write the same figures with
@@ -1068,8 +1090,8 @@ the molecule as a raster image and everything drawn over it — residue labels, 
 callouts, markers, corner titles, panel letters, captions, legend — as SVG elements. A measurement's
 text, colour, solid or dashed line and the place you moved its text to (with its leader line) are written
 exactly as on screen, in the SVG as in the PNG, PDF and TIFF, and every label takes the PNG's colours
-— its box the figure's background, its text the ink that reads on it — whichever interface theme you
-work in; *Plain text* labels have no box in either file. Open the file in
+— its box the figure's background, its text the ink that reads on it, its leader line slate grey
+unless the label has a colour of its own — whichever interface theme you work in; *Plain text* labels have no box in either file. Open the file in
 Illustrator, Inkscape, or Affinity to restyle type, recolour arrows, or move a label without
 re-rendering.
 

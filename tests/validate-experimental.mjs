@@ -16,6 +16,9 @@
       ND1 distances published from that entry (fixtures/experimental/published-distances.json) must be
       the viewer's to within 0.01 Å (the published values have two decimals), and the contacts list of
       the first residue must give exactly that atom pair as the closest pair of the two residues.
+   3. The polymer composition each paper gives for its asymmetric unit — 2HHB α₂β₂, 1BRS three
+      barnase–barstar pairs, 5CHA two three-chain chymotrypsin molecules — must be the viewer's
+      Stoichiometry line: the same entities, the same chains in each.
 
    Offline: the viewer is served with the libraries in vendor/ exactly as run.mjs serves it (run
    `npm test`, or `node vendor.mjs`, once). Prints a table and exits non-zero on any failure or console
@@ -128,6 +131,28 @@ for (const item of published.entries) {
     const listed = row ? row.atomA + '–' + row.atomB + ' ' + row.closest.toFixed(3) + ' Å' : 'not listed';
     record(item.pdb, 'contacts of ' + pair.resn_1 + pair.resi_1 + ' · ' + pair.chain_1 + ': closest pair to ' + pair.resn_2 + pair.resi_2 + ' · ' + pair.chain_2, samePair ? 1 : 0, 1, samePair ? 0 : NaN, samePair, listed);
   });
+}
+
+/* ---------- 3. published assembly composition ---------- */
+/* The polymer composition of each asymmetric unit as its paper gives it (fixtures/experimental/README.md):
+   2HHB α₂β₂ (Fermi et al. 1984), 1BRS three barnase–barstar complexes (Buckle et al. 1994), 5CHA two
+   chymotrypsin molecules of three chains each (Blevins & Tulinsky 1985) — against the viewer's
+   Stoichiometry line, each structure on a page of its own (the line describes the active model). Copies
+   built to different ends (1BRS) must still count as one entity (FA-5, 2.53.0). */
+const composition = { '2HHB': [['A', 'C'], ['B', 'D']], '1BRS': [['A', 'B', 'C'], ['D', 'E', 'F']], '5CHA': [['A', 'E'], ['B', 'F'], ['C', 'G']] };
+for (const [pdb, wanted] of Object.entries(composition)) {
+  const single = await browser.newPage({ viewport: { width: 1280, height: 1000 } });
+  single.on('pageerror', error => errors.push(error.message));
+  try {
+    await single.goto(`http://127.0.0.1:${server.address().port}/index.html?debug=1`); await single.waitForTimeout(1500);
+    await single.setInputFiles('#gpv-files', join(fixtures, pdb.toLowerCase() + '.cif'));
+    await single.waitForFunction(() => window.__viewerDebug.entries().some(entry => entry.model), null, { timeout: 120000 });
+    await single.click('[data-gpv-tab="models"]'); await single.waitForTimeout(500);
+    const line = ((await single.locator('#gpv-assembly-summary').textContent()) || '').trim();
+    const seen = [...line.matchAll(/(\S+) ×(\d+) \(([^)]*?), \d+ (?:aa|nt|residues)\)/g)].map(match => match[3].split(', '));
+    const ok = JSON.stringify(seen) === JSON.stringify(wanted);
+    record(pdb, 'polymer entities (copies) in the Stoichiometry line', seen.length, wanted.length, ok ? 0 : NaN, ok, (ok ? '' : 'expected ' + wanted.map(chains => chains.length + ' × (' + chains.join(', ') + ')').join(' · ') + '; ') + line.split(' · Cα')[0]);
+  } finally { await single.close(); }
 }
 
 /* ---------- the table ---------- */

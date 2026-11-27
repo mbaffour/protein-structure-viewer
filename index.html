@@ -935,7 +935,7 @@ html>body{padding:0}</style>
     <div class="viz-controls gpv-presets"><span class="text-small text-muted">Presets</span><button class="btn" type="button" id="gpv-preset-thesis" data-tooltip="White background, orthographic cartoon, legend on exports, 1800 × 1200 at 2×">Thesis figure</button><button class="btn" type="button" id="gpv-preset-slide" data-tooltip="Dark background, perspective cartoon, colour by chain">Dark slide</button><button class="btn" type="button" id="gpv-preset-review" data-tooltip="pLDDT colouring with the legend, every residue shown, ligands as sticks">Confidence review</button></div>
     <div class="viz-controls">
       <label class="form-label">Representation<select class="form-select" id="gpv-style"><option value="cartoon">Cartoon</option><option value="stick">Sticks</option><option value="sphere">Spheres</option><option value="line">Lines</option></select></label>
-      <label class="form-label">Colour scheme<select class="form-select" id="gpv-color-mode"><option value="structure">Per structure</option><option value="chain">Per chain</option><option value="entity">Per entity (identical sequences)</option><option value="plddt">pLDDT confidence</option><option value="deviation">Cα deviation after alignment</option><option value="fromresidue" title="Colour every residue of the selected residue’s model by the distance of its closest heavy atom to that residue: ≤4, 4–6, 6–10, 10–20 and over 20 Å, the residue itself in the accent colour. Click a residue first; changing the selection recolours">Distance from selected residue</option><option value="agreement">Model agreement (Cα RMSF)</option><option value="domain">PAE domains</option><option value="annotated">Annotated domains</option><option value="data">Per-residue data</option><option value="charge">Residue charge</option><option value="hydrophobicity">Hydrophobicity (Kyte–Doolittle)</option><option value="restype">Residue type</option><option value="amino">Amino acid</option><option value="ss">Secondary structure</option><option value="spectrum">Sequence spectrum</option><option value="element">Element</option></select></label>
+      <label class="form-label">Colour scheme<select class="form-select" id="gpv-color-mode"><option value="structure">Per structure</option><option value="chain">Per chain</option><option value="entity">Per entity</option><option value="plddt">pLDDT confidence</option><option value="deviation">Cα deviation after alignment</option><option value="fromresidue" title="Colour every residue of the selected residue’s model by the distance of its closest heavy atom to that residue: ≤4, 4–6, 6–10, 10–20 and over 20 Å, the residue itself in the accent colour. Click a residue first; changing the selection recolours">Distance from selected residue</option><option value="agreement">Model agreement (Cα RMSF)</option><option value="domain">PAE domains</option><option value="annotated">Annotated domains</option><option value="data">Per-residue data</option><option value="charge">Residue charge</option><option value="hydrophobicity">Hydrophobicity (Kyte–Doolittle)</option><option value="restype">Residue type</option><option value="amino">Amino acid</option><option value="ss">Secondary structure</option><option value="spectrum">Sequence spectrum</option><option value="element">Element</option></select></label>
       <label class="form-label">Low confidence<select class="form-select" id="gpv-hide-below" data-tooltip="Hide residues whose pLDDT is below the threshold — in the viewer, every panel and every export"><option value="0">Show every residue</option><option value="50">Hide pLDDT below 50</option><option value="70">Hide pLDDT below 70</option></select></label>
       <label class="form-label">Ligands and ions<select class="form-select" id="gpv-hetero" data-tooltip="How hetero groups — ligands, cofactors, ions, glycans — are drawn; water is never shown"><option value="stick">Sticks and spheres</option><option value="sphere">Spheres</option><option value="hide">Hidden</option></select></label>
       <label class="form-check form-switch"><input class="form-check-input" id="gpv-safe-palette" type="checkbox"><span class="form-check-label">Colour-blind-safe palette (Okabe–Ito) for chains and domains</span></label>
@@ -1864,14 +1864,22 @@ html>body{padding:0}</style>
     toast(message, kind);
   }
 
+  /* The busy badge, for every job running at once: each job's label is kept until that job ends, and
+     the badge names the latest job still running — so an Align started during an export, ending first,
+     puts "Rendering …" back rather than leaving "Aligning…" up for the rest of the export. The function
+     returned ends this job (once, however often it is called). */
+  const busyLabels = [];
   function setBusy(label) {
-    busyDepth += 1;
+    const job = { label };
+    busyLabels.push(job); busyDepth = busyLabels.length;
     const badge = root.querySelector('#gpv-busy');
     root.querySelector('#gpv-busy-label').textContent = label;
     badge.hidden = false;
     return () => {
-      busyDepth = Math.max(0, busyDepth - 1);
+      const at = busyLabels.indexOf(job); if (at < 0) return;
+      busyLabels.splice(at, 1); busyDepth = busyLabels.length;
       if (busyDepth === 0) badge.hidden = true;
+      else root.querySelector('#gpv-busy-label').textContent = busyLabels[busyLabels.length - 1].label;
     };
   }
 
@@ -1923,15 +1931,21 @@ html>body{padding:0}</style>
      per-residue lists (residueRows) stand a nucleotide by its P, and AlphaFold 3 and Boltz write a
      per-atom pLDDT that differs along a nucleotide, so Composition, the FASTA header and the profile
      gave one chain a mean that contradicted the header and the methods sentence ("C1′ for
-     nucleotides"). The C1′ atoms are indexed once per set of atoms. */
+     nucleotides"). Any atom of the residue may be given — a ligand site meets a residue at whichever
+     heavy atom is nearest the ligand — and the residue's Cα (a polymer Cα, never a calcium ion's) or
+     C1′ is read; a residue with neither keeps the atom given. Indexed once per set of atoms. */
   function residueConfidence(entry, atom) {
-    if (atom.atom !== 'CA') {
+    if (atom.atom !== 'CA' || atom.hetflag) {
       if (!entry.confidenceAtomCache || entry.confidenceAtomCache.atoms !== entry.atoms) {
         const map = new Map();
-        entry.atoms.forEach(item => { if (item.atom === "C1'" && !item.hetflag) map.set(residueCodeTag(item), item); });
+        entry.atoms.forEach(item => {
+          if (item.hetflag || (item.atom !== 'CA' && item.atom !== "C1'")) return;
+          const tag = residueCodeTag(item);
+          if (item.atom === 'CA' || !map.has(tag)) map.set(tag, item);
+        });
         entry.confidenceAtomCache = { atoms: entry.atoms, map };
       }
-      atom = entry.confidenceAtomCache.map.get(residueCodeTag(atom)) || atom;
+      if (!atom.hetflag) atom = entry.confidenceAtomCache.map.get(residueCodeTag(atom)) || atom;
     }
     return Number(atom.b) || 0;
   }
@@ -3771,7 +3785,11 @@ html>body{padding:0}</style>
   function labelPosition(label, byId = entriesById()) { return shiftBy(labelAnchor(label, byId), label.offset); }
   const leaderMinimum = 0.75;
   function leaderLength(anchor, position) { return Math.hypot(position.x - anchor.x, position.y - anchor.y, position.z - anchor.z); }
-  function leaderColor() { return themeColor('--muted-foreground', '#94a3b8'); }
+  /* A label with no colour of its own draws its leader in the theme's muted foreground on screen, and
+     in the figure's slate grey in an export (the export viewer, and the SVG, 34) — the PNG of a figure
+     made in the dark theme drew it light grey on white, where the SVG of the same figure drew it slate. */
+  const figureLeaderColor = '#94a3b8';
+  function leaderColor(figure = false) { return figure ? figureLeaderColor : themeColor('--muted-foreground', figureLeaderColor); }
   /* `placement`, when a figure panel has resolved one (panelLabelPlacement), says where each label
      goes in that panel — its text prints several times larger against the structure than on screen,
      so the screen's placement is not the panel's. Without one the label sits at its own offset. */
@@ -3785,7 +3803,7 @@ html>body{padding:0}</style>
       const position = (placement && placement.get(label)) || shiftBy(anchor, label.offset);
       if (leaderLength(anchor, position) > leaderMinimum) {
         /* A cylinder in an export, as a measurement's line is (drawMeasurements). */
-        const leader = { start: anchor, end: position, color: label.color || leaderColor() };
+        const leader = { start: anchor, end: position, color: label.color || leaderColor(target === exportViewer) };
         const radius = exportStrokeRadius(target, midpoint(anchor, position), Math.max(1, scale));
         if (radius) target.addCylinder({ ...leader, radius, fromCap: 1, toCap: 1 }); else target.addLine({ ...leader, linewidth: Math.max(1, Math.round(scale)) });
       }
@@ -4230,39 +4248,106 @@ html>body{padding:0}</style>
     '1MA': 'A', OMG: 'G', '1MG': 'G', '2MG': 'G', M2G: 'G', '7MG': 'G'
   };
 
+  /* One category of an mmCIF file — `_atom_site`, `_entity_poly`, `_struct_asym` — as columns of
+     values, read from the file's text, whether it is written as a `loop_` table or as single
+     `_category.item value` rows. `items` names the columns wanted (all when omitted), so a large
+     atom_site loop keeps three columns, not twenty. Values keep the file's spelling ('?' and '.' are
+     left to the caller). A value may be quoted ('…' or "…", a quote ending it only where whitespace
+     follows, so C1' stays one value) or a text field: a line starting with ';' opens it and the next
+     line starting with ';' closes it, the lines between joined with newlines. A text field that never
+     closes gives null, so nothing is guessed. Returns { loop, columns, count, values, textFields } or null when
+     the category is not in the file. The data of a loop end at the next tag, loop_, data_, save_ or
+     '#' line, as the PDB's own files separate categories with '#'. */
+  function mmcifCategory(text, category, items = null) {
+    if (typeof text !== 'string') return null;
+    const name = String(category).toLowerCase();
+    const prefix = '_' + name + '.';
+    const found = new RegExp('^[ \\t]*_' + name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '\\.', 'im').exec(text);
+    if (!found) return null;
+    let at = found.index;
+    const readLine = () => {
+      if (at >= text.length) return null;
+      let end = text.indexOf('\n', at); if (end < 0) end = text.length;
+      const line = text.slice(at, end); at = end + 1;
+      return line.endsWith('\r') ? line.slice(0, -1) : line;
+    };
+    /* A loop_ header is the line before the first tag (blank lines aside). */
+    let back = found.index - 1; let previous = '';
+    while (back > 0) {
+      const start = text.lastIndexOf('\n', back - 1) + 1;
+      previous = text.slice(start, back).trim();
+      if (previous) break;
+      back = start - 1;
+    }
+    const loop = /^loop_$/i.test(previous);
+    const token = /'(.*?)'(?=\s|$)|"(.*?)"(?=\s|$)|(\S+)/g;
+    const tokens = line => { const out = []; token.lastIndex = 0; let match; while ((match = token.exec(line))) out.push({ value: match[1] ?? match[2] ?? match[3], bare: match[3] !== undefined }); return out; };
+    /* The rest of a text field whose first line is `line`; null if it never closes. The closing line
+       may carry more values after its ';'. */
+    const textField = line => {
+      const parts = [line.slice(1)];
+      for (let next = readLine(); next !== null; next = readLine()) {
+        if (next.startsWith(';')) return { value: parts.join('\n'), rest: next.slice(1) };
+        parts.push(next);
+      }
+      return null;
+    };
+    const columns = []; const values = {}; let textFields = false;
+    if (loop) {
+      let line;
+      while (at < text.length) {
+        const mark = at; line = readLine();
+        if (!line.trim().toLowerCase().startsWith(prefix)) { at = mark; break; }
+        columns.push(line.trim().split(/\s/)[0].slice(prefix.length).toLowerCase());
+      }
+      if (!columns.length) return null;
+      const wanted = new Map();
+      (items ? items.map(item => item.toLowerCase()) : columns).forEach(item => { const place = columns.indexOf(item); if (place >= 0) { wanted.set(place, item); values[item] = []; } });
+      let cell = 0;
+      const take = value => { const item = wanted.get(cell % columns.length); if (item !== undefined) values[item][Math.floor(cell / columns.length)] = value; cell += 1; };
+      while ((line = readLine()) !== null) {
+        if (/^(_|loop_|data_|save_|#)/i.test(line.trim())) break;
+        if (line.startsWith(';')) {
+          const field = textField(line); if (!field) return null;
+          textFields = true; take(field.value); tokens(field.rest).forEach(item => take(item.value));
+          continue;
+        }
+        tokens(line).forEach(item => take(item.value));
+      }
+      return { loop: true, columns, count: Math.ceil(cell / columns.length), values, textFields };
+    }
+    /* Single rows: `_category.item value`, the value on the same line or the next (a text field). */
+    const row = {}; let item = null; let done = false;
+    for (let line = readLine(); line !== null && !done; line = readLine()) {
+      if (line.startsWith(';')) {
+        const field = textField(line); if (!field) return null;
+        textFields = true;
+        if (item !== null) { row[item] = field.value; item = null; }
+        line = field.rest;
+      } else if (/^(loop_|data_|save_|#)/i.test(line.trim())) break;
+      for (const part of tokens(line)) {
+        if (part.bare && part.value.startsWith('_')) {
+          if (!part.value.toLowerCase().startsWith(prefix)) { done = true; break; }
+          item = part.value.slice(prefix.length).toLowerCase(); columns.push(item);
+        } else if (item !== null) { row[item] = part.value; item = null; }
+      }
+    }
+    (items ? items.map(entry => entry.toLowerCase()) : columns).forEach(key => { if (key in row) values[key] = [row[key]]; });
+    return { loop: false, columns, count: 1, values, textFields };
+  }
+
   /* The insertion code of every row of an mmCIF file's atom_site loop, by row — 3Dmol's mmCIF reader
      numbers its atoms' `serial` by that row (TER rows included, though it skips them) — with each
      row's residue number and atom name to check the pairing against. null when the file has no such
-     column or a loop this reader cannot follow (a ;-delimited text field), so nothing is guessed. */
+     column or no such loop, so nothing is guessed. */
   function mmcifInsertionCodes(text) {
     if (typeof text !== 'string' || !/^_atom_site\.pdbx_PDB_ins_code\b/im.test(text)) return null;
-    const lines = text.split(/\r?\n/);
-    let at = lines.findIndex((line, index) => /^_atom_site\./i.test(line.trim()) && index > 0 && /^loop_$/i.test(lines[index - 1].trim()));
-    if (at < 0) return null;
-    const columns = [];
-    for (; at < lines.length && /^_atom_site\./i.test(lines[at].trim()); at += 1) columns.push(lines[at].trim().split(/\s/)[0].toLowerCase());
-    const column = name => columns.indexOf('_atom_site.' + name);
-    const code = column('pdbx_pdb_ins_code'); const seq = column('auth_seq_id') >= 0 ? column('auth_seq_id') : column('label_seq_id');
-    const name = column('auth_atom_id') >= 0 ? column('auth_atom_id') : column('label_atom_id');
-    if (code < 0) return null;
-    const codes = []; const numbers = []; const names = [];
-    /* CIF quoting: a quote ends a value only where whitespace follows it, so C1' stays one value. */
-    const token = /'(.*?)'(?=\s|$)|"(.*?)"(?=\s|$)|(\S+)/g;
-    let cell = 0;
-    for (; at < lines.length; at += 1) {
-      const line = lines[at];
-      if (/^(_|loop_|data_|#)/i.test(line.trim())) break;
-      if (line.startsWith(';')) return null;
-      token.lastIndex = 0; let match;
-      while ((match = token.exec(line))) {
-        const value = match[1] ?? match[2] ?? match[3]; const row = Math.floor(cell / columns.length); const place = cell % columns.length;
-        if (place === code) codes[row] = value === '?' || value === '.' ? '' : value;
-        else if (place === seq) numbers[row] = value;
-        else if (place === name) names[row] = value;
-        cell += 1;
-      }
-    }
-    return { codes, numbers, names };
+    const table = mmcifCategory(text, 'atom_site', ['pdbx_pdb_ins_code', 'auth_seq_id', 'label_seq_id', 'auth_atom_id', 'label_atom_id']);
+    /* An atom_site row split by a text field is not a file 3Dmol numbers row by row: no codes. */
+    if (!table || !table.loop || table.textFields || !table.values.pdbx_pdb_ins_code) return null;
+    const { values } = table;
+    const codes = values.pdbx_pdb_ins_code.map(value => (value === '?' || value === '.' ? '' : value));
+    return { codes, numbers: values.auth_seq_id || values.label_seq_id || [], names: values.auth_atom_id || values.label_atom_id || [] };
   }
 
   /* Sets `icode` on the atoms of an mmCIF model from the table above. Every atom must line up with
@@ -7666,20 +7751,91 @@ html>body{padding:0}</style>
   const greekLetters = ['α', 'β', 'γ', 'δ', 'ε', 'ζ', 'η', 'θ', 'ι', 'κ', 'λ', 'μ'];
   function entityColorFor(index) { const source = safePaletteOn ? okabeIto : chainPalette; return source[index % source.length]; }
 
-  /* Chains with identical sequences form one entity; entities are numbered in order of
-     first appearance and named with Greek letters like a stoichiometry formula. */
+  /* Which polymer entity each chain belongs to, by the file's own word: an mmCIF file lists its
+     polymer entities in _entity_poly, with the author chain ids of every copy in pdbx_strand_id — the
+     ids 3Dmol names chains by, as it reads auth_asym_id first. A file whose atoms carry no
+     auth_asym_id is named by label_asym_id, which _struct_asym maps to entities instead.
+     _atom_site.label_entity_id alone is not trusted: a minimal mmCIF of atom_site alone (the suite's
+     synthetic AlphaFold 3 file, its j3Cif builder) can give every chain an entity of its own, identical
+     copies included, or every chain the same one.
+     Map of chain → entity id, or null when the file says nothing usable. Cached per text. */
+  function mmcifChainEntities(entry) {
+    if (!entry || entry.format !== 'cif' || typeof entry.text !== 'string') return null;
+    if (entry.chainEntities && entry.chainEntities.text === entry.text) return entry.chainEntities.map;
+    const text = entry.text; let map = null;
+    const poly = mmcifCategory(text, 'entity_poly', ['entity_id', 'pdbx_strand_id']);
+    const ids = poly && poly.values.entity_id;
+    const usable = value => value !== undefined && value !== '?' && value !== '.' && value !== '';
+    if (ids) {
+      map = new Map();
+      if (/^_atom_site\.auth_asym_id\b/im.test(text)) {
+        const strands = poly.values.pdbx_strand_id || [];
+        ids.forEach((id, row) => { if (usable(strands[row])) strands[row].split(',').map(chain => chain.trim()).filter(Boolean).forEach(chain => { if (!map.has(chain)) map.set(chain, id); }); });
+      } else {
+        const asym = mmcifCategory(text, 'struct_asym', ['id', 'entity_id']);
+        const polymer = new Set(ids);
+        if (asym && asym.values.id && asym.values.entity_id) asym.values.id.forEach((chain, row) => { const id = asym.values.entity_id[row]; if (polymer.has(id) && !map.has(chain)) map.set(chain, id); });
+      }
+      if (!map.size) map = null;
+    }
+    entry.chainEntities = { text, map };
+    return map;
+  }
+
+  /* Without the file's entities, chains are grouped by observed sequence. Two chains are one entity
+     when they are the same kind of polymer, the shorter has at least 80 % of the longer's observed
+     residues, and either its observed sequence is a contiguous stretch of the longer's — copies of
+     one protein whose disordered ends were built to different lengths — or every residue it has
+     is the same residue at the same number (and insertion code) in the longer, which also covers a
+     copy with a disordered loop left out (barstar D and E of 1BRS, without residues 64–65). Each
+     chain is compared with the longest copy of a group (chains are taken longest first), so a copy
+     missing its N-terminus and one missing its C-terminus both join the full-length copy; two chains
+     that merely share a short motif never meet the 80 %. */
+  function sameEntitySequence(longer, shorter) {
+    if (longer.unit !== shorter.unit || shorter.sequence.length < 0.8 * longer.sequence.length) return false;
+    if (longer.sequence.includes(shorter.sequence)) return true;
+    for (const [key, letter] of shorter.numbered) if (longer.numbered.get(key) !== letter) return false;
+    return true;
+  }
+
+  /* Polymer chains grouped into entities — by the file's own entity table where an mmCIF file has one
+     that names every chain, otherwise by observed sequence (above) — numbered in order of first
+     appearance and named with Greek letters like a stoichiometry formula. A group's length is its
+     longest observed copy, in the unit Composition and the entity legend print. Two of the file's
+     entities whose copies read the same sequence are one group, as they always were here. */
   function entityGroups(entry) {
     if (!entry || !entry.model) return [];
     if (entry.entityCache && entry.entityCache.atoms === entry.atoms) return entry.entityCache.groups;
-    const bySequence = new Map();
-    residueRows(entry).forEach(row => {
-      const sequence = row.residues.map(atom => residueLetter(atom.resn)).join('');
-      /* `unit` is how the group's length is counted — nt, aa or residues — so every place that prints
-         it (Composition, the entity legend) says the same thing about the same chain. */
-      if (!bySequence.has(sequence)) bySequence.set(sequence, { chains: [], length: row.residues.length, unit: residueCountUnit(row.residues) });
-      bySequence.get(sequence).chains.push(row.chain);
+    /* `unit` is how the group's length is counted — nt, aa or residues — so every place that prints
+       it (Composition, the entity legend) says the same thing about the same chain. */
+    const chains = residueRows(entry).map((row, order) => {
+      const letters = row.residues.map(atom => residueLetter(atom.resn));
+      const numbered = new Map(row.residues.map((atom, index) => [atom.resi + '|' + insertionCodeOf(atom), letters[index]]));
+      return { chain: row.chain, order, sequence: letters.join(''), numbered, length: row.residues.length, unit: residueCountUnit(row.residues) };
     });
-    const groups = [...bySequence.values()].map((group, index) => ({ ...group, index, label: greekLetters[index] || 'e' + (index + 1) }));
+    const fileEntities = mmcifChainEntities(entry);
+    const fromFile = Boolean(fileEntities) && chains.length > 0 && chains.every(item => fileEntities.has(item.chain));
+    const sets = [];
+    if (fromFile) {
+      const byId = new Map();
+      chains.forEach(item => { const id = fileEntities.get(item.chain); if (!byId.has(id)) { byId.set(id, []); sets.push(byId.get(id)); } byId.get(id).push(item); });
+      /* One group for entities whose copies read the same sequence, as sequence grouping gives. */
+      for (let i = 0; i < sets.length; i += 1) for (let j = sets.length - 1; j > i; j -= 1) {
+        if (sets[j].some(b => sets[i].some(a => a.unit === b.unit && a.sequence === b.sequence))) { sets[i].push(...sets[j]); sets.splice(j, 1); }
+      }
+    } else {
+      [...chains].sort((a, b) => b.sequence.length - a.sequence.length || a.order - b.order).forEach(item => {
+        const home = sets.find(set => sameEntitySequence(set[0], item));
+        if (home) home.push(item); else sets.push([item]);
+      });
+    }
+    const groups = sets
+      .map(set => set.sort((a, b) => a.order - b.order))
+      .sort((a, b) => a[0].order - b[0].order)
+      .map((set, index) => {
+        const longest = set.reduce((best, item) => (item.length > best.length ? item : best), set[0]);
+        return { chains: set.map(item => item.chain), length: longest.length, unit: longest.unit, index, label: greekLetters[index] || 'e' + (index + 1), source: fromFile ? 'file' : 'sequence' };
+      });
     const chainToGroup = new Map(); groups.forEach(group => group.chains.forEach(chain => chainToGroup.set(chain, group.index)));
     entry.entityCache = { atoms: entry.atoms, groups, chainToGroup };
     return groups;
@@ -8374,7 +8530,9 @@ html>body{padding:0}</style>
       /* Site residues by chain, number and insertion code: 57 and 57A are two residues of the site. */
       group.atoms.forEach(target => grid.near(target).forEach(i => { const atom = protein[i]; if (squaredDistance(atom, target) <= limit) { const tag = residueCodeTag(atom); if (!residues.has(tag)) residues.set(tag, atom); } }));
       const site = [...residues.values()].sort((a, b) => compareChains(a.chain || '', b.chain || '') || a.resi - b.resi || (insertionCodeOf(a) < insertionCodeOf(b) ? -1 : insertionCodeOf(a) > insertionCodeOf(b) ? 1 : 0));
-      const plddt = entry.scores.length && site.length ? mean(site.map(atom => Number(atom.b) || 0)) : null;
+      /* Each site residue's pLDDT is its Cα's (or a nucleotide's C1′), as everywhere else — not that of
+         whichever heavy atom the search met first, which differs once a predictor writes per-atom pLDDT. */
+      const plddt = entry.scores.length && site.length ? mean(site.map(atom => residueConfidence(entry, atom))) : null;
       let pae = null;
       if (tokenIndex && matrix) {
         const ligandTokens = tokenIndex.get(group.chain + '|' + group.resi) || [];
@@ -9245,9 +9403,26 @@ html>body{padding:0}</style>
     if (!figure) return;
     const font = figureFont(); const size = 11 * scale;
     context.fillStyle = palette.ink; context.font = size + 'px ' + font; context.textAlign = 'center'; context.textBaseline = 'top';
-    rowB.residues.forEach((atom, j) => { if (atom.resi % step === 0) context.fillText(String(atom.resi), margin.left + j * cell + cell / 2, margin.top + n * cell + 6 * scale); });
+    /* A tick names its residue as the strip does — 100, 100A, 100B, not "100" three times — and one
+       whose text would run into the tick before it is left out, so 100A and 100B, one cell apart,
+       print only when the cells are wide enough to hold them. What was printed is kept for the suite. */
+    const ticks = { columns: [], rows: [] };
+    let lastRight = -Infinity;
+    rowB.residues.forEach((atom, j) => {
+      if (atom.resi % step !== 0) return;
+      const text = residueNumber(atom); const x = margin.left + j * cell + cell / 2; const half = context.measureText(text).width / 2;
+      if (x - half < lastRight + 2 * scale) return;
+      context.fillText(text, x, margin.top + n * cell + 6 * scale); lastRight = x + half; ticks.columns.push(text);
+    });
     context.textAlign = 'right'; context.textBaseline = 'middle';
-    rowA.residues.forEach((atom, i) => { if (atom.resi % step === 0) context.fillText(String(atom.resi), margin.left - 6 * scale, margin.top + i * cell + cell / 2); });
+    let lastBottom = -Infinity;
+    rowA.residues.forEach((atom, i) => {
+      if (atom.resi % step !== 0) return;
+      const text = residueNumber(atom); const y = margin.top + i * cell + cell / 2;
+      if (y - size / 2 < lastBottom + scale) return;
+      context.fillText(text, margin.left - 6 * scale, y); lastBottom = y + size / 2; ticks.rows.push(text);
+    });
+    contactResult.lastTicks = ticks;
     const axisTitle = axis => (axis.all ? 'Residue · chains ' + axis.blocks.map(block => block.chain || '—').join(' | ') : 'Chain ' + (axis.chain || '—') + ' residue');
     context.font = '600 ' + (12 * scale) + 'px ' + font; context.textAlign = 'center'; context.textBaseline = 'alphabetic';
     context.fillText(truncateToWidth(context, axisTitle(contactResult.axisB), Math.max(60, m * cell)), margin.left + m * cell / 2, canvas.height - 14 * scale);
@@ -9460,8 +9635,13 @@ html>body{padding:0}</style>
     /* The fix goes through the control's change event, as every other fix here does: the projection
        is a saved preference, and setting the value alone left the next visit in perspective. */
     if (scaleBar && projection !== 'orthographic') push('warn', 'A scale bar is only exact in orthographic projection; in perspective its length depends on depth.', { label: 'Switch to orthographic', action: () => { root.querySelector('#gpv-projection').value = 'orthographic'; root.querySelector('#gpv-projection').dispatchEvent(new Event('change', { bubbles: true })); updateStatus('Projection set to orthographic · the scale bar is exact at every depth'); } });
-    /* A bar that did not fit a panel of the last export was left out of it (32): that is not a ✓. */
-    else if (scaleBar && lastScaleBarMiss && lastScaleBarMiss.length === scaleBar) push('warn', 'The last export left the ' + scaleBar + ' Å scale bar out of ' + (lastScaleBarMiss.small ? 'a panel where it was under 8 px — choose a longer bar.' : 'a panel it did not fit — choose a shorter bar, or zoom out.'));
+    /* A bar that did not fit a panel of the last export was drawn shorter (or longer) there, or left out
+       where no offered length fitted (32): neither is a ✓ for the length chosen. */
+    else if (scaleBar && lastScaleBarMiss && lastScaleBarMiss.length === scaleBar && lastScaleBarMiss.left) push('warn', 'The last export left the ' + scaleBar + ' Å scale bar out of ' + (lastScaleBarMiss.small ? 'a panel where even the longest bar was under 8 px — zoom in.' : 'a panel no offered length fitted — zoom out.'));
+    else if (scaleBar && lastScaleBarMiss && lastScaleBarMiss.length === scaleBar) {
+      const drawn = lastScaleBarMiss.small ? Math.max(...lastScaleBarMiss.drawn) : Math.min(...lastScaleBarMiss.drawn);
+      push('warn', 'The last export drew a ' + lastScaleBarMiss.drawn.filter((value, index, all) => all.indexOf(value) === index).join(' / ') + ' Å bar where the ' + scaleBar + ' Å one did not fit; choose ' + drawn + ' Å for one length in every panel.');
+    }
     else if (scaleBar) push('ok', scaleBar + ' Å scale bar in orthographic projection.');
     if (measurementRecords.length && projection !== 'orthographic') push('info', 'Distances and angles are drawn in perspective; the numbers are exact, but orthographic projection keeps their lengths comparable across a panel.');
     if (shown.length > 1 && !alignmentResults.length) push('warn', shown.length + ' models are shown without superposition. Run Align visible, or state in the legend that the coordinates are as predicted.');
@@ -12851,34 +13031,61 @@ html>body{padding:0}</style>
     return perAngstrom ? px / 2 / perAngstrom : null;
   }
 
-  /* A bar that does not fit its panel is left out of it — wider than 90 % of the panel, or under
-     8 px — and that used to happen in silence: a site figure's close-up printed without the bar its
-     overview had, the status said nothing and the checklist kept "✓ 50 Å scale bar". While an export
-     runs (beginExport, 40) each bar left out is noted with its panel, for the export's status line,
-     and the last export's misses stay for the checklist. */
+  /* A bar that does not fit its panel — wider than 90 % of it, or under 8 px — is drawn at the nearest
+     offered length that does: the longest shorter one for a bar too wide (50 Å in a close-up becomes
+     20 Å), the shortest longer one for a bar too small. Its label states the length drawn, and the
+     export says so ("scale bar shortened to 20 Å in panel B"), since the panels of one figure may then
+     carry bars of different lengths. Only when no offered length fits is the bar left out. Either used
+     to happen in silence — a site figure's close-up printed without the bar its overview had and the
+     checklist kept "✓ 50 Å scale bar" — so while an export runs (beginExport, 40) each panel whose bar
+     was changed or left out is noted, for the export's status line, and the last export's notes stay
+     for the checklist. */
   let scaleBarMisses = null;
   let lastScaleBarMiss = null;
-  function scaleBarSpec(target, plan, panel = '') {
-    const length = Number(root.querySelector('#gpv-scale-bar').value) || 0;
-    if (!length || !target) return null;
-    const perAngstrom = pixelsPerAngstrom(target, target === viewer ? null : sceneCentre(figureEntries())); if (!perAngstrom) return null;
-    const pixels = length * perAngstrom;
-    if (pixels < 8 || pixels > plan.width * 0.9) {
-      if (scaleBarMisses && !scaleBarMisses.some(miss => miss.panel === panel)) scaleBarMisses.push({ length, panel, small: pixels < 8 });
-      return null;
-    }
-    return { length, pixels, width: plan.width, height: plan.height };
+  function scaleBarLengths() {
+    return [...root.querySelector('#gpv-scale-bar').options].map(option => Number(option.value)).filter(value => value > 0).sort((a, b) => a - b);
   }
-  /* " · scale bar left out of panel B — 50 Å is wider than the panel; choose a shorter bar", once per
-     export; empty when every panel drew it. Read once, at the export's status line. */
+  function scaleBarSpec(target, plan, panel = '') {
+    const requested = Number(root.querySelector('#gpv-scale-bar').value) || 0;
+    if (!requested || !target) return null;
+    const perAngstrom = pixelsPerAngstrom(target, target === viewer ? null : sceneCentre(figureEntries())); if (!perAngstrom) return null;
+    const fits = length => length * perAngstrom >= 8 && length * perAngstrom <= plan.width * 0.9;
+    const small = requested * perAngstrom < 8;
+    let length = requested;
+    if (!fits(requested)) {
+      const offered = scaleBarLengths();
+      length = small ? offered.find(value => value > requested && fits(value)) : offered.filter(value => value < requested && fits(value)).pop();
+      if (scaleBarMisses && !scaleBarMisses.some(miss => miss.panel === panel)) scaleBarMisses.push({ length: requested, panel, small, drawn: length || null });
+      if (!length) return null;
+    }
+    return { length, requested, pixels: length * perAngstrom, width: plan.width, height: plan.height };
+  }
+  /* " · scale bar shortened to 20 Å in panel B — 50 Å is wider than the panel", or " · scale bar left
+     out of panel C — no offered length fits (10 Å is wider than the panel); zoom out", once per export;
+     empty when every panel drew the bar asked for. Read once, at the export's status line. */
   function scaleBarMissNote() {
     const misses = scaleBarMisses || [];
     scaleBarMisses = null;
-    lastScaleBarMiss = misses.length ? { length: misses[0].length, small: misses.every(miss => miss.small) } : null;
+    const changed = misses.filter(miss => miss.drawn); const left = misses.filter(miss => !miss.drawn);
+    lastScaleBarMiss = misses.length ? {
+      length: misses[0].length, small: misses.every(miss => miss.small),
+      left: left.length > 0, drawn: changed.map(miss => miss.drawn)
+    } : null;
     if (!misses.length) return '';
-    const panels = misses.map(miss => miss.panel).filter(Boolean);
-    const where = panels.length ? ' of panel' + (panels.length === 1 ? ' ' : 's ') + panels.join(', ') : '';
-    return ' · scale bar left out' + where + ' — ' + lastScaleBarMiss.length + ' Å is ' + (lastScaleBarMiss.small ? 'under 8 px there; choose a longer bar' : 'wider than the panel; choose a shorter bar');
+    const panelsOf = (list, word) => { const panels = list.map(miss => miss.panel).filter(Boolean); return panels.length ? ' ' + word + ' panel' + (panels.length === 1 ? ' ' : 's ') + panels.join(', ') : ''; };
+    const lengths = scaleBarLengths(); const requested = misses[0].length;
+    let note = '';
+    if (changed.length) {
+      const longer = changed.every(miss => miss.small);
+      const drawn = [...new Set(changed.map(miss => miss.drawn))];
+      note += ' · scale bar ' + (longer ? 'lengthened' : 'shortened') + ' to ' + drawn.map(length => length + ' Å' + panelsOf(changed.filter(miss => miss.drawn === length), 'in')).join(', ')
+        + ' — ' + requested + ' Å is ' + (longer ? 'under 8 px there' : 'wider than the panel');
+    }
+    if (left.length) {
+      const small = left.every(miss => miss.small);
+      note += ' · scale bar left out' + panelsOf(left, 'of') + ' — no offered length fits (' + (small ? Math.max(...lengths) + ' Å is under 8 px there); zoom in' : Math.min(...lengths) + ' Å is wider than the panel); zoom out');
+    }
+    return note;
   }
 
   function drawScaleBar(context, bar, scale, palette) {
@@ -13219,7 +13426,7 @@ html>body{padding:0}</style>
     labelRecords.filter(label => shownIds.has(label.entryId)).forEach(label => {
       const anchor = labelAnchor(label, byId);
       const position = (placement && placement.get(label)) || shiftBy(anchor, label.offset);
-      if (leaderLength(anchor, position) > leaderMinimum) parts.push(svgLine(project(anchor), project(position), label.color || '#94a3b8', Math.max(1, scale), false));
+      if (leaderLength(anchor, position) > leaderMinimum) parts.push(svgLine(project(anchor), project(position), label.color || leaderColor(true), Math.max(1, scale), false));
       parts.push(svgLabel(project(position), label.text, (label.size || 12) * scale, svgLabelLook(label.color)));
     });
     measurementRecords.forEach(record => {
@@ -15632,22 +15839,16 @@ applyBackground();
     return { entry, source, note };
   }
 
-  /* An export renders one state of the page. Every export path sets the busy badge to "Rendering …"
-     (or "Embedding …" for the report, "Saving session…") from its first line to its last, and a model
-     added between its awaits used to reach its legend but not its image. While that badge is up, an
-     import (31 loadFiles) or a fetch waits for it to come down, and says so. */
-  const exportBusyLabel = /^(Rendering|Embedding|Saving session)/;
-  /* The badge label alone was not enough: one label for the whole page, and any job started during an
-     export (Align visible, Segment PAE) wrote its own over it and never put it back, so the export
-     stopped counting as one and a dropped file loaded halfway through it. An export that began with
-     beginExport is counted here instead, whatever the badge says; the label test stays for the paths
-     that do not go through beginExport yet. */
+  /* An export renders one state of the page, and a model added between its awaits used to reach its
+     legend but not its image. While an export runs, an import (31 loadFiles) or a fetch waits for it
+     to finish, and says so. The busy badge's label was once the test ("Rendering …"); one label for
+     the whole page, which any job started during an export wrote over. Every export now goes through
+     beginExport (batch M: views ZIP 13, Copy image 24 and Save session 12 were the last), so the count
+     is the test, whatever the badge says. */
   let exportsInFlight = 0;
   const exportWaiters = new Set();
   function exportRendering() {
-    if (exportsInFlight > 0) return true;
-    const badge = root.querySelector('#gpv-busy');
-    return Boolean(badge && !badge.hidden && exportBusyLabel.test(root.querySelector('#gpv-busy-label').textContent));
+    return exportsInFlight > 0;
   }
 
   /* Every export renders on the one shared export viewer (31) and most of them move the page through
