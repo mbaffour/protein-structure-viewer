@@ -16,6 +16,9 @@
       ND1 distances published from that entry (fixtures/experimental/published-distances.json) must be
       the viewer's to within 0.01 Å (the published values have two decimals), and the contacts list of
       the first residue must give exactly that atom pair as the closest pair of the two residues.
+   3. The polymer composition each paper gives for its asymmetric unit — 2HHB α₂β₂, 1BRS three
+      barnase–barstar pairs, 5CHA two three-chain chymotrypsin molecules — must be the viewer's
+      Stoichiometry line: the same entities, the same chains in each.
 
    3. Hydrogen bonds and salt bridges (2.53.0) on the three barnase–barstar complexes of 1BRS (A–D, B–E,
       C–F) against PDBePISA's list for the same interfaces (the same pisa-1brs.json). PISA places
@@ -177,6 +180,28 @@ if (entryIds['1BRS']) {
     extra.forEach(name => polarDetails.push('viewer hydrogen bond PISA does not list: ' + chainA + '–' + chainB + ' ' + name));
     record('1BRS', chainA + '–' + chainB + ' hydrogen bonds (reported, not asserted): PISA found / in a salt bridge / over 3.5 Å / missed; viewer extra', found, bonds.filter(bond => bond.kind === 'h-bonds').length, NaN, true, found + ' / ' + folded + ' / ' + longer + ' / ' + missed.length + '; extra ' + extra.length + ' · viewer ' + seen.neutral.hbonds.length + ' hydrogen bonds, ' + seen.neutral.salt_bridges.length + ' salt bridges');
   }
+}
+
+/* ---------- 4. published assembly composition ---------- */
+/* The polymer composition of each asymmetric unit as its paper gives it (fixtures/experimental/README.md):
+   2HHB α₂β₂ (Fermi et al. 1984), 1BRS three barnase–barstar complexes (Buckle et al. 1994), 5CHA two
+   chymotrypsin molecules of three chains each (Blevins & Tulinsky 1985) — against the viewer's
+   Stoichiometry line, each structure on a page of its own (the line describes the active model). Copies
+   built to different ends (1BRS) must still count as one entity (FA-5, 2.53.0). */
+const composition = { '2HHB': [['A', 'C'], ['B', 'D']], '1BRS': [['A', 'B', 'C'], ['D', 'E', 'F']], '5CHA': [['A', 'E'], ['B', 'F'], ['C', 'G']] };
+for (const [pdb, wanted] of Object.entries(composition)) {
+  const single = await browser.newPage({ viewport: { width: 1280, height: 1000 } });
+  single.on('pageerror', error => errors.push(error.message));
+  try {
+    await single.goto(`http://127.0.0.1:${server.address().port}/index.html?debug=1`); await single.waitForTimeout(1500);
+    await single.setInputFiles('#gpv-files', join(fixtures, pdb.toLowerCase() + '.cif'));
+    await single.waitForFunction(() => window.__viewerDebug.entries().some(entry => entry.model), null, { timeout: 120000 });
+    await single.click('[data-gpv-tab="models"]'); await single.waitForTimeout(500);
+    const line = ((await single.locator('#gpv-assembly-summary').textContent()) || '').trim();
+    const seen = [...line.matchAll(/(\S+) ×(\d+) \(([^)]*?), \d+ (?:aa|nt|residues)\)/g)].map(match => match[3].split(', '));
+    const ok = JSON.stringify(seen) === JSON.stringify(wanted);
+    record(pdb, 'polymer entities (copies) in the Stoichiometry line', seen.length, wanted.length, ok ? 0 : NaN, ok, (ok ? '' : 'expected ' + wanted.map(chains => chains.length + ' × (' + chains.join(', ') + ')').join(' · ') + '; ') + line.split(' · Cα')[0]);
+  } finally { await single.close(); }
 }
 
 /* ---------- the table ---------- */

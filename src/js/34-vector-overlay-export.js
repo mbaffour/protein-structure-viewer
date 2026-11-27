@@ -103,7 +103,7 @@
     labelRecords.filter(label => shownIds.has(label.entryId)).forEach(label => {
       const anchor = labelAnchor(label, byId);
       const position = (placement && placement.get(label)) || shiftBy(anchor, label.offset);
-      if (leaderLength(anchor, position) > leaderMinimum) parts.push(svgLine(project(anchor), project(position), label.color || '#94a3b8', Math.max(1, scale), false));
+      if (leaderLength(anchor, position) > leaderMinimum) parts.push(svgLine(project(anchor), project(position), label.color || leaderColor(true), Math.max(1, scale), false));
       parts.push(svgLabel(project(position), label.text, (label.size || 12) * scale, svgLabelLook(label.color)));
     });
     measurementRecords.forEach(record => {

@@ -28,8 +28,13 @@
     /* The fix goes through the control's change event, as every other fix here does: the projection
        is a saved preference, and setting the value alone left the next visit in perspective. */
     if (scaleBar && projection !== 'orthographic') push('warn', 'A scale bar is only exact in orthographic projection; in perspective its length depends on depth.', { label: 'Switch to orthographic', action: () => { root.querySelector('#gpv-projection').value = 'orthographic'; root.querySelector('#gpv-projection').dispatchEvent(new Event('change', { bubbles: true })); updateStatus('Projection set to orthographic · the scale bar is exact at every depth'); } });
-    /* A bar that did not fit a panel of the last export was left out of it (32): that is not a ✓. */
-    else if (scaleBar && lastScaleBarMiss && lastScaleBarMiss.length === scaleBar) push('warn', 'The last export left the ' + scaleBar + ' Å scale bar out of ' + (lastScaleBarMiss.small ? 'a panel where it was under 8 px — choose a longer bar.' : 'a panel it did not fit — choose a shorter bar, or zoom out.'));
+    /* A bar that did not fit a panel of the last export was drawn shorter (or longer) there, or left out
+       where no offered length fitted (32): neither is a ✓ for the length chosen. */
+    else if (scaleBar && lastScaleBarMiss && lastScaleBarMiss.length === scaleBar && lastScaleBarMiss.left) push('warn', 'The last export left the ' + scaleBar + ' Å scale bar out of ' + (lastScaleBarMiss.small ? 'a panel where even the longest bar was under 8 px — zoom in.' : 'a panel no offered length fitted — zoom out.'));
+    else if (scaleBar && lastScaleBarMiss && lastScaleBarMiss.length === scaleBar) {
+      const drawn = lastScaleBarMiss.small ? Math.max(...lastScaleBarMiss.drawn) : Math.min(...lastScaleBarMiss.drawn);
+      push('warn', 'The last export drew a ' + lastScaleBarMiss.drawn.filter((value, index, all) => all.indexOf(value) === index).join(' / ') + ' Å bar where the ' + scaleBar + ' Å one did not fit; choose ' + drawn + ' Å for one length in every panel.');
+    }
     else if (scaleBar) push('ok', scaleBar + ' Å scale bar in orthographic projection.');
     if (measurementRecords.length && projection !== 'orthographic') push('info', 'Distances and angles are drawn in perspective; the numbers are exact, but orthographic projection keeps their lengths comparable across a panel.');
     if (shown.length > 1 && !alignmentResults.length) push('warn', shown.length + ' models are shown without superposition. Run Align visible, or state in the legend that the coordinates are as predicted.');

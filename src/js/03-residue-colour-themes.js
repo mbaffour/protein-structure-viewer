@@ -912,7 +912,11 @@
   function labelPosition(label, byId = entriesById()) { return shiftBy(labelAnchor(label, byId), label.offset); }
   const leaderMinimum = 0.75;
   function leaderLength(anchor, position) { return Math.hypot(position.x - anchor.x, position.y - anchor.y, position.z - anchor.z); }
-  function leaderColor() { return themeColor('--muted-foreground', '#94a3b8'); }
+  /* A label with no colour of its own draws its leader in the theme's muted foreground on screen, and
+     in the figure's slate grey in an export (the export viewer, and the SVG, 34) — the PNG of a figure
+     made in the dark theme drew it light grey on white, where the SVG of the same figure drew it slate. */
+  const figureLeaderColor = '#94a3b8';
+  function leaderColor(figure = false) { return figure ? figureLeaderColor : themeColor('--muted-foreground', figureLeaderColor); }
   /* `placement`, when a figure panel has resolved one (panelLabelPlacement), says where each label
      goes in that panel — its text prints several times larger against the structure than on screen,
      so the screen's placement is not the panel's. Without one the label sits at its own offset. */
@@ -926,7 +930,7 @@
       const position = (placement && placement.get(label)) || shiftBy(anchor, label.offset);
       if (leaderLength(anchor, position) > leaderMinimum) {
         /* A cylinder in an export, as a measurement's line is (drawMeasurements). */
-        const leader = { start: anchor, end: position, color: label.color || leaderColor() };
+        const leader = { start: anchor, end: position, color: label.color || leaderColor(target === exportViewer) };
         const radius = exportStrokeRadius(target, midpoint(anchor, position), Math.max(1, scale));
         if (radius) target.addCylinder({ ...leader, radius, fromCap: 1, toCap: 1 }); else target.addLine({ ...leader, linewidth: Math.max(1, Math.round(scale)) });
       }

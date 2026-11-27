@@ -8938,6 +8938,153 @@ await step('under Mean pLDDT order an archive model not yet viewed is labelled n
   } finally { await fresh.close(); }
 });
 /* batch-J end */
+/* e53-J begin */
+/* ---- 2.53.0, builder B: entities by the file's entity ids (FA-5), contact-map ticks (J3-1) and a
+   ligand site's pLDDT (J3-3). On pages of their own; helpers are prefixed e53. ---- */
+/* Residue names for a synthetic chain: one-letter sequence → three-letter names. */
+const e53Names = { A: 'ALA', R: 'ARG', N: 'ASN', D: 'ASP', C: 'CYS', Q: 'GLN', E: 'GLU', G: 'GLY', H: 'HIS', I: 'ILE', L: 'LEU', K: 'LYS', M: 'MET', F: 'PHE', P: 'PRO', S: 'SER', T: 'THR', W: 'TRP', Y: 'TYR', V: 'VAL' };
+/* A chain of the c2Pdb backbone geometry from [number, one-letter] rows, on its own line in y. */
+const e53Chain = (lines, chain, rows, y) => j3Backbone(lines, rows.map(([resi, letter]) => [resi, ' ', e53Names[letter]]), { chain, y });
+/* The Stoichiometry line of a fresh page's one model. */
+const e53Stoichiometry = async fresh => { await fresh.click('[data-gpv-tab="models"]'); await fresh.waitForTimeout(300); return freshText(fresh, '#gpv-assembly-summary'); };
+
+await step('entities follow the file\'s own entity table: 1BRS is barnase ×3 and barstar ×3, three chains to each colour, though its copies end at different residues (FA-5)', async () => {
+  /* FA-5. entityGroups grouped chains by observed sequence alone, so the copies of barnase built to
+     different ends (A and C from residue 3, B from 1) and of barstar with and without the 64–65 loop
+     read as five entities: α ×2 (A, C), β (B), γ (D), δ (E), ε (F) in Stoichiometry, the entity colours
+     and the legend. The file's _entity_poly names A, B, C as entity 1 and D, E, F as entity 2. */
+  const fresh = await freshViewer([experimentalFile('1brs.cif')]);
+  try {
+    await fresh.waitForFunction(() => window.__viewerDebug.entries().some(entry => entry.model), null, { timeout: 60000 });
+    const summary = await e53Stoichiometry(fresh);
+    if (!/Stoichiometry: α ×3 \(A, B, C, 110 aa\) · β ×3 \(D, E, F, 89 aa\) · Cα extent/.test(summary)) throw new Error('the stoichiometry: ' + summary);
+    await fresh.click('[data-gpv-tab="appearance"]'); await fresh.selectOption('#gpv-color-mode', 'entity'); await fresh.waitForTimeout(400);
+    const seen = await fresh.evaluate(() => {
+      const d = window.__viewerDebug; const entry = d.activeEntry(); const options = d.colorOptions(entry);
+      const byChain = {};
+      entry.atoms.filter(atom => atom.atom === 'CA' && !atom.hetflag).forEach(atom => { (byChain[atom.chain] ||= new Set()).add(String(options.colorfunc(atom))); });
+      const legend = d.legendItems('figure');
+      return { colours: Object.fromEntries(Object.entries(byChain).map(([chain, set]) => [chain, [...set]])), items: legend ? legend.items.length : 0, key: d.legendKeyText() };
+    });
+    const colourOf = chain => (seen.colours[chain] || []).join();
+    if (Object.values(seen.colours).some(list => list.length !== 1)) throw new Error('a chain in more than one colour: ' + JSON.stringify(seen.colours));
+    if (new Set(['A', 'B', 'C'].map(colourOf)).size !== 1 || new Set(['D', 'E', 'F'].map(colourOf)).size !== 1 || colourOf('A') === colourOf('D')) throw new Error('entity colours by chain: ' + JSON.stringify(seen.colours));
+    const legend = await freshText(fresh, '#gpv-plddt-legend');
+    if (!/α ×3/.test(legend) || !/β ×3/.test(legend) || /γ/.test(legend) || seen.items !== 2) throw new Error('the entity legend: ' + legend + ' · ' + seen.items + ' figure items');
+    if (!/α ×3/.test(seen.key) || !/β ×3/.test(seen.key) || /γ/.test(seen.key)) throw new Error('the legend key text: ' + seen.key);
+    console.log('       ' + summary.split(' · Cα')[0] + ' · ' + seen.key);
+  } finally { await fresh.close(); }
+});
+await step('2HHB is α₂β₂ and 5CHA two copies of a three-chain enzyme, by their entity tables (FA-5)', async () => {
+  for (const [file, wanted] of [['2hhb.cif', /Stoichiometry: α ×2 \(A, C, \d+ aa\) · β ×2 \(B, D, \d+ aa\) · Cα/], ['5cha.cif', /Stoichiometry: α ×2 \(A, E, \d+ aa\) · β ×2 \(B, F, \d+ aa\) · γ ×2 \(C, G, \d+ aa\) · Cα/]]) {
+    const fresh = await freshViewer([experimentalFile(file)]);
+    try {
+      await fresh.waitForFunction(() => window.__viewerDebug.entries().some(entry => entry.model), null, { timeout: 60000 });
+      const summary = await e53Stoichiometry(fresh);
+      if (!wanted.test(summary)) throw new Error(file + ': ' + summary);
+      console.log('       ' + file + ': ' + summary.split(' · Cα')[0]);
+    } finally { await fresh.close(); }
+  }
+});
+await step('without an entity table, copies with ragged ends or a missing loop are one entity and chains sharing a 6-residue motif are not, as PDB and as mmCIF (FA-5)', async () => {
+  /* The fallback rule: same kind of polymer, the shorter at least 80 % of the longer, and either a
+     contiguous stretch of it (B: residues 4–28 of A) or the same residue at every number it has (D: A
+     without 14–15). C shares A's residues 10–15 (six) and nothing else. Before 2.53.0 only identical
+     sequences grouped: four entities. j3Cif writes label_entity_id 1 for every chain, so the mmCIF
+     copy also shows that an atom_site entity id without _entity_poly is not taken as the grouping
+     (it would make all four chains one entity). */
+  const a = 'MKTAYIAKQRQISFVKSHFSRQLEERLGLI';
+  const c = 'GWDEPLNHRQISFVNTEYHGCDPWMNEGHT';
+  if (!c.includes(a.slice(9, 15)) || c.includes(a.slice(9, 16)) || c.includes(a.slice(8, 15))) throw new Error('setup: C shares more or less than six residues with A');
+  const rows = (sequence, from = 1) => [...sequence].map((letter, index) => [from + index, letter]);
+  const lines = [];
+  e53Chain(lines, 'A', rows(a), 0);
+  e53Chain(lines, 'B', rows(a.slice(3, 28), 4), 12);
+  e53Chain(lines, 'C', rows(c), 24);
+  e53Chain(lines, 'D', rows(a).filter(([resi]) => resi !== 14 && resi !== 15), 36);
+  for (const format of ['pdb', 'cif']) {
+    const fresh = await freshViewer([j3File('ragged', j3Text(lines), format)]);
+    try {
+      const summary = await e53Stoichiometry(fresh);
+      if (!/Stoichiometry: α ×3 \(A, B, D, 30 aa\) · β ×1 \(C, 30 aa\) · Cα/.test(summary)) throw new Error(format + ': ' + summary);
+      console.log('       ' + format + ': ' + summary.split(' · Cα')[0]);
+    } finally { await fresh.close(); }
+  }
+  /* The same atoms with an _entity_poly table that disagrees with every sequence rule — A with C, B with
+     D — and a ;-delimited sequence field before the strand ids, as the PDB writes them: the table wins,
+     so this fails if the table is not read at all. */
+  const table = 'loop_\n_entity_poly.entity_id\n_entity_poly.type\n_entity_poly.pdbx_seq_one_letter_code_can\n_entity_poly.pdbx_strand_id\n'
+    + "1 'polypeptide(L)'\n;" + a + '\n;\nA,C\n2 \'polypeptide(L)\'\n;' + c + '\n;\nB,D\n#\n';
+  const fresh = await freshViewer([{ name: 'ragged_table.cif', mimeType: 'chemical/x-mmcif', buffer: Buffer.from(j3Cif(j3Text(lines)) + table) }]);
+  try {
+    const summary = await e53Stoichiometry(fresh);
+    if (!/Stoichiometry: α ×2 \(A, C, 30 aa\) · β ×2 \(B, D, 28 aa\) · Cα/.test(summary)) throw new Error('with an entity table: ' + summary);
+    console.log('       cif with _entity_poly: ' + summary.split(' · Cα')[0]);
+  } finally { await fresh.close(); }
+});
+await step('an entity table with one entity per chain, as the AlphaFold 3 server writes it, still gives one entity for identical copies: α ×3 and β ×1 (FA-5)', async () => {
+  /* A real AlphaFold 3 server output gives every chain its own _entity_poly row (1 A, 2 B, … 15 O), its
+     homo-oligomer copies included. Taken alone, the table would make this model four entities; entities
+     of the file whose copies read the same observed sequence are one. Guards the merge, which the
+     exact-sequence grouping before 2.53.0 also got right, so it passes at 93cb38f too. */
+  const a = 'MKTAYIAKQRQISFVKSHFS'; const d = 'GWDEPLNHRQISFVNTEYHGCD';
+  const rows = sequence => [...sequence].map((letter, index) => [index + 1, letter]);
+  const lines = [];
+  ['A', 'B', 'C'].forEach((chain, index) => e53Chain(lines, chain, rows(a), index * 12));
+  e53Chain(lines, 'D', rows(d), 36);
+  const table = 'loop_\n_entity_poly.entity_id\n_entity_poly.pdbx_strand_id\n_entity_poly.type\n1 A polypeptide(L)\n2 B polypeptide(L)\n3 C polypeptide(L)\n4 D polypeptide(L)\n#\n';
+  const fresh = await freshViewer([{ name: 'fold_af3_like_model_0.cif', mimeType: 'chemical/x-mmcif', buffer: Buffer.from(j3Cif(j3Text(lines)) + table) }]);
+  try {
+    const summary = await e53Stoichiometry(fresh);
+    if (!/Stoichiometry: α ×3 \(A, B, C, 20 aa\) · β ×1 \(D, 22 aa\) · Cα/.test(summary)) throw new Error(summary);
+    console.log('       ' + summary.split(' · Cα')[0]);
+  } finally { await fresh.close(); }
+});
+await step('the contact map\'s axis ticks name 100, 100A and 100B as the strip does, never "100" three times (J3-1)', async () => {
+  /* J3-1. The tick text was String(atom.resi) for every residue whose number is a multiple of the step,
+     so H 100, 100A and 100B each printed "100" on the figure's axis. */
+  const fresh = await freshViewer([j3File('hl_contacts', j3Interface(), 'pdb')]);
+  try {
+    await fresh.click('[data-gpv-tab="compare"]'); await fresh.waitForTimeout(200);
+    await fresh.selectOption('#gpv-contact-atoms', 'heavy'); await fresh.fill('#gpv-contact-cutoff', '4.5');
+    await fresh.selectOption('#gpv-contact-a', 'H'); await fresh.selectOption('#gpv-contact-b', 'L'); await fresh.click('#gpv-contact-run'); await fresh.waitForTimeout(800);
+    await c2Record(fresh);
+    await freshDownload(fresh, '#gpv-contact-png');
+    const ticks = await fresh.evaluate(() => window.__viewerDebug.contactResult().lastTicks);
+    const font = (await c2Drawn(fresh)).text.find(([text]) => text === '100');
+    /* Tick text only: the axis font (11 px × 3), not another canvas's. */
+    const numbers = (await c2Drawn(fresh)).text.filter(([text, used]) => /^\d+[A-Z]?$/.test(text) && font && used === font[1]).map(([text]) => text);
+    if (numbers.filter(text => text === '100').length !== 1) throw new Error('"100" printed ' + numbers.filter(text => text === '100').length + ' times: ' + JSON.stringify(numbers));
+    /* Column ticks (chain L: 50) are drawn first, then the row ticks (chain H). */
+    if (!ticks || JSON.stringify([...ticks.columns, ...ticks.rows]) !== JSON.stringify(numbers) || ticks.rows.some(text => !['100', '100A', '100B'].includes(text)) || ticks.rows[0] !== '100') throw new Error('ticks ' + JSON.stringify(ticks) + ' · drawn ' + JSON.stringify(numbers));
+    console.log('       column ticks ' + JSON.stringify(ticks.columns) + ' · row ticks ' + JSON.stringify(ticks.rows));
+  } finally { await fresh.close(); }
+});
+await step('a ligand site\'s mean pLDDT is its residues\' Cα pLDDT, not that of the atom the search met first (J3-3)', async () => {
+  /* J3-3. With per-atom pLDDT (AlphaFold 3, Boltz) the site averaged whichever heavy atom of each site
+     residue lay nearest the ligand. Here every Cα is 90 and every other atom 20, and the ligand sits
+     4.8 Å from the nearest Cα but 3 Å from residue 3's O: the old mean was 20. */
+  const lines = [];
+  for (let index = 0; index < 6; index += 1) {
+    const x = index * 3.8;
+    [['N', -1.2, 0.4, 'N', 20], ['CA', 0, 0, 'C', 90], ['C', 1.2, 0.4, 'C', 20], ['O', 1.4, 1.6, 'O', 20]].forEach(([name, dx, dy, element, b]) => lines.push(pdbAtom('ATOM', lines.length + 1, name, 'ALA', 'A', index + 1, [x + dx, dy, 0], element, ' ', b)));
+  }
+  lines.push(pdbAtom('HETATM', lines.length + 1, 'C1', 'LIG', 'A', 201, [2 * 3.8 + 1.4, 4.6, 0], 'C', ' ', 50));
+  const fresh = await freshViewer([{ name: 'per_atom_plddt.pdb', mimeType: 'chemical/x-pdb', buffer: Buffer.from(j3Text(lines)) }]);
+  try {
+    await fresh.click('[data-gpv-tab="confidence"]'); await fresh.click('#gpv-site-run'); await fresh.waitForTimeout(800);
+    const row = await fresh.evaluate(() => {
+      const r = window.__viewerDebug.siteResults(); if (!r || r.rows.length !== 1) return null;
+      const site = r.rows[0].site;
+      return { plddt: r.rows[0].plddt, residues: site.map(atom => atom.resi), met: site.map(atom => atom.atom) };
+    });
+    if (!row || !row.residues.length) throw new Error('setup: no site · ' + JSON.stringify(row));
+    if (row.met.includes('CA')) throw new Error('setup: the search met a Cα, so this tells nothing: ' + JSON.stringify(row));
+    if (row.plddt === null || Math.abs(row.plddt - 90) > 1e-9) throw new Error('site mean pLDDT ' + row.plddt + ' over residues ' + row.residues.join(', ') + ' met at ' + row.met.join(', '));
+    console.log('       site ' + row.residues.join(', ') + ' (met at ' + row.met.join(', ') + ') · mean pLDDT ' + row.plddt);
+  } finally { await fresh.close(); }
+});
+/* e53-J end */
 /* ---- Stress loop, round 3, batch I: publish, export and share (2.52.0) ----
    Each on a page of its own. Exports are driven through their own buttons; where a step needs an
    entry point mid-render it calls it through the debug hook, because a disabled button cannot be pressed. */
@@ -9315,22 +9462,101 @@ await step('a legend stacked down one side stays inside the panel: 12 chains shr
     } finally { await fresh.close(); }
   }
 });
-await step('an export says when it left the scale bar out of the figure, and the checklist stops ticking it (FC-15)', async () => {
+await step('a scale bar too wide for the figure is drawn at the longest offered length that fits and the export says so; only when none fits is it left out, and the checklist says which (FC-15; 2.53.0)', async () => {
+  /* FC-15 (round 3) made the export say it had left the bar out. Since 2.53.0 a bar too wide for its
+     panel is drawn at the longest shorter offered length that fits, labelled with that length; until
+     then this step expected "left out" for a 50 Å bar at a close zoom, which now gets a 20 or 10 Å bar.
+     The bar's label is read from the figure's own text (c2Record), so the length drawn is checked, not
+     assumed: the zoom is stepped until the 50 Å bar no longer fits but a shorter one does, then until
+     not even 10 Å fits. */
   const fresh = await freshViewer([models[0]]);
   try {
     await fresh.click('[data-gpv-tab="appearance"]'); await fresh.selectOption('#gpv-projection', 'orthographic'); await fresh.waitForTimeout(200);
     await fresh.click('[data-gpv-tab="publish"]'); await fresh.selectOption('#gpv-scale-bar', '50'); await fresh.waitForTimeout(200);
-    await fresh.evaluate(() => { const viewer = window.__viewerDebug.viewer; viewer.zoom(12); viewer.render(); });
-    await fresh.waitForTimeout(300);
-    await freshDownload(fresh, '#gpv-image');
-    const status = await freshStatus(fresh);
-    await fresh.evaluate(() => document.querySelector('#gpv-scale-bar').dispatchEvent(new Event('change', { bubbles: true }))); await fresh.waitForTimeout(300);
-    const checklist = await freshText(fresh, '#gpv-check-list');
-    if (!/scale bar left out — 50 Å is wider than the panel; choose a shorter bar/.test(status)) throw new Error('status: ' + status);
-    if (/✓\s*50 Å scale bar/.test(checklist) || !/left the 50 Å scale bar out/.test(checklist)) throw new Error('checklist: ' + checklist);
-    console.log('       ' + status);
+    await c2Record(fresh);
+    const exportAt = async factor => {
+      await fresh.evaluate(zoom => { const viewer = window.__viewerDebug.viewer; viewer.zoom(zoom); viewer.render(); window.__drawnText = []; }, factor);
+      await fresh.waitForTimeout(300);
+      await freshDownload(fresh, '#gpv-image');
+      const bars = (await c2Drawn(fresh)).text.map(([text]) => text).filter(text => /^\d+ Å$/.test(text));
+      const status = await freshStatus(fresh);
+      await fresh.evaluate(() => document.querySelector('#gpv-scale-bar').dispatchEvent(new Event('change', { bubbles: true }))); await fresh.waitForTimeout(300);
+      return { bars, status, checklist: await freshText(fresh, '#gpv-check-list') };
+    };
+    let shortened = null; let left = null; let factor = 12;
+    for (let attempt = 0; attempt < 8 && !(shortened && left); attempt += 1) {
+      const seen = await exportAt(factor);
+      if (seen.bars.length > 1) throw new Error('more than one bar drawn: ' + JSON.stringify(seen.bars));
+      if (seen.bars[0] === '50 Å') { if (/scale bar (shortened|left out)/.test(seen.status)) throw new Error('a 50 Å bar was drawn but the status says ' + seen.status); factor = 3; continue; }
+      if (seen.bars.length) {
+        const drawn = Number(seen.bars[0].split(' ')[0]);
+        if (!(drawn < 50) || !seen.status.includes('scale bar shortened to ' + drawn + ' Å — 50 Å is wider than the panel')) throw new Error('drew ' + seen.bars[0] + ' · status: ' + seen.status);
+        if (!seen.checklist.includes('drew a ' + drawn + ' Å bar where the 50 Å one did not fit') || /✓\s*50 Å scale bar/.test(seen.checklist)) throw new Error('checklist after a ' + drawn + ' Å bar: ' + seen.checklist);
+        shortened = seen; factor = 4;
+      } else {
+        if (!/scale bar left out — no offered length fits \(10 Å is wider than the panel\); zoom out/.test(seen.status)) throw new Error('no bar drawn · status: ' + seen.status);
+        if (!/left the 50 Å scale bar out of a panel no offered length fitted/.test(seen.checklist)) throw new Error('checklist with no bar: ' + seen.checklist);
+        if (shortened) left = seen; else factor = 0.35;
+      }
+    }
+    if (!shortened || !left) throw new Error('did not reach both cases: shortened ' + Boolean(shortened) + ', left out ' + Boolean(left));
+    console.log('       ' + shortened.status.split(' · ').filter(part => /scale bar/.test(part)).join() + ' | ' + left.status.split(' · ').filter(part => /scale bar/.test(part)).join());
   } finally { await fresh.close(); }
 });
+/* e53-I begin: 2.53.0, builder B — the busy badge's labels (FC-14) and label leaders in exports. */
+await step('the busy badge names the job still running when another ends: a file imported during a fetch puts "Fetching …" back (FC-14)', async () => {
+  /* FC-14. setBusy wrote one label for the page and never put one back, so the badge went on naming
+     the import for the rest of the fetch. The fetch is held at the network until the import is in. */
+  const fresh = await freshViewer([models[0]]);
+  let release = () => {}; const gate = new Promise(resolve => { release = resolve; });
+  try {
+    await fresh.route('https://files.rcsb.org/**', async route => { await gate; await route.fulfill({ status: 200, contentType: 'chemical/x-mmcif', body: cifText }).catch(() => {}); });
+    await fresh.click('[data-gpv-tab="models"]'); await fresh.fill('#gpv-fetch-id', '1tst'); await fresh.click('#gpv-fetch');
+    await fresh.waitForFunction(() => !document.querySelector('#gpv-busy').hidden && /^Fetching/.test(document.querySelector('#gpv-busy-label').textContent), null, { timeout: 10000 });
+    const before = (await freshEntries(fresh)).length;
+    await fresh.setInputFiles('#gpv-files', [models[1]]);
+    await fresh.waitForFunction(count => window.__viewerDebug.entries().length > count, before, { timeout: 30000 });
+    await fresh.waitForTimeout(1500);
+    const during = await fresh.evaluate(() => ({ hidden: document.querySelector('#gpv-busy').hidden, label: document.querySelector('#gpv-busy-label').textContent }));
+    if (during.hidden || !/^Fetching 1tst/i.test(during.label)) throw new Error('with the fetch still running the badge ' + (during.hidden ? 'is hidden' : 'reads "' + during.label + '"'));
+    release();
+    await fresh.waitForFunction(() => document.querySelector('#gpv-busy').hidden, null, { timeout: 30000 });
+    console.log('       during the fetch, after the import: "' + during.label + '"');
+  } finally { release(); await fresh.close(); }
+});
+await step('a label\'s leader line is the figure\'s slate grey in an exported PNG in the dark theme, as in the SVG, and the theme\'s on screen (backlog: PNG leaders follow the theme)', async () => {
+  /* leaderColor() (03) was the theme's muted foreground for every viewer, so a PNG made in the dark
+     theme drew an uncoloured label's leader light grey on its white figure, where the SVG drew #94a3b8.
+     The leaders drawn are read at 3Dmol's addCylinder / addLine, by the viewer they were drawn on. */
+  const fresh = await freshViewer([{ name: 'leader.pdb', mimeType: 'chemical/x-pdb', buffer: Buffer.from(c2Pdb({ insertion: false })) }]);
+  try {
+    await i3Theme(fresh, 'dark');
+    await c2Scene(fresh, { type: 'protein-viewer-scene', schemaVersion: 1, models: [{ name: 'leader.pdb' }], settings: { background: 'white' },
+      labels: [{ model: 'leader.pdb', chain: 'A', resi: 3, atom: 'CA', text: 'Moved', offset: { x: 8, y: 6, z: 0 } }] });
+    await fresh.waitForTimeout(1200);
+    const muted = await fresh.evaluate(() => window.__viewerDebug.themeColor('--muted-foreground', ''));
+    if (!muted || muted.toLowerCase() === '#94a3b8') throw new Error('setup: the dark theme\'s muted foreground is "' + muted + '"');
+    await fresh.evaluate(() => {
+      window.__leaders = [];
+      const proto = Object.getPrototypeOf(window.__viewerDebug.viewer);
+      ['addCylinder', 'addLine'].forEach(name => {
+        const original = proto[name];
+        proto[name] = function (spec) { const d = window.__viewerDebug; window.__leaders.push({ on: this === d.viewer ? 'screen' : this === d.exportViewer() ? 'export' : 'other', color: String(spec && spec.color) }); return original.apply(this, arguments); };
+      });
+    });
+    await fresh.click('[data-gpv-tab="publish"]'); await fresh.waitForTimeout(200);
+    await freshDownload(fresh, '#gpv-image');
+    await fresh.evaluate(() => { const d = window.__viewerDebug; d.drawLabels(d.viewer, new Set(d.displayedEntries().map(entry => entry.id))); });
+    const seen = await fresh.evaluate(() => window.__leaders);
+    const colours = where => [...new Set(seen.filter(item => item.on === where).map(item => item.color))];
+    if (JSON.stringify(colours('export')) !== '["#94a3b8"]') throw new Error('export leaders drawn in ' + JSON.stringify(colours('export')) + ' (theme muted ' + muted + ')');
+    if (!colours('screen').includes(muted)) throw new Error('screen leaders drawn in ' + JSON.stringify(colours('screen')) + ', not the theme\'s ' + muted);
+    const svg = (await freshDownload(fresh, '#gpv-svg')).toString('utf8');
+    if (!/<line [^>]*stroke="#94a3b8"/.test(svg)) throw new Error('setup: the SVG has no #94a3b8 leader');
+    console.log('       PNG ' + colours('export').join() + ' · SVG #94a3b8 · screen ' + colours('screen').join());
+  } finally { await fresh.close(); }
+});
+/* e53-I end */
 await step('a comparison capped at 24 megapixels says how wide each panel prints (FC-16, the layout through the debug hook, not a 3-panel 600 dpi render)', async () => {
   const fresh = await freshViewer([models[0]]);
   try {

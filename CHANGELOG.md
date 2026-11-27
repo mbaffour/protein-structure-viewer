@@ -46,6 +46,35 @@ All notable changes to this project are recorded here.
   which names the atom, keeps that atom's value.
 - `tests/reference.py` no longer stops on a run of one model (the RMSF summary had no values to take a
   maximum of).
+- **Entities follow the file's own entity table.** Chains were grouped into entities by their observed
+  sequence alone, so copies of one protein built to different ends read as different proteins: 1BRS
+  (three barnase–barstar complexes) came out as five entities, α ×2 · β · γ · δ · ε, in the
+  Stoichiometry line, the entity colours, the entity legend, its key text and the figure legend. An
+  mmCIF file that lists its polymer entities (`_entity_poly`, as every PDB entry and the AlphaFold DB,
+  AlphaFold 3 server, Boltz, Chai-1 and AlphaFold 2 multimer files do) is now taken at its word: 1BRS is
+  α ×3 (A, B, C) · β ×3 (D, E, F), 2HHB α₂β₂ and 5CHA two copies of its three chains. A PDB file, or an
+  mmCIF of atom records alone, is grouped by sequence with a rule for ragged copies: two chains of the same kind are one entity when the shorter has at least 80 % of the longer's
+  residues and is either an unbroken stretch of it or the same residue at every number it has (a copy
+  missing a disordered loop); chains that only share a short motif stay apart. An entity's length is
+  its longest observed copy.
+- **Contact-map ticks name insertion codes.** The axis of an exported contact map printed "100" for each
+  of 100, 100A and 100B; a tick now prints the residue as the strip does, and a tick whose text would run
+  into the one before it is left out.
+- **A ligand site's mean pLDDT is its residues' Cα pLDDT.** With a per-atom pLDDT (AlphaFold 3, Boltz)
+  the site averaged whichever heavy atom of each residue lay nearest the ligand; it now reads each
+  residue's Cα (C1′ for a nucleotide), as Composition, the FASTA and the profile do.
+- **The busy badge names the job still running.** A job that ended put nothing back, so an import
+  started during a fetch or an export left the badge naming the import until everything had finished;
+  the badge now returns to the label of the job still running.
+- **Label leader lines in a PNG match the SVG.** A label with no colour of its own drew its leader in the
+  interface theme's muted grey, so a figure exported in the dark theme had light-grey leaders on its
+  white background where the SVG of the same figure drew them slate; every export now draws them slate
+  (`#94a3b8`) whatever the theme. On screen they still follow the theme.
+- **A scale bar that does not fit is shortened, not dropped.** A bar wider than its panel (or under
+  8 px) was left out of that panel; it is now drawn at the nearest offered length that fits — 20 or
+  10 Å in a close-up of a 50 Å figure — labelled with the length it is, and the status line says so
+  (*scale bar shortened to 20 Å in panel B*), as does the publication checklist. Only when no offered
+  length fits is the bar left out, and the status line and the checklist say that instead.
 
 ## 2.52.0
 

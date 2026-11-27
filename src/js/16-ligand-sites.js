@@ -45,7 +45,9 @@
       /* Site residues by chain, number and insertion code: 57 and 57A are two residues of the site. */
       group.atoms.forEach(target => grid.near(target).forEach(i => { const atom = protein[i]; if (squaredDistance(atom, target) <= limit) { const tag = residueCodeTag(atom); if (!residues.has(tag)) residues.set(tag, atom); } }));
       const site = [...residues.values()].sort((a, b) => compareChains(a.chain || '', b.chain || '') || a.resi - b.resi || (insertionCodeOf(a) < insertionCodeOf(b) ? -1 : insertionCodeOf(a) > insertionCodeOf(b) ? 1 : 0));
-      const plddt = entry.scores.length && site.length ? mean(site.map(atom => Number(atom.b) || 0)) : null;
+      /* Each site residue's pLDDT is its Cα's (or a nucleotide's C1′), as everywhere else — not that of
+         whichever heavy atom the search met first, which differs once a predictor writes per-atom pLDDT. */
+      const plddt = entry.scores.length && site.length ? mean(site.map(atom => residueConfidence(entry, atom))) : null;
       let pae = null;
       if (tokenIndex && matrix) {
         const ligandTokens = tokenIndex.get(group.chain + '|' + group.resi) || [];

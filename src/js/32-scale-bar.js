@@ -39,34 +39,61 @@
     return perAngstrom ? px / 2 / perAngstrom : null;
   }
 
-  /* A bar that does not fit its panel is left out of it — wider than 90 % of the panel, or under
-     8 px — and that used to happen in silence: a site figure's close-up printed without the bar its
-     overview had, the status said nothing and the checklist kept "✓ 50 Å scale bar". While an export
-     runs (beginExport, 40) each bar left out is noted with its panel, for the export's status line,
-     and the last export's misses stay for the checklist. */
+  /* A bar that does not fit its panel — wider than 90 % of it, or under 8 px — is drawn at the nearest
+     offered length that does: the longest shorter one for a bar too wide (50 Å in a close-up becomes
+     20 Å), the shortest longer one for a bar too small. Its label states the length drawn, and the
+     export says so ("scale bar shortened to 20 Å in panel B"), since the panels of one figure may then
+     carry bars of different lengths. Only when no offered length fits is the bar left out. Either used
+     to happen in silence — a site figure's close-up printed without the bar its overview had and the
+     checklist kept "✓ 50 Å scale bar" — so while an export runs (beginExport, 40) each panel whose bar
+     was changed or left out is noted, for the export's status line, and the last export's notes stay
+     for the checklist. */
   let scaleBarMisses = null;
   let lastScaleBarMiss = null;
-  function scaleBarSpec(target, plan, panel = '') {
-    const length = Number(root.querySelector('#gpv-scale-bar').value) || 0;
-    if (!length || !target) return null;
-    const perAngstrom = pixelsPerAngstrom(target, target === viewer ? null : sceneCentre(figureEntries())); if (!perAngstrom) return null;
-    const pixels = length * perAngstrom;
-    if (pixels < 8 || pixels > plan.width * 0.9) {
-      if (scaleBarMisses && !scaleBarMisses.some(miss => miss.panel === panel)) scaleBarMisses.push({ length, panel, small: pixels < 8 });
-      return null;
-    }
-    return { length, pixels, width: plan.width, height: plan.height };
+  function scaleBarLengths() {
+    return [...root.querySelector('#gpv-scale-bar').options].map(option => Number(option.value)).filter(value => value > 0).sort((a, b) => a - b);
   }
-  /* " · scale bar left out of panel B — 50 Å is wider than the panel; choose a shorter bar", once per
-     export; empty when every panel drew it. Read once, at the export's status line. */
+  function scaleBarSpec(target, plan, panel = '') {
+    const requested = Number(root.querySelector('#gpv-scale-bar').value) || 0;
+    if (!requested || !target) return null;
+    const perAngstrom = pixelsPerAngstrom(target, target === viewer ? null : sceneCentre(figureEntries())); if (!perAngstrom) return null;
+    const fits = length => length * perAngstrom >= 8 && length * perAngstrom <= plan.width * 0.9;
+    const small = requested * perAngstrom < 8;
+    let length = requested;
+    if (!fits(requested)) {
+      const offered = scaleBarLengths();
+      length = small ? offered.find(value => value > requested && fits(value)) : offered.filter(value => value < requested && fits(value)).pop();
+      if (scaleBarMisses && !scaleBarMisses.some(miss => miss.panel === panel)) scaleBarMisses.push({ length: requested, panel, small, drawn: length || null });
+      if (!length) return null;
+    }
+    return { length, requested, pixels: length * perAngstrom, width: plan.width, height: plan.height };
+  }
+  /* " · scale bar shortened to 20 Å in panel B — 50 Å is wider than the panel", or " · scale bar left
+     out of panel C — no offered length fits (10 Å is wider than the panel); zoom out", once per export;
+     empty when every panel drew the bar asked for. Read once, at the export's status line. */
   function scaleBarMissNote() {
     const misses = scaleBarMisses || [];
     scaleBarMisses = null;
-    lastScaleBarMiss = misses.length ? { length: misses[0].length, small: misses.every(miss => miss.small) } : null;
+    const changed = misses.filter(miss => miss.drawn); const left = misses.filter(miss => !miss.drawn);
+    lastScaleBarMiss = misses.length ? {
+      length: misses[0].length, small: misses.every(miss => miss.small),
+      left: left.length > 0, drawn: changed.map(miss => miss.drawn)
+    } : null;
     if (!misses.length) return '';
-    const panels = misses.map(miss => miss.panel).filter(Boolean);
-    const where = panels.length ? ' of panel' + (panels.length === 1 ? ' ' : 's ') + panels.join(', ') : '';
-    return ' · scale bar left out' + where + ' — ' + lastScaleBarMiss.length + ' Å is ' + (lastScaleBarMiss.small ? 'under 8 px there; choose a longer bar' : 'wider than the panel; choose a shorter bar');
+    const panelsOf = (list, word) => { const panels = list.map(miss => miss.panel).filter(Boolean); return panels.length ? ' ' + word + ' panel' + (panels.length === 1 ? ' ' : 's ') + panels.join(', ') : ''; };
+    const lengths = scaleBarLengths(); const requested = misses[0].length;
+    let note = '';
+    if (changed.length) {
+      const longer = changed.every(miss => miss.small);
+      const drawn = [...new Set(changed.map(miss => miss.drawn))];
+      note += ' · scale bar ' + (longer ? 'lengthened' : 'shortened') + ' to ' + drawn.map(length => length + ' Å' + panelsOf(changed.filter(miss => miss.drawn === length), 'in')).join(', ')
+        + ' — ' + requested + ' Å is ' + (longer ? 'under 8 px there' : 'wider than the panel');
+    }
+    if (left.length) {
+      const small = left.every(miss => miss.small);
+      note += ' · scale bar left out' + panelsOf(left, 'of') + ' — no offered length fits (' + (small ? Math.max(...lengths) + ' Å is under 8 px there); zoom in' : Math.min(...lengths) + ' Å is wider than the panel); zoom out');
+    }
+    return note;
   }
 
   function drawScaleBar(context, bar, scale, palette) {
