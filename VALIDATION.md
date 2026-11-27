@@ -378,6 +378,88 @@ A consequence for users: the viewer's BSA is worth about two significant figures
 to whole Å², which over-states the precision by roughly an order of magnitude; read 1 024 Å² as
 "about 1 000 Å²".
 
+## Hydrogen bonds and salt bridges (added 2.53.0)
+
+Definitions, as the viewer implements them (`src/js/29a-polar-interactions.js`) and as
+`tests/reference.py` implements them again in Biopython from this text:
+
+- **Hydrogen bond (by geometry).** A donor N or O and an acceptor N or O in different residues and
+  not covalently bonded to each other, with donor–acceptor distance ≤ 3.5 Å, and both heavy-atom angles
+  ≥ 90°: antecedent–donor···acceptor and donor···acceptor–antecedent (antecedent = a heavy atom
+  covalently bonded to the donor / acceptor; if an atom has several, every one must satisfy it; an atom
+  with no antecedent, such as a water O, skips its angle test). Roles for the 20 standard amino acids
+  come from a table by atom name: backbone N donor (not Pro), backbone O and OXT acceptors; Ser OG, Thr
+  OG1, Tyr OH (both), Asn OD1 (acceptor) ND2 (donor), Gln OE1 (acceptor) NE2 (donor), His ND1 and NE2
+  (both), Trp NE1 (donor), Lys NZ (donor), Arg NE NH1 NH2 (donors), Asp OD1 OD2 and Glu OE1 OE2
+  (acceptors); Cys SG and Met SD take no part. Standard nucleotides: a table for the bases, the ribose
+  O2′ (both), O3′/O5′/O4′ (acceptors), phosphate OP1/OP2 (acceptors). Water O: both. Any other residue
+  (ligand, modified residue): every N and O is both donor and acceptor, and the row is marked "by
+  element". The N-terminal N is a donor; it is also a cation for salt bridges.
+- **Salt bridge.** A cationic N (Lys NZ; Arg NE, NH1, NH2; the chain's N-terminal N; His ND1/NE2 only
+  with **Count histidine as charged** on — default off) within 4.0 Å of an anionic O (Asp OD1/OD2; Glu
+  OE1/OE2; the chain's C-terminal O/OXT; nucleotide OP1/OP2). One salt bridge per residue pair, reported
+  at its shortest N–O distance, with those two atoms (Barlow & Thornton 1983 criterion).
+- A residue pair that is a salt bridge is reported once as a salt bridge, not also as hydrogen bonds
+  between its charged atoms (an N–O pair whose N is cationic and O anionic); hydrogen bonds between
+  *other* atoms of the same two residues are still listed. Hydrogen bonds are per atom pair; backbone
+  i→i+4 bonds within a helix are listed when the scope is one chain.
+- Covalent bonds (for "antecedent" and "not bonded") are read from geometry, as the residue card's
+  peptide-bond tag is: two heavy atoms of one residue within 1.9 Å, or the backbone link to another
+  residue of the same chain (C–N peptide, O3′–P phosphodiester) within 1.9 Å. Hydrogens are ignored,
+  water is left out, and an atom with alternate locations is read at its first. The chain's termini
+  are its first and last amino-acid residues in the file.
+
+**Against a second implementation.** `tests/reference.py` writes `interactions` for the contact-map
+chain pair of model 0 (its own role tables, antecedents by the 1.9 Å rule within a residue plus the
+peptide and phosphodiester links, `NeighborSearch`), and `tests/validate.mjs` compares the viewer's list
+(`__viewerDebug.polarInteractions`, histidine neutral): the atom-pair set of each kind must be identical
+and every distance within 0.005 Å.
+
+| run | chains | hydrogen bonds (viewer / ref) | salt bridges (viewer / ref) | largest distance difference | |
+|---|---|---:|---:|---:|:--:|
+| A — M13 virion tip | K–F | 1 / 1 | 0 / 0 | 5.2 × 10⁻⁷ Å | ✓ |
+| B — MS2 maturation protein–coat | A–B | 3 / 3 | 0 / 0 | 5.7 × 10⁻⁷ Å | ✓ |
+| C — phiX174 F–G | A–B | 4 / 4 | 0 / 0 | 7.3 × 10⁻⁷ Å | ✓ |
+| AF3 fixture `hbdimer` | A–B | 2 / 2 | 0 / 0 | 1.2 × 10⁻⁶ Å | ✓ |
+
+Beyond the pairs the validator compares, the two implementations were run against each other in pure
+node and Python on model 0 of each run and on the measured structures, chain pairs and single chains
+(the intra-chain case, helices included), with histidine neutral and charged: 1BRS A–D, B–E, C–F, A–C,
+A, D; 2HHB A–B, A–C, A; 5CHA B–C; the three runs' K–F, K, A–B, A (histidine charged: 391 hydrogen bonds,
+17 salt bridges), B — every atom-pair set identical, distances within 4 × 10⁻⁶ Å (single- against
+double-precision coordinates).
+
+**Against PDBePISA on barnase–barstar (1BRS).** `tests/validate-experimental.mjs` compares the three
+barnase–barstar complexes of the asymmetric unit with the hydrogen bonds and salt bridges PISA lists for
+them (`tests/fixtures/experimental/pisa-1brs.json`; Krissinel & Henrick 2007 — the same file the
+atom-distance check above uses). PISA places hydrogens and uses its own cutoffs, so only what the
+definitions guarantee is asserted: every residue pair PISA calls a salt bridge between Lys/Arg and
+Asp/Glu groups (or a chain terminus) is a salt bridge here, and with histidine counted as charged every
+PISA salt-bridge residue pair is. The hydrogen bonds are reported by criterion, not asserted.
+
+| complex | salt bridges: viewer (His neutral / charged) · PISA residue pairs | PISA hydrogen bonds | found | part of a salt bridge here | over 3.5 Å | missed | viewer extra |
+|---|---|---:|---:|---:|---:|---:|---:|
+| A–D | 3 / 4 · 4 | 14 | 8 | 4 | 2 | 0 | 1 |
+| B–E | 3 / 4 · 4 | 13 | 9 | 4 | 0 | 0 | 1 |
+| C–F | 3 / 4 · 4 | 14 | 7 | 4 | 3 | 0 | 1 |
+
+A–D, histidine neutral: hydrogen bonds Lys27 NZ – Thr42 OG1 2.949, Arg59 N – Asp35 OD1 2.877, Glu60 N –
+Asp35 OD2 3.375, Glu60 OE2 – Leu34 N 2.836, Arg83 O – Tyr29 OH 2.652, Arg83 NH1 – Gly43 O 3.066, His102 O
+– Asn33 ND2 3.221, His102 ND1 – Gly31 N 3.035, His102 NE2 – Asp39 OD2 2.805 Å; salt bridges Arg59 NH1 –
+Glu76 OE1 2.965, Arg83 NH2 – Asp39 OD1 2.497, Arg87 NH2 – Asp39 OD2 2.926 Å (barnase first). The
+differences, each by criterion: PISA's His102 NE2 – Asp39 OD2 salt bridge is a hydrogen bond here until
+histidine is counted as charged; PISA's hydrogen bonds between the charged atoms of a salt-bridged pair
+(Asp39 OD1 – Arg83 NH2, Glu76 OE1 – Arg59 NH1 …) are that salt bridge here; PISA's bonds at 3.50–3.81 Å
+(Asp39 O – Arg83 NH1 3.745, Asp39 OD1 – Arg87 NE 3.807; in C–F also Gly43 O – Arg83 NH1 3.582 and Val45 O
+– Ser38 OG 3.5004) are over this definition's 3.5 Å; and in each complex the viewer adds His102 ND1 –
+Gly31 N (2.85–3.03 Å), His102 ND1 taken as an acceptor, where PISA's hydrogen placement protonates ND1
+(a donor–donor pair, no bond). The asymmetric-unit crystal contacts A–B and A–C, also in PISA's list, are
+not asserted: PISA's three A–B hydrogen bonds are over 3.5 Å or fail the Cα-side angle here (Arg110 N –
+Ile109 O, C–N···O 59.5°), and its A–C salt bridge (Val3 N, the first modelled residue, – Asp8 OD2
+3.689 Å) is found.
+
+Run on 2026-11-26 with viewer 2.53.0: all 17 checks of `validate-experimental.mjs` pass (the 8 earlier ones and 9 for the three complexes); `validate.mjs` on the three runs above passes 57, 61 and 61 comparisons, the interaction rows among them. The `hbdimer` fixture is a single model, which `validate.mjs` cannot align, so it was run with model 0 copied as model 1 (44 comparisons, all pass).
+
 ## Ligand-site PAE — not validated
 
 The viewer's ligand-site table reports, for each ligand or ion group, the mean of the symmetrised PAE

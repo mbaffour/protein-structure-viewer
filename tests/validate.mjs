@@ -9,7 +9,7 @@
    the residue set within <cutoff> Å of <chain>, the inter-chain contact map and the full Cα–Cα distance
    matrix of the same chain pair and of its first chain against itself, every residue's contacts on that
    first chain with their closest atom pairs and the distance from three of its residues to every residue
-   (2.51.0), and the
+   (2.51.0), the hydrogen bonds and salt bridges of that chain pair (2.53.0), and the
    buried surface area of the chain interfaces (Shrake–Rupley, against Bio.PDB.SASA). Exits non-zero when any value disagrees beyond
    the tolerances below. Requires the suite's node_modules and vendor/ (run npm test once). */
 import { chromium } from 'playwright';
@@ -183,6 +183,27 @@ if (reference.residue_contacts) {
       const sameSet = missing === 0 && byKey.size === item.rows.length;
       rows.push({ label: 'distance from ' + name + ' · residues coloured (viewer / reference)', viewer: byKey.size, reference: item.rows.length, delta: sameSet ? 0 : NaN, ok: sameSet }); if (!sameSet) failed += 1;
       check('distance from ' + name + ' · largest closest heavy-atom difference over ' + (item.rows.length - missing) + ' residues (Å)', worst, 0, 5e-5);
+    });
+  }
+}
+
+/* hydrogen bonds and salt bridges on model 0 (added 2.53.0): the viewer's list for the contact-map chain
+   pair (__viewerDebug.polarInteractions, histidine neutral — the definitions in VALIDATION.md) against
+   the Biopython implementation in reference.py: the same atom pairs (in either order) for each kind, and
+   the distances to 0.005 Å. */
+if (reference.interactions) {
+  const ri = reference.interactions;
+  const seen = await page.evaluate(([a, b]) => { const d = window.__viewerDebug; const entry = d.entries().find(item => /_model_0\./.test(item.name)); return entry ? d.polarInteractions(entry.id, a, b, false) : null; }, ri.chains);
+  const label = 'interactions ' + ri.chains.join('–');
+  if (!seen) { rows.push({ label, viewer: NaN, reference: ri.hbonds.length + ri.salt_bridges.length, delta: NaN, ok: false }); failed += 1; }
+  else {
+    const keyed = list => new Map(list.map(row => [[row[0] + '|' + row[1] + '|' + row[2], row[3] + '|' + row[4] + '|' + row[5]].sort().join(' ~ '), row[6]]));
+    [['hbonds', 'hydrogen bonds'], ['salt_bridges', 'salt bridges']].forEach(([kind, words]) => {
+      const mine = keyed(seen[kind]); const theirs = keyed(ri[kind]);
+      const same = mine.size === theirs.size && [...theirs.keys()].every(key => mine.has(key));
+      rows.push({ label: label + ' · ' + words + ' (atom-pair set)', viewer: mine.size, reference: theirs.size, delta: same ? 0 : NaN, ok: same }); if (!same) failed += 1;
+      let worst = 0; theirs.forEach((d, key) => { if (mine.has(key)) worst = Math.max(worst, Math.abs(mine.get(key) - d)); });
+      check(label + ' · ' + words + ' · largest distance difference (Å)', worst, 0, 0.005);
     });
   }
 }

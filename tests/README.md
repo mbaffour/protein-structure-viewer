@@ -22,7 +22,10 @@ a substituted library.
 
 Set `PSV_BROWSER=firefox` or `PSV_BROWSER=webkit` to run the same suite in another engine (Playwright's
 WebKit is the closest headless stand-in for Safari; install them once with `npx playwright install
-firefox webkit`). Set `PSV_HEADED=1` to watch the run in a visible browser. Set `PSV_CHROMIUM` to an existing
+firefox webkit`). Set `PSV_HEADED=1` to watch the run in a visible browser. Set `PSV_ONLY='<regexp>'` to run
+only the steps whose name matches (`PSV_ONLY='under a GPU cap' node run.mjs`): the others are skipped and
+counted, so it suits a step that opens its own page or a run of steps the pattern names together — a
+quick check while writing a step, never a gate. Set `PSV_CHROMIUM` to an existing
 Chromium binary to skip Playwright's own download — useful in CI images that already ship one:
 
 ```
@@ -488,6 +491,21 @@ screenshot and print picking diagnostics at the start of the Annotate group.
 The validation harness (`reference.py` + `validate.mjs`) also compares the Compare tab's contact map with
 Biopython: `python3 reference.py <folder> <chain> <cutoff> [chainA chainB]` chooses the second chain with the
 most contacts when it is not given.
+
+## Hydrogen bonds and salt bridges (2.53.0)
+
+The group `2.53.0: hydrogen bonds and salt bridges` (helpers prefixed `p53`) checks, on 1BRS: the
+Interfaces columns (A–D 9 hydrogen bonds and 3 salt bridges, 8 and 4 with histidine charged), the exact
+pair list through `__viewerDebug.polarInteractions`, the interface CSV's two new columns and the
+interactions CSV; Show interactions (12 dashed records in the type colours, sticks on Asp39 · D, one undo
+step, a second press adds nothing, Hide takes only A–D and leaves B–E and a hand-made measurement); the
+residue card's tags, Copy column and Polar contacts at barstar Asp39; hand-made pairs (a Lys NZ 3.0 Å from
+an Asp OD1 is one salt bridge and no hydrogen bond, a closed angle gives none, a proline N never donates,
+with open-angle and alanine controls); the legend, the legend key text and the SVG (dashed lines and
+legend line swatches in both colours), recolouring and Default, a scene round trip of `interaction`, and
+Clear. One step checks J3-2: a nucleotide's pLDDT on the card and the marker is its C1′'s.
+`validate.mjs` compares the interactions with `reference.py`'s, and `validate-experimental.mjs` with
+PDBePISA's list for 1BRS.
 
 ## Continuous integration
 

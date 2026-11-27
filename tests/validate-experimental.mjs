@@ -17,6 +17,16 @@
       the viewer's to within 0.01 Å (the published values have two decimals), and the contacts list of
       the first residue must give exactly that atom pair as the closest pair of the two residues.
 
+   3. Hydrogen bonds and salt bridges (2.53.0) on the three barnase–barstar complexes of 1BRS (A–D, B–E,
+      C–F) against PDBePISA's list for the same interfaces (the same pisa-1brs.json). PISA places
+      hydrogens and uses its own cutoffs; the viewer uses heavy atoms only (donor–acceptor ≤ 3.5 Å, both
+      heavy-atom angles ≥ 90°; a charged N–O pair ≤ 4.0 Å, one salt bridge per residue pair). So only
+      what the definitions guarantee is asserted: every residue pair PISA calls a salt bridge between
+      the viewer's charged groups (Lys NZ, Arg NE/NH1/NH2, the N-terminus; Asp, Glu, the C-terminus)
+      is a salt bridge here — and, with histidine counted as charged, PISA's His102 bridges too. The
+      hydrogen bonds are reported, not asserted: found, folded into a salt bridge (a charged N–O pair of
+      a salt-bridged residue pair), longer than 3.5 Å, or missed, with the viewer's extra ones listed.
+
    Offline: the viewer is served with the libraries in vendor/ exactly as run.mjs serves it (run
    `npm test`, or `node vendor.mjs`, once). Prints a table and exits non-zero on any failure or console
    error. The fixtures are the wwPDB and PDBePISA files as downloaded (fixtures/experimental/README.md)
@@ -130,11 +140,51 @@ for (const item of published.entries) {
   });
 }
 
+/* ---------- 3. hydrogen bonds and salt bridges against PISA (2.53.0) ---------- */
+const polarDetails = [];
+if (entryIds['1BRS']) {
+  const pisa = JSON.parse(await readFile(join(fixtures, 'pisa-1brs.json'), 'utf8'));
+  const charged = { cation: { LYS: ['NZ'], ARG: ['NE', 'NH1', 'NH2'] }, anion: { ASP: ['OD1', 'OD2'], GLU: ['OE1', 'OE2'] } };
+  const isCharged = (kind, resn, atom) => (charged[kind][resn] || []).includes(atom);
+  for (const [chainA, chainB] of [['A', 'D'], ['B', 'E'], ['C', 'F']]) {
+    const seen = await page.evaluate(([id, a, b]) => ({ neutral: window.__viewerDebug.polarInteractions(id, a, b, false), charged: window.__viewerDebug.polarInteractions(id, a, b, true) }), [entryIds['1BRS'], chainA, chainB]);
+    const pairKey = (c1, r1, c2, r2) => [c1 + r1, c2 + r2].sort().join('~');
+    const atomKey = (c1, r1, a1, c2, r2, a2) => [c1 + r1 + ':' + a1, c2 + r2 + ':' + a2].sort().join('~');
+    const bonds = pisa.bonds.filter(bond => [bond.chain_1, bond.chain_2].sort().join('') === [chainA, chainB].sort().join(''));
+    /* Salt bridges, per residue pair: PISA's between the viewer's charged groups must all be found. */
+    const pisaSalts = new Map();
+    bonds.filter(bond => bond.kind === 'salt-bridges').forEach(bond => pisaSalts.set(pairKey(bond.chain_1, bond.resi_1, bond.chain_2, bond.resi_2), bond));
+    const viewerSalts = rows => new Set(rows.map(row => pairKey(row[0], row[1], row[3], row[4])));
+    const ours = viewerSalts(seen.neutral.salt_bridges); const oursCharged = viewerSalts(seen.charged.salt_bridges);
+    const guaranteed = [...pisaSalts.entries()].filter(([, bond]) => (isCharged('cation', bond.resn_1, bond.atom_1) && isCharged('anion', bond.resn_2, bond.atom_2)) || (isCharged('cation', bond.resn_2, bond.atom_2) && isCharged('anion', bond.resn_1, bond.atom_1)));
+    const missing = guaranteed.filter(([key]) => !ours.has(key)).map(([key]) => key);
+    record('1BRS', chainA + '–' + chainB + ' salt bridges: PISA residue pairs between Lys/Arg and Asp/Glu found (histidine neutral)', guaranteed.length - missing.length, guaranteed.length, missing.length ? NaN : 0, !missing.length, missing.length ? 'missing ' + missing.join(', ') : 'viewer ' + ours.size + ' residue pairs, PISA ' + pisaSalts.size + (pisaSalts.size > guaranteed.length ? ' (not between those groups: ' + [...pisaSalts.entries()].filter(([key]) => !guaranteed.some(([other]) => other === key)).map(([key]) => key).join(', ') + ')' : ''));
+    const missingCharged = [...pisaSalts.keys()].filter(key => !oursCharged.has(key));
+    record('1BRS', chainA + '–' + chainB + ' salt bridges: every PISA residue pair found with histidine charged', pisaSalts.size - missingCharged.length, pisaSalts.size, missingCharged.length ? NaN : 0, !missingCharged.length, missingCharged.length ? 'missing ' + missingCharged.join(', ') : 'viewer ' + oursCharged.size + ' residue pairs');
+    /* Hydrogen bonds: reported against PISA, each difference by criterion. */
+    const viewerHbonds = new Set(seen.neutral.hbonds.map(row => atomKey(row[0], row[1], row[2], row[3], row[4], row[5])));
+    let found = 0; let folded = 0; let longer = 0; const missed = []; const matched = new Set();
+    bonds.filter(bond => bond.kind === 'h-bonds').forEach(bond => {
+      const key = atomKey(bond.chain_1, bond.resi_1, bond.atom_1, bond.chain_2, bond.resi_2, bond.atom_2);
+      const name = bond.resn_1 + bond.resi_1 + ' ' + bond.chain_1 + ':' + bond.atom_1 + ' – ' + bond.resn_2 + bond.resi_2 + ' ' + bond.chain_2 + ':' + bond.atom_2 + ' ' + bond.dist + ' Å';
+      if (viewerHbonds.has(key)) { found += 1; matched.add(key); return; }
+      if (bond.dist > 3.5) { longer += 1; polarDetails.push('longer than 3.5 Å (not a hydrogen bond here): ' + name); return; }
+      if (ours.has(pairKey(bond.chain_1, bond.resi_1, bond.chain_2, bond.resi_2)) && ((isCharged('cation', bond.resn_1, bond.atom_1) && isCharged('anion', bond.resn_2, bond.atom_2)) || (isCharged('cation', bond.resn_2, bond.atom_2) && isCharged('anion', bond.resn_1, bond.atom_1)))) { folded += 1; polarDetails.push('part of a salt bridge here: ' + name); return; }
+      missed.push(name);
+    });
+    const extra = seen.neutral.hbonds.filter(row => !matched.has(atomKey(row[0], row[1], row[2], row[3], row[4], row[5]))).map(row => row[0] + row[1] + ':' + row[2] + ' – ' + row[3] + row[4] + ':' + row[5] + ' ' + row[6].toFixed(3) + ' Å');
+    missed.forEach(name => polarDetails.push('PISA hydrogen bond not found (heavy-atom angle under 90°, or roles): ' + name));
+    extra.forEach(name => polarDetails.push('viewer hydrogen bond PISA does not list: ' + chainA + '–' + chainB + ' ' + name));
+    record('1BRS', chainA + '–' + chainB + ' hydrogen bonds (reported, not asserted): PISA found / in a salt bridge / over 3.5 Å / missed; viewer extra', found, bonds.filter(bond => bond.kind === 'h-bonds').length, NaN, true, found + ' / ' + folded + ' / ' + longer + ' / ' + missed.length + '; extra ' + extra.length + ' · viewer ' + seen.neutral.hbonds.length + ' hydrogen bonds, ' + seen.neutral.salt_bridges.length + ' salt bridges');
+  }
+}
+
 /* ---------- the table ---------- */
 const format = value => Number.isInteger(value) ? String(value) : Number.isFinite(value) ? value.toFixed(4) : '—';
 console.log('\n| structure | quantity | viewer | reference | abs. difference | | note |\n|---|---|---:|---:|---:|:--:|---|');
 rows.forEach(row => console.log('| ' + row.structure + ' | ' + row.what + ' | ' + format(row.viewer) + ' | ' + format(row.reference) + ' | ' + (Number.isFinite(row.delta) ? row.delta.toExponential(1) : '—') + ' | ' + (row.ok ? '✓' : '✗') + ' | ' + row.note + ' |'));
 if (pisaDetails.length) { console.log('\nbonds that failed:'); pisaDetails.forEach(line => console.log('  ' + line)); }
+if (polarDetails.length) { console.log('\nhydrogen bonds and salt bridges against PISA, by criterion:'); polarDetails.forEach(line => console.log('  ' + line)); }
 console.log('\nconsole errors: ' + errors.length + (errors.length ? ' :: ' + errors[0].slice(0, 160) : ''));
 console.log(failed ? 'FAILED ' + failed + ' check' + (failed === 1 ? '' : 's') : 'all ' + rows.length + ' checks pass');
 await browser.close(); server.close();

@@ -1158,15 +1158,17 @@ html>body{padding:0}</style>
     </div>
     <div class="table-responsive" id="gpv-site-wrap" hidden><table class="table table-sm" aria-label="Ligand binding sites of the current model"><thead><tr><th>Ligand</th><th class="text-end">Atoms</th><th class="text-end">Site residues</th><th class="text-end">Site mean pLDDT</th><th class="text-end">Ligand–site PAE (Å)</th><th></th></tr></thead><tbody id="gpv-site-rows"></tbody></table></div>
     <h3 class="gpv-subheading">Interfaces</h3>
-    <p class="text-muted text-small gpv-hint">Geometry of the model as loaded: inter-chain heavy-atom contacts and buried surface area (Shrake–Rupley, 1.4 Å probe, 92 points per atom). A predicted interface is a hypothesis about an interaction, not evidence of one — read it next to the chain-pair ipTM and PAE above.</p>
+    <p class="text-muted text-small gpv-hint">Geometry of the model as loaded: inter-chain heavy-atom contacts, buried surface area (Shrake–Rupley, 1.4 Å probe, 92 points per atom), and hydrogen bonds and salt bridges by geometry (heavy atoms only: donor–acceptor ≤ 3.5 Å with both angles ≥ 90°; a charged N–O pair ≤ 4.0 Å). A predicted interface is a hypothesis about an interaction, not evidence of one — read it next to the chain-pair ipTM and PAE above.</p>
     <div class="viz-controls">
       <label class="form-label gpv-current-label">Model<select class="form-select" id="gpv-interface-model" disabled><option>No models loaded</option></select></label>
       <label class="form-label gpv-slider-label">Contact cutoff <span id="gpv-interface-cutoff-value">4.0 Å</span><input class="form-range" id="gpv-interface-cutoff" type="range" min="3" max="6" step="0.5" value="4"></label>
       <button class="btn" type="button" id="gpv-interface-run" disabled><i data-icon="crosshair" aria-hidden="true"></i>Analyse interfaces</button>
       <button class="btn" type="button" id="gpv-interface-csv" disabled>Download interface CSV</button>
+      <button class="btn" type="button" id="gpv-interface-polar-csv" disabled title="One row per hydrogen bond and salt bridge of every analysed chain pair: the two atoms, the type, the distance, which atom donates and whether the roles were assigned by element">Download interactions CSV</button>
+      <label class="form-check gpv-check text-small" title="Off: histidine is neutral, its ND1 and NE2 make hydrogen bonds only. On: they count as cations for salt bridges too"><input class="form-check-input" type="checkbox" id="gpv-interface-histidine"><span class="form-check-label">Count histidine as charged</span></label>
       <span class="text-muted text-small" id="gpv-interface-state"></span>
     </div>
-    <div class="table-responsive" id="gpv-contacts-wrap" hidden><table class="table table-sm" aria-label="Inter-chain interface geometry"><thead><tr><th>Chain pair</th><th class="text-end">Atom contacts</th><th class="text-end">Residue pairs</th><th class="text-end">Interface residues</th><th class="text-end">Buried surface (Å²)</th><th></th></tr></thead><tbody id="gpv-contacts-rows"></tbody></table></div>
+    <div class="table-responsive" id="gpv-contacts-wrap" hidden><table class="table table-sm" aria-label="Inter-chain interface geometry"><thead><tr><th>Chain pair</th><th class="text-end">Atom contacts</th><th class="text-end">Residue pairs</th><th class="text-end">Interface residues</th><th class="text-end">Buried surface (Å²)</th><th class="text-end" title="Hydrogen bonds by geometry: donor–acceptor ≤ 3.5 Å, both heavy-atom angles ≥ 90°">H-bonds</th><th class="text-end" title="Salt bridges: a charged N within 4.0 Å of a charged O, one per residue pair">Salt bridges</th><th></th></tr></thead><tbody id="gpv-contacts-rows"></tbody></table></div>
   </section>
 
   <section class="gpv-tool-panel" data-gpv-panel="publish" hidden>
@@ -1363,6 +1365,7 @@ html>body{padding:0}</style>
         <li><strong>Download comparison PNG</strong> stitches the current panels into one lettered figure at the export size you chose; the <strong>SVG</strong> variants keep labels, arrows, captions, and the legend as editable vector layers over the rendered molecule.</li>
         <li>Every residue label and annotation is editable in its list row — text, colour, and size — and can be nudged with the arrow buttons; it moves in screen space and stays put when the model turns. Callouts also take a leader length.</li>
         <li><strong>Interfaces</strong> in the Confidence tab counts inter-chain contacts and buried surface area for a model, and can highlight the interface residues. Read it next to ipTM and PAE; a predicted contact is not an observed one.</li>
+        <li><strong>Hydrogen bonds and salt bridges</strong>: Interfaces counts them per chain pair and <em>Show interactions</em> draws them as dashed lines (blue and red) with their side chains; the residue card tags each contact and its <em>Polar contacts</em> draws one residue's. By geometry, heavy atoms only — the legend and the methods text name them.</li>
         <li>Tick <em>Embed 3Dmol.js for offline use</em> before sharing a report that must open without internet; drop the PAE detail to <em>Compact</em> or <em>Omit</em> to keep it small.</li>
         <li>Keep <em>Report contents</em> on <em>Models currently shown</em> for a small file reviewers can open on a laptop; switch to <em>Every loaded model</em> for an archive.</li>
       </ul>
@@ -1473,6 +1476,8 @@ html>body{padding:0}</style>
   #generic-protein-viewer .gpv-contact-atoms, #generic-protein-viewer .gpv-contact-ca { color: var(--muted-foreground); }
   /* The tag on a covalently joined contact (peptide bond, disulfide): quiet, inside the name cell. */
   #generic-protein-viewer .gpv-contact-bond { display: inline-block; margin-left: 6px; padding: 0 5px; border: 1px solid var(--border); border-radius: 999px; color: var(--muted-foreground); font-size: 0.75em; white-space: nowrap; }
+  #generic-protein-viewer .gpv-contact-bond.gpv-contact-hbond { border-color: #0284c7; color: #0284c7; }
+  #generic-protein-viewer .gpv-contact-bond.gpv-contact-salt { border-color: #dc2626; color: #dc2626; }
   #generic-protein-viewer .gpv-residue-contacts-empty { color: var(--muted-foreground); }
   /* Measure to… is armed: the next click on a residue is its second point. */
   #generic-protein-viewer .gpv-stage.is-measuring-to { cursor: crosshair; }
@@ -1526,6 +1531,8 @@ html>body{padding:0}</style>
   #generic-protein-viewer .gpv-legend { display: flex; gap: 14px; flex-wrap: wrap; margin: 0 0 10px; color: var(--muted-foreground); }
   #generic-protein-viewer .gpv-legend span { display: inline-flex; align-items: center; gap: 5px; }
   #generic-protein-viewer .gpv-swatch { width: 12px; height: 12px; display: inline-block; border-radius: 2px; margin-right: 5px; vertical-align: -1px; }
+  /* A legend entry for a line drawn on the model (a hydrogen bond, a salt bridge): a short line in its colour and dash. */
+  #generic-protein-viewer .gpv-swatch.gpv-swatch-line { width: 14px; height: 0; border-radius: 0; border-top-width: 3px; background: none; vertical-align: 3px; }
   #generic-protein-viewer .gpv-vlow { background: #ff7d45; }
   #generic-protein-viewer .gpv-low { background: #ffdb13; }
   #generic-protein-viewer .gpv-confident { background: #65cbf3; }
@@ -1799,7 +1806,7 @@ html>body{padding:0}</style>
   let busyDepth = 0;
   let restoreMotion = null;
   const listPageSize = 60;
-  const viewerVersion = '2.52.0';
+  const viewerVersion = '2.53.0';
   const preferenceKey = 'protein-structure-viewer:preferences';
   const themeKey = 'protein-structure-viewer:theme';
   const labelColors = getComputedStyle(root);
@@ -3028,6 +3035,8 @@ html>body{padding:0}</style>
         model.setStyle(selection, { stick: { radius: 0.22, colorscheme: 'default' } }, true);
       });
     }
+    /* The residues a drawn hydrogen bond or salt bridge joins, as sticks too (29). */
+    polarStyleSticks(model, entry);
     const surface = root.querySelector('#gpv-surface').value;
     if (surface === 'none' || !host || typeof host.addSurface !== 'function') return Promise.resolve();
     if (entry.atoms.length > surfaceAtomLimit) {
@@ -3822,6 +3831,11 @@ html>body{padding:0}</style>
   }
 
   function rebuildOverlays(shouldRender = true) {
+    /* A hydrogen bond or salt bridge removed from the list takes its side-chain sticks with it: the
+       models are styled again, which rebuilds the overlays itself (29 polarSticksStale). */
+    if (polarSticksStale()) { applyStyle(); return; }
+    /* A hydrogen bond recoloured or made solid changes the legend's entries, and so the key and its text. */
+    if (polarLegendStale()) renderScreenLegend();
     viewer.removeAllLabels();
     viewer.removeAllShapes();
     const stage = root.querySelector('#gpv-stage');
@@ -3984,19 +3998,23 @@ html>body{padding:0}</style>
   }
 
   /* The words a measurement's label reads: the user's text and the value — "H-bond · 3.02 Å" — the
-     value alone with no text, the text alone with Show value off. Never empty: with no text and the
-     value hidden, the value shows anyway, since a label of nothing would be a box on its own. */
+     value alone with no text, the text alone with Show value off. Never empty for a measurement made
+     by hand: with no text and the value hidden, the value shows anyway, since a label of nothing would
+     be a box on its own. A hydrogen bond or salt bridge with its value hidden (more than 40 drawn at
+     once) is a line with no label at all: '' here, and every drawer leaves the label out. */
   function measurementLabelText(record) {
     const text = String(record.text || '').trim();
     const value = measurementText(record);
-    if (!text) return value;
+    if (!text) return record.interaction && record.showValue === false ? '' : value;
     return record.showValue === false ? text : text + ' · ' + value;
   }
 
   /* A colour the user chose, or null: the line then keeps the crimson every measurement has always
-     had, and the label the plain ink of a residue label. */
+     had, and the label the plain ink of a residue label. A hydrogen bond or salt bridge is drawn in its
+     type's colour (29 polarTypeColor) until it is given another. */
   function measurementColor(record) {
-    return record && /^#[0-9a-f]{6}$/i.test(record.color || '') ? record.color : null;
+    if (record && /^#[0-9a-f]{6}$/i.test(record.color || '')) return record.color;
+    return record && record.interaction ? polarTypeColor(record.interaction) : null;
   }
 
   /* One point as a reader names it: residue, number with its insertion code and chain, then the atom —
@@ -4049,10 +4067,11 @@ html>body{padding:0}</style>
       line(points[0], points[1]);
       if (record.type === 'angle') line(points[1], points[2]);
       const anchor = measurementAnchor(points, record);
+      const words = measurementLabelText(record); if (!words) return;
       const position = (placement && placement.get(record)) || shiftBy(anchor, record.offset);
       if (leaderLength(anchor, position) > leaderMinimum && !stroke(anchor, position, Math.max(1, scale), false)) target.addLine({ start: anchor, end: position, color, linewidth: Math.max(1, Math.round(scale)) });
       const style = labelStyle(position, { color: measurementColor(record), scale });
-      target.addLabel(measurementLabelText(record), record === active ? activeLabelStyle(style) : style);
+      target.addLabel(words, record === active ? activeLabelStyle(style) : style);
     });
   }
 
@@ -4595,9 +4614,17 @@ html>body{padding:0}</style>
     rebuildOverlays();
   }
 
-  /* "HIS57 · B NE2 ↔ SER195 · C OG · 3.02 Å": what the row names and the editor offers. */
+  /* "HIS57 · B NE2 ↔ SER195 · C OG · 3.02 Å": what the row names and the editor offers — after its
+     type for a hydrogen bond or salt bridge, "H-bond · ASP39 · D OD2 ↔ HIS102 · A NE2 · 2.81 Å". */
   function measurementRowText(record) {
-    return measurementAtomsText(record) + ' · ' + measurementText(record);
+    return (record.interaction ? polarTypeName(record.interaction, 'short') + ' · ' : '') + measurementAtomsText(record) + ' · ' + measurementText(record);
+  }
+
+  /* Whether a measurement's colour is its own: any colour on a measurement made by hand, a colour
+     other than its type's on a hydrogen bond or salt bridge — which is what Default is for. */
+  function measurementColourChanged(record) {
+    const own = record && /^#[0-9a-f]{6}$/i.test(record.color || '') ? record.color.toLowerCase() : null;
+    return Boolean(own) && own !== (record.interaction ? polarTypeColor(record.interaction) : null);
   }
 
   /* An edit to one measurement from anywhere — its row, the editor, the keyboard — redraws it, and
@@ -4683,20 +4710,28 @@ html>body{padding:0}</style>
     list.addEventListener('focusout', event => { if (!list.contains(event.relatedTarget)) setMeasurementHover(list.matches(':hover') ? measurementHover : null); });
   }
 
-  /* Back to the colour every measurement has always had: the crimson line and the plain ink label. */
+  /* Back to the colour every measurement has always had: the crimson line and the plain ink label —
+     or, for a hydrogen bond or salt bridge, its type's blue or red (measurementColor falls back to it). */
   function setMeasurementDefaultColour(record) {
-    if (!measurementColor(record)) return;
+    if (!measurementColourChanged(record)) return;
     remember('measurement colour');
     delete record.color;
+    if (record.interaction) record.color = polarTypeColor(record.interaction);
     measurementChanged(record);
-    updateStatus('Measurement colour back to the default');
+    updateStatus(record.interaction ? polarTypeName(record.interaction) + ' colour back to the default' : 'Measurement colour back to the default');
+  }
+
+  function measurementDefaultTitle(record) {
+    if (record && record.interaction === 'hbond') return 'Back to the default colour: a hydrogen bond’s blue';
+    if (record && record.interaction === 'salt') return 'Back to the default colour: a salt bridge’s red';
+    return 'Back to the default colour: a crimson line and plain ink text';
   }
 
   /* A small Default beside a measurement's colour well, in its row and in the editor. */
   function measurementDefaultButton(id) {
     const button = document.createElement('button'); button.type = 'button'; button.className = 'btn btn-ghost gpv-colour-default'; button.textContent = 'Default';
     if (id) button.id = id;
-    button.title = 'Back to the default colour: a crimson line and plain ink text';
+    button.title = measurementDefaultTitle(null);
     return button;
   }
 
@@ -4713,7 +4748,8 @@ html>body{padding:0}</style>
       const named = measurementAtomsText(record);
       const copy = document.createElement('span'); copy.className = 'gpv-edit-copy';
       const text = document.createElement('input'); text.className = 'form-control'; text.type = 'text'; text.maxLength = 120;
-      text.value = record.text || ''; text.placeholder = 'Text (optional)'; text.dataset.control = 'text';
+      /* A hydrogen bond or salt bridge says what it is where its text would be. */
+      text.value = record.text || ''; text.placeholder = record.interaction ? polarTypeName(record.interaction, 'short') + ' (text optional)' : 'Text (optional)'; text.dataset.control = 'text';
       text.setAttribute('aria-label', 'Text for the measurement ' + named);
       const commit = () => { if (setMeasurementText(record, text.value)) { measurementChanged(record); updateStatus('Measurement text updated'); } };
       text.addEventListener('change', commit);
@@ -4736,7 +4772,7 @@ html>body{padding:0}</style>
       color.value = measurementColor(record) || '#e11d48'; color.setAttribute('aria-label', 'Colour of the measurement ' + named); color.dataset.control = 'color';
       color.title = 'Colour of the line and the label';
       const colourDefault = measurementDefaultButton(null); colourDefault.dataset.control = 'default';
-      colourDefault.disabled = !measurementColor(record);
+      colourDefault.disabled = !measurementColourChanged(record); colourDefault.title = measurementDefaultTitle(record);
       colourDefault.setAttribute('aria-label', 'Default colour for the measurement ' + named);
       colourDefault.addEventListener('click', () => setMeasurementDefaultColour(record));
       color.addEventListener('input', () => { if (!color.dataset.remembered) { remember('measurement colour'); color.dataset.remembered = '1'; } record.color = color.value; colourDefault.disabled = false; measurementChanged(record, false); });
@@ -4751,7 +4787,7 @@ html>body{padding:0}</style>
         return wrap;
       };
       const dashed = toggle('Dashed', 'dashed', 'measurement dashed', 'Draw the line dashed, as measurements always have been, or solid');
-      const value = toggle('Show value', 'showValue', 'measurement value', 'Write the distance or angle after the text; with no text the value is always written');
+      const value = toggle('Show value', 'showValue', 'measurement value', record.interaction ? 'Write the distance after the text; a hydrogen bond or salt bridge with no text and no value is drawn as its line alone' : 'Write the distance or angle after the text; with no text the value is always written');
       const show = document.createElement('button'); show.className = 'btn btn-ghost'; show.type = 'button'; show.textContent = 'Show'; show.dataset.control = 'show';
       show.title = 'Centre the view on this measurement without changing the zoom';
       show.setAttribute('aria-label', 'Show the measurement ' + named);
@@ -4927,7 +4963,8 @@ html>body{padding:0}</style>
     const color = host.querySelector('#gpv-measure-editor-color');
     const wanted = measurementColor(record) || '#e11d48';
     if (color.value !== wanted) color.value = wanted;
-    host.querySelector('#gpv-measure-editor-color-default').disabled = !measurementColor(record);
+    const colourDefault = host.querySelector('#gpv-measure-editor-color-default');
+    colourDefault.disabled = !measurementColourChanged(record); colourDefault.title = measurementDefaultTitle(record);
     const pair = measurementPairState(record);
     const wrap = host.querySelector('#gpv-measure-editor-pair-wrap');
     const select = host.querySelector('#gpv-measure-editor-pair');
@@ -5106,7 +5143,9 @@ html>body{padding:0}</style>
     measurementRecords.forEach(record => {
       if (!record.points.every(point => shown.has(point.entryId))) return;
       const position = canvasTextPoint('measurement', record); if (!position) return;
-      items.push({ kind: 'measurement', record, position, text: measurementLabelText(record), size: 12 });
+      /* A hydrogen bond or salt bridge drawn without its value has no text to hit or move. */
+      const text = measurementLabelText(record); if (!text) return;
+      items.push({ kind: 'measurement', record, position, text, size: 12 });
     });
     return items;
   }
@@ -5172,7 +5211,8 @@ html>body{padding:0}</style>
   function measurementScreenBox(record) {
     if (typeof viewer.modelToScreen !== 'function') return null;
     const anchor = measurementAnchor(null, record); if (!anchor) return null;
-    return labelBoxAt({ project: point => viewer.modelToScreen(point), scale: 1 }, { text: measurementLabelText(record), size: 12 }, shiftBy(anchor, record.offset));
+    const text = measurementLabelText(record); if (!text) return null;
+    return labelBoxAt({ project: point => viewer.modelToScreen(point), scale: 1 }, { text, size: 12 }, shiftBy(anchor, record.offset));
   }
 
   function screenProjection() {
@@ -5207,7 +5247,8 @@ html>body{padding:0}</style>
     measurementRecords.forEach(record => {
       if (!record.points.every(point => shown.has(point.entryId))) return;
       const points = record.points.map(resolvePoint); if (points.some(point => !point)) return;
-      items.push({ record, kind: 'measurement', entryId: record.points[0].entryId, anchor: measurementAnchor(points, record), text: measurementLabelText(record), size: 12 });
+      const text = measurementLabelText(record); if (!text) return;
+      items.push({ record, kind: 'measurement', entryId: record.points[0].entryId, anchor: measurementAnchor(points, record), text, size: 12 });
     });
     return items;
   }
@@ -5664,7 +5705,7 @@ html>body{padding:0}</style>
     /* The residue card's facts line, its contacts list, Measure to…, the measure choice, Contacts and
        the distances CSV (04c). */
     const card = residueCardElements();
-    actions.append(commit, card.measure, card.atoms, card.contacts, card.distances, remove);
+    actions.append(commit, card.measure, card.atoms, card.contacts, card.distances, card.polar, remove);
     /* A measurement's own controls (04): Name the atoms, Show value, colour, Dashed and the atoms it
        joins. Hidden for every other kind of text. */
     const measure = measurementEditorElement();
@@ -6460,7 +6501,9 @@ html>body{padding:0}</style>
      contacts list. */
   function residueCardFacts(entry, atom) {
     const parts = [];
-    if (entry.scores.length && Number.isFinite(Number(atom.b))) parts.push('pLDDT ' + Number(atom.b).toFixed(1));
+    /* The residue's confidence atom — its Cα, a nucleotide's C1′ — as Composition, the FASTA and the
+       profile read it, not the P the card stands a nucleotide by (J3-2). */
+    if (entry.scores.length && Number.isFinite(Number(atom.b))) parts.push('pLDDT ' + residueConfidence(entry, atom).toFixed(1));
     const ss = secondaryStructureWord(entry, atom);
     if (ss) parts.push(ss);
     const near = entry.model ? nearbyResidues({ entry, mode: 'residue', residue: { chain: atom.chain || '', resi: atom.resi, icode: insertionCodeOf(atom) } }) : null;
@@ -6486,6 +6529,10 @@ html>body{padding:0}</style>
     distances.type = 'button'; distances.className = 'btn btn-ghost'; distances.id = 'gpv-label-editor-distances'; distances.textContent = 'Distances CSV';
     distances.title = 'Download the distance from this residue to every residue of its model — Cα–Cα and closest heavy atoms — nearest first';
     distances.addEventListener('click', downloadResidueDistancesFromCard);
+    const polar = document.createElement('button');
+    polar.type = 'button'; polar.className = 'btn btn-ghost'; polar.id = 'gpv-label-editor-polar'; polar.textContent = 'Polar contacts';
+    polar.title = 'Draw this residue’s hydrogen bonds (blue) and salt bridges (red) as dashed lines, with the side chains as sticks, in one undo step';
+    polar.addEventListener('click', drawCardPolarContacts);
     const atoms = document.createElement('label');
     atoms.className = 'gpv-residue-card-atoms text-small'; atoms.id = 'gpv-label-editor-measure-atoms-wrap';
     atoms.title = 'What Measure to…, M, a click on a contact and Measure all join: the two residues’ Cα atoms, or their closest pair of heavy atoms. Remembered for next time; the contact and distance map always measures Cα–Cα';
@@ -6496,7 +6543,7 @@ html>body{padding:0}</style>
     select.addEventListener('change', () => setMeasureAtoms(select.value));
     atoms.append('Measure ', select);
     const list = residueContactsElement();
-    return { facts, measure, contacts, distances, atoms, list };
+    return { facts, measure, contacts, distances, polar, atoms, list };
   }
 
   /* The contacts list: three actions over a scrolling list of rows, each row a button so the list
@@ -6514,7 +6561,7 @@ html>body{padding:0}</style>
     tools.append(
       button('gpv-residue-contacts-measure-all', 'Measure all', 'Draw a measurement from this residue to every residue listed — Cα–Cα or closest atoms, as the Measure choice says — in one undo step', measureAllContacts),
       button('gpv-residue-contacts-highlight', 'Highlight', 'Highlight the listed residues in the Annotate tab’s highlight colour — what Highlight nearby residues makes for this residue', highlightContactsFromCard),
-      button('gpv-residue-contacts-copy', 'Copy', 'Copy the list as tab-separated text: residue, chain, closest distance, the two atoms, Cα–Cα distance', copyContactsFromCard)
+      button('gpv-residue-contacts-copy', 'Copy', 'Copy the list as tab-separated text: residue, chain, closest distance, the two atoms, any covalent bond, hydrogen bond or salt bridge, Cα–Cα distance', copyContactsFromCard)
     );
     const rows = document.createElement('ul'); rows.className = 'gpv-residue-contacts-rows'; rows.id = 'gpv-residue-contacts-rows';
     rows.setAttribute('aria-label', 'Residues in contact');
@@ -6529,7 +6576,7 @@ html>body{padding:0}</style>
   function fillResidueCard(host, target, residueLine) {
     resetResidueContacts(true);
     const facts = host.querySelector('#gpv-residue-card-facts');
-    const own = ['#gpv-label-editor-measure', '#gpv-label-editor-contacts', '#gpv-label-editor-distances', '#gpv-label-editor-measure-atoms-wrap'].map(selector => host.querySelector(selector));
+    const own = ['#gpv-label-editor-measure', '#gpv-label-editor-contacts', '#gpv-label-editor-distances', '#gpv-label-editor-polar', '#gpv-label-editor-measure-atoms-wrap'].map(selector => host.querySelector(selector));
     const entry = residueLine && !textWithoutResidue(target) ? entryById(target.entryId) : null;
     if (!entry || !target.atom) { facts.hidden = true; facts.textContent = ''; own.forEach(item => { item.hidden = true; }); return; }
     const chain = target.atom.chain || '';
@@ -6800,7 +6847,8 @@ html>body{padding:0}</style>
     const key = residueKey(picked.entryId, picked.chain, picked.resi, picked.icode);
     if (labelRecords.some(label => label.key === key)) return null;
     const atom = residueAlphaCarbon(entry, picked.chain, picked.resi, insertionCodeOf(picked)) || picked;
-    const confidence = entry.scores.length && Number.isFinite(Number(atom.b)) ? ' · pLDDT ' + Number(atom.b).toFixed(1) : '';
+    /* The marker names the residue, not an atom: its confidence atom's pLDDT, as the card says (J3-2). */
+    const confidence = entry.scores.length && Number.isFinite(Number(atom.b)) ? ' · pLDDT ' + residueConfidence(entry, atom).toFixed(1) : '';
     return { text: labelEditorDefaultText(atom) + confidence, style: residueMarkerStyle(atom) };
   }
 
@@ -6877,6 +6925,7 @@ html>body{padding:0}</style>
     if (!near) return { error: 'That residue’s model is not loaded' };
     if (near.error) return near;
     const origin = residueAlphaCarbon(entry, chain, resi, icode);
+    const polar = residuePolarInteractions(entry, chain, resi, icode);
     const rows = near.residues.map(item => {
       const pair = closestHeavyAtomPair(entry, { chain, resi, icode }, entry, item);
       const other = residueAlphaCarbon(entry, item.chain, item.resi, insertionCodeOf(item));
@@ -6887,6 +6936,9 @@ html>body{padding:0}</style>
         reach: origin && other ? atomWord(origin) + '–' + atomWord(other) : ''
       };
       row.bond = contactBond(pair ? pair.a.resn || '' : '', row);
+      /* Its hydrogen bonds and salt bridges with this residue (29a), this residue's atom first. The
+         closest-atom columns still give the closest heavy-atom pair, which need not be one of them. */
+      row.interactions = polar.filter(found => sameResidue(found.b, item.chain, item.resi, insertionCodeOf(item))).map(found => ({ type: found.type, atomA: found.a.atom || '', atomB: found.b.atom || '', distance: found.distance, byElement: found.byElement }));
       return row;
     });
     const nearestFirst = value => (value === null ? Infinity : value);
@@ -6980,6 +7032,15 @@ html>body{padding:0}</style>
       const bondText = row.bond === 'peptide' ? 'peptide bond' : row.bond === 'disulfide' ? 'disulfide' : '';
       const name = part('gpv-contact-name', contactRowName(row));
       if (bondText) name.append(part('gpv-contact-bond', bondText));
+      /* A salt bridge or hydrogen bond with this residue: a tag of its type's colour whose tooltip names
+         the atoms and the distance. */
+      ['salt', 'hbond'].forEach(type => {
+        const found = (row.interactions || []).filter(item => item.type === type); if (!found.length) return;
+        const tag = part('gpv-contact-bond gpv-contact-' + type, type === 'salt' ? 'salt bridge' : 'H-bond');
+        tag.title = found.map(item => item.atomA + '–' + item.atomB + ' ' + item.distance.toFixed(2) + ' Å').join(', ') + ' (' + (type === 'salt' ? 'salt bridge' : 'hydrogen bond' + (found.length === 1 ? '' : 's')) + ')';
+        name.append(tag);
+      });
+      button.dataset.interaction = contactInteractionText(row);
       button.append(
         name,
         part('gpv-contact-closest', row.closest === null ? '—' : row.closest.toFixed(2) + ' Å'),
@@ -7058,9 +7119,31 @@ html>body{padding:0}</style>
   }
 
   function contactsText(found) {
-    const lines = [['residue', 'chain', 'resi', 'resn', 'closest_distance', 'closest_atoms', 'bond', 'ca_distance'].join('\t')];
-    found.rows.forEach(row => lines.push([contactRowName(row), row.chain, residueNumber(row), row.resn, row.closest === null ? '' : row.closest.toFixed(3), row.atomA + '–' + row.atomB, row.bond || '', row.ca === null ? '' : row.ca.toFixed(3)].join('\t')));
+    const lines = [['residue', 'chain', 'resi', 'resn', 'closest_distance', 'closest_atoms', 'bond', 'interaction', 'ca_distance'].join('\t')];
+    found.rows.forEach(row => lines.push([contactRowName(row), row.chain, residueNumber(row), row.resn, row.closest === null ? '' : row.closest.toFixed(3), row.atomA + '–' + row.atomB, row.bond || '', contactInteractionText(row), row.ca === null ? '' : row.ca.toFixed(3)].join('\t')));
     return lines.join('\n');
+  }
+
+  /* "salt bridge", "H-bond", "salt bridge; H-bond" or '' — the tags a contacts row carries. */
+  function contactInteractionText(row) {
+    const types = new Set((row.interactions || []).map(item => item.type));
+    return [types.has('salt') ? 'salt bridge' : '', types.has('hbond') ? 'H-bond' : ''].filter(Boolean).join('; ');
+  }
+
+  /* A residue's hydrogen bonds and salt bridges with every other residue of its model (water out),
+     this residue's atom first in each. */
+  function residuePolarInteractions(entry, chain, resi, icode = '') {
+    const context = polarModel(entry);
+    const own = context.all.filter(atom => sameResidue(atom, chain, resi, icode));
+    return own.length ? polarInteractions(own, context.all, { context }) : [];
+  }
+
+  /* The card's Polar contacts: this residue's hydrogen bonds and salt bridges drawn as Show
+     interactions draws a chain pair's (29), in one undo step. */
+  function drawCardPolarContacts() {
+    const picked = cardResidue();
+    if (!picked) { updateStatus('That residue’s model is no longer loaded'); return; }
+    drawPolarInteractions(picked.entry, residuePolarInteractions(picked.entry, picked.chain, picked.resi, picked.icode), 'from ' + picked.name);
   }
 
   async function copyContactsFromCard() {
@@ -7275,8 +7358,10 @@ html>body{padding:0}</style>
     return entry.scores.length ? plddtColor(Number(atom.b || 0)) : entry.color;
   }
 
+  /* The hint names the residue, so its pLDDT is the residue's confidence atom's — a nucleotide's C1′,
+     not the P its strip cell stands for (J3-2), as Composition, the FASTA and the profile read it. */
   function describeResidue(entry, atom) {
-    const confidence = entry.scores.length && Number.isFinite(Number(atom.b)) ? ' · pLDDT ' + Number(atom.b).toFixed(1) : '';
+    const confidence = entry.scores.length && Number.isFinite(Number(atom.b)) ? ' · pLDDT ' + residueConfidence(entry, atom).toFixed(1) : '';
     return residueName(atom, 'prose') + confidence;
   }
 
@@ -9481,7 +9566,8 @@ html>body{padding:0}</style>
       if (!target) push('warn', 'Colour by distance from the selected residue is on, but no residue is selected, so every residue is grey. Click the residue to measure from.');
       else push('info', 'Colours are distances from ' + target.short + '; the legend and methods text name it. Saved views do not keep the selection — reselect it before exporting one again.');
     }
-    if (shown.some(entry => entry.scores.length) && !['plddt', 'deviation', 'agreement'].includes(mode) && !legendWanted('figure')) push('info', 'pLDDT is available but not shown; a confidence panel or legend note helps a reviewer weigh the model.');
+    /* The colour scheme's own key, not one made only of hydrogen bonds and salt bridges (2.53.0). */
+    if (shown.some(entry => entry.scores.length) && !['plddt', 'deviation', 'agreement'].includes(mode) && !(root.querySelector('#gpv-export-legend').checked && defaultLegendItems('figure') !== null)) push('info', 'pLDDT is available but not shown; a confidence panel or legend note helps a reviewer weigh the model.');
     return items;
   }
 
@@ -10030,7 +10116,7 @@ html>body{padding:0}</style>
     let colourText = {
       structure: 'coloured per model' + (shown.length > 1 ? ' (' + shown.map(entry => displayName(entry) + ' ' + entry.color).join('; ') + ')' : ''),
       chain: 'coloured by chain' + (abbreviated ? ' (' + abbreviated.length + ' chains: ' + abbreviated.join(', ') + ')' : ''),
-      entity: 'coloured by entity — chains with identical sequences share a colour' + (shown[0] ? ' (' + entityGroups(shown[0]).map(group => group.label + ' ×' + group.chains.length).join(', ') + ')' : ''),
+      entity: 'coloured by entity — copies of one polymer entity share a colour' + (shown[0] ? ' (' + entityGroups(shown[0]).map(group => group.label + ' ×' + group.chains.length).join(', ') + ')' : ''),
       plddt: 'coloured by per-residue pLDDT (very low <50 orange, low 50–70 yellow, confident 70–90 light blue, very high ≥90 dark blue)',
       agreement: 'coloured by per-residue Cα RMSF across ' + (ensembleSpread ? ensembleSpread.count + ' aligned models' : 'the aligned models') + ' (<0.5 Å blue, 0.5–1 Å green, 1–2 Å yellow, 2–4 Å orange, ≥4 Å red; residues present in one model grey)',
       deviation: 'coloured by Cα deviation from the reference after superposition (<1 Å blue, 1–2 Å green, 2–4 Å yellow, 4–8 Å orange, ≥8 Å red; unmatched residues grey)',
@@ -10078,9 +10164,11 @@ html>body{padding:0}</style>
     });
     const highlights = selectionRecords.filter(record => record.action === 'highlight' && shownIds.has(record.entryId));
     if (highlights.length) sentences.push('Highlighted residues: ' + highlights.map(record => (record.chain ? 'chain ' + record.chain + ' ' : '') + compactRange(record.residues, record.icodes)).join('; ') + '.');
-    const measurements = measurementRecords.filter(record => record.points.every(point => shownIds.has(point.entryId)));
+    /* Hydrogen bonds and salt bridges have a sentence of their own (29), not a line each here. */
+    const measurements = measurementRecords.filter(record => !record.interaction && record.points.every(point => shownIds.has(point.entryId)));
     /* The atoms each joins, its value, and the user's words for it in parentheses. */
     if (measurements.length) sentences.push('Measurements: ' + measurements.map(record => measurementAtomsText(record, true) + ' ' + measurementText(record) + (record.text ? ' (' + record.text + ')' : '')).join('; ') + '.');
+    const polar = polarLegendSentence(shownIds); if (polar) sentences.push(polar);
     const annotations = annotationRecords.filter(record => record.text && record.points.every(point => shownIds.has(point.entryId)));
     if (annotations.length) sentences.push('Annotations: ' + annotations.map(record => record.text).join('; ') + '.');
     const plan = exportDimensions();
@@ -10141,7 +10229,7 @@ html>body{padding:0}</style>
     const contactSentence = contactMethodsSentence(); if (contactSentence) sentences.push(contactSentence);
     /* The legend quotes each measurement's value; this says what it was measured between. */
     const shownIds = new Set(shown.map(entry => entry.id));
-    const measured = measurementRecords.filter(record => record.points.every(point => shownIds.has(point.entryId)));
+    const measured = measurementRecords.filter(record => !record.interaction && record.points.every(point => shownIds.has(point.entryId)));
     if (measured.length) {
       const distances = measured.filter(record => record.type === 'distance'); const angles = measured.length - distances.length;
       const alpha = distances.filter(record => record.points.every(point => point.atom === 'CA')).length;
@@ -10158,6 +10246,7 @@ html>body{padding:0}</style>
     if (domains && domains.domains.length) sentences.push('Domains were derived from the PAE matrix by greedy agglomeration of ten-residue segments: the pair with the lowest mean inter-segment PAE was merged while that mean stayed below ' + domains.cutoff + ' Å; groups of fewer than twenty residues were absorbed into the nearest domain when within twice the cutoff and otherwise left unassigned. This segmentation is a heuristic and differs from the graph clustering used by the AlphaFold Protein Structure Database.');
     if (nearbyResult && nearbyResult.residues) sentences.push('Contacting residues were defined as residues with any heavy atom within ' + nearbyResult.cutoff + ' Å of any heavy atom of the ' + (nearbyResult.mode === 'chain' ? 'target chain' : nearbyResult.mode === 'hetero' ? 'ligands and ions' : 'target residue') + ' (hydrogens and water excluded).');
     const interactionSentence = interactionMethodsSentence(); if (interactionSentence) sentences.push(interactionSentence);
+    const polarSentence = polarMethodsSentence(shownIds); if (polarSentence) sentences.push(polarSentence);
     if (siteResults && siteResults.rows.length) sentences.push('Ligand-binding sites were defined as protein residues with any heavy atom within ' + siteResults.cutoff + ' Å of a ligand or ion heavy atom' + (siteResults.rows.some(row => row.pae !== null) ? '; ligand–site PAE is the mean of the symmetrised PAE between ligand tokens and site-residue tokens' : '') + '.');
     if (first) {
       const size = assemblyDimensions(first);
@@ -10170,7 +10259,7 @@ html>body{padding:0}</style>
       charge: 'Residue charge colouring used formal charges at neutral pH (Lys and Arg positive; Asp and Glu negative; His shown as partially positive).',
       hydrophobicity: 'Hydrophobicity colouring used the Kyte–Doolittle scale.',
       chain: abbreviated ? 'Each chain was given its own colour; the figure key names the first ' + (legendNamedLimit - 1) + ' of the ' + abbreviated.length + ' chains and counts the remainder, all of which are named in the figure legend.' : null,
-      entity: 'Chains were grouped into entities by identical sequence.',
+      entity: 'Chains were grouped into entities by the mmCIF entity table where the file has one, otherwise by observed sequence (copies with ragged ends or a missing loop counted as one).',
       fromresidue: distanceColourMethods(),
       data: residueData ? 'Per-residue values (' + residueData.name + ') were mapped linearly onto a ' + ({ viridis: 'viridis', diverging: 'diverging blue–white–red', heat: 'white–red' })[residueData.scale] + ' scale between the minimum and maximum of the data.' : null
     };
@@ -10320,7 +10409,11 @@ html>body{padding:0}</style>
         const together = solventAccessibleArea(byChain.get(row.chains[0]).concat(byChain.get(row.chains[1])));
         row.bsa = Math.max(0, soloArea.get(row.chains[0]) + soloArea.get(row.chains[1]) - together);
       }
-      interfaceResults = { entryId: entry.id, cutoff, rows };
+      /* The hydrogen bonds and salt bridges of every pair, by 29a's definitions, from the same press. */
+      state.textContent = 'Hydrogen bonds and salt bridges…'; await afterPaint();
+      const histidineCharged = polarHistidineCharged();
+      polarInterfaceRows(entry, rows, byChain, histidineCharged);
+      interfaceResults = { entryId: entry.id, cutoff, rows, histidineCharged };
       renderInterfaceResults();
       state.textContent = rows.length ? rows.length + ' chain pair' + (rows.length === 1 ? '' : 's') + ' in contact at ' + cutoff.toFixed(1) + ' Å · ' + displayName(entry) : 'No inter-chain contacts within ' + cutoff.toFixed(1) + ' Å.';
       announce('Interface analysis finished · ' + rows.length + ' chain pair' + (rows.length === 1 ? '' : 's'));
@@ -10336,15 +10429,25 @@ html>body{padding:0}</style>
     const rows = interfaceResults ? interfaceResults.rows : [];
     wrap.hidden = rows.length === 0;
     root.querySelector('#gpv-interface-csv').disabled = rows.length === 0;
+    root.querySelector('#gpv-interface-polar-csv').disabled = !rows.some(row => row.polar && row.polar.length);
     rows.forEach(row => {
       const tr = document.createElement('tr');
-      const cells = [row.chains.join(' – '), String(row.contacts), String(row.residuePairs.size), row.residuesA.size + ' + ' + row.residuesB.size, Number.isFinite(row.bsa) ? row.bsa.toFixed(0) : '—'];
+      const counts = row.polar ? polarCounts(row.polar) : null;
+      const cells = [row.chains.join(' – '), String(row.contacts), String(row.residuePairs.size), row.residuesA.size + ' + ' + row.residuesB.size, Number.isFinite(row.bsa) ? row.bsa.toFixed(0) : '—', counts ? String(counts.hbonds) : '—', counts ? String(counts.salts) : '—'];
       cells.forEach((value, index) => { const cell = document.createElement(index === 0 ? 'th' : 'td'); cell.textContent = value; if (index > 0) cell.className = 'text-end'; tr.append(cell); });
       const action = document.createElement('td');
       const highlight = document.createElement('button'); highlight.className = 'btn btn-ghost'; highlight.type = 'button'; highlight.textContent = 'Highlight';
       highlight.title = 'Highlight this interface’s residues in the Annotate tab’s Highlight colour';
       highlight.addEventListener('click', () => highlightInterface(row));
-      action.append(highlight); tr.append(action); body.append(tr);
+      /* Highlight stays the row's first button (the suite presses it as the first). */
+      const show = document.createElement('button'); show.className = 'btn btn-ghost'; show.type = 'button'; show.textContent = 'Show interactions';
+      show.title = 'Draw this pair’s hydrogen bonds (blue) and salt bridges (red) as dashed lines with their side chains as sticks, in one undo step';
+      show.disabled = !row.polar || !row.polar.length;
+      show.addEventListener('click', () => showInterfaceInteractions(row));
+      const hide = document.createElement('button'); hide.className = 'btn btn-ghost'; hide.type = 'button'; hide.textContent = 'Hide interactions';
+      hide.title = 'Remove the hydrogen bonds and salt bridges drawn between these two chains, and nothing else, in one undo step';
+      hide.addEventListener('click', () => hideInterfaceInteractions(row));
+      action.append(highlight, show, hide); tr.append(action); body.append(tr);
     });
   }
 
@@ -10372,12 +10475,480 @@ html>body{padding:0}</style>
     if (!interfaceResults || !interfaceResults.rows.length) return;
     const entry = entryById(interfaceResults.entryId);
     const quote = value => '"' + String(value).replace(/"/g, '""') + '"';
-    const lines = [['model', 'chain_a', 'chain_b', 'cutoff_angstrom', 'atom_contacts', 'residue_pairs', 'interface_residues_a', 'interface_residues_b', 'buried_surface_area_A2', 'residues_a', 'residues_b'].join(',')];
-    interfaceResults.rows.forEach(row => lines.push([entry ? entry.name : '', row.chains[0], row.chains[1], interfaceResults.cutoff, row.contacts, row.residuePairs.size, row.residuesA.size, row.residuesB.size, Number.isFinite(row.bsa) ? row.bsa.toFixed(1) : '', interfaceResidueItems(row.residuesA).map(residueNumber).join(' '), interfaceResidueItems(row.residuesB).map(residueNumber).join(' ')].map(quote).join(',')));
+    /* The counts of hydrogen bonds and salt bridges come last, so every earlier column keeps its place. */
+    const lines = [['model', 'chain_a', 'chain_b', 'cutoff_angstrom', 'atom_contacts', 'residue_pairs', 'interface_residues_a', 'interface_residues_b', 'buried_surface_area_A2', 'residues_a', 'residues_b', 'hbonds', 'salt_bridges'].join(',')];
+    interfaceResults.rows.forEach(row => {
+      const counts = row.polar ? polarCounts(row.polar) : null;
+      lines.push([entry ? entry.name : '', row.chains[0], row.chains[1], interfaceResults.cutoff, row.contacts, row.residuePairs.size, row.residuesA.size, row.residuesB.size, Number.isFinite(row.bsa) ? row.bsa.toFixed(1) : '', interfaceResidueItems(row.residuesA).map(residueNumber).join(' '), interfaceResidueItems(row.residuesB).map(residueNumber).join(' '), counts ? counts.hbonds : '', counts ? counts.salts : ''].map(quote).join(','));
+    });
     downloadBlob(lines.join('\n'), 'text/csv', 'interface-geometry.csv');
     announce('Interface CSV downloaded');
   }
 
+
+  /* ---------- Hydrogen bonds and salt bridges, drawn (2.53.0) ----------
+     29a finds them; this draws them. An interaction is an ordinary measurement record — a two-atom
+     distance — that also says what it is (`interaction: 'hbond'|'salt'`) and carries its type's colour,
+     dashed, with its value: so the list, the editor, Clear, undo, scenes, sessions, share links, the
+     PNG, the SVG and the report treat it as they treat any measurement, and the legend names it (31).
+     The side chains of the residues it joins are drawn as sticks for as long as it exists: derived
+     from the records each time a model is styled (polarStyleSticks), so nothing else is stored. */
+
+  /* Annotate → Interfaces' "Count histidine as charged": off unless ticked. */
+  function polarHistidineCharged() {
+    const box = root.querySelector('#gpv-interface-histidine');
+    return Boolean(box && box.checked);
+  }
+
+  function polarTypeColor(type) {
+    return type === 'hbond' ? '#0284c7' : type === 'salt' ? '#dc2626' : null;
+  }
+
+  function polarTypeName(type, form = 'legend') {
+    if (form === 'short') return type === 'hbond' ? 'H-bond' : type === 'salt' ? 'Salt bridge' : '';
+    return type === 'hbond' ? 'Hydrogen bond' : type === 'salt' ? 'Salt bridge' : '';
+  }
+
+  /* The interactions of every analysed chain pair, from the chains' own atoms (water already out). */
+  function polarInterfaceRows(entry, rows, byChain, histidineCharged) {
+    const context = polarModel(entry, histidineCharged);
+    rows.forEach(row => { row.polar = polarInteractions(byChain.get(row.chains[0]) || [], byChain.get(row.chains[1]) || [], { context }); });
+  }
+
+  /* A measurement record for one interaction: its type's colour, dashed, the value shown unless the
+     press draws more than polarValueLimit at once. */
+  function polarRecord(entry, item, showValue) {
+    return { id: nextAnnotationId++, type: 'distance', points: [atomReference(entry, item.a), atomReference(entry, item.b)], interaction: item.type, color: polarTypeColor(item.type), dashed: true, showValue };
+  }
+
+  /* Draws a list of interactions in one undo step and says what it drew — "12 hydrogen bonds and 3
+     salt bridges drawn between A and D". A pair of atoms already measured (an earlier press, the card,
+     a measurement made by hand) is not drawn again on top of itself; with nothing new the press adds
+     nothing and says so, as Measure all does. */
+  function drawPolarInteractions(entry, list, where) {
+    if (!list.length) { updateStatus('No hydrogen bonds or salt bridges ' + where); return; }
+    const measured = new Set(measurementRecords.map(measuredPairKey).filter(Boolean));
+    const many = list.length > polarValueLimit;
+    const fresh = list.map(item => polarRecord(entry, item, !many)).filter(record => { const key = measuredPairKey(record); if (measured.has(key)) return false; measured.add(key); return true; });
+    if (!fresh.length) { updateStatus('Already drawn: ' + polarCountText(polarCounts(list)) + ' ' + where + ' · nothing added'); return; }
+    remember('hydrogen bonds and salt bridges');
+    fresh.forEach(record => measurementRecords.push(record));
+    if (!entry.visible) { entry.visible = true; renderList(); }
+    renderMeasurementList(); applyStyle();
+    const counts = polarCounts(fresh.map(record => ({ type: record.interaction })));
+    const already = list.length - fresh.length;
+    updateStatus(polarCountText(counts).replace(/^./, letter => letter.toUpperCase()) + ' drawn ' + where + (already ? ' · ' + already + ' already drawn' : '') + (many ? ' · more than ' + polarValueLimit + ', so without their values — Show value on a row brings one back' : ' · Separate labels if the values crowd') + ' · one undo step');
+  }
+
+  function showInterfaceInteractions(row) {
+    const entry = interfaceResults && entryById(interfaceResults.entryId);
+    if (!entry || !row.polar) return;
+    drawPolarInteractions(entry, row.polar, 'between ' + row.chains[0] + ' and ' + row.chains[1]);
+  }
+
+  /* The interaction records between two chains of a model — whichever press drew them. */
+  function polarPairRecords(entryId, chains) {
+    const wanted = chains.slice().sort().join('|');
+    return measurementRecords.filter(record => record.interaction && record.points.length === 2 && record.points.every(point => point.entryId === entryId) && record.points.map(point => point.chain || '').sort().join('|') === wanted);
+  }
+
+  function hideInterfaceInteractions(row) {
+    if (!interfaceResults) return;
+    const gone = polarPairRecords(interfaceResults.entryId, row.chains);
+    if (!gone.length) { updateStatus('No hydrogen bonds or salt bridges are drawn between ' + row.chains[0] + ' and ' + row.chains[1]); return; }
+    remember('hiding hydrogen bonds and salt bridges');
+    const drop = new Set(gone);
+    measurementRecords = measurementRecords.filter(record => !drop.has(record));
+    renderMeasurementList(); applyStyle();
+    updateStatus(polarCountText(polarCounts(gone.map(record => ({ type: record.interaction })))).replace(/^./, letter => letter.toUpperCase()) + ' between ' + row.chains[0] + ' and ' + row.chains[1] + ' removed · one undo step');
+  }
+
+  /* One row per interaction of every analysed pair. `donor` says which atom donates a hydrogen bond
+     — a, b, or either when both atoms can — and for a salt bridge which atom is the cation. */
+  function downloadInteractionsCsv() {
+    if (!interfaceResults || !interfaceResults.rows.some(row => row.polar && row.polar.length)) return;
+    const entry = entryById(interfaceResults.entryId);
+    const lines = [['model', 'chain_a', 'resi_a', 'resn_a', 'atom_a', 'chain_b', 'resi_b', 'resn_b', 'atom_b', 'type', 'distance_angstrom', 'donor', 'by_element'].join(',')];
+    let count = 0;
+    interfaceResults.rows.forEach(row => (row.polar || []).forEach(item => {
+      count += 1;
+      const donor = item.donor === item.a ? 'a' : item.donor === item.b ? 'b' : 'either';
+      lines.push([entry ? entry.name : '', item.a.chain || '', residueNumber(item.a), item.a.resn || '', item.a.atom || '', item.b.chain || '', residueNumber(item.b), item.b.resn || '', item.b.atom || '', item.type === 'hbond' ? 'hydrogen bond' : 'salt bridge', item.distance.toFixed(3), donor, item.byElement ? 'yes' : 'no'].map(csvCell).join(','));
+    }));
+    downloadBlob(lines.join('\n'), 'text/csv', 'interface-interactions.csv');
+    announce('Interactions CSV downloaded · ' + count + ' row' + (count === 1 ? '' : 's'));
+  }
+
+  /* A new histidine rule is a new answer: the analysed pairs are counted again on the spot. */
+  function polarHistidineChanged() {
+    const entry = interfaceResults && entryById(interfaceResults.entryId);
+    if (entry && entry.model && interfaceResults.rows.length) {
+      const atoms = heavyAtoms(entry).filter(atom => !isWater(atom));
+      const byChain = new Map();
+      atoms.forEach(atom => { const chain = atom.chain || ''; if (!byChain.has(chain)) byChain.set(chain, []); byChain.get(chain).push(atom); });
+      interfaceResults.histidineCharged = polarHistidineCharged();
+      polarInterfaceRows(entry, interfaceResults.rows, byChain, interfaceResults.histidineCharged);
+      renderInterfaceResults();
+    }
+    /* The card's tags follow too. */
+    if (contactsPanelOpen()) { cardContacts = null; openResidueContacts(); }
+    updateStatus('Histidine is ' + (polarHistidineCharged() ? 'now counted as charged: its ND1 and NE2 can make salt bridges' : 'no longer counted as charged: its ND1 and NE2 make hydrogen bonds only'));
+  }
+
+  /* The residues joined by interaction records, per model — `entryId|chain|resi|icode` — and the
+     signature that says whether they changed since the models were last styled. */
+  function polarStickKeys() {
+    const keys = new Map();
+    measurementRecords.forEach(record => {
+      if (!record.interaction) return;
+      record.points.forEach(point => {
+        if (!keys.has(point.entryId)) keys.set(point.entryId, new Set());
+        keys.get(point.entryId).add((point.chain || '') + '|' + point.resi + '|' + insertionCodeOf(point));
+      });
+    });
+    return keys;
+  }
+
+  /* Called by applyModelStyle (03): the residues an interaction joins drawn as sticks over whatever
+     the model is drawn as, on the main view, every panel and every export, as compared positions are.
+     A hidden chain stays hidden. */
+  function polarStyleSticks(model, entry) {
+    const keys = polarStickKeys().get(entry.id);
+    if (!keys || !keys.size) return;
+    const hidden = entry.hiddenChains || [];
+    model.setStyle({ predicate: atom => !hidden.includes(atom.chain || '') && keys.has((atom.chain || '') + '|' + atom.resi + '|' + insertionCodeOf(atom)) }, { stick: { radius: 0.22, colorscheme: 'default' } }, true);
+  }
+
+  /* Called first by rebuildOverlays (03): true, once, when the residues the interaction records join
+     are not the ones the models were last styled with — a row's Remove, Clear measurements and the
+     editor's Remove change the records and redraw only the overlays — so the sticks follow. Kept on
+     the function itself: rebuildOverlays can run before this part's own declarations have. */
+  function polarSticksStale() {
+    const keys = polarStickKeys();
+    const signature = [...keys.entries()].map(([id, set]) => id + ':' + [...set].sort().join(',')).sort().join(';');
+    if (signature === (polarSticksStale.signature || '')) return false;
+    polarSticksStale.signature = signature;
+    return true;
+  }
+
+  /* The interaction records a view draws: every point in a model the figure (or, for 'screen', the
+     page) shows. */
+  function polarShownRecords(kind = 'figure') {
+    const shown = new Set((kind === 'screen' ? displayedEntries() : figureEntries()).map(entry => entry.id));
+    return measurementRecords.filter(record => record.interaction && record.points.every(point => shown.has(point.entryId)));
+  }
+
+  /* The legend's entries for them (31 legendItems): one per type, colour and line as they are drawn
+     now — a recoloured hydrogen bond gets an entry of its own colour — hydrogen bonds first. */
+  function polarLegendItems(kind = 'figure') {
+    const records = polarShownRecords(kind);
+    const seen = new Map();
+    ['hbond', 'salt'].forEach(type => records.forEach(record => {
+      if (record.interaction !== type) return;
+      const color = String(measurementColor(record) || '').toLowerCase(); const line = record.dashed === false ? 'solid' : 'dashed';
+      const key = type + '|' + color + '|' + line;
+      if (!seen.has(key)) seen.set(key, [color, polarTypeName(type), polarTypeName(type) + ' (' + line + ' line)', line]);
+    }));
+    return [...seen.values()];
+  }
+
+  /* Called by rebuildOverlays (03): true, once, when the legend entries the interaction records make
+     have changed since the legend was last drawn — a colour, a dash — so the on-screen legend, the
+     legend key and its text follow at once. Kept on the function, as polarSticksStale's signature is. */
+  function polarLegendStale() {
+    const signature = JSON.stringify([polarLegendItems('screen'), polarLegendItems('figure')]);
+    if (signature === (polarLegendStale.signature || '[[],[]]')) return false;
+    polarLegendStale.signature = signature;
+    return true;
+  }
+
+  /* The figure legend's sentence (28): "Dashed lines: 12 hydrogen bonds (blue) and 3 salt bridges
+     (red), by geometry (…)", in the colours and line the records are drawn in now. */
+  function polarLegendSentence(shownIds) {
+    const records = measurementRecords.filter(record => record.interaction && record.points.every(point => shownIds.has(point.entryId)));
+    if (!records.length) return '';
+    const part = type => {
+      const own = records.filter(record => record.interaction === type); if (!own.length) return '';
+      const colours = [...new Set(own.map(record => colourName(measurementColor(record))))];
+      return own.length + ' ' + (type === 'hbond' ? 'hydrogen bond' : 'salt bridge') + (own.length === 1 ? '' : 's') + ' (' + colours.join(', ') + ')';
+    };
+    const dashed = records.every(record => record.dashed !== false); const solid = records.every(record => record.dashed === false);
+    return (dashed ? 'Dashed lines' : solid ? 'Solid lines' : 'Lines') + ': ' + ['hbond', 'salt'].map(part).filter(Boolean).join(' and ') + ', by geometry (donor–acceptor ≤ 3.5 Å, angles ≥ 90°; N–O ≤ 4.0 Å between charged groups).';
+  }
+
+  /* The methods text's sentence (28): the definitions behind the lines, once any is drawn. */
+  function polarMethodsSentence(shownIds) {
+    const records = measurementRecords.filter(record => record.interaction && record.points.every(point => shownIds.has(point.entryId)));
+    if (!records.length) return '';
+    const histidine = polarHistidineCharged() ? 'histidine ND1 and NE2 counted as charged' : 'histidine treated as neutral';
+    return 'Hydrogen bonds and salt bridges were identified from heavy-atom geometry (no hydrogens were placed): a hydrogen bond joined a donor and an acceptor N or O of different residues at ≤ 3.5 Å with every antecedent–donor···acceptor and donor···acceptor–antecedent angle ≥ 90°, roles being assigned by atom name for the standard amino acids and nucleotides and by element otherwise; a salt bridge joined a charged N (Lys NZ, Arg NE/NH1/NH2, the chain N-terminus) and a charged O (Asp OD1/OD2, Glu OE1/OE2, the C-terminus, nucleotide phosphate) at ≤ 4.0 Å, one per residue pair (' + histidine + '; water excluded).';
+  }
+
+  /* The debug hook's view (validate.mjs, validate-experimental.mjs, the suite): the hydrogen bonds and
+     salt bridges between two chains of a model — within one chain when the two are the same — as rows
+     [chainA, resiA, atomA, chainB, resiB, atomB, distance], the shape tests/reference.py writes, with
+     the insertion codes and the by-element flag beside them. Water out, histidine as the option says
+     unless `histidineCharged` is given. */
+  function debugPolarInteractions(entryId, chainA, chainB, histidineCharged = null) {
+    const entry = debugEntry(entryId); if (!entry) return null;
+    const context = polarModel(entry, histidineCharged === null ? polarHistidineCharged() : histidineCharged);
+    const side = chain => context.all.filter(atom => (atom.chain || '') === (chain || ''));
+    const atomsA = side(chainA); const atomsB = (chainA || '') === (chainB || '') ? atomsA : side(chainB);
+    const list = polarInteractions(atomsA, atomsB, { context });
+    const row = item => [item.a.chain || '', item.a.resi, item.a.atom || '', item.b.chain || '', item.b.resi, item.b.atom || '', item.distance];
+    return {
+      hbonds: list.filter(item => item.type === 'hbond').map(row), salt_bridges: list.filter(item => item.type === 'salt').map(row),
+      icodes: list.map(item => [insertionCodeOf(item.a), insertionCodeOf(item.b)]), byElement: list.filter(item => item.byElement).length,
+      donors: list.map(item => (item.donor === item.a ? 'a' : item.donor === item.b ? 'b' : 'either'))
+    };
+  }
+
+  root.querySelector('#gpv-interface-polar-csv').addEventListener('click', downloadInteractionsCsv);
+  root.querySelector('#gpv-interface-histidine').addEventListener('change', polarHistidineChanged);
+  /* ---------- Polar interactions: hydrogen bonds and salt bridges (2.53.0) ----------
+     The chemistry only — tables, roles and the search — with no page and no records, so the
+     Interfaces table (29), the residue card (04c), the debug hook and a test harness all ask the same
+     functions. Heavy atoms only: most structures and every prediction carry no hydrogens, so the
+     angles are heavy-atom proxies (the definitions are stated in USAGE, VALIDATION.md and the
+     methods text, and tests/reference.py implements them again in Biopython).
+
+     Hydrogen bond: a donor N or O and an acceptor N or O in different residues, not covalently
+     bonded to each other, donor–acceptor ≤ 3.5 Å, and both angles antecedent–donor···acceptor and
+     donor···acceptor–antecedent ≥ 90° for every antecedent (a heavy atom covalently bonded to the
+     atom); an atom with no antecedent skips its test.
+     Salt bridge: a cationic N within 4.0 Å of an anionic O, in different residues; one per residue
+     pair, reported at its shortest N–O distance. A salt-bridged residue pair is not also listed as
+     hydrogen bonds between its charged atoms (an N–O pair whose N is cationic and whose O is
+     anionic); hydrogen bonds between its other atoms still are.
+
+     Covalent bonds are read from geometry, as the residue card's peptide-bond tag is (04c
+     contactBond): two heavy atoms of one residue within 1.9 Å, or the backbone link between two
+     residues of one chain — C–N (peptide) or O3′–P (phosphodiester) within 1.9 Å. 3Dmol's own
+     `bonds` are not used: they are its guess from element radii, and an independent implementation
+     could not reproduce them. A residue is its chain, number and insertion code; where a crystal
+     structure gives an atom alternate locations the first in the file is used, as everywhere else in
+     the viewer (debugAtomPairDistance). */
+
+  const polarHbondCutoff = 3.5;
+  const polarSaltCutoff = 4.0;
+  const polarBondLength = 1.9;
+  /* More drawn at once than this and the values go: the lines alone say where they are. The type
+     colours and names are polarTypeColor and polarTypeName (29), functions so that the legend and the
+     measurement drawing, which can run before this part has, may ask for them at any time. */
+  const polarValueLimit = 40;
+
+  /* Donor (D), acceptor (A) or both (B), by atom name, for the residues whose chemistry is known.
+     Backbone N, O and OXT are added in polarRole for every amino acid (PRO's N is no donor). */
+  const polarAminoSide = {
+    SER: { OG: 'B' }, THR: { OG1: 'B' }, TYR: { OH: 'B' },
+    ASN: { OD1: 'A', ND2: 'D' }, GLN: { OE1: 'A', NE2: 'D' },
+    HIS: { ND1: 'B', NE2: 'B' }, TRP: { NE1: 'D' }, LYS: { NZ: 'D' },
+    ARG: { NE: 'D', NH1: 'D', NH2: 'D' }, ASP: { OD1: 'A', OD2: 'A' }, GLU: { OE1: 'A', OE2: 'A' },
+    ALA: {}, CYS: {}, GLY: {}, ILE: {}, LEU: {}, MET: {}, PHE: {}, PRO: {}, VAL: {}
+  };
+  const polarBases = {
+    A: { N1: 'A', N3: 'A', N6: 'D', N7: 'A' },
+    G: { O6: 'A', N1: 'D', N2: 'D', N3: 'A', N7: 'A' },
+    C: { O2: 'A', N3: 'A', N4: 'D' },
+    U: { O2: 'A', N3: 'D', O4: 'A' },
+    T: { O2: 'A', N3: 'D', O4: 'A' }
+  };
+  const polarNucleotideBase = { A: 'A', G: 'G', C: 'C', U: 'U', T: 'T', DA: 'A', DG: 'G', DC: 'C', DT: 'T', DU: 'U' };
+  /* Sugar and phosphate, by the remediated names; the older O1P/O2P/O3P are the same atoms. */
+  const polarNucleotideBackbone = { "O2'": 'B', "O3'": 'A', "O4'": 'A', "O5'": 'A', OP1: 'A', OP2: 'A', OP3: 'A', O1P: 'A', O2P: 'A', O3P: 'A' };
+  const polarCations = { LYS: ['NZ'], ARG: ['NE', 'NH1', 'NH2'] };
+  const polarHistidineCations = ['ND1', 'NE2'];
+  const polarAnions = { ASP: ['OD1', 'OD2'], GLU: ['OE1', 'OE2'] };
+  const polarPhosphateAnions = ['OP1', 'OP2', 'O1P', 'O2P'];
+
+  /* An atom's name with the older '*' for a prime written as one, so O2* and O2′ are the same atom. */
+  function polarAtomName(atom) {
+    return String(atom.atom || '').replace(/\*/g, "'");
+  }
+
+  function polarResidueKey(atom) {
+    return (atom.chain || '') + '|' + atom.resi + '|' + insertionCodeOf(atom);
+  }
+
+  /* The atoms the search works on: heavy atoms, water left out unless asked for, and one copy of each
+     atom of a residue — the first, where alternate locations repeat a name. */
+  function polarAtomsOf(atoms, options = {}) {
+    const seen = new Set();
+    return atoms.filter(atom => {
+      const element = atomElement(atom);
+      if (element === 'H' || element === 'D') return false;
+      if (!options.water && isWater(atom)) return false;
+      const key = polarResidueKey(atom) + '|' + polarAtomName(atom);
+      if (seen.has(key)) return false;
+      seen.add(key); return true;
+    });
+  }
+
+  /* What a role needs to know beyond the atom: every atom of the model (the antecedents of an atom
+     at the edge of a chosen set are outside it), the termini and the options. Built once per model.
+     An amino acid is a polymer residue (not hetflag — a modified residue bonded into its chain has
+     had hetflag cleared, 03b) with N, CA and C; a chain's first such residue's N is its N-terminus,
+     its last such residue's O and OXT its C-terminus. These are the first and last residues in the
+     file: where a crystal structure leaves a disordered end out, the residue taken for a terminus is
+     not the real one (USAGE says so). */
+  function polarContext(atoms, options = {}) {
+    const all = polarAtomsOf(atoms, options);
+    const residues = new Map();
+    all.forEach(atom => {
+      const key = polarResidueKey(atom);
+      if (!residues.has(key)) residues.set(key, []);
+      residues.get(key).push(atom);
+    });
+    const firstOfChain = new Map(); const lastOfChain = new Map();
+    residues.forEach((list, key) => {
+      const names = new Set(list.map(polarAtomName));
+      if (list[0].hetflag || !names.has('N') || !names.has('CA') || !names.has('C')) return;
+      const chain = list[0].chain || '';
+      if (!firstOfChain.has(chain)) firstOfChain.set(chain, key);
+      lastOfChain.set(chain, key);
+    });
+    const nTermini = new Set(); const cTermini = new Set();
+    firstOfChain.forEach(key => residues.get(key).forEach(atom => { if (polarAtomName(atom) === 'N') nTermini.add(atom); }));
+    lastOfChain.forEach(key => residues.get(key).forEach(atom => { if (['O', 'OXT'].includes(polarAtomName(atom))) cTermini.add(atom); }));
+    return { all, grid: spatialGrid(all, 2), nTermini, cTermini, histidineCharged: Boolean(options.histidineCharged), water: Boolean(options.water), antecedentCache: new Map(), roleCache: new Map() };
+  }
+
+  /* An N or O atom's part: { donor, acceptor, cation, anion, byElement }, or null when it takes none
+     (any other element, PRO's N, a nucleotide's glycosidic N). A residue whose chemistry is not in the
+     tables — a ligand, a modified residue — takes every N and O as both donor and acceptor, and says
+     so (byElement), so no chemistry is assumed. */
+  function polarRole(atom, context) {
+    if (context.roleCache.has(atom)) return context.roleCache.get(atom);
+    const element = atomElement(atom);
+    let made = null;
+    if (element === 'N' || element === 'O') {
+      const name = polarAtomName(atom); const resn = String(atom.resn || '').toUpperCase();
+      const role = code => ({ donor: code === 'D' || code === 'B', acceptor: code === 'A' || code === 'B', cation: false, anion: false, byElement: false });
+      if (isWater(atom)) made = element === 'O' ? role('B') : null;
+      else if (!atom.hetflag && polarAminoSide[resn]) {
+        const side = polarAminoSide[resn];
+        if (name === 'N') made = resn === 'PRO' ? null : role('D');
+        else if (name === 'O' || name === 'OXT') made = role('A');
+        else if (side[name]) made = role(side[name]);
+        if (made) {
+          made.cation = Boolean(polarCations[resn] && polarCations[resn].includes(name)) || (resn === 'HIS' && context.histidineCharged && polarHistidineCations.includes(name));
+          made.anion = Boolean(polarAnions[resn] && polarAnions[resn].includes(name));
+        }
+      } else if (!atom.hetflag && polarNucleotideBase[resn]) {
+        const code = polarNucleotideBackbone[name] || polarBases[polarNucleotideBase[resn]][name];
+        if (code) { made = role(code); made.anion = polarPhosphateAnions.includes(name); }
+      } else made = { donor: true, acceptor: true, cation: false, anion: false, byElement: true };
+      /* The chain's ends, whatever the residue: its N-terminal N is a donor and a cation (PRO's too),
+         its C-terminal O and OXT acceptors and anions. */
+      if (context.nTermini.has(atom)) { made = made || role('D'); made.donor = true; made.cation = true; }
+      if (context.cTermini.has(atom)) { made = made || role('A'); made.acceptor = true; made.anion = true; }
+    }
+    context.roleCache.set(atom, made);
+    return made;
+  }
+
+  /* The heavy atoms covalently bonded to an atom, by the geometric rule at the top of this part. */
+  function polarAntecedents(atom, context) {
+    if (context.antecedentCache.has(atom)) return context.antecedentCache.get(atom);
+    const limit = polarBondLength * polarBondLength;
+    const key = polarResidueKey(atom); const name = polarAtomName(atom);
+    const partner = name === 'N' ? 'C' : name === 'C' ? 'N' : name === "O3'" ? 'P' : name === 'P' ? "O3'" : null;
+    const found = [];
+    context.grid.near(atom).forEach(index => {
+      const other = context.all[index];
+      if (other === atom || squaredDistance(atom, other) > limit) return;
+      if (polarResidueKey(other) === key) { found.push(other); return; }
+      if (partner && polarAtomName(other) === partner && (other.chain || '') === (atom.chain || '')) found.push(other);
+    });
+    context.antecedentCache.set(atom, found);
+    return found;
+  }
+
+  /* Whether every antecedent of `atom` makes an angle of at least 90° with `other` at `atom`. */
+  function polarAnglesOpen(atom, other, context) {
+    return polarAntecedents(atom, context).every(before => (before.x - atom.x) * (other.x - atom.x) + (before.y - atom.y) * (other.y - atom.y) + (before.z - atom.z) * (other.z - atom.z) <= 0);
+  }
+
+  /* The context's own copy of each atom (the first alternate location), so a set chosen from a
+     model's atoms is searched as the context knows it. */
+  function polarPick(atoms, context) {
+    const own = new Set(context.all);
+    return atoms.filter(atom => own.has(atom)).map(atom => ({ atom, role: polarRole(atom, context) })).filter(item => item.role);
+  }
+
+  /* Every hydrogen bond and salt bridge between the atoms of `atomsA` and those of `atomsB` (the same
+     array for the interactions within one set, each pair once): [{ type: 'hbond'|'salt', a, b,
+     distance, byElement, donor, acceptor }], a from atomsA and b from atomsB. For a hydrogen bond
+     `donor` and `acceptor` are the two atoms when the tables decide which is which, null when either
+     could be; for a salt bridge they are the cationic N and the anionic O. Options: `context`
+     (polarContext over the whole model; built from atomsA and atomsB when left out),
+     `histidineCharged`, `water`. Sorted by the residues of a, then those of b, then distance. */
+  function polarInteractions(atomsA, atomsB, options = {}) {
+    const same = atomsA === atomsB;
+    const context = options.context || polarContext(same ? atomsA : atomsA.concat(atomsB), options);
+    const sideA = polarPick(atomsA, context); const sideB = same ? sideA : polarPick(atomsB, context);
+    const grid = spatialGrid(sideB.map(item => item.atom), polarSaltCutoff);
+    const hbondLimit = polarHbondCutoff * polarHbondCutoff; const saltLimit = polarSaltCutoff * polarSaltCutoff;
+    const hbonds = []; const salts = new Map();
+    sideA.forEach((first, indexA) => {
+      const keyA = polarResidueKey(first.atom);
+      grid.near(first.atom).forEach(indexB => {
+        if (same && indexB <= indexA) return;
+        const second = sideB[indexB];
+        const keyB = polarResidueKey(second.atom);
+        if (keyB === keyA) return;
+        const d2 = squaredDistance(first.atom, second.atom);
+        if (d2 > saltLimit) return;
+        const distance = Math.sqrt(d2);
+        const byElement = first.role.byElement || second.role.byElement;
+        const pairKey = keyA < keyB ? keyA + '>' + keyB : keyB + '>' + keyA;
+        /* A salt bridge: one per residue pair, at its shortest cation–anion distance. */
+        const cationFirst = first.role.cation && second.role.anion; const cationSecond = second.role.cation && first.role.anion;
+        const charged = cationFirst || cationSecond;
+        if (charged) {
+          const held = salts.get(pairKey);
+          if (!held || distance < held.distance) salts.set(pairKey, { type: 'salt', a: first.atom, b: second.atom, distance, byElement, donor: cationFirst ? first.atom : second.atom, acceptor: cationFirst ? second.atom : first.atom });
+        }
+        if (d2 > hbondLimit) return;
+        const forward = first.role.donor && second.role.acceptor; const backward = second.role.donor && first.role.acceptor;
+        if (!forward && !backward) return;
+        if (polarAntecedents(first.atom, context).includes(second.atom)) return;
+        if (!polarAnglesOpen(first.atom, second.atom, context) || !polarAnglesOpen(second.atom, first.atom, context)) return;
+        const either = forward && backward;
+        hbonds.push({ item: { type: 'hbond', a: first.atom, b: second.atom, distance, byElement, donor: either ? null : forward ? first.atom : second.atom, acceptor: either ? null : forward ? second.atom : first.atom }, charged, pairKey });
+      });
+    });
+    /* A salt-bridged pair's charged N–O pairs are the salt bridge, not hydrogen bonds beside it. */
+    const kept = hbonds.filter(found => !(found.charged && salts.has(found.pairKey))).map(found => found.item);
+    const code = atom => insertionCodeOf(atom);
+    const order = (x, y) => compareChains(x.a.chain || '', y.a.chain || '') || x.a.resi - y.a.resi || (code(x.a) < code(y.a) ? -1 : code(x.a) > code(y.a) ? 1 : 0)
+      || compareChains(x.b.chain || '', y.b.chain || '') || x.b.resi - y.b.resi || (code(x.b) < code(y.b) ? -1 : code(x.b) > code(y.b) ? 1 : 0) || x.distance - y.distance;
+    return [...kept, ...salts.values()].sort(order);
+  }
+
+  /* Hydrogen bonds and salt bridges in a list of interactions. */
+  function polarCounts(list) {
+    const hbonds = list.filter(item => item.type === 'hbond').length;
+    return { hbonds, salts: list.length - hbonds };
+  }
+
+  /* The context over a model's atoms, cached on the atoms array and the histidine option it was
+     made with — so the card, the table and the debug hook build it once. */
+  function polarModel(entry, histidineCharged = polarHistidineCharged()) {
+    const charged = Boolean(histidineCharged);
+    if (!entry.polarCache || entry.polarCache.atoms !== entry.atoms || entry.polarCache.histidineCharged !== charged) {
+      entry.polarCache = { atoms: entry.atoms, histidineCharged: charged, context: polarContext(entry.atoms, { histidineCharged: charged }) };
+    }
+    return entry.polarCache.context;
+  }
+
+  /* "12 hydrogen bonds and 3 salt bridges", "1 hydrogen bond", "no hydrogen bonds or salt bridges". */
+  function polarCountText(counts) {
+    const parts = [];
+    if (counts.hbonds) parts.push(counts.hbonds + ' hydrogen bond' + (counts.hbonds === 1 ? '' : 's'));
+    if (counts.salts) parts.push(counts.salts + ' salt bridge' + (counts.salts === 1 ? '' : 's'));
+    return parts.length ? parts.join(' and ') : 'no hydrogen bonds or salt bridges';
+  }
   /* ---------- Synchronized multi-view ---------- */
 
   /* Up to three panels sit in one row; four make a 2 × 2 grid; five or six use three columns. */
@@ -11397,8 +11968,9 @@ html>body{padding:0}</style>
       labels: labelRecords.filter(kept).map(label => ({ model: nameOf(label.entryId), chain: label.chain, resi: label.resi, ...icodeOf(label), atom: label.atom, text: label.text, color: label.color, size: label.size, ...(label.kind === 'domain' || label.kind === 'position' ? { kind: label.kind } : {}), ...(labelOffsetLength(label) ? { offset: label.offset } : {}), ...(label.autoPlaced && labelOffsetLength(label) ? { autoPlaced: true } : {}) })),
       selections: selectionRecords.filter(kept).map(record => ({ model: nameOf(record.entryId), chain: record.chain, residues: record.residues, ...(Array.isArray(record.icodes) ? { icodes: record.icodes } : {}), action: record.action, color: record.color })),
       /* A measurement's text, value switch, offset, colour and dash only when they differ from the
-         defaults, so a scene with none of them reads exactly as it did before they existed. */
-      measurements: measurementRecords.filter(keptPoints).map(record => ({ type: record.type, points: record.points.map(point), ...(record.text ? { text: record.text } : {}), ...(record.showValue === false ? { showValue: false } : {}), ...(labelOffsetLength(record) ? { offset: record.offset } : {}), ...(record.autoPlaced && labelOffsetLength(record) ? { autoPlaced: true } : {}), ...(measurementColor(record) ? { color: record.color } : {}), ...(record.dashed === false ? { dashed: false } : {}) })),
+         defaults, so a scene with none of them reads exactly as it did before they existed; a hydrogen
+         bond or salt bridge also says which (`interaction`, 2.53.0), which an older viewer ignores. */
+      measurements: measurementRecords.filter(keptPoints).map(record => ({ type: record.type, points: record.points.map(point), ...(record.text ? { text: record.text } : {}), ...(record.showValue === false ? { showValue: false } : {}), ...(labelOffsetLength(record) ? { offset: record.offset } : {}), ...(record.autoPlaced && labelOffsetLength(record) ? { autoPlaced: true } : {}), ...(/^#[0-9a-f]{6}$/i.test(record.color || '') ? { color: record.color } : {}), ...(record.dashed === false ? { dashed: false } : {}), ...(record.interaction === 'hbond' || record.interaction === 'salt' ? { interaction: record.interaction } : {}) })),
       residueData: residueData && (residueData.scope === 'all' || keep(residueData.entryId)) ? { name: residueData.name, scale: residueData.scale, scope: residueData.scope, model: nameOf(residueData.entryId), rows: [...residueData.values.entries()].map(([key, value]) => [key.split('|')[0], Number(key.split('|')[1]), value]).concat([...residueData.byResi.entries()].map(([resi, value]) => ['', resi, value])) } : null,
       domains: domainRecords.filter(record => record.scope === 'all' || kept(record)).map(record => ({ name: record.name, color: record.color, chain: record.chain, residues: record.residues, scope: record.scope, model: nameOf(record.entryId) })),
       annotations: annotationRecords.filter(keptPoints).map(record => ({ type: record.type, text: record.text, color: record.color, size: record.size, dashed: record.dashed, corner: record.corner, offset: record.offset, distance: record.distance, dx: record.dx, dy: record.dy, points: record.points.map(point) })),
@@ -11752,7 +12324,7 @@ html>body{padding:0}</style>
       /* `autoPlaced` marks an offset Separate labels chose, not one dragged by hand: without it a
          reopened scene's separated labels counted as placed by hand, Separate labels would not move
          them again and the exports could no longer re-place them at print size. */
-      return { id: nextAnnotationId++, type: record.type === 'angle' ? 'angle' : 'distance', points, ...(text ? { text } : {}), ...(record.showValue === false ? { showValue: false } : {}), ...(labelOffsetLength({ offset }) ? { offset } : {}), ...(labelOffsetLength({ offset }) && record.autoPlaced === true ? { autoPlaced: true } : {}), ...(/^#[0-9a-f]{6}$/i.test(record.color || '') ? { color: record.color } : {}), ...(record.dashed === false ? { dashed: false } : {}) };
+      return { id: nextAnnotationId++, type: record.type === 'angle' ? 'angle' : 'distance', points, ...(text ? { text } : {}), ...(record.showValue === false ? { showValue: false } : {}), ...(labelOffsetLength({ offset }) ? { offset } : {}), ...(labelOffsetLength({ offset }) && record.autoPlaced === true ? { autoPlaced: true } : {}), ...(/^#[0-9a-f]{6}$/i.test(record.color || '') ? { color: record.color } : {}), ...(record.dashed === false ? { dashed: false } : {}), ...(record.type !== 'angle' && points.length === 2 && (record.interaction === 'hbond' || record.interaction === 'salt') ? { interaction: record.interaction } : {}) };
     }).filter(Boolean);
     annotationRecords = (scene.annotations || []).map(record => {
       const type = record.type === 'screen' || annotationTools[record.type] ? record.type : null;
@@ -12446,15 +13018,22 @@ html>body{padding:0}</style>
      and is part of the scene, so scenes, sessions and share links carry it. */
   let figureLabels = {};
   const figureLabelLimit = 80;
+  /* An entry may carry a fourth element, 'dashed' or 'solid': a line, not a colour, drawn as a short
+     line in that colour (the hydrogen bonds and salt bridges drawn on the model, 29). They follow the
+     colour scheme's entries and make a key of their own when the scheme has none — every figure's
+     key lists what is drawn on it, with its colour and line. */
   function legendItems(kind = 'figure') {
-    const legend = defaultLegendItems(kind); if (!legend) return null;
+    const scheme = defaultLegendItems(kind); const lines = polarLegendItems(kind);
+    if (!scheme && !lines.length) return null;
+    const legend = !lines.length ? scheme : scheme ? { ...scheme, items: [...scheme.items, ...lines], ...(scheme.all ? { all: [...scheme.all, ...lines] } : {}) } : { title: 'Interactions', items: lines };
     const mode = root.querySelector('#gpv-color-mode').value;
     const title = figureLabels[mode + '|title'];
-    const renamed = ([color, short, long]) => {
+    const renamed = item => {
+      const [color, short, long] = item;
       const custom = figureLabels[mode + '|' + short];
-      if (!custom) return [color, short, long];
+      if (!custom) return item;
       const detail = long && long.includes(' · ') ? long.slice(long.indexOf(' · ')) : '';
-      return [color, custom, custom + detail];
+      return [color, custom, custom + detail, ...item.slice(3)];
     };
     const items = legend.items.map(renamed);
     /* `full`: every entry, renamed, even when the drawn key stopped at '+N more' — the list the
@@ -12483,9 +13062,9 @@ html>body{padding:0}</style>
        figure — the swatch that only ever named the legend row becomes the same colour picker the
        Composition panel uses, so a change here, there, or in the on-screen legend all land on the
        one chainColor() override every consumer reads. */
-    const row = (key, fallback, swatch) => {
+    const row = (key, fallback, swatch, line = null) => {
       const tr = document.createElement('tr'); const th = document.createElement('th'); th.scope = 'row';
-      const isChainSwatch = mode === 'chain' && swatch && key !== mode + '|title' && !/^\+\d+ more$/.test(fallback);
+      const isChainSwatch = mode === 'chain' && swatch && !line && key !== mode + '|title' && !/^\+\d+ more$/.test(fallback);
       if (isChainSwatch) {
         const chainId = fallback === '—' ? '' : fallback;
         const picker = document.createElement('input');
@@ -12503,7 +13082,7 @@ html>body{padding:0}</style>
           updateStatus('Chain ' + fallback + ' colour reset to default');
         });
         th.append(picker, ' ');
-      } else if (swatch) { const i = document.createElement('i'); i.className = 'gpv-swatch'; i.style.background = swatch; th.append(i, ' '); }
+      } else if (swatch) { th.append(legendSwatchElement(swatch, line), ' '); }
       th.append(fallback); tr.append(th);
       const td = document.createElement('td'); const input = document.createElement('input'); input.className = 'form-control'; input.type = 'text'; input.maxLength = figureLabelLimit;
       input.dataset.gpvLabelKey = key; input.placeholder = fallback; input.value = figureLabels[key] || ''; input.setAttribute('aria-label', 'Label for ' + fallback);
@@ -12516,7 +13095,7 @@ html>body{padding:0}</style>
       td.append(input); tr.append(td); body.append(tr);
     };
     row(mode + '|title', legend.defaults.title, null);
-    legend.defaults.items.forEach(item => row(mode + '|' + item[1], item[1], item[0]));
+    legend.defaults.items.forEach(item => row(mode + '|' + item[1], item[1], item[0], item[3] || null));
     renderFigureLabelsState();
   }
   function renderFigureLabelsState() {
@@ -12625,6 +13204,22 @@ html>body{padding:0}</style>
     return root.querySelector('#gpv-export-legend').checked && legendItems(kind) !== null;
   }
 
+  /* A legend entry's swatch on the page: a square of colour, or a short line of it ('dashed' or
+     'solid') for a line drawn on the model. */
+  function legendSwatchElement(color, line = null) {
+    const swatch = document.createElement('i');
+    swatch.className = line ? 'gpv-swatch gpv-swatch-line' : 'gpv-swatch';
+    if (line) { swatch.style.borderTopColor = color; swatch.style.borderTopStyle = line === 'solid' ? 'solid' : 'dashed'; swatch.dataset.line = line; }
+    else swatch.style.background = color;
+    return swatch;
+  }
+
+  /* A line entry's dash, as fractions of the swatch: dash, gap, dash — two dashes filling the swatch
+     width — and its stroke width; the canvas and the SVG both draw from these. */
+  function legendLineDash(swatch, line) {
+    return { width: Math.max(1.5, swatch / 6), dash: line === 'solid' ? [] : [swatch * 0.35, swatch * 0.3] };
+  }
+
   function renderScreenLegend() {
     /* Every change that redraws the on-screen key — colour scheme, a model's colour, a hidden model,
        a renamed entry — comes through here, so the legend key's button and text follow it (34a). */
@@ -12636,10 +13231,9 @@ html>body{padding:0}</style>
     if (!legend) return;
     host.setAttribute('aria-label', legend.title + ' colour legend');
     const title = document.createElement('strong'); title.textContent = legend.title; host.append(title);
-    legend.items.forEach(([color, short, long]) => {
-      const item = document.createElement('span'); const swatch = document.createElement('i');
-      swatch.className = 'gpv-swatch'; swatch.style.background = color;
-      item.append(swatch, long || short); host.append(item);
+    legend.items.forEach(([color, short, long, line]) => {
+      const item = document.createElement('span');
+      item.append(legendSwatchElement(color, line), long || short); host.append(item);
     });
     const edit = document.createElement('button'); edit.type = 'button'; edit.className = 'btn btn-ghost gpv-legend-edit'; edit.id = 'gpv-legend-edit';
     edit.textContent = figureLabelsCustomised(legend) ? 'Edit labels ·' : 'Edit labels'; edit.title = 'Rename the legend title and entries for figures (Publish → Figure labels)';
@@ -12668,7 +13262,7 @@ html>body{padding:0}</style>
       const step = Math.round(swatch * 1.7);
       const labels = legend.items.map(item => truncateToWidth(context, item[1], roomFor(available - gap * 3 - swatch)));
       const width = Math.max(titleWidth, ...labels.map(label => swatch + gap + context.measureText(label).width)) + gap * 2;
-      const rows = [[{ textX: 0, text: title }], ...labels.map((label, index) => [{ color: legend.items[index][0], x: 0, textX: swatch + gap, text: label }])]
+      const rows = [[{ textX: 0, text: title }], ...labels.map((label, index) => [{ color: legend.items[index][0], line: legend.items[index][3] || null, x: 0, textX: swatch + gap, text: label }])]
         .map((cells, index) => ({ dy: gap + step * index + step / 2, cells }));
       return { legend, swatch, gap, font, vertical: true, rows, top: 0, boxWidth: width, width, height: step * (legend.items.length + 1) + gap * 2 };
     }
@@ -12683,7 +13277,7 @@ html>body{padding:0}</style>
         label = truncateToWidth(context, label, roomFor(available - cursor - swatch - gap * 3));
         itemWidth = swatch + gap + context.measureText(label).width + gap * 2;
       }
-      rows[rows.length - 1].cells.push({ color: item[0], x: cursor, textX: cursor + swatch + gap, text: label });
+      rows[rows.length - 1].cells.push({ color: item[0], line: item[3] || null, x: cursor, textX: cursor + swatch + gap, text: label });
       cursor += itemWidth; width = Math.max(width, cursor);
     });
     /* The last row keeps the centre line the caller asked for; earlier rows stack above it. */
@@ -12701,7 +13295,11 @@ html>body{padding:0}</style>
     context.fillRect(x - gap, y + metrics.top, metrics.boxWidth, metrics.height); context.globalAlpha = 1;
     metrics.rows.forEach(row => row.cells.forEach(cell => {
       const rowY = y + row.dy;
-      if (cell.color) { context.fillStyle = cell.color; context.fillRect(x + cell.x, rowY - swatch / 2, swatch, swatch); }
+      if (cell.color && cell.line) {
+        const stroke = legendLineDash(swatch, cell.line);
+        context.save(); context.strokeStyle = cell.color; context.lineWidth = stroke.width; context.lineCap = 'butt'; context.setLineDash(stroke.dash);
+        context.beginPath(); context.moveTo(x + cell.x, rowY); context.lineTo(x + cell.x + swatch, rowY); context.stroke(); context.restore();
+      } else if (cell.color) { context.fillStyle = cell.color; context.fillRect(x + cell.x, rowY - swatch / 2, swatch, swatch); }
       context.fillStyle = palette.ink; context.fillText(cell.text, x + cell.textX, rowY);
     }));
     context.restore();
@@ -13186,7 +13784,10 @@ html>body{padding:0}</style>
     const parts = ['<g id="legend"><rect x="' + f(x - gap) + '" y="' + f(y + metrics.top) + '" width="' + f(metrics.boxWidth) + '" height="' + f(metrics.height) + '" fill="' + palette.paper + '" fill-opacity="0.88"/>'];
     metrics.rows.forEach(row => row.cells.forEach(cell => {
       const rowY = y + row.dy;
-      if (cell.color) parts.push('<rect x="' + f(x + cell.x) + '" y="' + f(rowY - swatch / 2) + '" width="' + f(swatch) + '" height="' + f(swatch) + '" fill="' + cell.color + '"/>');
+      if (cell.color && cell.line) {
+        const stroke = legendLineDash(swatch, cell.line);
+        parts.push('<line x1="' + f(x + cell.x) + '" y1="' + f(rowY) + '" x2="' + f(x + cell.x + swatch) + '" y2="' + f(rowY) + '" stroke="' + cell.color + '" stroke-width="' + f(stroke.width) + '"' + (stroke.dash.length ? ' stroke-dasharray="' + stroke.dash.map(f).join(' ') + '"' : '') + ' data-legend-line="' + cell.line + '"/>');
+      } else if (cell.color) parts.push('<rect x="' + f(x + cell.x) + '" y="' + f(rowY - swatch / 2) + '" width="' + f(swatch) + '" height="' + f(swatch) + '" fill="' + cell.color + '"/>');
       parts.push(text(x + cell.textX, rowY, cell.text));
     }));
     parts.push('</g>');
@@ -13232,6 +13833,8 @@ html>body{padding:0}</style>
       parts.push(svgLine(screen[0], screen[1], color, 2 * scale, dashed));
       if (record.type === 'angle') parts.push(svgLine(screen[1], screen[2], color, 2 * scale, dashed));
       const anchor = measurementAnchor(points, record);
+      /* A hydrogen bond or salt bridge drawn without its value has no label (03 measurementLabelText). */
+      const words = measurementLabelText(record); if (!words) return;
       const placed = placement && placement.get(record);
       const position = placed || shiftBy(anchor, record.offset);
       if (leaderLength(anchor, position) > leaderMinimum) parts.push(svgLine(project(anchor), project(position), color, Math.max(1, scale), false));
@@ -13239,7 +13842,7 @@ html>body{padding:0}</style>
          projected ends, which a perspective camera puts a fraction of a pixel from the projected
          midpoint. */
       const at = placed || labelOffsetLength(record) ? project(position) : record.type === 'angle' ? screen[1] : { x: (screen[0].x + screen[1].x) / 2, y: (screen[0].y + screen[1].y) / 2 };
-      parts.push(svgLabel(at, measurementLabelText(record), 12 * scale, svgLabelLook(measurementColor(record))));
+      parts.push(svgLabel(at, words, 12 * scale, svgLabelLook(measurementColor(record))));
     });
     annotationRecords.forEach(record => {
       if (record.type === 'screen') { if (includeScreenText) parts.push(svgScreenText(record, dimensions, scale)); return; }
@@ -13510,13 +14113,16 @@ html>body{padding:0}</style>
      key draws it (item[1], renamed by Figure labels), its colour as a word (colourName, 01), and
      the hex as well only where two entries share a word, so the sentence never names two colours
      alike. A key that stopped at '+N more' is written out in full here — the text has the room. */
+  /* A line entry (a hydrogen bond or salt bridge drawn on the model) names its line as well:
+     "Hydrogen bond (blue, dashed line)". */
   function legendKeyText(legend = legendItems('figure')) {
     if (!legend) return '';
     const entries = legend.full.filter(([, label]) => String(label || '').trim());
     const words = entries.map(([color]) => colourName(color));
     const shared = word => words.filter(other => other === word).length > 1;
     const colour = (color, word) => word + (shared(word) && /^#/.test(String(color)) ? ', ' + String(color).toLowerCase() : '');
-    return legend.title + ': ' + entries.map(([color, label], index) => label + ' (' + colour(color, words[index]) + ')').join('; ') + '.';
+    const line = item => (item[3] ? ', ' + (item[3] === 'solid' ? 'solid' : 'dashed') + ' line' : '');
+    return legend.title + ': ' + entries.map((item, index) => item[1] + ' (' + colour(item[0], words[index]) + line(item) + ')').join('; ') + '.';
   }
 
   /* The key as one row at the figure's text scale, wrapping at the figure's width or at 1200 px of
@@ -13887,9 +14493,12 @@ html>body{padding:0}</style>
       if (record.type === 'angle') shapes.push({ kind: 'line', start: xyz(points[1]), end: xyz(points[2]), color: color || '#e11d48', dashed });
       const anchor = measurementAnchor(points, record);
       const position = shiftBy(anchor, record.offset);
+      /* A hydrogen bond or salt bridge says what it is in the report, where there is no legend beside
+         it: "H-bond · 2.81 Å". Drawn without its value (more than 40 at once), it is the type alone. */
+      const words = record.interaction && !String(record.text || '').trim() ? [polarTypeName(record.interaction, 'short'), record.showValue === false ? '' : measurementText(record)].filter(Boolean).join(' · ') : measurementLabelText(record);
       /* A moved label keeps a thin leader back to what it measures, as on screen. */
       if (leaderLength(anchor, position) > leaderMinimum) shapes.push({ kind: 'line', start: xyz(anchor), end: xyz(position), color: color || '#e11d48', dashed: false, width: 1 });
-      shapes.push({ kind: 'label', position: xyz(position), text: measurementLabelText(record), color: color || '#111827', size: 1 });
+      shapes.push({ kind: 'label', position: xyz(position), text: words, color: color || '#111827', size: 1 });
     });
     annotationRecords.forEach(record => {
       if (record.type === 'screen' || !record.points.every(point => point.entryId === entry.id)) return;
@@ -16560,7 +17169,7 @@ applyBackground();
   offerSessionRestore();
   /* ?debug=1 exposes a few internals for the regression suite and for bug reports;
      it has no effect otherwise. */
-  if (new URLSearchParams(location.search).has('debug')) window.__viewerDebug = { viewer, pickAtomAt, displayedEntries, activeEntry, colorOptions, sceneSettings, contactResult: () => contactResult, residueData: () => residueData, msaAssets: () => msaAssets, entries: () => structures, nearbyResidues, assemblyDimensions, paeDomains, parseConfidenceBytes, methodsText, alignmentResults: () => alignmentResults, ensembleSpread: () => ensembleSpread, siteResults: () => siteResults, interfaceResults: () => interfaceResults, solventAccessibleArea, heavyAtoms, ligandGroups, architectureModel, domainSets, distinguishingNames, rmsdMatrix: () => rmsdMatrix, rmsdMedoid, scaleBarSpec, pixelsPerAngstrom, sceneCentre, exportDimensions, exportGpuLimit, setExportGpuLimit, exportViewer: () => exportViewer, renderPublicationImage, furnitureLayout, legendMetrics, legendWanted, figurePalette, figureScale, releaseExportViewer, labelRecords: () => labelRecords, labelPosition, labelHitAt, labelScreenBox, separateLabels, spotlightResidues: () => spotlightResidues, positionEffect: () => positionEffect, savedViews: () => savedViews, selectionRecords: () => selectionRecords, labelStyle, themeColor, hexLuminance, backgroundSpec, paeTokenLayout, readNpy, materializeEntry, interactionScores, reportedPairIptm, reportedPairIptmMax, interactionResults: () => interactionResults, reportConfidence, activeText: () => { const resolved = activeCanvasText(); return resolved ? { kind: resolved.kind, key: resolved.record.key || null, id: resolved.record.id || null } : null; }, labelEditor: () => (labelEditor ? { kind: labelEditor.kind, key: labelEditor.key || null, id: labelEditor.id || null } : null), undoDepth: () => undoStack.length, rememberedSteps: () => rememberedSteps, boxSelectMode: () => boxSelectMode, residueMarker: residueMarkerText, selectedResidue: () => (selectedResidue ? { ...selectedResidue } : null), measureFrom: () => (measureFrom ? { ...measureFrom } : null), measurementRecords: () => measurementRecords, drawLabels, distanceMatrix: contactDistanceMatrix, residueContacts: debugResidueContacts, residueDistances: debugResidueDistances, atomPairDistance: debugAtomPairDistance, measureAtoms: () => measureAtoms, contactHover: () => (contactHover ? { ...contactHover } : null), measurementHover: () => measurementHover, measurementLabelText, measurementAtomsText, measurementsText, measurementAnchor, measurementScreenBox, panelLabelPlacement, legendItems, legendKeyText, colourName, residueDataValue, exportRendering, downloadFigure, downloadPublicationSvg, panelFigureLayout, panelFigureSize, comparisonPanes, openSharedScene, figureEntries };
+  if (new URLSearchParams(location.search).has('debug')) window.__viewerDebug = { viewer, pickAtomAt, displayedEntries, activeEntry, colorOptions, sceneSettings, contactResult: () => contactResult, residueData: () => residueData, msaAssets: () => msaAssets, entries: () => structures, nearbyResidues, assemblyDimensions, paeDomains, parseConfidenceBytes, methodsText, alignmentResults: () => alignmentResults, ensembleSpread: () => ensembleSpread, siteResults: () => siteResults, interfaceResults: () => interfaceResults, solventAccessibleArea, heavyAtoms, ligandGroups, architectureModel, domainSets, distinguishingNames, rmsdMatrix: () => rmsdMatrix, rmsdMedoid, scaleBarSpec, pixelsPerAngstrom, sceneCentre, exportDimensions, exportGpuLimit, setExportGpuLimit, exportViewer: () => exportViewer, renderPublicationImage, furnitureLayout, legendMetrics, legendWanted, figurePalette, figureScale, releaseExportViewer, labelRecords: () => labelRecords, labelPosition, labelHitAt, labelScreenBox, separateLabels, spotlightResidues: () => spotlightResidues, positionEffect: () => positionEffect, savedViews: () => savedViews, selectionRecords: () => selectionRecords, labelStyle, themeColor, hexLuminance, backgroundSpec, paeTokenLayout, readNpy, materializeEntry, interactionScores, reportedPairIptm, reportedPairIptmMax, interactionResults: () => interactionResults, reportConfidence, activeText: () => { const resolved = activeCanvasText(); return resolved ? { kind: resolved.kind, key: resolved.record.key || null, id: resolved.record.id || null } : null; }, labelEditor: () => (labelEditor ? { kind: labelEditor.kind, key: labelEditor.key || null, id: labelEditor.id || null } : null), undoDepth: () => undoStack.length, rememberedSteps: () => rememberedSteps, boxSelectMode: () => boxSelectMode, residueMarker: residueMarkerText, selectedResidue: () => (selectedResidue ? { ...selectedResidue } : null), measureFrom: () => (measureFrom ? { ...measureFrom } : null), measurementRecords: () => measurementRecords, drawLabels, distanceMatrix: contactDistanceMatrix, residueContacts: debugResidueContacts, residueDistances: debugResidueDistances, atomPairDistance: debugAtomPairDistance, polarInteractions: debugPolarInteractions, measureAtoms: () => measureAtoms, contactHover: () => (contactHover ? { ...contactHover } : null), measurementHover: () => measurementHover, measurementLabelText, measurementAtomsText, measurementsText, measurementAnchor, measurementScreenBox, panelLabelPlacement, legendItems, legendKeyText, colourName, residueDataValue, exportRendering, downloadFigure, downloadPublicationSvg, panelFigureLayout, panelFigureSize, comparisonPanes, openSharedScene, figureEntries };
   applyTheme(readJson(themeKey, 'system'));
   selectToolTab('models');
   applyAppearance();

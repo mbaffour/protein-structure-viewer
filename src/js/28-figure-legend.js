@@ -38,7 +38,7 @@
     let colourText = {
       structure: 'coloured per model' + (shown.length > 1 ? ' (' + shown.map(entry => displayName(entry) + ' ' + entry.color).join('; ') + ')' : ''),
       chain: 'coloured by chain' + (abbreviated ? ' (' + abbreviated.length + ' chains: ' + abbreviated.join(', ') + ')' : ''),
-      entity: 'coloured by entity — chains with identical sequences share a colour' + (shown[0] ? ' (' + entityGroups(shown[0]).map(group => group.label + ' ×' + group.chains.length).join(', ') + ')' : ''),
+      entity: 'coloured by entity — copies of one polymer entity share a colour' + (shown[0] ? ' (' + entityGroups(shown[0]).map(group => group.label + ' ×' + group.chains.length).join(', ') + ')' : ''),
       plddt: 'coloured by per-residue pLDDT (very low <50 orange, low 50–70 yellow, confident 70–90 light blue, very high ≥90 dark blue)',
       agreement: 'coloured by per-residue Cα RMSF across ' + (ensembleSpread ? ensembleSpread.count + ' aligned models' : 'the aligned models') + ' (<0.5 Å blue, 0.5–1 Å green, 1–2 Å yellow, 2–4 Å orange, ≥4 Å red; residues present in one model grey)',
       deviation: 'coloured by Cα deviation from the reference after superposition (<1 Å blue, 1–2 Å green, 2–4 Å yellow, 4–8 Å orange, ≥8 Å red; unmatched residues grey)',
@@ -86,9 +86,11 @@
     });
     const highlights = selectionRecords.filter(record => record.action === 'highlight' && shownIds.has(record.entryId));
     if (highlights.length) sentences.push('Highlighted residues: ' + highlights.map(record => (record.chain ? 'chain ' + record.chain + ' ' : '') + compactRange(record.residues, record.icodes)).join('; ') + '.');
-    const measurements = measurementRecords.filter(record => record.points.every(point => shownIds.has(point.entryId)));
+    /* Hydrogen bonds and salt bridges have a sentence of their own (29), not a line each here. */
+    const measurements = measurementRecords.filter(record => !record.interaction && record.points.every(point => shownIds.has(point.entryId)));
     /* The atoms each joins, its value, and the user's words for it in parentheses. */
     if (measurements.length) sentences.push('Measurements: ' + measurements.map(record => measurementAtomsText(record, true) + ' ' + measurementText(record) + (record.text ? ' (' + record.text + ')' : '')).join('; ') + '.');
+    const polar = polarLegendSentence(shownIds); if (polar) sentences.push(polar);
     const annotations = annotationRecords.filter(record => record.text && record.points.every(point => shownIds.has(point.entryId)));
     if (annotations.length) sentences.push('Annotations: ' + annotations.map(record => record.text).join('; ') + '.');
     const plan = exportDimensions();
@@ -149,7 +151,7 @@
     const contactSentence = contactMethodsSentence(); if (contactSentence) sentences.push(contactSentence);
     /* The legend quotes each measurement's value; this says what it was measured between. */
     const shownIds = new Set(shown.map(entry => entry.id));
-    const measured = measurementRecords.filter(record => record.points.every(point => shownIds.has(point.entryId)));
+    const measured = measurementRecords.filter(record => !record.interaction && record.points.every(point => shownIds.has(point.entryId)));
     if (measured.length) {
       const distances = measured.filter(record => record.type === 'distance'); const angles = measured.length - distances.length;
       const alpha = distances.filter(record => record.points.every(point => point.atom === 'CA')).length;
@@ -166,6 +168,7 @@
     if (domains && domains.domains.length) sentences.push('Domains were derived from the PAE matrix by greedy agglomeration of ten-residue segments: the pair with the lowest mean inter-segment PAE was merged while that mean stayed below ' + domains.cutoff + ' Å; groups of fewer than twenty residues were absorbed into the nearest domain when within twice the cutoff and otherwise left unassigned. This segmentation is a heuristic and differs from the graph clustering used by the AlphaFold Protein Structure Database.');
     if (nearbyResult && nearbyResult.residues) sentences.push('Contacting residues were defined as residues with any heavy atom within ' + nearbyResult.cutoff + ' Å of any heavy atom of the ' + (nearbyResult.mode === 'chain' ? 'target chain' : nearbyResult.mode === 'hetero' ? 'ligands and ions' : 'target residue') + ' (hydrogens and water excluded).');
     const interactionSentence = interactionMethodsSentence(); if (interactionSentence) sentences.push(interactionSentence);
+    const polarSentence = polarMethodsSentence(shownIds); if (polarSentence) sentences.push(polarSentence);
     if (siteResults && siteResults.rows.length) sentences.push('Ligand-binding sites were defined as protein residues with any heavy atom within ' + siteResults.cutoff + ' Å of a ligand or ion heavy atom' + (siteResults.rows.some(row => row.pae !== null) ? '; ligand–site PAE is the mean of the symmetrised PAE between ligand tokens and site-residue tokens' : '') + '.');
     if (first) {
       const size = assemblyDimensions(first);
@@ -178,7 +181,7 @@
       charge: 'Residue charge colouring used formal charges at neutral pH (Lys and Arg positive; Asp and Glu negative; His shown as partially positive).',
       hydrophobicity: 'Hydrophobicity colouring used the Kyte–Doolittle scale.',
       chain: abbreviated ? 'Each chain was given its own colour; the figure key names the first ' + (legendNamedLimit - 1) + ' of the ' + abbreviated.length + ' chains and counts the remainder, all of which are named in the figure legend.' : null,
-      entity: 'Chains were grouped into entities by identical sequence.',
+      entity: 'Chains were grouped into entities by the mmCIF entity table where the file has one, otherwise by observed sequence (copies with ragged ends or a missing loop counted as one).',
       fromresidue: distanceColourMethods(),
       data: residueData ? 'Per-residue values (' + residueData.name + ') were mapped linearly onto a ' + ({ viridis: 'viridis', diverging: 'diverging blue–white–red', heat: 'white–red' })[residueData.scale] + ' scale between the minimum and maximum of the data.' : null
     };

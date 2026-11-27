@@ -261,9 +261,17 @@
     rebuildOverlays();
   }
 
-  /* "HIS57 · B NE2 ↔ SER195 · C OG · 3.02 Å": what the row names and the editor offers. */
+  /* "HIS57 · B NE2 ↔ SER195 · C OG · 3.02 Å": what the row names and the editor offers — after its
+     type for a hydrogen bond or salt bridge, "H-bond · ASP39 · D OD2 ↔ HIS102 · A NE2 · 2.81 Å". */
   function measurementRowText(record) {
-    return measurementAtomsText(record) + ' · ' + measurementText(record);
+    return (record.interaction ? polarTypeName(record.interaction, 'short') + ' · ' : '') + measurementAtomsText(record) + ' · ' + measurementText(record);
+  }
+
+  /* Whether a measurement's colour is its own: any colour on a measurement made by hand, a colour
+     other than its type's on a hydrogen bond or salt bridge — which is what Default is for. */
+  function measurementColourChanged(record) {
+    const own = record && /^#[0-9a-f]{6}$/i.test(record.color || '') ? record.color.toLowerCase() : null;
+    return Boolean(own) && own !== (record.interaction ? polarTypeColor(record.interaction) : null);
   }
 
   /* An edit to one measurement from anywhere — its row, the editor, the keyboard — redraws it, and
@@ -349,20 +357,28 @@
     list.addEventListener('focusout', event => { if (!list.contains(event.relatedTarget)) setMeasurementHover(list.matches(':hover') ? measurementHover : null); });
   }
 
-  /* Back to the colour every measurement has always had: the crimson line and the plain ink label. */
+  /* Back to the colour every measurement has always had: the crimson line and the plain ink label —
+     or, for a hydrogen bond or salt bridge, its type's blue or red (measurementColor falls back to it). */
   function setMeasurementDefaultColour(record) {
-    if (!measurementColor(record)) return;
+    if (!measurementColourChanged(record)) return;
     remember('measurement colour');
     delete record.color;
+    if (record.interaction) record.color = polarTypeColor(record.interaction);
     measurementChanged(record);
-    updateStatus('Measurement colour back to the default');
+    updateStatus(record.interaction ? polarTypeName(record.interaction) + ' colour back to the default' : 'Measurement colour back to the default');
+  }
+
+  function measurementDefaultTitle(record) {
+    if (record && record.interaction === 'hbond') return 'Back to the default colour: a hydrogen bond’s blue';
+    if (record && record.interaction === 'salt') return 'Back to the default colour: a salt bridge’s red';
+    return 'Back to the default colour: a crimson line and plain ink text';
   }
 
   /* A small Default beside a measurement's colour well, in its row and in the editor. */
   function measurementDefaultButton(id) {
     const button = document.createElement('button'); button.type = 'button'; button.className = 'btn btn-ghost gpv-colour-default'; button.textContent = 'Default';
     if (id) button.id = id;
-    button.title = 'Back to the default colour: a crimson line and plain ink text';
+    button.title = measurementDefaultTitle(null);
     return button;
   }
 
@@ -379,7 +395,8 @@
       const named = measurementAtomsText(record);
       const copy = document.createElement('span'); copy.className = 'gpv-edit-copy';
       const text = document.createElement('input'); text.className = 'form-control'; text.type = 'text'; text.maxLength = 120;
-      text.value = record.text || ''; text.placeholder = 'Text (optional)'; text.dataset.control = 'text';
+      /* A hydrogen bond or salt bridge says what it is where its text would be. */
+      text.value = record.text || ''; text.placeholder = record.interaction ? polarTypeName(record.interaction, 'short') + ' (text optional)' : 'Text (optional)'; text.dataset.control = 'text';
       text.setAttribute('aria-label', 'Text for the measurement ' + named);
       const commit = () => { if (setMeasurementText(record, text.value)) { measurementChanged(record); updateStatus('Measurement text updated'); } };
       text.addEventListener('change', commit);
@@ -402,7 +419,7 @@
       color.value = measurementColor(record) || '#e11d48'; color.setAttribute('aria-label', 'Colour of the measurement ' + named); color.dataset.control = 'color';
       color.title = 'Colour of the line and the label';
       const colourDefault = measurementDefaultButton(null); colourDefault.dataset.control = 'default';
-      colourDefault.disabled = !measurementColor(record);
+      colourDefault.disabled = !measurementColourChanged(record); colourDefault.title = measurementDefaultTitle(record);
       colourDefault.setAttribute('aria-label', 'Default colour for the measurement ' + named);
       colourDefault.addEventListener('click', () => setMeasurementDefaultColour(record));
       color.addEventListener('input', () => { if (!color.dataset.remembered) { remember('measurement colour'); color.dataset.remembered = '1'; } record.color = color.value; colourDefault.disabled = false; measurementChanged(record, false); });
@@ -417,7 +434,7 @@
         return wrap;
       };
       const dashed = toggle('Dashed', 'dashed', 'measurement dashed', 'Draw the line dashed, as measurements always have been, or solid');
-      const value = toggle('Show value', 'showValue', 'measurement value', 'Write the distance or angle after the text; with no text the value is always written');
+      const value = toggle('Show value', 'showValue', 'measurement value', record.interaction ? 'Write the distance after the text; a hydrogen bond or salt bridge with no text and no value is drawn as its line alone' : 'Write the distance or angle after the text; with no text the value is always written');
       const show = document.createElement('button'); show.className = 'btn btn-ghost'; show.type = 'button'; show.textContent = 'Show'; show.dataset.control = 'show';
       show.title = 'Centre the view on this measurement without changing the zoom';
       show.setAttribute('aria-label', 'Show the measurement ' + named);
@@ -593,7 +610,8 @@
     const color = host.querySelector('#gpv-measure-editor-color');
     const wanted = measurementColor(record) || '#e11d48';
     if (color.value !== wanted) color.value = wanted;
-    host.querySelector('#gpv-measure-editor-color-default').disabled = !measurementColor(record);
+    const colourDefault = host.querySelector('#gpv-measure-editor-color-default');
+    colourDefault.disabled = !measurementColourChanged(record); colourDefault.title = measurementDefaultTitle(record);
     const pair = measurementPairState(record);
     const wrap = host.querySelector('#gpv-measure-editor-pair-wrap');
     const select = host.querySelector('#gpv-measure-editor-pair');
@@ -772,7 +790,9 @@
     measurementRecords.forEach(record => {
       if (!record.points.every(point => shown.has(point.entryId))) return;
       const position = canvasTextPoint('measurement', record); if (!position) return;
-      items.push({ kind: 'measurement', record, position, text: measurementLabelText(record), size: 12 });
+      /* A hydrogen bond or salt bridge drawn without its value has no text to hit or move. */
+      const text = measurementLabelText(record); if (!text) return;
+      items.push({ kind: 'measurement', record, position, text, size: 12 });
     });
     return items;
   }
@@ -838,7 +858,8 @@
   function measurementScreenBox(record) {
     if (typeof viewer.modelToScreen !== 'function') return null;
     const anchor = measurementAnchor(null, record); if (!anchor) return null;
-    return labelBoxAt({ project: point => viewer.modelToScreen(point), scale: 1 }, { text: measurementLabelText(record), size: 12 }, shiftBy(anchor, record.offset));
+    const text = measurementLabelText(record); if (!text) return null;
+    return labelBoxAt({ project: point => viewer.modelToScreen(point), scale: 1 }, { text, size: 12 }, shiftBy(anchor, record.offset));
   }
 
   function screenProjection() {
@@ -873,7 +894,8 @@
     measurementRecords.forEach(record => {
       if (!record.points.every(point => shown.has(point.entryId))) return;
       const points = record.points.map(resolvePoint); if (points.some(point => !point)) return;
-      items.push({ record, kind: 'measurement', entryId: record.points[0].entryId, anchor: measurementAnchor(points, record), text: measurementLabelText(record), size: 12 });
+      const text = measurementLabelText(record); if (!text) return;
+      items.push({ record, kind: 'measurement', entryId: record.points[0].entryId, anchor: measurementAnchor(points, record), text, size: 12 });
     });
     return items;
   }

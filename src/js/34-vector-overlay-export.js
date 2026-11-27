@@ -67,7 +67,10 @@
     const parts = ['<g id="legend"><rect x="' + f(x - gap) + '" y="' + f(y + metrics.top) + '" width="' + f(metrics.boxWidth) + '" height="' + f(metrics.height) + '" fill="' + palette.paper + '" fill-opacity="0.88"/>'];
     metrics.rows.forEach(row => row.cells.forEach(cell => {
       const rowY = y + row.dy;
-      if (cell.color) parts.push('<rect x="' + f(x + cell.x) + '" y="' + f(rowY - swatch / 2) + '" width="' + f(swatch) + '" height="' + f(swatch) + '" fill="' + cell.color + '"/>');
+      if (cell.color && cell.line) {
+        const stroke = legendLineDash(swatch, cell.line);
+        parts.push('<line x1="' + f(x + cell.x) + '" y1="' + f(rowY) + '" x2="' + f(x + cell.x + swatch) + '" y2="' + f(rowY) + '" stroke="' + cell.color + '" stroke-width="' + f(stroke.width) + '"' + (stroke.dash.length ? ' stroke-dasharray="' + stroke.dash.map(f).join(' ') + '"' : '') + ' data-legend-line="' + cell.line + '"/>');
+      } else if (cell.color) parts.push('<rect x="' + f(x + cell.x) + '" y="' + f(rowY - swatch / 2) + '" width="' + f(swatch) + '" height="' + f(swatch) + '" fill="' + cell.color + '"/>');
       parts.push(text(x + cell.textX, rowY, cell.text));
     }));
     parts.push('</g>');
@@ -113,6 +116,8 @@
       parts.push(svgLine(screen[0], screen[1], color, 2 * scale, dashed));
       if (record.type === 'angle') parts.push(svgLine(screen[1], screen[2], color, 2 * scale, dashed));
       const anchor = measurementAnchor(points, record);
+      /* A hydrogen bond or salt bridge drawn without its value has no label (03 measurementLabelText). */
+      const words = measurementLabelText(record); if (!words) return;
       const placed = placement && placement.get(record);
       const position = placed || shiftBy(anchor, record.offset);
       if (leaderLength(anchor, position) > leaderMinimum) parts.push(svgLine(project(anchor), project(position), color, Math.max(1, scale), false));
@@ -120,7 +125,7 @@
          projected ends, which a perspective camera puts a fraction of a pixel from the projected
          midpoint. */
       const at = placed || labelOffsetLength(record) ? project(position) : record.type === 'angle' ? screen[1] : { x: (screen[0].x + screen[1].x) / 2, y: (screen[0].y + screen[1].y) / 2 };
-      parts.push(svgLabel(at, measurementLabelText(record), 12 * scale, svgLabelLook(measurementColor(record))));
+      parts.push(svgLabel(at, words, 12 * scale, svgLabelLook(measurementColor(record))));
     });
     annotationRecords.forEach(record => {
       if (record.type === 'screen') { if (includeScreenText) parts.push(svgScreenText(record, dimensions, scale)); return; }

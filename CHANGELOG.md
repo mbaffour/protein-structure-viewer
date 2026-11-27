@@ -2,6 +2,51 @@
 
 All notable changes to this project are recorded here.
 
+## 2.53.0
+
+### Added
+
+- **Hydrogen bonds and salt bridges.** Confidence → Interfaces now counts them for every chain pair in
+  contact, in two new columns (**H-bonds**, **Salt bridges**) worked out by the same press of *Analyse
+  interfaces*. Each row gains **Show interactions** — one press, one undo step — which draws every
+  hydrogen bond (blue) and salt bridge (red) of the pair as a dashed line with its distance, and the
+  side chains of the residues involved as sticks; a second press adds nothing and says so, and with
+  more than 40 at once the lines are drawn without their values. **Hide interactions** takes that
+  pair's lines away and nothing else. **Download interactions CSV** writes one row per interaction of
+  every analysed pair (the two atoms, the type, the distance, which atom donates, and whether the roles
+  were assigned by element), and the interface CSV ends with the two counts. **Count histidine as
+  charged** (off by default) recounts at once.
+- **The residue card tags its contacts.** A contact that makes a hydrogen bond or a salt bridge with
+  the card's residue carries an *H-bond* or *salt bridge* tag whose tooltip names the two atoms and their
+  distance; **Copy** gains an `interaction` column after `bond`; **Polar contacts** draws the residue's
+  hydrogen bonds and salt bridges as Show interactions does.
+- **Interactions are measurements that say what they are.** Their rows start with "H-bond" or "Salt
+  bridge"; colour, dashed, text, Show value and Remove work as for any measurement, and **Default** goes
+  back to the type's colour rather than crimson. Scenes, sessions, share links and undo carry the new
+  `interaction` field (older scenes load as before); the HTML report prints the type on each line.
+- **The legend names them.** While any is drawn, the on-figure legend, the standalone legend key (PNG,
+  SVG and the other formats) and the legend text starter gain "Hydrogen bond" and "Salt bridge" entries
+  drawn as short dashed lines in their current colours — an entry per colour if some were recoloured,
+  and a key of their own ("Interactions") when the colour scheme has none. The figure legend text says
+  "Dashed lines: … by geometry (donor–acceptor ≤ 3.5 Å, angles ≥ 90°; N–O ≤ 4.0 Å between charged
+  groups)" and the methods text states the criteria.
+- How it was checked: `tests/reference.py` implements the same definitions again in Biopython and
+  `tests/validate.mjs` compares the atom-pair sets and distances (to 0.005 Å) through a new debug hook;
+  on 1BRS (barnase–barstar) `tests/validate-experimental.mjs` compares the three complexes with
+  PDBePISA's list — every PISA salt bridge between Lys/Arg and Asp/Glu is found (and the His102 ones with
+  histidine counted as charged), and every PISA hydrogen bond under 3.5 Å that is not part of a salt
+  bridge is found (VALIDATION.md). Six suite steps cover the table, the CSVs, Show and Hide, the card,
+  hand-made pairs (a Lys–Asp pair, a bad angle, a proline N), the legend, the SVG and a scene round trip.
+
+### Fixed
+
+- **A nucleotide's pLDDT on the residue card, its marker, the sequence-strip hint and the hover readout
+  is now its C1′'s**, as Composition, the FASTA and the profile have read it since 2.52.0; it was the
+  P's, which AlphaFold 3 and Boltz give a different per-atom value (backlog J3-2). The Annotate readout,
+  which names the atom, keeps that atom's value.
+- `tests/reference.py` no longer stops on a run of one model (the RMSF summary had no values to take a
+  maximum of).
+
 ## 2.52.0
 
 ### Added

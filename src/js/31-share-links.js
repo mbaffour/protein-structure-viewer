@@ -311,7 +311,7 @@
       /* `autoPlaced` marks an offset Separate labels chose, not one dragged by hand: without it a
          reopened scene's separated labels counted as placed by hand, Separate labels would not move
          them again and the exports could no longer re-place them at print size. */
-      return { id: nextAnnotationId++, type: record.type === 'angle' ? 'angle' : 'distance', points, ...(text ? { text } : {}), ...(record.showValue === false ? { showValue: false } : {}), ...(labelOffsetLength({ offset }) ? { offset } : {}), ...(labelOffsetLength({ offset }) && record.autoPlaced === true ? { autoPlaced: true } : {}), ...(/^#[0-9a-f]{6}$/i.test(record.color || '') ? { color: record.color } : {}), ...(record.dashed === false ? { dashed: false } : {}) };
+      return { id: nextAnnotationId++, type: record.type === 'angle' ? 'angle' : 'distance', points, ...(text ? { text } : {}), ...(record.showValue === false ? { showValue: false } : {}), ...(labelOffsetLength({ offset }) ? { offset } : {}), ...(labelOffsetLength({ offset }) && record.autoPlaced === true ? { autoPlaced: true } : {}), ...(/^#[0-9a-f]{6}$/i.test(record.color || '') ? { color: record.color } : {}), ...(record.dashed === false ? { dashed: false } : {}), ...(record.type !== 'angle' && points.length === 2 && (record.interaction === 'hbond' || record.interaction === 'salt') ? { interaction: record.interaction } : {}) };
     }).filter(Boolean);
     annotationRecords = (scene.annotations || []).map(record => {
       const type = record.type === 'screen' || annotationTools[record.type] ? record.type : null;
@@ -1005,15 +1005,22 @@
      and is part of the scene, so scenes, sessions and share links carry it. */
   let figureLabels = {};
   const figureLabelLimit = 80;
+  /* An entry may carry a fourth element, 'dashed' or 'solid': a line, not a colour, drawn as a short
+     line in that colour (the hydrogen bonds and salt bridges drawn on the model, 29). They follow the
+     colour scheme's entries and make a key of their own when the scheme has none — every figure's
+     key lists what is drawn on it, with its colour and line. */
   function legendItems(kind = 'figure') {
-    const legend = defaultLegendItems(kind); if (!legend) return null;
+    const scheme = defaultLegendItems(kind); const lines = polarLegendItems(kind);
+    if (!scheme && !lines.length) return null;
+    const legend = !lines.length ? scheme : scheme ? { ...scheme, items: [...scheme.items, ...lines], ...(scheme.all ? { all: [...scheme.all, ...lines] } : {}) } : { title: 'Interactions', items: lines };
     const mode = root.querySelector('#gpv-color-mode').value;
     const title = figureLabels[mode + '|title'];
-    const renamed = ([color, short, long]) => {
+    const renamed = item => {
+      const [color, short, long] = item;
       const custom = figureLabels[mode + '|' + short];
-      if (!custom) return [color, short, long];
+      if (!custom) return item;
       const detail = long && long.includes(' · ') ? long.slice(long.indexOf(' · ')) : '';
-      return [color, custom, custom + detail];
+      return [color, custom, custom + detail, ...item.slice(3)];
     };
     const items = legend.items.map(renamed);
     /* `full`: every entry, renamed, even when the drawn key stopped at '+N more' — the list the
@@ -1042,9 +1049,9 @@
        figure — the swatch that only ever named the legend row becomes the same colour picker the
        Composition panel uses, so a change here, there, or in the on-screen legend all land on the
        one chainColor() override every consumer reads. */
-    const row = (key, fallback, swatch) => {
+    const row = (key, fallback, swatch, line = null) => {
       const tr = document.createElement('tr'); const th = document.createElement('th'); th.scope = 'row';
-      const isChainSwatch = mode === 'chain' && swatch && key !== mode + '|title' && !/^\+\d+ more$/.test(fallback);
+      const isChainSwatch = mode === 'chain' && swatch && !line && key !== mode + '|title' && !/^\+\d+ more$/.test(fallback);
       if (isChainSwatch) {
         const chainId = fallback === '—' ? '' : fallback;
         const picker = document.createElement('input');
@@ -1062,7 +1069,7 @@
           updateStatus('Chain ' + fallback + ' colour reset to default');
         });
         th.append(picker, ' ');
-      } else if (swatch) { const i = document.createElement('i'); i.className = 'gpv-swatch'; i.style.background = swatch; th.append(i, ' '); }
+      } else if (swatch) { th.append(legendSwatchElement(swatch, line), ' '); }
       th.append(fallback); tr.append(th);
       const td = document.createElement('td'); const input = document.createElement('input'); input.className = 'form-control'; input.type = 'text'; input.maxLength = figureLabelLimit;
       input.dataset.gpvLabelKey = key; input.placeholder = fallback; input.value = figureLabels[key] || ''; input.setAttribute('aria-label', 'Label for ' + fallback);
@@ -1075,7 +1082,7 @@
       td.append(input); tr.append(td); body.append(tr);
     };
     row(mode + '|title', legend.defaults.title, null);
-    legend.defaults.items.forEach(item => row(mode + '|' + item[1], item[1], item[0]));
+    legend.defaults.items.forEach(item => row(mode + '|' + item[1], item[1], item[0], item[3] || null));
     renderFigureLabelsState();
   }
   function renderFigureLabelsState() {
@@ -1184,6 +1191,22 @@
     return root.querySelector('#gpv-export-legend').checked && legendItems(kind) !== null;
   }
 
+  /* A legend entry's swatch on the page: a square of colour, or a short line of it ('dashed' or
+     'solid') for a line drawn on the model. */
+  function legendSwatchElement(color, line = null) {
+    const swatch = document.createElement('i');
+    swatch.className = line ? 'gpv-swatch gpv-swatch-line' : 'gpv-swatch';
+    if (line) { swatch.style.borderTopColor = color; swatch.style.borderTopStyle = line === 'solid' ? 'solid' : 'dashed'; swatch.dataset.line = line; }
+    else swatch.style.background = color;
+    return swatch;
+  }
+
+  /* A line entry's dash, as fractions of the swatch: dash, gap, dash — two dashes filling the swatch
+     width — and its stroke width; the canvas and the SVG both draw from these. */
+  function legendLineDash(swatch, line) {
+    return { width: Math.max(1.5, swatch / 6), dash: line === 'solid' ? [] : [swatch * 0.35, swatch * 0.3] };
+  }
+
   function renderScreenLegend() {
     /* Every change that redraws the on-screen key — colour scheme, a model's colour, a hidden model,
        a renamed entry — comes through here, so the legend key's button and text follow it (34a). */
@@ -1195,10 +1218,9 @@
     if (!legend) return;
     host.setAttribute('aria-label', legend.title + ' colour legend');
     const title = document.createElement('strong'); title.textContent = legend.title; host.append(title);
-    legend.items.forEach(([color, short, long]) => {
-      const item = document.createElement('span'); const swatch = document.createElement('i');
-      swatch.className = 'gpv-swatch'; swatch.style.background = color;
-      item.append(swatch, long || short); host.append(item);
+    legend.items.forEach(([color, short, long, line]) => {
+      const item = document.createElement('span');
+      item.append(legendSwatchElement(color, line), long || short); host.append(item);
     });
     const edit = document.createElement('button'); edit.type = 'button'; edit.className = 'btn btn-ghost gpv-legend-edit'; edit.id = 'gpv-legend-edit';
     edit.textContent = figureLabelsCustomised(legend) ? 'Edit labels ·' : 'Edit labels'; edit.title = 'Rename the legend title and entries for figures (Publish → Figure labels)';
@@ -1227,7 +1249,7 @@
       const step = Math.round(swatch * 1.7);
       const labels = legend.items.map(item => truncateToWidth(context, item[1], roomFor(available - gap * 3 - swatch)));
       const width = Math.max(titleWidth, ...labels.map(label => swatch + gap + context.measureText(label).width)) + gap * 2;
-      const rows = [[{ textX: 0, text: title }], ...labels.map((label, index) => [{ color: legend.items[index][0], x: 0, textX: swatch + gap, text: label }])]
+      const rows = [[{ textX: 0, text: title }], ...labels.map((label, index) => [{ color: legend.items[index][0], line: legend.items[index][3] || null, x: 0, textX: swatch + gap, text: label }])]
         .map((cells, index) => ({ dy: gap + step * index + step / 2, cells }));
       return { legend, swatch, gap, font, vertical: true, rows, top: 0, boxWidth: width, width, height: step * (legend.items.length + 1) + gap * 2 };
     }
@@ -1242,7 +1264,7 @@
         label = truncateToWidth(context, label, roomFor(available - cursor - swatch - gap * 3));
         itemWidth = swatch + gap + context.measureText(label).width + gap * 2;
       }
-      rows[rows.length - 1].cells.push({ color: item[0], x: cursor, textX: cursor + swatch + gap, text: label });
+      rows[rows.length - 1].cells.push({ color: item[0], line: item[3] || null, x: cursor, textX: cursor + swatch + gap, text: label });
       cursor += itemWidth; width = Math.max(width, cursor);
     });
     /* The last row keeps the centre line the caller asked for; earlier rows stack above it. */
@@ -1260,7 +1282,11 @@
     context.fillRect(x - gap, y + metrics.top, metrics.boxWidth, metrics.height); context.globalAlpha = 1;
     metrics.rows.forEach(row => row.cells.forEach(cell => {
       const rowY = y + row.dy;
-      if (cell.color) { context.fillStyle = cell.color; context.fillRect(x + cell.x, rowY - swatch / 2, swatch, swatch); }
+      if (cell.color && cell.line) {
+        const stroke = legendLineDash(swatch, cell.line);
+        context.save(); context.strokeStyle = cell.color; context.lineWidth = stroke.width; context.lineCap = 'butt'; context.setLineDash(stroke.dash);
+        context.beginPath(); context.moveTo(x + cell.x, rowY); context.lineTo(x + cell.x + swatch, rowY); context.stroke(); context.restore();
+      } else if (cell.color) { context.fillStyle = cell.color; context.fillRect(x + cell.x, rowY - swatch / 2, swatch, swatch); }
       context.fillStyle = palette.ink; context.fillText(cell.text, x + cell.textX, rowY);
     }));
     context.restore();

@@ -5,7 +5,8 @@ exact maximum Cα–Cα distance, heavy-atom residue contacts within a cutoff of
 inter-chain residue contact map (pairs with closest heavy-atom distance) for two chains, the full
 Cα–Cα distance matrix of those two chains and of the first chain against itself, and the
 buried surface area of every contacting chain pair by Shrake-Rupley (Bio.PDB.SASA), and for every residue
-of the first contact-map chain its contacts within the cutoff with their closest atom pairs (2.51.0)."""
+of the first contact-map chain its contacts within the cutoff with their closest atom pairs (2.51.0), and
+the hydrogen bonds and salt bridges between the contact-map chain pair (2.53.0)."""
 import sys, json, glob, re, warnings
 import Bio
 import numpy as np
@@ -37,7 +38,8 @@ rmsf = {}
 for k, pts in coords.items():
     if len(pts) < 2: continue
     p = np.array(pts); rmsf[f'{k[0]}|{k[1]}'] = float(np.sqrt(((p - p.mean(0)) ** 2).sum(1).mean()))
-out['rmsf'] = {'count': len(rmsf), 'max': round(max(rmsf.values()), 4), 'mean': round(float(np.mean(list(rmsf.values()))), 4), 'sample': {k: round(v, 4) for k, v in list(rmsf.items())[:5]}}
+# A run of one model has no spread to report (it stopped here with an empty max() before 2.53.0).
+out['rmsf'] = {'count': len(rmsf), 'max': round(max(rmsf.values()), 4) if rmsf else None, 'mean': round(float(np.mean(list(rmsf.values()))), 4) if rmsf else None, 'sample': {k: round(v, 4) for k, v in list(rmsf.items())[:5]}}
 ca0 = np.array([a.coord for a in ref.values()])
 centre = ca0.mean(0)
 out['rg_ca'] = round(float(np.sqrt(((ca0 - centre) ** 2).sum(1).mean())), 4)
@@ -233,5 +235,129 @@ for a3m in sorted(glob.glob(f'{folder}/*unpaired*.a3m')):
         cons[i] = normalised(-sum((w / wtotal) * math.log2(w / wtotal) for w in wfreq.values() if w > 0))
     out['msa'].append({'file': os.path.basename(a3m), 'query': query, 'sequences': len(rows), 'depth': depth, 'identity': [round(v, 6) for v in ident], 'conservation': [round(v, 6) for v in cons], 'conservation_unweighted': [round(v, 6) for v in cons_raw]})
 print('msa', [(m['file'][-30:], m['sequences'], len(m['query'])) for m in out['msa']])
+# --- polar interactions (2.53.0) ---
+# Hydrogen bonds and salt bridges between two chains of model 0 (the contact-map pair), written again
+# from the definitions in VALIDATION.md rather than from the viewer's code. Heavy atoms only, water left
+# out, the first alternate location of an atom. Roles by atom name for the 20 amino acids and the
+# standard nucleotides; any other residue (a ligand, a modified residue) has every N and O as donor and
+# acceptor ("by element"). The chain's first amino-acid residue's N is a donor and a cation, its last
+# one's O and OXT acceptors and anions. Covalent neighbours (antecedents) from geometry: atoms of the
+# same residue within 1.9 A, and the backbone link to another residue of the chain (C-N, O3'-P) within
+# 1.9 A. Hydrogen bond: donor-acceptor <= 3.5 A, different residues, not bonded, and every
+# antecedent-donor...acceptor and donor...acceptor-antecedent angle >= 90 deg (dot product <= 0).
+# Salt bridge: cationic N (LYS NZ, ARG NE/NH1/NH2, N-terminal N; HIS ND1/NE2 only with histidine
+# charged) within 4.0 A of an anionic O (ASP OD1/OD2, GLU OE1/OE2, C-terminal O/OXT, nucleotide
+# OP1/OP2), one per residue pair at its shortest N-O distance; a salt-bridged pair's cation-anion
+# atom pairs are not also hydrogen bonds.
+POLAR_WATER = {'HOH', 'WAT', 'DOD', 'H2O', 'TIP', 'SOL'}
+POLAR_SIDE = {'SER': {'OG': 'B'}, 'THR': {'OG1': 'B'}, 'TYR': {'OH': 'B'}, 'ASN': {'OD1': 'A', 'ND2': 'D'},
+              'GLN': {'OE1': 'A', 'NE2': 'D'}, 'HIS': {'ND1': 'B', 'NE2': 'B'}, 'TRP': {'NE1': 'D'}, 'LYS': {'NZ': 'D'},
+              'ARG': {'NE': 'D', 'NH1': 'D', 'NH2': 'D'}, 'ASP': {'OD1': 'A', 'OD2': 'A'}, 'GLU': {'OE1': 'A', 'OE2': 'A'},
+              'ALA': {}, 'CYS': {}, 'GLY': {}, 'ILE': {}, 'LEU': {}, 'MET': {}, 'PHE': {}, 'PRO': {}, 'VAL': {}}
+POLAR_BASES = {'A': {'N1': 'A', 'N3': 'A', 'N6': 'D', 'N7': 'A'}, 'G': {'O6': 'A', 'N1': 'D', 'N2': 'D', 'N3': 'A', 'N7': 'A'},
+               'C': {'O2': 'A', 'N3': 'A', 'N4': 'D'}, 'U': {'O2': 'A', 'N3': 'D', 'O4': 'A'}, 'T': {'O2': 'A', 'N3': 'D', 'O4': 'A'}}
+POLAR_NUC = {'A': 'A', 'G': 'G', 'C': 'C', 'U': 'U', 'T': 'T', 'DA': 'A', 'DG': 'G', 'DC': 'C', 'DT': 'T', 'DU': 'U'}
+POLAR_SUGAR = {"O2'": 'B', "O3'": 'A', "O4'": 'A', "O5'": 'A', 'OP1': 'A', 'OP2': 'A', 'OP3': 'A', 'O1P': 'A', 'O2P': 'A', 'O3P': 'A'}
+POLAR_CATION = {'LYS': {'NZ'}, 'ARG': {'NE', 'NH1', 'NH2'}}
+POLAR_ANION = {'ASP': {'OD1', 'OD2'}, 'GLU': {'OE1', 'OE2'}}
+
+def polar_interactions(model, chain_a, chain_b, histidine_charged=False):
+    def name(atom): return atom.get_id().replace('*', "'")
+    def element(atom): return (atom.element or atom.get_id()[:1]).upper()
+    def rkey(res): return (res.get_parent().id, res.id[1], res.id[2].strip())
+    atoms = []; residues = {}
+    for chain in model:
+        for res in chain:
+            if res.get_resname().strip().upper() in POLAR_WATER: continue
+            seen = set()
+            for atom in res.get_unpacked_list():  # every alternate location, in file order
+                if element(atom) in ('H', 'D') or name(atom) in seen: continue
+                seen.add(name(atom)); atoms.append(atom); residues.setdefault(rkey(res), []).append(atom)
+    by_res = {k: {name(a): a for a in v} for k, v in residues.items()}
+    near = NeighborSearch(atoms)
+    def dist(x, y): return float(np.linalg.norm(x.coord.astype(float) - y.coord.astype(float)))
+    # A HETATM residue with a backbone, bonded into its chain (C-N or O3'-P within 1.9 A of another
+    # residue), is a polymer residue, as the viewer's structure reader decides (03b).
+    def linked(res):
+        names = by_res[rkey(res)]
+        if not ({'N', 'CA', 'C'} <= set(names) or ("C1'" in names and ({'P', "O3'"} & set(names)))): return False
+        partners = {'C': 'N', 'N': 'C', 'P': "O3'", "O3'": 'P'}
+        for nm, a in names.items():
+            if nm not in partners: continue
+            for b in near.search(a.coord, 1.9):
+                if name(b) == partners[nm] and b.get_parent() is not res and b.get_parent().get_parent() is res.get_parent() and dist(a, b) <= 1.9: return True
+        return False
+    ligand = {}
+    for chain in model:
+        for res in chain:
+            if rkey(res) in residues: ligand[rkey(res)] = res.id[0] != ' ' and not linked(res)
+    n_term, c_term = set(), set()
+    for chain in model:
+        amino = [res for res in chain if rkey(res) in residues and not ligand[rkey(res)] and {'N', 'CA', 'C'} <= set(by_res[rkey(res)])]
+        if amino:
+            n_term.add(id(by_res[rkey(amino[0])]['N']))
+            for nm in ('O', 'OXT'):
+                if nm in by_res[rkey(amino[-1])]: c_term.add(id(by_res[rkey(amino[-1])][nm]))
+    def role(atom):
+        el = element(atom)
+        if el not in ('N', 'O'): return None
+        res = atom.get_parent(); resn = res.get_resname().strip().upper(); nm = name(atom)
+        def code(c): return {'donor': c in ('D', 'B'), 'acceptor': c in ('A', 'B'), 'cation': False, 'anion': False, 'by_element': False}
+        made = None
+        if not ligand[rkey(res)] and resn in POLAR_SIDE:
+            if nm == 'N': made = None if resn == 'PRO' else code('D')
+            elif nm in ('O', 'OXT'): made = code('A')
+            elif nm in POLAR_SIDE[resn]: made = code(POLAR_SIDE[resn][nm])
+            if made:
+                made['cation'] = nm in POLAR_CATION.get(resn, set()) or (resn == 'HIS' and histidine_charged and nm in ('ND1', 'NE2'))
+                made['anion'] = nm in POLAR_ANION.get(resn, set())
+        elif not ligand[rkey(res)] and resn in POLAR_NUC:
+            c = POLAR_SUGAR.get(nm) or POLAR_BASES[POLAR_NUC[resn]].get(nm)
+            if c: made = code(c); made['anion'] = nm in ('OP1', 'OP2', 'O1P', 'O2P')
+        else: made = {'donor': True, 'acceptor': True, 'cation': False, 'anion': False, 'by_element': True}
+        if id(atom) in n_term: made = made or code('D'); made['donor'] = True; made['cation'] = True
+        if id(atom) in c_term: made = made or code('A'); made['acceptor'] = True; made['anion'] = True
+        return made
+    link = {'N': 'C', 'C': 'N', "O3'": 'P', 'P': "O3'"}
+    def antecedents(atom):
+        res = atom.get_parent(); out = []
+        for other in near.search(atom.coord, 1.9 + 0.01):
+            if other is atom or dist(atom, other) > 1.9: continue
+            if other.get_parent() is res: out.append(other)
+            elif link.get(name(atom)) == name(other) and other.get_parent().get_parent() is res.get_parent(): out.append(other)
+        return out
+    def open_angles(x, y):
+        for p in antecedents(x):
+            if float(np.dot(p.coord.astype(float) - x.coord.astype(float), y.coord.astype(float) - x.coord.astype(float))) > 0: return False
+        return True
+    side_a = [a for a in atoms if a.get_parent().get_parent().id == chain_a and role(a)]
+    side_b = [a for a in atoms if a.get_parent().get_parent().id == chain_b and role(a)]
+    ns_b = NeighborSearch(side_b) if side_b else None
+    hbonds, salts = [], {}
+    same = chain_a == chain_b
+    for x in side_a:
+        for y in (ns_b.search(x.coord, 4.0 + 0.01) if ns_b else []):
+            if same and atoms.index(y) <= atoms.index(x): continue
+            if x.get_parent() is y.get_parent(): continue
+            d = dist(x, y)
+            if d > 4.0: continue
+            rx, ry = role(x), role(y)
+            charged = (rx['cation'] and ry['anion']) or (ry['cation'] and rx['anion'])
+            pair = tuple(sorted([rkey(x.get_parent()), rkey(y.get_parent())]))
+            if charged and (pair not in salts or d < salts[pair][2]): salts[pair] = (x, y, d)
+            if d > 3.5: continue
+            if not ((rx['donor'] and ry['acceptor']) or (ry['donor'] and rx['acceptor'])): continue
+            if y in antecedents(x): continue
+            if not open_angles(x, y) or not open_angles(y, x): continue
+            hbonds.append((x, y, d, charged, pair))
+    def row(x, y, d):
+        rx, ry = x.get_parent(), y.get_parent()
+        return [rx.get_parent().id, rx.id[1], name(x), ry.get_parent().id, ry.id[1], name(y), round(d, 6)]
+    return {'chains': [chain_a, chain_b], 'histidine_charged': histidine_charged,
+            'hbonds': [row(x, y, d) for x, y, d, charged, pair in hbonds if not (charged and pair in salts)],
+            'salt_bridges': [row(x, y, d) for x, y, d in salts.values()]}
+# --- end polar interactions ---
+out['interactions'] = polar_interactions(model0, map_a, map_b)
+print('interactions', [map_a, map_b], len(out['interactions']['hbonds']), 'hydrogen bonds,', len(out['interactions']['salt_bridges']), 'salt bridges')
 json.dump(out, open(f'{folder}/reference.json', 'w'), indent=1)
-print(json.dumps({k: v for k, v in out.items() if k not in ('contacts', 'distance_map', 'residue_contacts')}, indent=1)); print('contacts', out['contacts']['count'], out['contacts']['residues'][:6]); print('contact map', out['contact_map']['chains'], out['contact_map']['pairs'], 'pairs; chain pairs with contacts:', out['contact_map']['chain_pair_counts'])
+print(json.dumps({k: v for k, v in out.items() if k not in ('contacts', 'distance_map', 'residue_contacts', 'interactions')}, indent=1)); print('contacts', out['contacts']['count'], out['contacts']['residues'][:6]); print('contact map', out['contact_map']['chains'], out['contact_map']['pairs'], 'pairs; chain pairs with contacts:', out['contact_map']['chain_pair_counts'])

@@ -167,6 +167,8 @@
         model.setStyle(selection, { stick: { radius: 0.22, colorscheme: 'default' } }, true);
       });
     }
+    /* The residues a drawn hydrogen bond or salt bridge joins, as sticks too (29). */
+    polarStyleSticks(model, entry);
     const surface = root.querySelector('#gpv-surface').value;
     if (surface === 'none' || !host || typeof host.addSurface !== 'function') return Promise.resolve();
     if (entry.atoms.length > surfaceAtomLimit) {
@@ -961,6 +963,11 @@
   }
 
   function rebuildOverlays(shouldRender = true) {
+    /* A hydrogen bond or salt bridge removed from the list takes its side-chain sticks with it: the
+       models are styled again, which rebuilds the overlays itself (29 polarSticksStale). */
+    if (polarSticksStale()) { applyStyle(); return; }
+    /* A hydrogen bond recoloured or made solid changes the legend's entries, and so the key and its text. */
+    if (polarLegendStale()) renderScreenLegend();
     viewer.removeAllLabels();
     viewer.removeAllShapes();
     const stage = root.querySelector('#gpv-stage');
@@ -1123,19 +1130,23 @@
   }
 
   /* The words a measurement's label reads: the user's text and the value — "H-bond · 3.02 Å" — the
-     value alone with no text, the text alone with Show value off. Never empty: with no text and the
-     value hidden, the value shows anyway, since a label of nothing would be a box on its own. */
+     value alone with no text, the text alone with Show value off. Never empty for a measurement made
+     by hand: with no text and the value hidden, the value shows anyway, since a label of nothing would
+     be a box on its own. A hydrogen bond or salt bridge with its value hidden (more than 40 drawn at
+     once) is a line with no label at all: '' here, and every drawer leaves the label out. */
   function measurementLabelText(record) {
     const text = String(record.text || '').trim();
     const value = measurementText(record);
-    if (!text) return value;
+    if (!text) return record.interaction && record.showValue === false ? '' : value;
     return record.showValue === false ? text : text + ' · ' + value;
   }
 
   /* A colour the user chose, or null: the line then keeps the crimson every measurement has always
-     had, and the label the plain ink of a residue label. */
+     had, and the label the plain ink of a residue label. A hydrogen bond or salt bridge is drawn in its
+     type's colour (29 polarTypeColor) until it is given another. */
   function measurementColor(record) {
-    return record && /^#[0-9a-f]{6}$/i.test(record.color || '') ? record.color : null;
+    if (record && /^#[0-9a-f]{6}$/i.test(record.color || '')) return record.color;
+    return record && record.interaction ? polarTypeColor(record.interaction) : null;
   }
 
   /* One point as a reader names it: residue, number with its insertion code and chain, then the atom —
@@ -1188,10 +1199,11 @@
       line(points[0], points[1]);
       if (record.type === 'angle') line(points[1], points[2]);
       const anchor = measurementAnchor(points, record);
+      const words = measurementLabelText(record); if (!words) return;
       const position = (placement && placement.get(record)) || shiftBy(anchor, record.offset);
       if (leaderLength(anchor, position) > leaderMinimum && !stroke(anchor, position, Math.max(1, scale), false)) target.addLine({ start: anchor, end: position, color, linewidth: Math.max(1, Math.round(scale)) });
       const style = labelStyle(position, { color: measurementColor(record), scale });
-      target.addLabel(measurementLabelText(record), record === active ? activeLabelStyle(style) : style);
+      target.addLabel(words, record === active ? activeLabelStyle(style) : style);
     });
   }
 

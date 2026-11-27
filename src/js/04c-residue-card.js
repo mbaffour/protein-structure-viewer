@@ -75,7 +75,9 @@
      contacts list. */
   function residueCardFacts(entry, atom) {
     const parts = [];
-    if (entry.scores.length && Number.isFinite(Number(atom.b))) parts.push('pLDDT ' + Number(atom.b).toFixed(1));
+    /* The residue's confidence atom — its Cα, a nucleotide's C1′ — as Composition, the FASTA and the
+       profile read it, not the P the card stands a nucleotide by (J3-2). */
+    if (entry.scores.length && Number.isFinite(Number(atom.b))) parts.push('pLDDT ' + residueConfidence(entry, atom).toFixed(1));
     const ss = secondaryStructureWord(entry, atom);
     if (ss) parts.push(ss);
     const near = entry.model ? nearbyResidues({ entry, mode: 'residue', residue: { chain: atom.chain || '', resi: atom.resi, icode: insertionCodeOf(atom) } }) : null;
@@ -101,6 +103,10 @@
     distances.type = 'button'; distances.className = 'btn btn-ghost'; distances.id = 'gpv-label-editor-distances'; distances.textContent = 'Distances CSV';
     distances.title = 'Download the distance from this residue to every residue of its model — Cα–Cα and closest heavy atoms — nearest first';
     distances.addEventListener('click', downloadResidueDistancesFromCard);
+    const polar = document.createElement('button');
+    polar.type = 'button'; polar.className = 'btn btn-ghost'; polar.id = 'gpv-label-editor-polar'; polar.textContent = 'Polar contacts';
+    polar.title = 'Draw this residue’s hydrogen bonds (blue) and salt bridges (red) as dashed lines, with the side chains as sticks, in one undo step';
+    polar.addEventListener('click', drawCardPolarContacts);
     const atoms = document.createElement('label');
     atoms.className = 'gpv-residue-card-atoms text-small'; atoms.id = 'gpv-label-editor-measure-atoms-wrap';
     atoms.title = 'What Measure to…, M, a click on a contact and Measure all join: the two residues’ Cα atoms, or their closest pair of heavy atoms. Remembered for next time; the contact and distance map always measures Cα–Cα';
@@ -111,7 +117,7 @@
     select.addEventListener('change', () => setMeasureAtoms(select.value));
     atoms.append('Measure ', select);
     const list = residueContactsElement();
-    return { facts, measure, contacts, distances, atoms, list };
+    return { facts, measure, contacts, distances, polar, atoms, list };
   }
 
   /* The contacts list: three actions over a scrolling list of rows, each row a button so the list
@@ -129,7 +135,7 @@
     tools.append(
       button('gpv-residue-contacts-measure-all', 'Measure all', 'Draw a measurement from this residue to every residue listed — Cα–Cα or closest atoms, as the Measure choice says — in one undo step', measureAllContacts),
       button('gpv-residue-contacts-highlight', 'Highlight', 'Highlight the listed residues in the Annotate tab’s highlight colour — what Highlight nearby residues makes for this residue', highlightContactsFromCard),
-      button('gpv-residue-contacts-copy', 'Copy', 'Copy the list as tab-separated text: residue, chain, closest distance, the two atoms, Cα–Cα distance', copyContactsFromCard)
+      button('gpv-residue-contacts-copy', 'Copy', 'Copy the list as tab-separated text: residue, chain, closest distance, the two atoms, any covalent bond, hydrogen bond or salt bridge, Cα–Cα distance', copyContactsFromCard)
     );
     const rows = document.createElement('ul'); rows.className = 'gpv-residue-contacts-rows'; rows.id = 'gpv-residue-contacts-rows';
     rows.setAttribute('aria-label', 'Residues in contact');
@@ -144,7 +150,7 @@
   function fillResidueCard(host, target, residueLine) {
     resetResidueContacts(true);
     const facts = host.querySelector('#gpv-residue-card-facts');
-    const own = ['#gpv-label-editor-measure', '#gpv-label-editor-contacts', '#gpv-label-editor-distances', '#gpv-label-editor-measure-atoms-wrap'].map(selector => host.querySelector(selector));
+    const own = ['#gpv-label-editor-measure', '#gpv-label-editor-contacts', '#gpv-label-editor-distances', '#gpv-label-editor-polar', '#gpv-label-editor-measure-atoms-wrap'].map(selector => host.querySelector(selector));
     const entry = residueLine && !textWithoutResidue(target) ? entryById(target.entryId) : null;
     if (!entry || !target.atom) { facts.hidden = true; facts.textContent = ''; own.forEach(item => { item.hidden = true; }); return; }
     const chain = target.atom.chain || '';
@@ -415,7 +421,8 @@
     const key = residueKey(picked.entryId, picked.chain, picked.resi, picked.icode);
     if (labelRecords.some(label => label.key === key)) return null;
     const atom = residueAlphaCarbon(entry, picked.chain, picked.resi, insertionCodeOf(picked)) || picked;
-    const confidence = entry.scores.length && Number.isFinite(Number(atom.b)) ? ' · pLDDT ' + Number(atom.b).toFixed(1) : '';
+    /* The marker names the residue, not an atom: its confidence atom's pLDDT, as the card says (J3-2). */
+    const confidence = entry.scores.length && Number.isFinite(Number(atom.b)) ? ' · pLDDT ' + residueConfidence(entry, atom).toFixed(1) : '';
     return { text: labelEditorDefaultText(atom) + confidence, style: residueMarkerStyle(atom) };
   }
 
@@ -492,6 +499,7 @@
     if (!near) return { error: 'That residue’s model is not loaded' };
     if (near.error) return near;
     const origin = residueAlphaCarbon(entry, chain, resi, icode);
+    const polar = residuePolarInteractions(entry, chain, resi, icode);
     const rows = near.residues.map(item => {
       const pair = closestHeavyAtomPair(entry, { chain, resi, icode }, entry, item);
       const other = residueAlphaCarbon(entry, item.chain, item.resi, insertionCodeOf(item));
@@ -502,6 +510,9 @@
         reach: origin && other ? atomWord(origin) + '–' + atomWord(other) : ''
       };
       row.bond = contactBond(pair ? pair.a.resn || '' : '', row);
+      /* Its hydrogen bonds and salt bridges with this residue (29a), this residue's atom first. The
+         closest-atom columns still give the closest heavy-atom pair, which need not be one of them. */
+      row.interactions = polar.filter(found => sameResidue(found.b, item.chain, item.resi, insertionCodeOf(item))).map(found => ({ type: found.type, atomA: found.a.atom || '', atomB: found.b.atom || '', distance: found.distance, byElement: found.byElement }));
       return row;
     });
     const nearestFirst = value => (value === null ? Infinity : value);
@@ -595,6 +606,15 @@
       const bondText = row.bond === 'peptide' ? 'peptide bond' : row.bond === 'disulfide' ? 'disulfide' : '';
       const name = part('gpv-contact-name', contactRowName(row));
       if (bondText) name.append(part('gpv-contact-bond', bondText));
+      /* A salt bridge or hydrogen bond with this residue: a tag of its type's colour whose tooltip names
+         the atoms and the distance. */
+      ['salt', 'hbond'].forEach(type => {
+        const found = (row.interactions || []).filter(item => item.type === type); if (!found.length) return;
+        const tag = part('gpv-contact-bond gpv-contact-' + type, type === 'salt' ? 'salt bridge' : 'H-bond');
+        tag.title = found.map(item => item.atomA + '–' + item.atomB + ' ' + item.distance.toFixed(2) + ' Å').join(', ') + ' (' + (type === 'salt' ? 'salt bridge' : 'hydrogen bond' + (found.length === 1 ? '' : 's')) + ')';
+        name.append(tag);
+      });
+      button.dataset.interaction = contactInteractionText(row);
       button.append(
         name,
         part('gpv-contact-closest', row.closest === null ? '—' : row.closest.toFixed(2) + ' Å'),
@@ -673,9 +693,31 @@
   }
 
   function contactsText(found) {
-    const lines = [['residue', 'chain', 'resi', 'resn', 'closest_distance', 'closest_atoms', 'bond', 'ca_distance'].join('\t')];
-    found.rows.forEach(row => lines.push([contactRowName(row), row.chain, residueNumber(row), row.resn, row.closest === null ? '' : row.closest.toFixed(3), row.atomA + '–' + row.atomB, row.bond || '', row.ca === null ? '' : row.ca.toFixed(3)].join('\t')));
+    const lines = [['residue', 'chain', 'resi', 'resn', 'closest_distance', 'closest_atoms', 'bond', 'interaction', 'ca_distance'].join('\t')];
+    found.rows.forEach(row => lines.push([contactRowName(row), row.chain, residueNumber(row), row.resn, row.closest === null ? '' : row.closest.toFixed(3), row.atomA + '–' + row.atomB, row.bond || '', contactInteractionText(row), row.ca === null ? '' : row.ca.toFixed(3)].join('\t')));
     return lines.join('\n');
+  }
+
+  /* "salt bridge", "H-bond", "salt bridge; H-bond" or '' — the tags a contacts row carries. */
+  function contactInteractionText(row) {
+    const types = new Set((row.interactions || []).map(item => item.type));
+    return [types.has('salt') ? 'salt bridge' : '', types.has('hbond') ? 'H-bond' : ''].filter(Boolean).join('; ');
+  }
+
+  /* A residue's hydrogen bonds and salt bridges with every other residue of its model (water out),
+     this residue's atom first in each. */
+  function residuePolarInteractions(entry, chain, resi, icode = '') {
+    const context = polarModel(entry);
+    const own = context.all.filter(atom => sameResidue(atom, chain, resi, icode));
+    return own.length ? polarInteractions(own, context.all, { context }) : [];
+  }
+
+  /* The card's Polar contacts: this residue's hydrogen bonds and salt bridges drawn as Show
+     interactions draws a chain pair's (29), in one undo step. */
+  function drawCardPolarContacts() {
+    const picked = cardResidue();
+    if (!picked) { updateStatus('That residue’s model is no longer loaded'); return; }
+    drawPolarInteractions(picked.entry, residuePolarInteractions(picked.entry, picked.chain, picked.resi, picked.icode), 'from ' + picked.name);
   }
 
   async function copyContactsFromCard() {

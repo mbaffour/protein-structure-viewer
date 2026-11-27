@@ -1158,15 +1158,17 @@ html>body{padding:0}</style>
     </div>
     <div class="table-responsive" id="gpv-site-wrap" hidden><table class="table table-sm" aria-label="Ligand binding sites of the current model"><thead><tr><th>Ligand</th><th class="text-end">Atoms</th><th class="text-end">Site residues</th><th class="text-end">Site mean pLDDT</th><th class="text-end">Ligand–site PAE (Å)</th><th></th></tr></thead><tbody id="gpv-site-rows"></tbody></table></div>
     <h3 class="gpv-subheading">Interfaces</h3>
-    <p class="text-muted text-small gpv-hint">Geometry of the model as loaded: inter-chain heavy-atom contacts and buried surface area (Shrake–Rupley, 1.4 Å probe, 92 points per atom). A predicted interface is a hypothesis about an interaction, not evidence of one — read it next to the chain-pair ipTM and PAE above.</p>
+    <p class="text-muted text-small gpv-hint">Geometry of the model as loaded: inter-chain heavy-atom contacts, buried surface area (Shrake–Rupley, 1.4 Å probe, 92 points per atom), and hydrogen bonds and salt bridges by geometry (heavy atoms only: donor–acceptor ≤ 3.5 Å with both angles ≥ 90°; a charged N–O pair ≤ 4.0 Å). A predicted interface is a hypothesis about an interaction, not evidence of one — read it next to the chain-pair ipTM and PAE above.</p>
     <div class="viz-controls">
       <label class="form-label gpv-current-label">Model<select class="form-select" id="gpv-interface-model" disabled><option>No models loaded</option></select></label>
       <label class="form-label gpv-slider-label">Contact cutoff <span id="gpv-interface-cutoff-value">4.0 Å</span><input class="form-range" id="gpv-interface-cutoff" type="range" min="3" max="6" step="0.5" value="4"></label>
       <button class="btn" type="button" id="gpv-interface-run" disabled><i data-icon="crosshair" aria-hidden="true"></i>Analyse interfaces</button>
       <button class="btn" type="button" id="gpv-interface-csv" disabled>Download interface CSV</button>
+      <button class="btn" type="button" id="gpv-interface-polar-csv" disabled title="One row per hydrogen bond and salt bridge of every analysed chain pair: the two atoms, the type, the distance, which atom donates and whether the roles were assigned by element">Download interactions CSV</button>
+      <label class="form-check gpv-check text-small" title="Off: histidine is neutral, its ND1 and NE2 make hydrogen bonds only. On: they count as cations for salt bridges too"><input class="form-check-input" type="checkbox" id="gpv-interface-histidine"><span class="form-check-label">Count histidine as charged</span></label>
       <span class="text-muted text-small" id="gpv-interface-state"></span>
     </div>
-    <div class="table-responsive" id="gpv-contacts-wrap" hidden><table class="table table-sm" aria-label="Inter-chain interface geometry"><thead><tr><th>Chain pair</th><th class="text-end">Atom contacts</th><th class="text-end">Residue pairs</th><th class="text-end">Interface residues</th><th class="text-end">Buried surface (Å²)</th><th></th></tr></thead><tbody id="gpv-contacts-rows"></tbody></table></div>
+    <div class="table-responsive" id="gpv-contacts-wrap" hidden><table class="table table-sm" aria-label="Inter-chain interface geometry"><thead><tr><th>Chain pair</th><th class="text-end">Atom contacts</th><th class="text-end">Residue pairs</th><th class="text-end">Interface residues</th><th class="text-end">Buried surface (Å²)</th><th class="text-end" title="Hydrogen bonds by geometry: donor–acceptor ≤ 3.5 Å, both heavy-atom angles ≥ 90°">H-bonds</th><th class="text-end" title="Salt bridges: a charged N within 4.0 Å of a charged O, one per residue pair">Salt bridges</th><th></th></tr></thead><tbody id="gpv-contacts-rows"></tbody></table></div>
   </section>
 
   <section class="gpv-tool-panel" data-gpv-panel="publish" hidden>
@@ -1363,6 +1365,7 @@ html>body{padding:0}</style>
         <li><strong>Download comparison PNG</strong> stitches the current panels into one lettered figure at the export size you chose; the <strong>SVG</strong> variants keep labels, arrows, captions, and the legend as editable vector layers over the rendered molecule.</li>
         <li>Every residue label and annotation is editable in its list row — text, colour, and size — and can be nudged with the arrow buttons; it moves in screen space and stays put when the model turns. Callouts also take a leader length.</li>
         <li><strong>Interfaces</strong> in the Confidence tab counts inter-chain contacts and buried surface area for a model, and can highlight the interface residues. Read it next to ipTM and PAE; a predicted contact is not an observed one.</li>
+        <li><strong>Hydrogen bonds and salt bridges</strong>: Interfaces counts them per chain pair and <em>Show interactions</em> draws them as dashed lines (blue and red) with their side chains; the residue card tags each contact and its <em>Polar contacts</em> draws one residue's. By geometry, heavy atoms only — the legend and the methods text name them.</li>
         <li>Tick <em>Embed 3Dmol.js for offline use</em> before sharing a report that must open without internet; drop the PAE detail to <em>Compact</em> or <em>Omit</em> to keep it small.</li>
         <li>Keep <em>Report contents</em> on <em>Models currently shown</em> for a small file reviewers can open on a laptop; switch to <em>Every loaded model</em> for an archive.</li>
       </ul>
@@ -1473,6 +1476,8 @@ html>body{padding:0}</style>
   #generic-protein-viewer .gpv-contact-atoms, #generic-protein-viewer .gpv-contact-ca { color: var(--muted-foreground); }
   /* The tag on a covalently joined contact (peptide bond, disulfide): quiet, inside the name cell. */
   #generic-protein-viewer .gpv-contact-bond { display: inline-block; margin-left: 6px; padding: 0 5px; border: 1px solid var(--border); border-radius: 999px; color: var(--muted-foreground); font-size: 0.75em; white-space: nowrap; }
+  #generic-protein-viewer .gpv-contact-bond.gpv-contact-hbond { border-color: #0284c7; color: #0284c7; }
+  #generic-protein-viewer .gpv-contact-bond.gpv-contact-salt { border-color: #dc2626; color: #dc2626; }
   #generic-protein-viewer .gpv-residue-contacts-empty { color: var(--muted-foreground); }
   /* Measure to… is armed: the next click on a residue is its second point. */
   #generic-protein-viewer .gpv-stage.is-measuring-to { cursor: crosshair; }
@@ -1526,6 +1531,8 @@ html>body{padding:0}</style>
   #generic-protein-viewer .gpv-legend { display: flex; gap: 14px; flex-wrap: wrap; margin: 0 0 10px; color: var(--muted-foreground); }
   #generic-protein-viewer .gpv-legend span { display: inline-flex; align-items: center; gap: 5px; }
   #generic-protein-viewer .gpv-swatch { width: 12px; height: 12px; display: inline-block; border-radius: 2px; margin-right: 5px; vertical-align: -1px; }
+  /* A legend entry for a line drawn on the model (a hydrogen bond, a salt bridge): a short line in its colour and dash. */
+  #generic-protein-viewer .gpv-swatch.gpv-swatch-line { width: 14px; height: 0; border-radius: 0; border-top-width: 3px; background: none; vertical-align: 3px; }
   #generic-protein-viewer .gpv-vlow { background: #ff7d45; }
   #generic-protein-viewer .gpv-low { background: #ffdb13; }
   #generic-protein-viewer .gpv-confident { background: #65cbf3; }

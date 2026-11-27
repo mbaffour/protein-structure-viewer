@@ -32,13 +32,16 @@
      key draws it (item[1], renamed by Figure labels), its colour as a word (colourName, 01), and
      the hex as well only where two entries share a word, so the sentence never names two colours
      alike. A key that stopped at '+N more' is written out in full here — the text has the room. */
+  /* A line entry (a hydrogen bond or salt bridge drawn on the model) names its line as well:
+     "Hydrogen bond (blue, dashed line)". */
   function legendKeyText(legend = legendItems('figure')) {
     if (!legend) return '';
     const entries = legend.full.filter(([, label]) => String(label || '').trim());
     const words = entries.map(([color]) => colourName(color));
     const shared = word => words.filter(other => other === word).length > 1;
     const colour = (color, word) => word + (shared(word) && /^#/.test(String(color)) ? ', ' + String(color).toLowerCase() : '');
-    return legend.title + ': ' + entries.map(([color, label], index) => label + ' (' + colour(color, words[index]) + ')').join('; ') + '.';
+    const line = item => (item[3] ? ', ' + (item[3] === 'solid' ? 'solid' : 'dashed') + ' line' : '');
+    return legend.title + ': ' + entries.map((item, index) => item[1] + ' (' + colour(item[0], words[index]) + line(item) + ')').join('; ') + '.';
   }
 
   /* The key as one row at the figure's text scale, wrapping at the figure's width or at 1200 px of

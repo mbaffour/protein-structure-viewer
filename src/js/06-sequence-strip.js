@@ -62,8 +62,10 @@
     return entry.scores.length ? plddtColor(Number(atom.b || 0)) : entry.color;
   }
 
+  /* The hint names the residue, so its pLDDT is the residue's confidence atom's — a nucleotide's C1′,
+     not the P its strip cell stands for (J3-2), as Composition, the FASTA and the profile read it. */
   function describeResidue(entry, atom) {
-    const confidence = entry.scores.length && Number.isFinite(Number(atom.b)) ? ' · pLDDT ' + Number(atom.b).toFixed(1) : '';
+    const confidence = entry.scores.length && Number.isFinite(Number(atom.b)) ? ' · pLDDT ' + residueConfidence(entry, atom).toFixed(1) : '';
     return residueName(atom, 'prose') + confidence;
   }
 

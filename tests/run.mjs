@@ -363,7 +363,14 @@ const recover = async (failedName, mark) => {
   }
 };
 
+/* PSV_ONLY=<regexp> runs only the steps whose name matches — for checking one step, or the steps of
+   one change, without the forty-minute suite. The steps before it are skipped, so use it for steps
+   that make their own page (freshViewer) or follow steps the pattern also names; the summary says
+   how many were skipped, and a filtered run is never a gate. */
+const onlySteps = process.env.PSV_ONLY ? new RegExp(process.env.PSV_ONLY) : null;
+let skippedSteps = 0;
 const step = async (name, body) => {
+  if (onlySteps && !onlySteps.test(name)) { skippedSteps += 1; return; }
   currentStep = name;
   steps += 1;
   const mark = await markState();
@@ -6667,7 +6674,7 @@ await step('under a GPU cap the builder’s estimate and status and the composit
     if (!(await freshStatus(fresh)).includes('178 mm wide at ' + dpi + ' dpi · ' + note)) throw new Error('builder status: ' + await freshStatus(fresh));
     await freshDownload(fresh, '#gpv-composite', 180000);
     const status = await freshStatus(fresh);
-    if (!new RegExp('^Composite figure downloaded · 1 panel · \\d+ × \\d+ at ' + dpi + ' dpi · ' + note + '$').test(status)) throw new Error('composite status: ' + status);
+    if (!new RegExp('^Composite figure downloaded · 1 panel · \\d+ × \\d+ at ' + dpi + ' dpi \\(178 mm wide\\) · ' + note + '$').test(status)) throw new Error('composite status: ' + status);
     console.log('       ' + status);
   } finally { await fresh.close(); }
 });
@@ -9413,6 +9420,264 @@ await step('a measurement line in an exported PNG is as wide as in the SVG, not 
     console.log('       PNG ' + result.width.toFixed(2) + ' px · SVG ' + stroke + ' px (median of ' + result.samples + ' cross-sections)');
   } finally { await fresh.close(); }
 });
+/* batch-p53 start */
+group('2.53.0: hydrogen bonds and salt bridges');
+/* 1BRS A–D (barnase A, barstar D). The expected lists are the viewer's definitions as tests/reference.py
+   computes them in Biopython (VALIDATION.md, "Hydrogen bonds and salt bridges"), and agree with PDBePISA's
+   list for this interface wherever the two criteria agree (validate-experimental.mjs). */
+const p53HbondsAD = ['A:27:NZ D:42:OG1 2.949', 'A:59:N D:35:OD1 2.877', 'A:60:N D:35:OD2 3.375', 'A:60:OE2 D:34:N 2.836', 'A:83:O D:29:OH 2.652', 'A:83:NH1 D:43:O 3.066', 'A:102:O D:33:ND2 3.221', 'A:102:ND1 D:31:N 3.035', 'A:102:NE2 D:39:OD2 2.805'];
+const p53SaltsAD = ['A:59:NH1 D:76:OE1 2.965', 'A:83:NH2 D:39:OD1 2.497', 'A:87:NH2 D:39:OD2 2.926'];
+const p53Rows = rows => rows.map(([ca, ra, aa, cb, rb, ab, d]) => ca + ':' + ra + ':' + aa + ' ' + cb + ':' + rb + ':' + ab + ' ' + d.toFixed(3)).sort();
+/* Analyse interfaces on a page holding 1BRS, and wait for the table. */
+const p53Analyse = async fresh => {
+  await fresh.evaluate(() => document.querySelector('#gpv-interface-run').click());
+  await fresh.waitForFunction(() => document.querySelectorAll('#gpv-contacts-rows button').length > 0 && !document.querySelector('#gpv-interface-run').disabled, null, { timeout: 120000 });
+};
+/* The A–D row of the interface table, by its first cell. */
+const p53Row = (fresh, pair = 'A–D') => fresh.evaluate(pair => {
+  const tr = [...document.querySelectorAll('#gpv-contacts-rows tr')].find(row => row.querySelector('th').textContent.replace(/\s/g, '') === pair);
+  return tr ? { cells: [...tr.children].map(cell => cell.textContent.trim()), buttons: [...tr.querySelectorAll('button')].map(button => ({ text: button.textContent.trim(), disabled: button.disabled })) } : null;
+}, pair);
+const p53Press = (fresh, text, pair = 'A–D') => fresh.evaluate(([text, pair]) => {
+  const tr = [...document.querySelectorAll('#gpv-contacts-rows tr')].find(row => row.querySelector('th').textContent.replace(/\s/g, '') === pair);
+  [...tr.querySelectorAll('button')].find(button => button.textContent.trim() === text).click();
+}, [text, pair]);
+const p53Records = fresh => fresh.evaluate(() => window.__viewerDebug.measurementRecords().map(record => ({ id: record.id, interaction: record.interaction || null, color: record.color || null, dashed: record.dashed !== false, showValue: record.showValue !== false, chains: record.points.map(point => point.chain).join(''), atoms: record.points.map(point => point.chain + ':' + point.resi + ':' + point.atom).join(' ') })));
+
+await step('Interfaces counts 9 hydrogen bonds and 3 salt bridges between barnase and barstar (1BRS A–D), in the table, both CSVs and the debug hook; histidine as charged makes it 8 and 4', async () => {
+  const fresh = await freshViewer([experimentalFile('1brs.cif')]);
+  try {
+    await p53Analyse(fresh);
+    const head = await fresh.evaluate(() => [...document.querySelectorAll('#gpv-contacts-wrap thead th')].map(cell => cell.textContent.trim()));
+    if (head.join('|') !== 'Chain pair|Atom contacts|Residue pairs|Interface residues|Buried surface (Å²)|H-bonds|Salt bridges|') throw new Error('table head: ' + JSON.stringify(head));
+    const row = await p53Row(fresh);
+    if (!row || row.cells[1] !== '165' || row.cells[5] !== '9' || row.cells[6] !== '3') throw new Error('A–D row: ' + JSON.stringify(row && row.cells));
+    if (row.buttons.map(button => button.text).join('|') !== 'Highlight|Show interactions|Hide interactions') throw new Error('row buttons: ' + JSON.stringify(row.buttons));
+    const id = await fresh.evaluate(() => window.__viewerDebug.entries()[0].id);
+    const hook = await fresh.evaluate(id => window.__viewerDebug.polarInteractions(id, 'A', 'D'), id);
+    if (p53Rows(hook.hbonds).join() !== p53HbondsAD.slice().sort().join()) throw new Error('hydrogen bonds: ' + JSON.stringify(p53Rows(hook.hbonds)));
+    if (p53Rows(hook.salt_bridges).join() !== p53SaltsAD.slice().sort().join()) throw new Error('salt bridges: ' + JSON.stringify(p53Rows(hook.salt_bridges)));
+    /* The interface CSV keeps every column in place and gains the two counts at the end. */
+    const download = fresh.waitForEvent('download', { timeout: 30000 });
+    await fresh.evaluate(() => document.querySelector('#gpv-interface-csv').click());
+    const lines = (await readFile(await (await download).path(), 'utf8')).split('\n');
+    if (lines[0] !== 'model,chain_a,chain_b,cutoff_angstrom,atom_contacts,residue_pairs,interface_residues_a,interface_residues_b,buried_surface_area_A2,residues_a,residues_b,hbonds,salt_bridges') throw new Error('interface CSV header: ' + lines[0]);
+    const ad = lines.map(csvCells).find(cells => cells[1] === 'A' && cells[2] === 'D');
+    if (!ad || ad[4] !== '165' || ad[11] !== '9' || ad[12] !== '3') throw new Error('interface CSV A–D: ' + JSON.stringify(ad));
+    /* One row per interaction of every analysed pair. */
+    const polarDownload = fresh.waitForEvent('download', { timeout: 30000 });
+    await fresh.evaluate(() => document.querySelector('#gpv-interface-polar-csv').click());
+    const polar = await polarDownload;
+    if (polar.suggestedFilename() !== 'interface-interactions.csv') throw new Error('interactions CSV named ' + polar.suggestedFilename());
+    const polarLines = (await readFile(await polar.path(), 'utf8')).split('\n');
+    if (polarLines[0] !== 'model,chain_a,resi_a,resn_a,atom_a,chain_b,resi_b,resn_b,atom_b,type,distance_angstrom,donor,by_element') throw new Error('interactions CSV header: ' + polarLines[0]);
+    const polarRows = polarLines.slice(1).map(csvCells);
+    const adRows = polarRows.filter(cells => cells[1] === 'A' && cells[5] === 'D');
+    if (adRows.length !== 12 || adRows.filter(cells => cells[9] === 'salt bridge').length !== 3) throw new Error('interactions CSV A–D: ' + adRows.length + ' rows');
+    const bridge = adRows.find(cells => cells[2] === '83' && cells[6] === '39' && cells[9] === 'salt bridge');
+    if (!bridge || bridge[3] !== 'ARG' || bridge[4] !== 'NH2' || bridge[7] !== 'ASP' || bridge[8] !== 'OD1' || bridge[10] !== '2.497' || bridge[11] !== 'a' || bridge[12] !== 'no') throw new Error('Arg83–Asp39: ' + JSON.stringify(bridge));
+    const histidine = adRows.find(cells => cells[2] === '102' && cells[4] === 'NE2');
+    /* His NE2 can donate or accept, Asp OD2 only accept: His is the donor. */
+    if (!histidine || histidine[9] !== 'hydrogen bond' || histidine[11] !== 'a') throw new Error('His102 NE2–Asp39 OD2: ' + JSON.stringify(histidine));
+    /* Barnase–barstar pairs in the other two complexes are counted too, so every analysed pair is in. */
+    if (!polarRows.some(cells => cells[1] === 'B' && cells[5] === 'E') || !polarRows.some(cells => cells[1] === 'C' && cells[5] === 'F')) throw new Error('the other complexes are missing from the interactions CSV');
+    /* His102 NE2 – Asp39 OD2 becomes a salt bridge with histidine counted as charged, and is no longer a hydrogen bond. */
+    await fresh.evaluate(() => { const box = document.querySelector('#gpv-interface-histidine'); box.checked = true; box.dispatchEvent(new Event('change', { bubbles: true })); });
+    await fresh.waitForTimeout(400);
+    const charged = await p53Row(fresh);
+    if (charged.cells[5] !== '8' || charged.cells[6] !== '4') throw new Error('with histidine charged: ' + JSON.stringify(charged.cells));
+    await fresh.evaluate(() => { const box = document.querySelector('#gpv-interface-histidine'); box.checked = false; box.dispatchEvent(new Event('change', { bubbles: true })); });
+    await fresh.waitForTimeout(400);
+    const neutral = await p53Row(fresh);
+    if (neutral.cells[5] !== '9' || neutral.cells[6] !== '3') throw new Error('back to neutral histidine: ' + JSON.stringify(neutral.cells));
+    console.log('       A–D ' + row.cells[5] + ' hydrogen bonds · ' + row.cells[6] + ' salt bridges · ' + polarRows.length + ' interactions over every analysed pair');
+  } finally { await fresh.close(); }
+});
+
+await step('Show interactions draws A–D as 12 dashed records in the type colours with side-chain sticks, in one undo step; a second press adds nothing; Hide takes only that pair’s', async () => {
+  const fresh = await freshViewer([experimentalFile('1brs.cif')]);
+  try {
+    await p53Analyse(fresh);
+    /* A measurement made by hand between the same chains, which Hide must leave alone. */
+    await fresh.evaluate(() => {
+      const d = window.__viewerDebug; const entry = d.entries()[0];
+      d.measurementRecords().push({ id: 9000, type: 'distance', points: [{ entryId: entry.id, chain: 'A', resi: 83, atom: 'CA', index: null }, { entryId: entry.id, chain: 'D', resi: 39, atom: 'CA', index: null }] });
+    });
+    const depth = await fresh.evaluate(() => window.__viewerDebug.rememberedSteps());
+    await p53Press(fresh, 'Show interactions'); await fresh.waitForTimeout(600);
+    const said = await freshStatus(fresh);
+    if (!/^9 hydrogen bonds and 3 salt bridges drawn between A and D · Separate labels if the values crowd · one undo step$/.test(said)) throw new Error('status: ' + said);
+    if ((await fresh.evaluate(() => window.__viewerDebug.rememberedSteps())) !== depth + 1) throw new Error('Show interactions took more or less than one undo step');
+    const drawn = (await p53Records(fresh)).filter(record => record.interaction);
+    if (drawn.length !== 12) throw new Error(drawn.length + ' interaction records');
+    if (drawn.some(record => !record.dashed || !record.showValue || record.color !== (record.interaction === 'hbond' ? '#0284c7' : '#dc2626') || record.chains.split('').sort().join('') !== 'AD')) throw new Error('records: ' + JSON.stringify(drawn.slice(0, 3)));
+    if (drawn.filter(record => record.interaction === 'salt').length !== 3) throw new Error('salt bridge records: ' + drawn.filter(record => record.interaction === 'salt').length);
+    /* The residues they join are drawn as sticks: Asp39's side chain has a stick style now. */
+    const sticks = await fresh.evaluate(() => { const entry = window.__viewerDebug.entries()[0]; const atom = entry.atoms.find(item => item.chain === 'D' && item.resi === 39 && item.atom === 'CG'); return Boolean(atom && atom.style && atom.style.stick); });
+    if (!sticks) throw new Error('no sticks on Asp39 · D');
+    /* The rows say what they are. */
+    const names = await fresh.evaluate(() => [...document.querySelectorAll('#gpv-measurement-list .gpv-entry-source')].map(item => item.textContent));
+    if (names.filter(text => text.startsWith('H-bond · ')).length !== 9 || names.filter(text => text.startsWith('Salt bridge · ')).length !== 3) throw new Error('rows: ' + JSON.stringify(names.slice(0, 4)));
+    await p53Press(fresh, 'Show interactions'); await fresh.waitForTimeout(400);
+    const again = await freshStatus(fresh);
+    if (!/^Already drawn: 9 hydrogen bonds and 3 salt bridges between A and D · nothing added$/.test(again)) throw new Error('second press: ' + again);
+    if ((await p53Records(fresh)).filter(record => record.interaction).length !== 12) throw new Error('the second press added records');
+    /* Undo takes all twelve back in one step, redo puts them back. */
+    await fresh.evaluate(() => document.querySelector('#gpv-undo').click()); await fresh.waitForTimeout(400);
+    if ((await p53Records(fresh)).some(record => record.interaction)) throw new Error('undo left interaction records');
+    await fresh.evaluate(() => document.querySelector('#gpv-redo').click()); await fresh.waitForTimeout(400);
+    if ((await p53Records(fresh)).filter(record => record.interaction).length !== 12) throw new Error('redo did not bring them back');
+    /* B–E drawn as well, then Hide on A–D: B–E and the hand-made A–D measurement stay. */
+    await p53Press(fresh, 'Show interactions', 'B–E'); await fresh.waitForTimeout(400);
+    const withBE = (await p53Records(fresh)).filter(record => record.interaction).length;
+    await p53Press(fresh, 'Hide interactions'); await fresh.waitForTimeout(600);
+    const left = await p53Records(fresh);
+    if (left.some(record => record.interaction && record.chains.split('').sort().join('') === 'AD')) throw new Error('A–D interactions survived Hide');
+    if (left.filter(record => record.interaction).length !== withBE - 12) throw new Error('Hide removed records of another pair');
+    if (!left.some(record => record.id === 9000)) throw new Error('Hide removed the measurement made by hand');
+    const stuck = await fresh.evaluate(() => { const entry = window.__viewerDebug.entries()[0]; const atom = entry.atoms.find(item => item.chain === 'D' && item.resi === 39 && item.atom === 'CG'); return Boolean(atom && atom.style && atom.style.stick); });
+    if (stuck) throw new Error('Asp39 · D kept its sticks after Hide');
+    console.log('       12 records, one step; ' + (withBE - 12) + ' B–E records kept through Hide on A–D');
+  } finally { await fresh.close(); }
+});
+
+await step('The residue card tags barstar Asp39’s contacts — salt bridges to barnase Arg83 and Arg87, a hydrogen bond to His102 — and Polar contacts draws them', async () => {
+  const fresh = await freshViewer([experimentalFile('1brs.cif')]);
+  try {
+    await j2Card(fresh, 'D:39');
+    await fresh.evaluate(() => document.querySelector('#gpv-label-editor-contacts').click()); await fresh.waitForTimeout(400);
+    const rows = await fresh.evaluate(() => [...document.querySelectorAll('#gpv-residue-contacts-rows .gpv-residue-contact')].map(button => ({ chain: button.dataset.chain, resi: button.dataset.resi, interaction: button.dataset.interaction, tags: [...button.querySelectorAll('.gpv-contact-bond')].map(tag => ({ text: tag.textContent, title: tag.title })) })));
+    const at = (chain, resi) => rows.find(row => row.chain === chain && row.resi === resi);
+    const arg83 = at('A', '83'); const arg87 = at('A', '87'); const his102 = at('A', '102');
+    if (!arg83 || arg83.interaction !== 'salt bridge' || !/^OD1–NH2 2\.50 Å/.test(arg83.tags.find(tag => tag.text === 'salt bridge').title)) throw new Error('Arg83: ' + JSON.stringify(arg83));
+    if (!arg87 || arg87.interaction !== 'salt bridge') throw new Error('Arg87: ' + JSON.stringify(arg87));
+    if (!his102 || his102.interaction !== 'H-bond' || his102.tags.find(tag => tag.text === 'H-bond').title !== 'OD2–NE2 2.81 Å (hydrogen bond)') throw new Error('His102: ' + JSON.stringify(his102));
+    /* The copy gains an interaction column after bond. */
+    const copied = await fresh.evaluate(async () => {
+      navigator.clipboard.writeText = text => { window.__p53Copied = text; return Promise.resolve(); };
+      document.querySelector('#gpv-residue-contacts-copy').click();
+      await new Promise(done => setTimeout(done, 300));
+      return window.__p53Copied || document.querySelector('#gpv-copy-fallback-text').value;
+    });
+    const header = copied.split('\n')[0].split('\t');
+    const argLine = copied.split('\n').find(line => line.split('\t')[1] === 'A' && line.split('\t')[2] === '83');
+    if (header.join() !== 'residue,chain,resi,resn,closest_distance,closest_atoms,bond,interaction,ca_distance' || !argLine || argLine.split('\t')[7] !== 'salt bridge') throw new Error('copy: ' + JSON.stringify([header, argLine]));
+    const before = (await p53Records(fresh)).length;
+    await fresh.evaluate(() => document.querySelector('#gpv-label-editor-polar').click()); await fresh.waitForTimeout(600);
+    const said = await freshStatus(fresh);
+    const made = (await p53Records(fresh)).slice(before);
+    if (!made.length || made.some(record => !record.interaction)) throw new Error('Polar contacts made ' + JSON.stringify(made));
+    const joins = (record, other) => record.atoms.split(' ').some(atom => atom.startsWith(other));
+    if (!made.some(record => record.interaction === 'salt' && joins(record, 'A:83:')) || !made.some(record => record.interaction === 'salt' && joins(record, 'A:87:')) || !made.some(record => record.interaction === 'hbond' && joins(record, 'A:102:NE2'))) throw new Error('Polar contacts drew ' + JSON.stringify(made.map(record => record.interaction + ' ' + record.atoms)));
+    if (!/drawn from ASP39 · D/.test(said)) throw new Error('status: ' + said);
+    await fresh.evaluate(() => document.querySelector('#gpv-label-editor-polar').click()); await fresh.waitForTimeout(400);
+    if ((await p53Records(fresh)).length !== before + made.length) throw new Error('a second Polar contacts press added records');
+    console.log('       ' + made.length + ' interactions of Asp39 · D: ' + made.map(record => record.interaction).join(', '));
+  } finally { await fresh.close(); }
+});
+
+await step('Hand-made pairs: a Lys NZ 3.0 Å from an Asp OD1 is one salt bridge and no hydrogen bond; a bad angle gives none; a proline N never donates', async () => {
+  const lines = []; let serial = 1;
+  const put = (name, resn, chain, resi, xyz, element, shift) => lines.push(pdbAtom('ATOM', serial++, name, resn, chain, resi, [xyz[0] + shift, xyz[1], xyz[2]], element));
+  /* A, B: the side chains alone (no backbone, so neither is a chain terminus), antecedents at bonding distance. */
+  [['CD', [-2.5, 1.2, 0], 'C'], ['CE', [-1.5, 0, 0], 'C'], ['NZ', [0, 0, 0], 'N']].forEach(([name, xyz, el]) => put(name, 'LYS', 'A', 1, xyz, el, 0));
+  [['CB', [5.5, 1.2, 0], 'C'], ['CG', [4.2, 0.4, 0], 'C'], ['OD1', [3.0, 0, 0], 'O'], ['OD2', [4.3, -0.9, 0], 'O']].forEach(([name, xyz, el]) => put(name, 'ASP', 'B', 1, xyz, el, 0));
+  /* C, D: Ser OG and Thr OG1 3.0 Å apart with Ser's CB between them (CB–OG···OG1 under 90°); E, F the same with CB behind. */
+  [['CB', [1.0, 0.3, 0], 'C'], ['OG', [0, 0, 0], 'O']].forEach(([name, xyz, el]) => put(name, 'SER', 'C', 1, xyz, el, 30));
+  [['CB', [4.4, 0.3, 0], 'C'], ['OG1', [3.0, 0, 0], 'O']].forEach(([name, xyz, el]) => put(name, 'THR', 'D', 1, xyz, el, 30));
+  [['CB', [-1.0, 0.8, 0], 'C'], ['OG', [0, 0, 0], 'O']].forEach(([name, xyz, el]) => put(name, 'SER', 'E', 1, xyz, el, 60));
+  [['CB', [4.0, 1.0, 0], 'C'], ['OG1', [3.0, 0, 0], 'O']].forEach(([name, xyz, el]) => put(name, 'THR', 'F', 1, xyz, el, 60));
+  /* G: Gly1–Pro2, Pro2's N 2.9 Å from an Asn OD1 of H with every angle open; I/J the same with Ala2. */
+  const dipeptide = (chain, resn, shift) => {
+    [['N', [-3.5, -0.6, 0], 'N'], ['CA', [-2.3, -0.1, 0], 'C'], ['C', [-1.1, -0.75, 0], 'C'], ['O', [-1.1, -1.98, 0], 'O']].forEach(([name, xyz, el]) => put(name, 'GLY', chain, 1, xyz, el, shift));
+    [['N', [0, 0, 0], 'N'], ['CA', [1.2, -0.8, 0], 'C'], ['C', [1.9, -2.0, 0], 'C'], ...(resn === 'PRO' ? [['CD', [-0.2, -1.43, 0.3], 'C']] : [['CB', [2.2, 0.2, 0.5], 'C']])].forEach(([name, xyz, el]) => put(name, resn, chain, 2, xyz, el, shift));
+  };
+  const acceptor = (chain, shift) => [['CB', [0.6, 5.3, 0], 'C'], ['CG', [0.3, 4.1, 0], 'C'], ['OD1', [0, 2.9, 0], 'O']].forEach(([name, xyz, el]) => put(name, 'ASN', chain, 1, xyz, el, shift));
+  dipeptide('G', 'PRO', 90); acceptor('H', 90);
+  dipeptide('I', 'ALA', 120); acceptor('J', 120);
+  const fresh = await freshViewer([{ name: 'p53_pairs.pdb', mimeType: 'chemical/x-pdb', buffer: Buffer.from(lines.join('\n') + '\nEND\n') }]);
+  try {
+    const found = await fresh.evaluate(() => {
+      const d = window.__viewerDebug; const id = d.entries()[0].id;
+      const count = (a, b) => { const r = d.polarInteractions(id, a, b); return { hbonds: r.hbonds.length, salts: r.salt_bridges.length, salt: r.salt_bridges[0] || null, donors: r.donors }; };
+      return { lysAsp: count('A', 'B'), bad: count('C', 'D'), good: count('E', 'F'), proline: count('G', 'H'), alanine: count('I', 'J') };
+    });
+    if (found.lysAsp.salts !== 1 || found.lysAsp.hbonds !== 0 || found.lysAsp.salt[2] !== 'NZ' || found.lysAsp.salt[5] !== 'OD1' || Math.abs(found.lysAsp.salt[6] - 3.0) > 1e-3) throw new Error('Lys–Asp: ' + JSON.stringify(found.lysAsp));
+    if (found.bad.hbonds || found.bad.salts) throw new Error('a bad angle made ' + JSON.stringify(found.bad));
+    if (found.good.hbonds !== 1 || found.good.donors[0] !== 'either') throw new Error('the open-angle control: ' + JSON.stringify(found.good));
+    if (found.proline.hbonds || found.proline.salts) throw new Error('a proline N donated: ' + JSON.stringify(found.proline));
+    if (found.alanine.hbonds !== 1 || found.alanine.donors[0] !== 'a') throw new Error('the alanine control: ' + JSON.stringify(found.alanine));
+  } finally { await fresh.close(); }
+});
+
+await step('The legend, the legend key and its text name hydrogen bonds and salt bridges while they are drawn and neither once they are gone; the SVG carries both dashed colours; a scene keeps `interaction`', async () => {
+  const fresh = await freshViewer([experimentalFile('1brs.cif')]);
+  try {
+    const point = (chain, resi, atom) => ({ model: '1brs.cif', chain, resi, atom });
+    await c2Scene(fresh, { type: 'protein-viewer-scene', schemaVersion: 1, models: [{ name: '1brs.cif' }], settings: { colorMode: 'element', background: 'white' },
+      measurements: [
+        { type: 'distance', interaction: 'hbond', color: '#0284c7', points: [point('A', 102, 'NE2'), point('D', 39, 'OD2')] },
+        { type: 'distance', interaction: 'salt', color: '#dc2626', points: [point('A', 83, 'NH2'), point('D', 39, 'OD1')] },
+        { type: 'distance', interaction: 'salt', showValue: false, points: [point('A', 87, 'NH2'), point('D', 39, 'OD2')] },
+        { type: 'distance', interaction: 'nonsense', points: [point('A', 59, 'NH1'), point('D', 76, 'OE1')] }
+      ] });
+    await fresh.waitForTimeout(1200);
+    const state = await fresh.evaluate(() => {
+      const d = window.__viewerDebug; const records = d.measurementRecords();
+      const legend = d.legendItems('figure');
+      return { interactions: records.map(record => record.interaction || null), colours: records.map(record => record.color || null), labels: records.map(record => d.measurementLabelText(record)), legend: legend && { title: legend.title, items: legend.items }, text: document.querySelector('#gpv-legend-key-text').value, methods: d.methodsText() };
+    });
+    /* An unknown type is read as a plain measurement; a record with no colour takes its type's. */
+    if (state.interactions.join() !== 'hbond,salt,salt,') throw new Error('scene read: ' + JSON.stringify(state.interactions));
+    if (state.labels[2] !== '' || !/ Å$/.test(state.labels[0])) throw new Error('labels: ' + JSON.stringify(state.labels));
+    if (!state.legend || state.legend.title !== 'Interactions' || JSON.stringify(state.legend.items) !== JSON.stringify([['#0284c7', 'Hydrogen bond', 'Hydrogen bond (dashed line)', 'dashed'], ['#dc2626', 'Salt bridge', 'Salt bridge (dashed line)', 'dashed']])) throw new Error('legend: ' + JSON.stringify(state.legend));
+    if (state.text !== 'Interactions: Hydrogen bond (blue, dashed line); Salt bridge (red, dashed line).') throw new Error('legend text: ' + state.text);
+    if (!/Hydrogen bonds and salt bridges were identified from heavy-atom geometry/.test(state.methods)) throw new Error('methods text has no interaction sentence');
+    /* The SVG: the measurement lines and the legend's line swatches, dashed, in both colours. */
+    await fresh.click('[data-gpv-tab="publish"]'); await fresh.waitForTimeout(200);
+    if (!(await fresh.isChecked('#gpv-export-legend'))) await fresh.check('#gpv-export-legend');
+    const svg = (await freshDownload(fresh, '#gpv-svg')).toString('utf8');
+    for (const colour of ['#0284c7', '#dc2626']) {
+      if (!new RegExp('<line [^>]*stroke="' + colour + '"[^>]*stroke-dasharray="[^"]+"/>').test(svg)) throw new Error('no dashed ' + colour + ' measurement line in the SVG');
+      if (!new RegExp('<line [^>]*stroke="' + colour + '"[^>]*stroke-dasharray="[^"]+" data-legend-line="dashed"/>').test(svg)) throw new Error('no dashed ' + colour + ' legend line in the SVG');
+    }
+    if (!/>Hydrogen bond</.test(svg) || !/>Salt bridge</.test(svg)) throw new Error('the SVG legend does not name both types');
+    /* The scene written back keeps the field, and only on the two kinds. */
+    const scene = JSON.parse((await freshDownload(fresh, '#gpv-save-scene')).toString('utf8'));
+    if (scene.measurements.map(record => record.interaction || '').join() !== 'hbond,salt,salt,') throw new Error('scene written: ' + JSON.stringify(scene.measurements.map(record => record.interaction)));
+    /* Recoloured, a type gets an entry of its new colour; Default puts the type's colour back. */
+    await fresh.click('[data-gpv-tab="annotate"]'); await fresh.waitForTimeout(200);
+    await fresh.evaluate(() => { const well = document.querySelectorAll('#gpv-measurement-list .gpv-entry [data-control="color"]')[0]; well.value = '#16a34a'; well.dispatchEvent(new Event('input', { bubbles: true })); well.dispatchEvent(new Event('change', { bubbles: true })); });
+    await fresh.waitForTimeout(300);
+    const recoloured = await fresh.evaluate(() => document.querySelector('#gpv-legend-key-text').value);
+    if (recoloured !== 'Interactions: Hydrogen bond (green, dashed line); Salt bridge (red, dashed line).') throw new Error('after recolouring: ' + recoloured);
+    await fresh.evaluate(() => document.querySelectorAll('#gpv-measurement-list .gpv-entry [data-control="default"]')[0].click()); await fresh.waitForTimeout(300);
+    const back = await fresh.evaluate(() => ({ color: window.__viewerDebug.measurementRecords()[0].color, disabled: document.querySelectorAll('#gpv-measurement-list .gpv-entry [data-control="default"]')[0].disabled }));
+    if (back.color !== '#0284c7' || !back.disabled) throw new Error('Default: ' + JSON.stringify(back));
+    /* Gone: Clear measurements leaves a key that names neither (here, no key at all). */
+    await fresh.click('#gpv-clear-measurements'); await fresh.waitForTimeout(500);
+    const after = await fresh.evaluate(() => ({ legend: window.__viewerDebug.legendItems('figure'), text: document.querySelector('#gpv-legend-key-text').value }));
+    if (after.legend !== null || /Hydrogen|Salt/.test(after.text)) throw new Error('after Clear: ' + JSON.stringify(after));
+  } finally { await fresh.close(); }
+});
+
+await step('A nucleotide’s pLDDT on the residue card and its marker is its C1′’s, not its P’s (J3-2)', async () => {
+  /* AlphaFold 3 and Boltz write a per-atom pLDDT that differs along a nucleotide. Composition, the FASTA
+     and the profile read the C1′ (FA-15); the card and the marker read the P they stand the residue by. */
+  const lines = []; let serial = 1;
+  ['A', 'U', 'G'].forEach((resn, index) => {
+    const x = index * 6;
+    [['P', 0, 0, 'P', 41.0], ['OP1', 0, 1.4, 'O', 42.0], ["C4'", 1.5, -1, 'C', 60.0], ["C1'", 2.5, -1.5, 'C', 91.5 + index], ['N1', 3.6, -1, 'N', 70.0]].forEach(([name, dx, dy, element, b]) => lines.push(pdbAtom('ATOM', serial++, name, resn, 'R', index + 1, [x + dx, dy, 0], element, ' ', b)));
+  });
+  const fresh = await freshViewer([{ name: 'p53_rna.pdb', mimeType: 'chemical/x-pdb', buffer: Buffer.from(lines.join('\n') + '\nEND\n') }]);
+  try {
+    await j2Card(fresh, 'R:2');
+    const seen = await fresh.evaluate(() => ({ facts: document.querySelector('#gpv-residue-card-facts').textContent, marker: window.__viewerDebug.residueMarker() }));
+    if (!/pLDDT 92\.5/.test(seen.facts) || /pLDDT 41/.test(seen.facts)) throw new Error('card: ' + seen.facts);
+    if (!/pLDDT 92\.5$/.test(seen.marker || '')) throw new Error('marker: ' + seen.marker);
+  } finally { await fresh.close(); }
+});
+/* batch-p53 end */
 await browser.close();
 server.close();
 
@@ -9426,6 +9691,7 @@ console.log('steps retried after a timeout: ' + retries);
    not on the `suspect` one failed on its own; a suspect step ran on a page recovery could not
    put back, so its failure says as much about the recovery as about the viewer. */
 console.log('safety net: baseline ' + baselineMs + ' ms · marks ' + (markMs / 1000).toFixed(1) + ' s over ' + steps + ' steps · recoveries ' + recoveries + (recoveries ? ' in ' + (recoveryMs / 1000).toFixed(1) + ' s' : '') + ' · incomplete ' + incompleteRecoveries);
+if (onlySteps) console.log('PSV_ONLY ' + onlySteps + ': ' + steps + ' steps run, ' + skippedSteps + ' skipped — a filtered run, not a gate');
 console.log('failed steps: ' + (failures.length ? failures.join(', ') : 'none'));
 console.log('failed on their own: ' + (failures.filter(name => !suspect.includes(name)).length ? failures.filter(name => !suspect.includes(name)).join(', ') : 'none'));
 console.log('failed after an incomplete recovery (suspect): ' + (suspect.length ? suspect.join(', ') : 'none'));

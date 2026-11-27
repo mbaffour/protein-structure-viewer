@@ -132,7 +132,7 @@
     /* The residue card's facts line, its contacts list, Measure to…, the measure choice, Contacts and
        the distances CSV (04c). */
     const card = residueCardElements();
-    actions.append(commit, card.measure, card.atoms, card.contacts, card.distances, remove);
+    actions.append(commit, card.measure, card.atoms, card.contacts, card.distances, card.polar, remove);
     /* A measurement's own controls (04): Name the atoms, Show value, colour, Dashed and the atoms it
        joins. Hidden for every other kind of text. */
     const measure = measurementEditorElement();

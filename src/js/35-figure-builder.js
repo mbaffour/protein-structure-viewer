@@ -263,9 +263,12 @@
       if (record.type === 'angle') shapes.push({ kind: 'line', start: xyz(points[1]), end: xyz(points[2]), color: color || '#e11d48', dashed });
       const anchor = measurementAnchor(points, record);
       const position = shiftBy(anchor, record.offset);
+      /* A hydrogen bond or salt bridge says what it is in the report, where there is no legend beside
+         it: "H-bond · 2.81 Å". Drawn without its value (more than 40 at once), it is the type alone. */
+      const words = record.interaction && !String(record.text || '').trim() ? [polarTypeName(record.interaction, 'short'), record.showValue === false ? '' : measurementText(record)].filter(Boolean).join(' · ') : measurementLabelText(record);
       /* A moved label keeps a thin leader back to what it measures, as on screen. */
       if (leaderLength(anchor, position) > leaderMinimum) shapes.push({ kind: 'line', start: xyz(anchor), end: xyz(position), color: color || '#e11d48', dashed: false, width: 1 });
-      shapes.push({ kind: 'label', position: xyz(position), text: measurementLabelText(record), color: color || '#111827', size: 1 });
+      shapes.push({ kind: 'label', position: xyz(position), text: words, color: color || '#111827', size: 1 });
     });
     annotationRecords.forEach(record => {
       if (record.type === 'screen' || !record.points.every(point => point.entryId === entry.id)) return;
