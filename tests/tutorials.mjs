@@ -369,10 +369,23 @@ const openViewer = async (files = []) => {
    not three steps later. ACTION_MS is short on purpose: a control that is absent or greyed out is
    a fact, not something to wait thirty seconds for. */
 const ACTION_MS = 6000;
+/* What ACTION_MS limits is finding the control and its being pressable; the press itself may then
+   take as long as the work behind it takes. A click waits for its handler to return, and on a slow
+   software renderer (the CI runner) Make site figure and Compare these positions hold the page for
+   longer than six seconds, which read as "the button is not there" when it was. */
+const WORK_MS = 120000;
+const pressable = async target => { await target.click({ trial: true, timeout: ACTION_MS }); };
 const step = async (name, body) => {
   currentStep = name;
   try { await body(); console.log('  ok   ' + name); }
-  catch (error) { console.log('  FAIL ' + name + ' :: ' + String(error && error.message || error).split('\n')[0]); failures.push(name); }
+  catch (error) {
+    /* The first line names the failure; the next few are Playwright's own account of what it was
+       waiting for, which is what tells a covered control from a busy page in a CI log. */
+    const lines = String(error && error.message || error).split('\n');
+    console.log('  FAIL ' + name + ' :: ' + lines[0]);
+    lines.slice(1, 7).filter(line => line.trim()).forEach(line => console.log('       | ' + line.trim().slice(0, 220)));
+    failures.push(name);
+  }
 };
 const group = name => console.log('\n' + name);
 
@@ -380,7 +393,7 @@ const driver = page => {
   const button = name => page.locator('#generic-protein-viewer button', { hasText: new RegExp('^\\s*' + name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '\\s*$') });
   return {
     page,
-    tab: async name => { await page.click(`[data-gpv-tab="${name}"]`, { timeout: ACTION_MS }); await page.waitForTimeout(200); },
+    tab: async name => { const target = page.locator(`[data-gpv-tab="${name}"]`); await pressable(target); await target.click({ timeout: WORK_MS }); await page.waitForTimeout(200); },
     /* Presses a button by the text the tutorial prints. A button that is not there, or is there
        but greyed out at the point the tutorial presses it, fails loudly. */
     press: async (name, wait = 600) => {
@@ -388,7 +401,8 @@ const driver = page => {
       if (!(await target.count())) throw new Error('no button reads "' + name + '"');
       await target.waitFor({ state: 'visible', timeout: ACTION_MS });
       if (await target.isDisabled()) throw new Error('"' + name + '" is on the page but greyed out at this step');
-      await target.click({ timeout: ACTION_MS });
+      await pressable(target);
+      await target.click({ timeout: WORK_MS });
       await page.waitForTimeout(wait);
     },
     /* Asserts a button exists without pressing it — for the ones whose effect is a clipboard write
@@ -410,7 +424,8 @@ const driver = page => {
     },
     check: async (id, on = true) => {
       if (!(await page.locator('#' + id).count())) throw new Error('no switch #' + id);
-      await page.setChecked('#' + id, on, { timeout: ACTION_MS });
+      await page.locator('#' + id).waitFor({ state: 'attached', timeout: ACTION_MS });
+      await page.setChecked('#' + id, on, { timeout: WORK_MS });
       await page.waitForTimeout(300);
     },
     status: async () => ((await page.locator('#gpv-state').textContent()) || '').trim(),
@@ -428,8 +443,9 @@ const driver = page => {
       const target = button(name).first();
       if (!(await target.count())) throw new Error('no button reads "' + name + '"');
       if (await target.isDisabled()) throw new Error('"' + name + '" is greyed out at this step');
+      await pressable(target);
       const waiting = page.waitForEvent('download', { timeout });
-      await target.click({ timeout: ACTION_MS });
+      await target.click({ timeout: WORK_MS });
       const file = await (await waiting).path();
       const bytes = await readFile(file);
       if (!bytes.length) throw new Error('"' + name + '" wrote an empty file');
