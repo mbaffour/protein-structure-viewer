@@ -6,6 +6,7 @@
   async function downloadSessionFile() {
     if (!structures.length) return;
     if (typeof JSZip === 'undefined') { announce('The ZIP writer did not load. Refresh the page and try again.', 'error'); return; }
+    const finish = beginExport(); if (!finish) return;
     const done = setBusy('Saving session…');
     try {
       const zip = new JSZip(); const snapshot = sessionSnapshot(confidence => confidence);
@@ -29,7 +30,7 @@
       downloadBlob(blob, 'application/zip', (title || 'protein-session') + '-' + new Date().toISOString().slice(0, 10) + '.zip');
       announce('Session saved · ' + structures.length + ' model' + (structures.length === 1 ? '' : 's') + ' · ' + formatBytes(blob.size) + ' · reopen it with Open session file or by dropping it on the page');
     } catch (error) { announce('Could not save the session: ' + error.message, 'error'); }
-    finally { done(); }
+    finally { done(); finish(); }
   }
 
   async function readSessionZip(zip) {
@@ -52,14 +53,24 @@
 
   async function openSessionFile(file) {
     if (typeof JSZip === 'undefined') { announce('The ZIP reader did not load. Refresh the page and try again.', 'error'); return false; }
+    /* A session empties the page — removes every model and releases the export viewer — so opened
+       between a figure's awaits it pulled the models out from under the render, by the door a file
+       and a fetch already wait at (31, 40). */
+    if (exportRendering()) await afterExportRenders(file.name || 'the session');
     const snapshot = await readSessionZip(await JSZip.loadAsync(file));
     if (!snapshot) { announce('That ZIP is not a session file', 'error'); return false; }
-    await restoreSession(snapshot);
+    const restored = await restoreSession(snapshot);
+    if (!restored) { updateStatus('Session not opened · the page is kept as it was'); return false; }
     return true;
   }
 
+  /* An empty page has nothing of its own to save; it only replaces the stored session once it has
+     held models of its own. Otherwise the boot-time save would delete the session the restore banner
+     is offering, and Not now would be Forget it. */
+  let sessionHadModels = false;
   async function saveSession() {
-    if (!structures.length) { await sessionStore('readwrite', store => store.delete('current')); return; }
+    if (!structures.length) { if (sessionHadModels) await sessionStore('readwrite', store => store.delete('current')); return; }
+    sessionHadModels = true;
     const total = structures.reduce((sum, entry) => sum + (entry.text ? entry.text.length : 0), 0);
     if (total > 80 * 1024 * 1024) { if (!sessionWarned) { sessionWarned = true; toast('Session too large to autosave (over 80 MB of coordinates) — use Save session file to keep your work.'); } return; }
     const snapshot = {
@@ -80,9 +91,55 @@
     root.querySelector('#gpv-session-no').onclick = () => { banner.hidden = true; };
     root.querySelector('#gpv-session-forget').onclick = () => { banner.hidden = true; sessionStore('readwrite', store => store.delete('current')).then(() => updateStatus('Saved session discarded')).catch(() => {}); };
   }
+  function dismissSessionBanner() {
+    root.querySelector('#gpv-session-banner').hidden = true;
+  }
+  /* The page's own work, as Clear all counts it. */
+  function sessionPageWork() {
+    return labelRecords.length + selectionRecords.length + measurementRecords.length + annotationRecords.length + domainRecords.length + savedViews.length + spotlightResidues.length;
+  }
+  /* Everything Clear all removes, without its question (the session asked its own): the models, their
+     records and panels, and the analyses made on them. The undo history goes too — its steps name
+     models that are no longer on the page, and undoing into them would only take the session's records
+     away. Chain colours and the export settings stay; the session's scene sets its own. */
+  function sessionEmptyPage() {
+    stopCycle(); stopMotion();
+    dismissCanvasText(); cancelMeasureTo(false); setBoxSelectMode(false);
+    if (annotationActive) toggleAnnotating(false);
+    if (measurementActive) toggleMeasurement();
+    viewer.removeAllModels(); viewer.removeAllLabels(); viewer.removeAllShapes();
+    comparePanels.forEach(destroyPanelViewer);
+    releaseExportViewer();
+    structures = []; activeId = null; selectedResidue = null;
+    clearHistory();
+    labelRecords = []; selectionRecords = []; measurementRecords = []; measurementDraft = []; annotationRecords = []; annotationDraft = [];
+    spotlightResidues = []; positionEffect = null; renderPositionEffect(); renderPositionState();
+    domainRecords = []; domainVersion += 1;
+    residueData = null; renderDataState();
+    savedViews = [];
+    confidenceAssets = []; interactionResults = null; alignmentResults = []; interfaceResults = null; renderInterfaceResults();
+    pendingScene = null;
+    root.querySelector('#gpv-residue').textContent = idleResidueText;
+    root.querySelector('#gpv-side-by-side').checked = false;
+    clearComparePanels();
+    resetAnalyses();
+    renderAlignmentResults();
+    renderLabelList(); renderSelectionList(); renderMeasurementList(); renderAnnotationList(); renderDomainList(); renderSavedViews();
+  }
+
+  /* A session file is a whole workspace: it replaces the page — models, records, views, settings —
+     rather than adding its models beside the page's and pinning its records on whichever page model
+     had the same file name (before 2.52.0 a session of run A opened over run B labelled run B). With
+     anything on the page it asks first; Cancel keeps the page. Returns what it restored, or null. */
   async function restoreSession(saved) {
+    const open = structures.length; const work = sessionPageWork();
+    if (open || work) {
+      const what = open ? 'the ' + (open === 1 ? 'model' : open + ' models') + ' and the work on this page' : 'the work on this page';
+      if (!confirm('Replace ' + what + ' with the session? Cancel keeps the page.')) return null;
+    }
     const done = setBusy('Restoring session…');
     try {
+      if (open || work) sessionEmptyPage();
       saved.files.forEach(file => {
         const entry = addStructure(uniqueModelName(file.name, file.collection), file.text, file.format, file.sourcePath, file.collection);
         if (file.fetchId) entry.fetchId = file.fetchId;
@@ -91,7 +148,17 @@
       });
       renderList(); applyStyle();
       await applyScene(saved.scene);
-      announce('Session restored · ' + saved.files.length + ' model' + (saved.files.length === 1 ? '' : 's') + ' from ' + new Date(saved.savedAt).toLocaleTimeString());
+      /* The autosave banner offered the page as it was; Restore on it now would replace the session
+         just opened. Loading a file and a fetch take it down the same way. */
+      dismissSessionBanner();
+      /* What is on the page now, which is what the session held. */
+      /* The autosave leaves out a PAE over 1 500 tokens (sessionConfidence) and marks it; nothing said
+         so, and the heatmap, the PAE domains and ipSAE/LIS were simply gone after the restore. */
+      const omitted = saved.files.filter(file => file.confidence && file.confidence.paeOmitted).map(file => file.name);
+      const paeNote = omitted.length ? ' · the PAE of ' + (omitted.length === 1 ? omitted[0] : omitted.length + ' models (' + clipText(omitted.join(', '), 80) + ')') + ' was too large to autosave — reopen its files, or keep it with Save session file' : '';
+      const message = 'Session restored · ' + structures.length + ' model' + (structures.length === 1 ? '' : 's') + ' from ' + new Date(saved.savedAt).toLocaleTimeString() + (open ? ' · replaced the ' + (open === 1 ? 'model that was open' : open + ' models that were open') : '') + paeNote;
+      announce(message);
+      return { models: structures.length, message };
     } finally { done(); }
   }
 

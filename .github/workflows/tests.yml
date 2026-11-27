@@ -13,7 +13,7 @@ concurrency:
 jobs:
   playwright:
     name: playwright (${{ matrix.browser }})
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 40
     strategy:
       fail-fast: false
@@ -53,6 +53,16 @@ jobs:
           PSV_HEADED: '1'
         run: xvfb-run --auto-servernum --server-args="-screen 0 1920x1200x24" npm test
 
+      # The tutorials walked end to end against the built page: every control docs/TUTORIALS.md names
+      # has to exist and be drivable in the order the tutorial gives, so a renamed control or a step
+      # that silently needs another one first fails here. Like the step below it drives a browser and
+      # needs the vendor/ copies npm test has just written, so it runs in the Chromium leg. It passes
+      # in WebKit too and can be widened to the other engines if that is ever worth the minutes.
+      - name: Walk the tutorials
+        if: matrix.browser == 'chromium'
+        working-directory: tests
+        run: node tutorials.mjs
+
       # Distances and contacts against PDBePISA and a published catalytic triad. It drives Chromium, so
       # it runs in the Chromium leg, after npm test has written vendor/; validate-scripts has no browser.
       - name: Validate against measured structures
@@ -62,7 +72,7 @@ jobs:
 
   validate-scripts:
     name: validate scripts
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
@@ -76,6 +86,9 @@ jobs:
 
       - name: Check shipped HTML matches source and parses
         run: node scripts/build.mjs --check
+
+      - name: Check the tutorials name controls the viewer has
+        run: node tests/tutorials.mjs --text-only
 
       - name: Set up Python
         uses: actions/setup-python@v5

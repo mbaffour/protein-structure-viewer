@@ -22,7 +22,10 @@ a substituted library.
 
 Set `PSV_BROWSER=firefox` or `PSV_BROWSER=webkit` to run the same suite in another engine (Playwright's
 WebKit is the closest headless stand-in for Safari; install them once with `npx playwright install
-firefox webkit`). Set `PSV_HEADED=1` to watch the run in a visible browser. Set `PSV_CHROMIUM` to an existing
+firefox webkit`). Set `PSV_HEADED=1` to watch the run in a visible browser. Set `PSV_ONLY='<regexp>'` to run
+only the steps whose name matches (`PSV_ONLY='under a GPU cap' node run.mjs`): the others are skipped and
+counted, so it suits a step that opens its own page or a run of steps the pattern names together — a
+quick check while writing a step, never a gate. Set `PSV_CHROMIUM` to an existing
 Chromium binary to skip Playwright's own download — useful in CI images that already ship one:
 
 ```
@@ -197,11 +200,33 @@ Phone checks emulate viewport dimensions, not a physical phone or its GPU.
   undo takes back, and Highlight adds one highlight record per chain covering exactly the listed residues in one undo
   step; with *closest atoms* chosen `M` measures the closest heavy-atom pair to the next residue tapped, the status
   reading `first — second: ATOM–ATOM d.dd Å`; Distance from selected residue paints a residue within 4 Å `#1e3a8a`
-  and one beyond 20 Å `#e5e7eb` and the residue itself in the accent colour, the strip's pixels agree, the legend,
+  and one beyond 20 Å `#d1d5db` and the residue itself `#f97316`, the same in the dark interface theme, a
+  spin video recorded meanwhile keeps the residue selected and hides only the marker, the strip's pixels agree, the legend,
   strip title and methods text name the residue, another selection recolours, nothing selected is grey and the mode
   announces *Click a residue first*, and a saved and reloaded scene keeps the mode; and on
   `fixtures/experimental/5cha.cif` His57 of chain B lists `SER195 · C` at NE2–OG 3.02 Å and `ASP102 · B` at ND1–OD1
   2.67 Å. Each step takes its records, selection, measure choice and colour scheme back, and the last removes 5CHA.
+- Measurements you can read, edit, place and export (2.52.0, right after the 5CHA step, still in the turned view;
+  every measurement is made by a click on the card's first contacts row, Cα–Cα): a click on the measurement's
+  label (found with `labelHitAt` at its projected anchor) opens the editor as kind `measurement`, headed
+  `Distance · … · d.dd Å` with the row's value, with Remove and the measurement controls shown and no Measure to…;
+  Name the atoms fills the field with `measurementAtomsText` without committing, and Enter stores it as the record's
+  text in one undo step, the row's field and `measurementLabelText` (`text · value`) follow, the measurement is the
+  active text and undo takes the text away; a mouse drag of the label moves it by the drag (±14 px) into a model-space
+  offset with the camera still and no editor, Reset in the row is enabled, Select then → moves it 8 px, Reset clears
+  the offset and disables itself — three undo steps — and undoing Reset puts the nudged offset back; hovering the row
+  sets `measurementHover` and leaving clears it; the row's colour, Dashed, text and Show value and then the editor's
+  colour, Dashed and Show value each change the record in exactly one undo step, the editor opening on what the row
+  set and the row following the editor; the editor's Atoms choice starts at Cα–Cα, re-points the same record to the
+  two atoms the contacts row names at the row's closest distance (±0.006 Å, head line following) and back to CA–CA,
+  one undo step each; a saved and reloaded scene keeps text, Show value off, offset, colour and a solid line and
+  writes them into the JSON; the figure SVG carries `Salt bridge · d.dd Å` in the measurement's colour, its dashed
+  line, and a solid leader from the line's middle to the label's centre at least 20 px away; Separate labels moves a
+  measurement's text off a residue label it covers (the boxes no longer overlap), undo puts both back, and the panel
+  placement of an exported figure leaves the two print-size boxes clear of each other; and `measurementsText` has
+  the 19-column header and one row per measurement whose chains, residues, residue names, atoms, distance (±0.0005 Å),
+  unit and text match the records, Copy measurements copies it or fills the paste box, and the downloaded
+  `measurements.csv` matches it cell for cell. Each step removes its measurements, labels and active text.
 - The contact and distance map (2.50.0, in 'figure finishing' after the methods-text step, beside the other
   contact-map steps): A against A gives a square map with no diagonal or mirrored pair stored and a diagonal cell
   painted like the paper while its contacting neighbour is painted on both sides; All chains lays A and B end to end
@@ -302,6 +327,22 @@ Phone checks emulate viewport dimensions, not a physical phone or its GPU.
   drawn in its model colour under pLDDT colouring.
 
 The two emphasised checks are regressions against bugs that shipped in 2.0.
+
+- UX fixes (2.52.0), most on a page of their own (`freshViewer`, a new browser context with its own storage)
+  because they clear, remove or reload: *Not now* keeps the autosave for the next visit and *Forget it*
+  discards it; loading other work takes the restore banner down; Remove takes the card, the selected
+  residue, its labels and the modes with the model; Clear all asks before discarding one labelled model,
+  not for one bare model, clears the RMSD matrix and model agreement, and model ids keep counting; a
+  Nature 89 mm width survives a reload; ← → on a tab button, the divider or a slider leave the model alone;
+  Esc in help keeps full screen and in a rename keeps drawing; `?` works after a click on a switch; undo
+  restores Emphasise, a renamed legend title, MSA colouring and a compared position's neighbourhood table;
+  an RNA chain is box-selected and labelled through its P atoms and a calcium ion is not labelled;
+  residues 100, 100A and 100B are separate in the strip, Go to (`100A`, `H:100B`), a label's key and
+  anchor, the card's pLDDT and a scene; a loose `.a3m` colours a fetched model; the card closes over a
+  hidden model or chain, recounts on a new cutoff, and fits a phone's 380 px view; a contact map is marked
+  out of date when its settings change and a hidden model drops the RMSD matrix; the saved-views list and
+  captions use the figure's letters; a refused clipboard fills its own box, not the paste box; a fetch
+  keeps an overlay, and → from an overlay says it shows one model and saves the mode.
 
 ## Recovering from a failed step
 

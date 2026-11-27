@@ -11,7 +11,9 @@
     const bySequence = new Map();
     residueRows(entry).forEach(row => {
       const sequence = row.residues.map(atom => residueLetter(atom.resn)).join('');
-      if (!bySequence.has(sequence)) bySequence.set(sequence, { chains: [], length: row.residues.length });
+      /* `unit` is how the group's length is counted — nt, aa or residues — so every place that prints
+         it (Composition, the entity legend) says the same thing about the same chain. */
+      if (!bySequence.has(sequence)) bySequence.set(sequence, { chains: [], length: row.residues.length, unit: residueCountUnit(row.residues) });
       bySequence.get(sequence).chains.push(row.chain);
     });
     const groups = [...bySequence.values()].map((group, index) => ({ ...group, index, label: greekLetters[index] || 'e' + (index + 1) }));

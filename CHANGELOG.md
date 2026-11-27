@@ -2,6 +2,553 @@
 
 All notable changes to this project are recorded here.
 
+## 2.52.0
+
+### Added
+
+- **A measurement's text is edited on the canvas, like a label's.** Click a measurement's value on the
+  view and the editor opens at it, headed `Distance · HIS57 · B NE2 ↔ SER195 · C OG · 3.02 Å`. The field
+  takes words written before the value (`H-bond · 3.02 Å`); **Name the atoms** fills it with
+  `HIS57 · B NE2 ↔ SER195 · C OG`, kept with <kbd>Enter</kbd> or **Update**; **Show value** hides the
+  number; a colour picker colours the line and the text together; **Dashed** makes the line solid or
+  dashed; for a distance between two residues **Atoms** re-joins the same record to their Cα atoms or
+  their closest heavy-atom pair, keeping its text, colour and place; **Remove** deletes it. Drag the text
+  to move it (a thin leader line in the measurement's colour leads back once it has moved), or make it
+  the active text and move it with the arrow keys (<kbd>Shift</kbd> for 1 px) and remove it with
+  <kbd>Delete</kbd>; one undo step per change.
+- **A row per measurement in Annotate → Measurements** with the same controls: a text field, the atoms
+  and the value it joins, colour, **Dashed**, **Show value**, **Show** (centres the view on it, keeping
+  the zoom), **Reset**, **Remove**, arrow buttons and **Select**. Hovering a row draws its line thicker
+  on the view, never in an export.
+- **Copy measurements** and **Download measurements CSV**: one row per measurement — the type, each
+  point's model, chain, residue number, residue name and atom (the third empty for a distance), the
+  value, its unit and the measurement's text.
+- **Measurement text, colour and placement reach every export**: PNG, TIFF, PDF and SVG figures (with
+  the leader line), the shared report, the figure legend (`HIS57 · B NE2 ↔ SER195 · C OG 3.02 Å
+  (H-bond)`), scenes, sessions and share links. A scene writes the new fields only when they differ from
+  the defaults.
+- **Separate labels and per-panel placement include measurement text**: a measurement's value lying on
+  a residue label is moved off it on screen (`2 labels and 1 measurement moved apart`) and again at
+  print size in every exported panel; text placed by hand is left where it was put.
+- **A tutorials guide, [`docs/TUTORIALS.md`](docs/TUTORIALS.md).** Six walkthroughs, each ending in a
+  file: a first figure, a wild type against a mutant, an ensemble, exporting cleanly, a figure someone
+  else can rebuild, and measuring a catalytic triad. Every one can be followed with a public structure
+  from the PDB or AlphaFold DB. `tests/tutorials.mjs` drives the steps against the built page, and
+  `node tests/tutorials.mjs --text-only` — which CI runs — checks that every control the tutorials name
+  in bold is a control `src/00-head.html` actually has, with the help dialog left out of the corpus so
+  prose describing a feature cannot stand in for the control itself. The walkthrough itself runs in
+  CI's Chromium leg: it drives every step of all six tutorials against the built page and fails if a
+  named control is missing, greyed out at the point the tutorial presses it, or needs a step the
+  tutorial does not give. Green in Chromium and WebKit, with no console errors. Linked from the README,
+  the usage guide's contents and the in-app help.
+- **The text check also verifies navigation chains** — `Appearance → Colour scheme → pLDDT
+  confidence` — across `docs/USAGE.md`, `docs/USE-CASES.md` and `docs/TUTORIALS.md`, against the
+  structure of `src/00-head.html` rather than against a list of names: the second segment has to be an
+  option of the select the first one labels, a control under the heading it names, or a control in the
+  tab it names. Checking names alone could not find this class of drift, because `Colour by` is a real
+  prefix of the `Colour by MSA` button and so matched something every time. Only chains written wholly
+  inside one bold or italic run are checked, which is what gives a chain its boundaries; a paragraph
+  lead-in that happens to contain an arrow is left alone.
+- **A legend key for every figure, in one click.** **Download legend key** (Publish) saves the
+  figure's colour key on its own — the title and every entry with its exact swatch colour and name,
+  Figure labels renames included, in the figure font, text size, ink and background (a transparent
+  figure gives a transparent key) — in the chosen **Figure format** (PNG and TIFF with the dpi, PDF at
+  its physical size, JPEG, WebP) as `<figure title>-legend-key.<ext>`; **Download legend key SVG** writes
+  it with editable text. It is drawn by the code that draws the legend on every exported figure
+  (`legendMetrics` → `drawPlddtLegend` / `svgLegend`), always as a row wrapping at its own width. A
+  read-only box under the buttons gives a **legend text starter** — `Model: model_a (purple); model_b
+  (cyan); model_c (orange).` — each colour named by `colourName()`, the nearest of a set of colour words
+  by CIEDE2000 in CIELAB (checked against the viewer's own palettes and Okabe–Ito), with the hex only
+  where two entries share a word; **Copy legend text** copies it. All three are derived when asked and
+  follow the colour scheme, shown models, their colours and the Figure labels; a scheme with no key
+  (element colouring, one model) greys the buttons out with the reason. **Download all views (ZIP)**
+  now carries `legend-key.png` and `legend-key.svg`. Each has a suite step, and tutorial 4 drives it.
+
+### Changed
+
+- The figure legend names a measurement by its atoms — `HIS57 · B NE2 ↔ SER195 · C OG 3.02 Å` — where
+  it wrote `B:57–C:195 3.02 Å`; the sentence changes for every scene, old ones included. Nothing drawn
+  changes: a measurement with none of the new fields looks exactly as it did.
+- **Colour by distance from the selected residue**: the residue itself is now orange (`#f97316`, the
+  Annotate highlight colour) in either interface theme, where it took the theme's accent blue — close
+  to the 4–6 Å and 6–10 Å bands, and different in a figure exported from a dark interface. The band
+  beyond 20 Å is `#d1d5db` instead of `#e5e7eb`, which all but vanished on white paper. The legend,
+  figure legend and methods text say so.
+
+### Fixed
+
+- **Insertion codes from mmCIF files.** 3Dmol's mmCIF reader never reads `_atom_site.pdbx_PDB_ins_code`,
+  so in every `.cif` — including every structure fetched by PDB ID — residues 100, 100A and 100B were one
+  residue numbered 100: the strip, Composition, the FASTA, Go to, labels, the card and Measure to… kept
+  only the last of them, and all of 2.52.0's insertion-code work applied to PDB files alone. The viewer
+  now reads the column from the file itself as the model is made and sets the code where the PDB reader
+  sets it, so the same residues give the same strip, Composition, FASTA and measurements in either
+  format. If the file's rows cannot be matched to the atoms one for one, nothing is changed.
+- **Modified residues written as HETATM stay in their chain.** Phosphothreonine (TPO), phosphoserine,
+  phosphotyrosine, selenomethionine (MSE) and the like are polymer residues written as HETATM records,
+  and the viewer read every HETATM as a ligand: AlphaFold 3's Aurora A model counted 274 residues in
+  chain A instead of 276, its FASTA lost "TT" at 160–161, the strip jumped from 159 to 162, and *Ligands
+  and ions* listed `TPO ×2`; the contact map, box selection, the card's Contacts and Distances, Highlight
+  nearby residues and Colour by distance left them out, and the card on one stood on its phosphorus. A
+  HETATM residue now counts as a residue of its chain when it has a backbone (N, Cα and C; C1′ with P or
+  O3′ for a nucleotide) and is bonded into the chain — its C within 1.9 Å of another residue's N or its N
+  of another's C (O3′–P for a nucleotide), the length the card already calls a peptide bond. A free amino
+  acid, a cap such as ACE or NH2, and every ligand still are ligands. Its letter is its parent's (TPO →
+  T, MSE → M, SEP → S, PTR → Y, PSU → U and about twenty more), `X` for one the viewer does not know. It
+  is now drawn in the cartoon with its chain rather than as hetero sticks, and *Ligands and ions → hide*
+  no longer hides it.
+- **Interfaces counted water.** Every water of a crystal structure carries a protein chain's letter, so
+  Confidence → Interfaces counted water–protein and water–water contacts, listed waters as interface
+  residues (barnase "residue 241"), and buried the water shell's surface: 1BRS barnase–barstar A–D read
+  280 contacts, 43 + 39 residues and 2 289 Å² where the protein interface has 165 contacts, 16 + 14
+  residues and about 1 550 Å² (`tests/reference.py` on 1BRS with its waters removed: 1 551.8 Å²).
+  Water is now left out of the contacts, the areas, Highlight and the CSV, as PDBePISA leaves it out;
+  ligands and ions still count with their chain.
+- **Documentation drift: nine control names that the viewer no longer spells that way.** Found by
+  sweeping both guides against the control inventory rather than by reading them. In
+  `docs/USE-CASES.md`, the colour select was called *Colour by* in five places (it is **Colour
+  scheme**; the similarly named **Colour by MSA**, **Colour by data**, **Colour by domains** and
+  **Colour by annotated domains** buttons are untouched and correct), the Compare block was called
+  *Interface contact map* with a *Compute contacts* button (renamed to **Contact and distance map**
+  and **Compute map** in 2.50.0), and the label button was called *Add label* (it is **Add or
+  update**). In `docs/USAGE.md`, *Download publication TIFF* described a button that stopped existing
+  when 2.35.0 moved the formats into the **Figure format** select, and the file picker was called
+  *Add structures* in two places (it is **Choose model files**). The navigation-chain check added
+  above now fails CI on the first of these; the rest are not reachable by any name check, and are
+  recorded here so the next sweep knows they were deliberate corrections.
+- **Two tutorial steps that could not be followed as written**, caught by the walkthrough rather than
+  by reading: *Go to* was described as opening the residue card, when it deliberately *closes* one —
+  the card names the residue it was opened at, and the selection has just moved — so the card has to be
+  asked for with <kbd>L</kbd> or a click; and *Use medoid as reference* relabels itself to name the
+  model it found once a matrix is computed, so the reader presses a button reading *Use … as
+  reference*. Both are now in the tutorials, with the step the first one was missing.
+- **Not now kept nothing.** Every page load saved the empty page about 1.5 s in, which deleted the
+  autosaved session the banner was offering, so *Not now* behaved as *Forget it* and the next visit
+  offered nothing. An empty page now never replaces a stored session; only a page that has held models
+  (or *Forget it*) does. Opening or fetching other work also takes the banner down, so a later
+  *Restore* can no longer pour the old scene's labels and settings over the new work.
+- **Arrow keys on a tab button, the panel divider or the residue card also changed the model**, switched
+  the view to one at a time and closed the card. A key a control has already used is no longer also a
+  shortcut, and the arrows, Delete and Backspace inside the card and the box popover stay theirs.
+- **Esc in the help dialog or a text field also left full screen, Drag to select, drawing or
+  measuring** — closing help left full screen, cancelling a rename stopped drawing. Esc there now only
+  closes help or cancels the edit. And the shortcuts no longer stop after a click on a switch, checkbox,
+  slider or colour well (only text fields and selects count as typing; a slider keeps its own arrows).
+- **Removing a model left its residue selected and its card open**: *Add or update* then added a
+  "Missing model" label, its annotations stayed listed, deviation colours kept painting, and with the
+  last model gone drawing or Drag to select stayed on. Remove now takes the card, the selection, its
+  annotations, the deviations, the comparison and the RMSD matrix with the model, turns the modes off
+  when nothing is left, and says *Removed …*.
+- **Clear all**: it discarded a single model's labels, views and figure without asking — it now asks
+  whenever there is work to lose (one bare model still clears at once). Ligand sites, model agreement
+  (and its enabled RMSF buttons), the RMSD matrix, a loose `.a3m`, renamed legend entries, the motif
+  line and *Copy residue list* outlived it, and because model ids restarted at 1 the old results
+  attached to the next models loaded; ids now keep counting and those results are cleared. The Motion
+  select goes back to off with nothing left to turn. The named domains were emptied but their rows in
+  Annotate → Domains stayed on screen: Clear all now empties the page through the same path a session
+  file takes, which re-renders every list it empties.
+- **Undo steps that undid nothing**: undoing a fade, *Emphasise*, *Use medoid*, *Colour by MSA* or a
+  renamed legend entry said "Undid …" and changed nothing, using up the step. They now come back; the
+  legend rename is remembered before the first keystroke, not after the last. Undoing *Compare this
+  position* now takes its neighbourhood table, its buttons and its figure-legend sentence with it, and
+  redo brings them back.
+- **A journal width that is not a listed width** (Nature's 89 mm, Science's 55 mm …) printed at 120 mm
+  after a reload: *Custom width* is now remembered with the other export preferences.
+- **Insertion codes**: residues 100, 100A and 100B were one cell in the sequence strip, a label on 100A
+  sat on 100's Cα and shared its key, the card for 100A read 100's pLDDT, and Go to read `100A` as chain
+  A. Each is now its own residue in the strip, labels, the card, the marker and Measure to…; Go to
+  takes `H:100A`, and `100A` where the model has that residue and no chain A; scenes, sessions and share
+  links record `"icode"` only for a residue that has one, so older scenes load as before. Go to also
+  matches a chain's case exactly when both `a` and `A` exist. Restoring a scene reads those codes back:
+  a compared position and a highlighted selection used to come back one residue out, 100A landing on
+  100. The figure legend writes them too — `Highlighted residues: chain A 9, 10A, 10B, 11–13`, where the
+  range compactor saw six numbers, deduplicated 10 against 10 and printed `9–13`; a residue with an
+  insertion code is now never folded into a numeric run. **Model agreement (Cα RMSF)** keyed its
+  residues by chain and number while the superposition pairs them by chain, number and code, so every
+  coded residue was dropped from the ensemble and 100 held whichever of 100, 100A and 100B came last in
+  the file: six residues now come back where four did, and the RMSF CSV's `resi` column names the code.
+  Two copies of one ligand at 101 and 101A also count as two in *Ligands and ions*, not one.
+- **A nucleotide chain was counted in amino acids** in Models → Composition (`Stoichiometry: β ×1 (R, 24
+  aa)`) and in the entity legend, while the contact map's chain menu called the same chain `24 nt`. All
+  three now read the count from one place: `nt` for an RNA or DNA chain, `aa` for a protein one,
+  `residues` for a chain of both. A chain of nothing but ligands, ions or water is no longer a row in the
+  chain key either: hetero groups are drawn in element colours whatever the colour scheme, so its swatch
+  named a colour that was nowhere on the model — and the Composition panel never listed it.
+- **The clipboard fallback had a branch nobody read aloud**: with one measurement refused by the browser
+  it said *the 1 measurement are selected in the box under the view*. The sentence is now written around
+  the name the caller passes, which already carries its own count, so it reads the same for one as for
+  twelve — and *Copy residue list* says *1 residue*, not *1 residues*.
+- **A model that appeared while a figure was rendering could reach its labels but not its image**
+  (FA-18). Opening a file already waits for an export to finish, but the renderer itself asked which
+  models were shown twice, once to add them and once — after the styles and any surface had been
+  awaited — to decide whose labels to draw. It now reads that list once and finishes the figure with the
+  models it began with; nothing waits.
+- **An `.a3m` dropped on its own only served models opened as individual files**: with a fetched or
+  unzipped model *Colour by MSA* stayed disabled and the import said "No supported structures found". It
+  now serves every model, and the import says *Alignment added*.
+- **A spin video recorded under distance colouring was grey**, because recording deselected the residue.
+  It now hides only the marker while it records and keeps the selection.
+- **Motion said Spin but nothing spun** after loading files: the chosen motion now resumes once they are
+  in.
+- **The residue card with its contacts open ran past the bottom of a short view** (a phone, five or six
+  panels), cutting off its field and buttons; it now fits and scrolls. It also closes when its model or
+  chain is hidden or its residue is cut by *Low confidence*, instead of following a residue no longer
+  drawn.
+- **RNA and DNA could not be box-selected or labelled per residue, and calcium ions were labelled**:
+  Drag to select and *Label every residue* looked for atoms named CA. Both now use one atom per polymer
+  residue, the Cα or a nucleotide's P.
+- **Panel letters disagreed**: the saved-views list, *Download captions* and the views ZIP lettered every
+  view in order, while the figure lettered only the ticked ones — after *Make site figure* the list said D
+  for the panel printed as A. All of them now use the figure's letters (a view left out shows —).
+- **A refused clipboard overwrote the Per-residue data paste box** (Copy in the card's contacts, *Copy
+  measurements*, *Copy residue list*). The text now goes to a read-only box of its own under the view,
+  selected for Ctrl/⌘+C.
+- **Results that no longer matched their settings**: a contact map whose chains, cutoff or atoms change
+  is dimmed and says *Settings changed · Compute map to update*; an open card recounts its neighbours and
+  its contacts list when *Within (Å)* changes; the pairwise RMSD matrix is dropped when a model is hidden,
+  shown, added or renamed.
+- **Stepping to a model from an overlay switched to one at a time without a word**, and a fetched
+  structure did the same. A fetch now keeps the View mode; Current model, ← →, Previous/Next and cycling
+  still show one model, but say so in the status line, and the mode is saved as a preference.
+- **Dragging or nudging text in perspective moved it the wrong distance.** After *Go to* a 100 px drag
+  moved a label 49 px and five arrow presses 20 px instead of 40, and a callout far from the model centre
+  overshot, because pixels per ångström were measured at the model centre. They are now measured at the
+  text's own anchor for the drag, the arrow keys, the row arrows and *Separate labels* (on screen and at
+  print size), so text moves by the pixels asked at any zoom.
+- **Side-chain atoms could not be clicked on a model over 3 000 atoms** (5CHA): a click on His57 NE2
+  picked nothing and one on Ser195 OG picked another residue's Cα, so measurement mode and drawing only
+  ever took Cα atoms or water. The click is still searched among the Cα atoms first, then among every atom
+  of the residues near the pointer; NE2 to OG now measures the published 3.02 Å.
+- **Sequence spectrum drew every model grey** and logged a warning per atom (3Dmol has no scheme of that
+  name). Each chain now runs blue at its N-terminus to red at its C-terminus, and the sequence strip and
+  its letters, which kept the model colour, are painted from the same colours.
+- **The residue card and Measure to…**: opening the card (<kbd>L</kbd>) left an armed *Measure to…* on
+  behind it, and <kbd>Esc</kbd> in the card closed the card and left the crosshair; opening the card now
+  drops the arm and says so. *Go to* with the card open left it naming the old residue, and its
+  <kbd>Enter</kbd> labelled that one; *Go to* now closes it. (Removing the armed residue's model already
+  cancels the arm since the model-removal fix above.)
+- **Measure all and Highlight made duplicates**: a contact clicked first and then *Measure all* drew that
+  pair twice, text on text, and every press of the card's *Highlight* added another set of rows. *Measure
+  all* now leaves out a pair already measured between the same atoms and says *N new · M already
+  measured*; a press with nothing new, or a *Highlight* of residues already highlighted in that colour,
+  adds nothing and takes no undo step.
+- **While measuring, drawing or with Measure to… armed, a click on text over an atom was swallowed**:
+  the press started a drag of the text that did nothing. A click without a drag now goes to the atom
+  under the text, and the status says so when there is none.
+- **Separate labels pressed again announced the same move and took an undo step that undid nothing.** A
+  press that would leave every offset as it is now says *Nothing more to move* (or that labels are
+  already clear) and takes no step, and a press that leaves boxes overlapping says how many pairs remain.
+- **"As measured" could not be chosen again** once a measurement made between other atoms was re-pointed
+  to Cα–Cα or the closest atoms; the clicked atoms are now kept for that record (in memory only, not in
+  scenes) and stay one choice of *Atoms*.
+- **The canvas editor could not empty an arrow's, a line's or a marker's text** (the row could): an empty
+  commit now removes the text; a callout or a corner title keeps its text and the status says how to
+  remove it instead.
+- **Under distance colouring the status kept saying "Click a residue first"** after a residue was clicked
+  and the model coloured; it now says *Coloured by distance from SER14 · D*.
+- **Light theme: accent-coloured text read below 4.5:1** — the selected tab (2.9:1), the current model's
+  name in the Models list (2.5:1) and the card's count of nearby residues. Text in the accent now takes a
+  darker blue (`--accent-ink`, `#0b6bcb`) in the light theme; fills and rings keep the accent, and the
+  dark theme is unchanged.
+- **Measurement text and rows**: dragging measurement text said *Label moved*, <kbd>Esc</kbd> on it *No
+  label selected*, and undoing its arrow move *Undid label nudge*; they now name the measurement (and
+  annotation text its own), and an arrow move, the row arrows, *Show* and the row's *Remove* say what they
+  did. Enter in a row's text, and its *Dashed* or *Show value*, rebuilt the list and dropped the keyboard
+  focus on the page; it now comes back to the same control (annotation rows too), and every measurement
+  and annotation *Remove* is named for screen readers (*Remove the measurement HIS57 · B NE2 ↔ …*). A
+  label just dragged is now the active one, so the arrows and <kbd>Delete</kbd> act on it. The measurement
+  colour had no way back to the default: a **Default** button beside it, in the row and in the editor, puts
+  back the crimson line in one undo step.
+- **Small things in the card and Annotate**: the *peptide bond* tag in the contacts list was cut to
+  "peptide bon…" (it now wraps under the name) and the atoms column wrote `CA` beside a `Cα` column (it
+  writes Cα); *Within (Å)* kept 15 or 1 in its field while the card counted at 12 or 2 Å (it is now set
+  to the nearest end); *Clear measurements* was enabled and *Start measuring* turned on with nothing
+  loaded (Clear is greyed out until there is a measurement, and Start until there is a model); *Go to*
+  rejected `B57`, the way the card writes a residue (it now reads a chain name then a number).
+- **Polish**: one way of spelling a residue in the card, its contacts, the marker, the hover readout and
+  *Copy residue list* (`HIS57 · B`, `HIS57 · chain B`, `B:HIS57`); *Colour scheme* and *Highlight colour*
+  spelt as everywhere else; the figure builder's buttons are *Download built figure PNG/SVG*, no longer
+  named like the view's; the sequence letters can be reached and walked from the keyboard (one Tab stop
+  per chain, arrows, Enter); the help lists <kbd>Backspace</kbd> beside <kbd>Delete</kbd>; deleting a
+  figure template asks first; a hand edit after a journal preset sets the journal select back to *Choose
+  a journal…*; a per-residue table says how many rows it could not read (`· 2 rows skipped`).
+- **A figure with no colour legend and no scale bar was saved at twice the stated size.** 3Dmol draws at
+  twice the screen's resolution, and only a figure with a legend or a bar was drawn back to the plan:
+  an 85 mm, 300 dpi PNG or TIFF was 2008 × 1338 px with 300 dpi written in it, so it printed 170 mm wide;
+  the PDF page was 170 mm while its status said 85; JPEG, WebP, the views ZIP and *Copy PNG* were doubled
+  too. Every raster export is now exactly the size the estimate states.
+- **Large print figures came out black, with "downloaded" in the status.** At 178 mm and 600 dpi the
+  canvas passed the 8192 px a side many integrated GPUs and software renderers allow, and the PNG held
+  only the labels. The plan now stays inside the GPU's limit: the width is kept and the resolution
+  lowered, the estimate and the status say `rendered at 584 dpi, the most this GPU allows for 178 mm`,
+  and that is the dpi written into the file. When the browser then gives the canvas a smaller drawing
+  buffer than it asked for (Chromium does under memory pressure, and the figure came out shifted and
+  cropped), the figure is drawn once more at the size it allowed (`rendered at 503 dpi …`) and later
+  plans fit under it. A canvas past the limit all the same says so and saves nothing. The 24-megapixel
+  cap also keeps a print figure's width now; it kept the dpi and printed the figure smaller.
+- **Restoring a scene emptied the undo history** — Restore scene JSON, the autosaved session's *Restore*
+  and a session file alike — so the labels, measurements and views it replaced could not be got back.
+  A scene restore is now one undo step: ⌘Z says *Undid scene restore* and brings them back. (A session
+  file opened over other work now replaces the page after asking first; see below.)
+- **The methods text called every structure predicted**, a crystal structure included. It now begins
+  *Experimental structure (PDB 5CHA) was inspected…*, *Predicted structures…* or *Structures…* from
+  what is shown, and says how the distances and angles in the figure were measured (between Cα atoms
+  or the atoms named). The figure legend names a renamed label's residue: *Catalytic Ser (SER195 · C)*.
+- **Opening an archive beside a loaded model hid the models it added**: View mode went to one at a time
+  with the old model still current, and stayed there, so later imports were hidden too. The first model
+  an import adds is now the current one, the status names it (`· showing hbdimer_model_0.cif`), and an
+  archive opens one at a time only on an empty page. *· confidence attached* counted every confidence
+  file loaded since the page opened, so it ended every later import, and a failed one read *Confidence
+  data loaded*; it now counts only the import's own files. A second copy of a file is `1brs.cif (2)`,
+  not `Individual files › 1brs.cif`, which the model menus read as *Individual files › Individual files ›*.
+- **A file of ligands and ions was given a pLDDT** (its calcium ion, atom name CA, read as a Cα), with an
+  empty chain table. It now has none, and the composition says *No polymer chains (ligands and ions
+  only)*. The legend no longer shows a key for colours that are not drawn: pLDDT on a model without
+  pLDDT says *No pLDDT in 5cha.cif (experimental) — drawn in the model colour*, and model agreement
+  before an alignment says to align first. Those two lines are notes on screen, not keys: they are not
+  printed on exports, and the publication checklist does not ask for a legend for them. Choosing *Model
+  agreement* before an alignment also says *Model agreement stays grey until you align*, as Cα deviation
+  does. A calcium ion in a predicted model with protein in it was averaged into the mean pLDDT the same
+  way (five residues scored 80 read 66.7); only polymer residues are scored.
+- **Compare**: *Align visible* with one shown model blamed the matching, and *Restore coordinates* with
+  nothing aligned said it had restored; both, and the RMSD matrix, are now off until they have
+  something to do. Unrelated proteins superposed without a word (5CHA on 1BRS: 34 Å RMSD); an alignment
+  under 30 % identity or over 10 Å now says *low identity / large RMSD — these models may not be
+  comparable* in the status and its row. The alignment table follows renames and dims a model hidden
+  since. In the synchronized multi-view, ← → and *Current model* said *Showing …* and changed nothing:
+  they now change the primary panel. Removing a model handed its panel silently to the first model; the
+  panel now closes with it and the status says so. *Add panel* is off once every model has a panel.
+- **Hide all left a blank grey stage saying "Ready"**; the stage now says *All models are hidden* with
+  a *Show all* button, the status too, and *Cycle models* is off until a model is shown.
+- **Publish, smaller ones**: after the figure builder's downloads and *Download all views (ZIP)* the
+  status line read "Ready" instead of what was written; a builder caption longer than two lines was cut
+  mid-word without a word — captions now take three lines and the estimate and status name a panel whose
+  caption was shortened; the publication checklist kept ticking "The colour legend is drawn on exports"
+  after the legend was switched off, and missed a scale bar in perspective, until another setting
+  changed; in the composite figure the pLDDT profile was a 1200-unit chart shrunk into its cell (tick
+  labels about 1 pt) — it and the RMSF profile are now laid out at the cell's size with text at the
+  chosen point size — the PAE panel gains a colour bar, and its caption says "pLDDT", not "plddt".
+- **A session file opened over other work added its models beside the page's and put its records on
+  the wrong model**: a session of run A opened over a different `model.pdb` (run B) arrived as
+  `model.pdb (2)`, and its rename, labels and measurements were matched by file name to run B, while
+  the status said "1 model" of two. A session is a whole workspace, so it now replaces the page — asking
+  first whenever there is a model or work on it (*Cancel keeps the page*) — and the status counts the
+  models on the page afterwards. Scene JSON still applies its records to the page's models by name, and
+  now says how many matched no model there.
+- **Undoing a scene restore kept the scene's look**: the old labels came back in the scene's colour
+  scheme, representation, background and title. The undo step now holds the display it replaced —
+  settings, title, model colours and names, camera — and puts it back; redo puts the scene's back.
+- **The composite, comparison and per-model figures printed their text at 2–5 pt** whatever the text
+  size: captions, panel letters, panel A's legend, the contact map, the RMSD matrix and the architecture
+  bar were sized from the cell (captions 3.4 pt at 85 mm, 8 pt chosen). They now print at the chosen
+  point size, captions wrapping onto three lines as in the figure builder; a chart that cannot hold its
+  text in its cell makes its row taller and the status says so. *Download one panel per model* is now
+  the chosen width overall — two models at 85 mm made a 170 mm figure named `…-85mm-300dpi.png` — and
+  the comparison figure, which keeps the chosen size per panel, states its whole width.
+- **A measurement between insertion-code residues was named without the codes** — `ALA10 · A CA ↔
+  ALA10 · A CA`, a residue measured to itself — in its row, its editor, the figure legend and the
+  measurements CSV. All name `ALA10A` and `ALA10B`; the CSV and *Copy measurements* write `10A` in
+  `resi`, keeping their columns.
+- **Cα deviation before an alignment printed its band key on exports**, *unmatched* included, over a
+  model drawn all grey, and the checklist ticked the legend. Like model agreement, it is now a note on
+  screen (*Grey until models are aligned*), not printed and not asked for.
+- **The shared report**: a crystal structure's report said *Predicted structures are predictions*; the
+  sentence now appears only when the report holds a predicted model, by the methods text's rule. The
+  online report loads 3Dmol.js with the viewer's own integrity hash, and the size estimate counts the
+  library at its real size (about 500 KB, not 1.5 MB — 1.8 MB estimated for a 960 KB file) and the page
+  around the data. The report's mean pLDDT no longer averages in a calcium ion named CA.
+- **Publish, round two**: under a GPU limit the figure builder's estimate and status and the composite's
+  status gave the lowered dpi without saying it was lowered; they now say *600 dpi asked · rendered at
+  142 dpi, the most this GPU allows*, as the single figure does. The composite said *1 panels*; the
+  pLDDT profile's model key in the composite ran off the cell's left edge — it names the models by what
+  tells them apart (`model_0`, `model_1`) and cuts each name to its share. The publication checklist
+  kept *No figure title yet* after a title was typed, and *Use print size*, *Draw legend* and *Switch to
+  orthographic* said nothing; the title now updates it and each fix says what it set. Opening a
+  predictor ZIP read *Ready* for seconds while it was still being read; it reads *Loading* until the
+  import's own message.
+- **An armed *Measure to…* survived an import**, so the first click on the model just loaded measured
+  into it. Loading a file now cancels it, and the click opens that residue's card.
+- **Sequence spectrum was grey in the HTML report**, which asked 3Dmol for a colour scheme it does not
+  have. The report's view and strip now run each chain blue to red with the viewer's own colours, and
+  the legend under the viewer shows the ramp, *N-terminus → C-terminus, per chain* (exports carry no
+  key for it).
+- ***Copy PNG to clipboard* stated the size asked for**, and rendered without the second try the
+  downloads make when the browser gives the canvas less than it asked. It now renders as they do and
+  states the size copied, with *rendered at … dpi, the most this GPU allows* when it had to be lowered.
+- **Colour by distance stayed grey after Go to.** The sequence strip's colour lookup marked the view as
+  already drawn, so whenever the strip repainted first — after Go to always, after a click about one
+  time in five, and on Firefox after the first clicks — the model stayed grey under a key saying no
+  residue was selected, and a figure exported then printed that key. Every change of residue now
+  recolours the view and its key, and the status names the residue the colours are measured from now,
+  not the first one clicked.
+- **Residues told apart only by an insertion code were one residue** to Measure to…, the card's contacts
+  and its Distances CSV: *Measure to…* from 57 to 57B in closest atoms recorded 57 N to 57 N, 0.00 Å; the
+  card at 57A left out 57 and 57B, its bonded neighbours, as itself, and its CSV said *Distances from
+  ALA57*. They are three residues there now, and in the card's count, *Highlight*, *Highlight nearby
+  residues*, a box selection, the contact map's *Highlight* and its zoom, Go to's framing, *Compare
+  this position* and *Align visible*'s chain-and-number pairing. The Distances CSV and the contacts copy
+  write `57A` in `resi` (the column count is unchanged).
+- **A file opened while a figure was rendering** went in between the export's steps: the image showed
+  the old models and its key the new model's chains. It now waits for the figure to finish, saying
+  *Export in progress — 1brs.cif will load when it finishes*, then loads; a fetch waits the same way.
+- **Fetch by identifier left an armed *Measure to…* armed**, so the next click measured into the fetched
+  structure. A fetch now cancels it as an opened file does. In the synchronized multi-view an opened
+  file is put in the primary panel, as a fetch already was, and both say *in the primary panel*; an
+  archive opened on an empty page says it switched to *one model at a time (View mode)*. A fetch that
+  cannot reach the server says *Could not reach the PDB (1ubq) — check the network and the id* on every
+  engine, rather than the browser's own words (*Failed to fetch*, *Load failed*, *NetworkError…*).
+- **Two models could share one short name** in an exported Model key, the RMSD matrix, the site figure
+  and the position comparison: names differing past the 28th character were clipped alike, and 1brs.cif
+  and its second copy became *cif* and *cif (2)*. Short names are now unique after clipping (a name that
+  would repeat keeps its end), and a stem is never cut down to its extension (*1brs*, *1brs (2)*).
+- **Depth cueing, the surface, Okabe–Ito, Low confidence and the legend on exports were forgotten** at
+  the next visit, though USAGE said appearance and export choices were remembered; a user who turned the
+  export legend off got it back without noticing. They are remembered now.
+- **Past eight models the colours repeated with nothing to tell them apart**, and the strip said
+  *8 models* beside *10 displayed*. Models now take twelve distinct colours before repeating, and the
+  strip says *first 8 of 10 models*.
+- **Emphasise with one shown model** said it had faded the others and took an undo step that changed
+  nothing; it is off below two shown models (*Needs two shown models*), and the row's fade switch now
+  says what it did.
+- **Removing the alignment reference** left the deviation colours to turn grey with only *Removed
+  syn_b.pdb* to say why. The status now says the alignment was cleared with it, and that Restore
+  coordinates puts the others back.
+- **← → in the synchronized multi-view could show one model in two panels** and leave another in none,
+  while the count read *1 displayed*. The model chosen now swaps places with the primary one
+  (*… moved to panel 2*), and the count reads every panel (*3 displayed / 3 loaded · 3 panels*).
+- **A measurement on a hidden model still answered Show and the arrows**: the camera went to empty space
+  and the status said the text had moved. Its row now says *not drawn* and why, and Show, the arrows and
+  Edit say *Show model_a.pdb first …* and move nothing; a measurement between two models in different
+  panels of the multi-view says it is drawn in none.
+- **Keyboard**: <kbd>Enter</kbd> in a measurement row's text field moves the focus to the row's *Show*,
+  so <kbd>Ctrl</kbd>/<kbd>⌘</kbd>+<kbd>Z</kbd> undoes the text straight away (it did nothing while the
+  field kept the focus); in the clipboard fallback box <kbd>Esc</kbd> closes it and ⌘Z undoes. The
+  measurement editor — Atoms, Name the atoms, colour, Dashed — opens from the keyboard: the row's new
+  **Edit**, or <kbd>Enter</kbd> on the measurement made active with **Select**; Tab walks it, Esc closes
+  it.
+- **Light theme: muted text and every ghost button were 3.2:1 on white** — the card's facts, the contacts'
+  atoms, the measurement rows, Show, Remove, the arrows. They are 5.6:1 now; the dark theme is unchanged.
+- **Nucleotides and ions were called Cα**: the contacts' last column read *Cα 6.01 Å* between two
+  nucleotides and the card offered *Cα–Cα*, Distances CSV said *(Cα–Cα)*, and *Measure to…* a calcium ion
+  said *C1–Cα*. A nucleotide is measured and named by its P (*P–P*), an ion by its own atom name, and the
+  contact map's chain menu counts an RNA or DNA chain in *nt*.
+- **Polish, round 2**: Help says *Appearance → Colour scheme*; a label row's arrows say *Label moved up ·
+  Reset puts it back*; every control in a measurement row is read out with its measurement, and the
+  editor's × is *Close the editor*; at 1400 × 900 the card with Contacts open keeps *Distances CSV* in
+  view; Interfaces' *Highlight* uses Annotate's *Highlight colour*, as every other highlight does, and
+  its own colour well is gone.
+- **Polish, continued**: the Annotate readout and the status name a renamed model by its new name and
+  the residue as the card does (`Wild type · ALA12 · chain B · atom CA`), the label list writes
+  `ALA12 · chain B`, the selection list *all chains* rather than *chain —*, and the contact map's readout
+  `A:GLU57 — B:ARG59`; *Highlight interface* and a ligand site's *Highlight* use Annotate's *Highlight
+  colour*, as every other highlight does; the model rows' colour wells are read out as *Colour for …*,
+  and every *Remove* in the model, label and selection lists names its row; Rename, Emphasise, a label's
+  or a measurement's *Reset* (the focus goes to *Show* beside it once Reset greys out), a domain's
+  scope, and the figure builder's tick and ↑/↓ keep the keyboard focus instead of dropping it on the
+  page; the site-figure tip in Help names *Download built figure PNG or SVG*.
+- **Stress loop, round 3 (batch J): insertion codes everywhere else a residue is named.** The contact map
+  indexed residues by chain and number, so 100 and 100A both found 100B's row — one pair, on 100B, at
+  100A's distance — and its two CSVs wrote *100* three times; Interfaces counted 100, 100A and 100B as one
+  interface residue, highlighted all three for a contact at one and wrote *100*; *Compare this position*
+  at 100A measured around 100 (or gave no table) and labelled it *Ala100*; a ligand site lined by 57 and
+  57A counted one residue; a motif matched at 100A highlighted 100 too and said *H:100*; *Label residues*
+  on a highlight of 57A labelled 57 and 57B; comparing plain 57 drew sticks on 57A and 57B, and a label's
+  *Show* and a strip double-click framed all three; per-residue data painted 100A with 100's value; the
+  card's status said *Label added at A:57* for 57A. Each now keeps the code, as PDB and as mmCIF. *Compare
+  a set of positions* takes `H:100A`.
+- **Sequence-aware superposition paired calcium ions as Cα atoms** (an ion is a HETATM named CA), and read
+  a phosphothreonine as X, so it mis-scored against its own unmodified copy; ions are left out and a
+  modified residue reads as its parent.
+- **Removing a model left work behind**: its Interfaces table, a measurement or a drawing half made on it
+  (the next click finished it on a model that was gone), and named domains and per-residue data of *Same
+  source*, which stopped colouring the rest of the archive. The table and the half go with it; a *Same
+  source* record moves to a surviving model of its source. Undo no longer brings back an effect table
+  measured against the removed model.
+- **A session file restored every model solid and a scene un-faded every chain**: each wrote one of the
+  two fades. Both write both. A scene also writes which label offsets *Separate labels* chose.
+- **A session file opened during a figure export** emptied the page under the render; it now waits, as a
+  file and a fetch do, and any restore takes the autosave banner down. A restored autosave says when a
+  model's PAE was too large to keep.
+- **Numbers that were missing read 0**: the metrics table gave *0.0* for the mean pLDDT of a model with
+  none, and a blank ranking score ranked as 0. An RNA or DNA chain's pLDDT in Composition, the FASTA and
+  the profile was its P's, while the header and the methods text use C1′; all use C1′.
+- **An AlphaFold 2 output folder zipped as `job/ranked_0.pdb`** never paired with `ranking_debug.json`, so
+  its models had no rank or ranking confidence.
+- **A header-less `chain,resi,value` table lost its first row**, taken as a header.
+- **Mean pLDDT order sank an archive's unviewed models below every viewed one** without a word, as if
+  their pLDDT were the lowest. They now read *Not yet ranked*, follow the ranked models (before any model
+  with no pLDDT at all), and the status bar counts them; nothing is parsed to rank them.
+- **A scene restored onto a file of the same name but another atom order** measured between whatever atoms
+  now sat at the stored indices; a point is the named atom, or nothing.
+- **Polish, round 3**: a range with a part that cannot be read (`100A-100C, 105`) is refused and the part
+  named, in Selections, Domains and the fit region, instead of keeping the rest; *Highlight neighbourhood*
+  uses Annotate's *Highlight colour*, and it and a ligand site's *Highlight* refuse a press that would add
+  the same rows again; a compared nucleotide's label hangs on its P and follows a superposition; the
+  measurement editor names a nucleotide pair *P–P*, shows a measurement *Measure to…* made as such, and
+  choosing the atoms it already joins takes no undo step; the arrow keys refuse to move a label or a
+  measurement on a hidden model, and say why; an annotation's *Reset* is greyed out until it has moved;
+  *Download one panel per model* is off unless two models are shown or the active one's source has two.
+- **One export at a time.** A second export pressed while one rendered — another *Download built figure*
+  press, *Download all views (ZIP)*, *Download figure SVG*, the composite — ran on the same export
+  surface: it emptied the first one's scene between its awaits, shrank the surface under it, and took a
+  saved view's colours and camera as "the page to go back to", so both files came out wrong and the
+  screen was left in panel A's colours. The export buttons were disabled only by the export itself and
+  every restyle enabled them again, still reading "Rendering 1 / 3…". Exports now take a turn: a press
+  while one renders is refused with a line saying so, and the buttons stay off until it ends. The
+  "export in progress" test that makes a dropped file wait no longer reads the busy badge's label, which
+  any job started meanwhile (Align visible) overwrote, so a file dropped then loaded halfway through.
+- **An export draws one state of the page.** The SVG overlay, the built figure's SVG panels, the legend
+  and the scale bar read the shown models again after the image had rendered, so with *Cycle models*
+  running (or ← →) the image was one model and its labels, key and bar another's. They now use the models
+  the image was drawn with; an export stops the cycle as it starts, and ← → and C do nothing until it ends.
+- **SVG labels follow the figure, not the interface theme.** In the dark theme every uncoloured label and
+  measurement value in an SVG was white text on a white box, invisible; the PNG was readable. SVG labels
+  now take their box, text and border by the PNG's rule — the figure's background first, the theme only
+  for a transparent one — and *Labels: Plain text* draws no box in the SVG either.
+- **A built figure's PNG and SVG agree on corner text.** The PNG printed a corner title (Annotate →
+  screen text) in every panel and the SVG in none; neither does now — it is a title for one figure.
+- **A print-size composite is the width asked for.** Each cell had a 300 px floor, so a 35 mm composite
+  in two columns at 300 dpi came out 600 px — 51 mm — under a name that still said 35 mm. The floor now
+  applies to pixel exports only, and the status gives the composite's printed width.
+- **Share links match their models by what was fetched, not by name.** A link records the sender's
+  model names, and a sender with a local `1brs.cif` beside the fetched one named it `1brs.cif (2)`: the
+  recipient's fetch was `1brs.cif`, so every label, measurement and selection was dropped and each
+  saved view hid every model — under a status that said the scene had opened. A recipient whose own
+  file was called `1brs.cif` skipped the fetch and got the link's labels on their file. Each model is
+  now matched to the model fetched from its identifier, the scene is read through those names, and the
+  status keeps the count of records that matched nothing.
+- **Share links keep emphasis and faded chains**, and a scene keeps which labels and measurement values
+  were placed by *Separate labels* rather than by hand, so after reopening it Separate labels still
+  moves them and the exports still re-place them at print size. Undoing a scene restore puts emphasis
+  back with the colours.
+- **Make site figure keeps a site's insertion code.** At H:100A the panels were named "Site H:100", the
+  close-up's caption gave residue 100's identities, and 100, 100A and 100B were all framed as the site;
+  the code now travels through the panels, the caption and the neighbourhood.
+- **The HTML report reads residues as the viewer does.** It parses each file again with 3Dmol, which
+  reads no mmCIF insertion codes and treats a phosphothreonine as a ligand: an antibody `.cif` merged
+  100, 100A and 100B and Aurora A's TPO160–161 were drawn as sticks and left out of the strip. The report
+  now carries the viewer's reading of each atom, numbers its strip readout with the code, and its
+  contact map keys residues by 100A rather than 100.
+- **The legend for many models, and for hidden chains.** Colour scheme *Structure* drew no Model key at all
+  from nine models on (on screen, on every export, and no checklist line), although models have had
+  twelve colours since this release; it names them as chains are named, then "+N more". The chain key
+  no longer lists a chain switched off in Composition.
+- **A legend down the side stays inside the panel.** A stacked legend taller than the panel — nine chains
+  at 85 mm — was centred anyway and ran off the top and bottom. It now shrinks for height (to the same
+  55 % floor as for width) and, if still too tall, goes along the bottom.
+- ***Score all shown* scores every shown model.** An archive's models after the first are read only when
+  shown, and a Chai-1 run writes no PAE, so the second sample counted as unscorable and was left out;
+  they are read first now.
+- **Measurement lines in a PNG were hairlines.** WebGL draws a line one device pixel wide whatever
+  width it is given, so a measurement's line and a label's leader in a 300 dpi PNG, TIFF or PDF were 0.6 px
+  wide where the SVG strokes 5.56 px (9.31 px at 600 dpi). Exports now draw them as thin cylinders at the
+  SVG's stroke width, dashed as the SVG dashes them; on screen and in comparison panels they stay lines.
+- **Smaller things**: an export says when it left the scale bar out of a panel (and which) because the bar
+  did not fit, and the checklist stops ticking it; a comparison or per-model figure capped at 24
+  megapixels says how wide each panel now prints; the checklist's *Switch to orthographic* is remembered
+  after a reload like its other fixes; *Load scene JSON* waits for an export to finish; the per-model
+  figure's refusal says to show two models.
+
 ## 2.51.0
 
 ### Added

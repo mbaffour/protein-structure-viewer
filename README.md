@@ -17,6 +17,7 @@ Structure files you open stay in the browser. Nothing is uploaded.
 
 - **Live viewer:** <https://mbaffour.github.io/protein-structure-viewer/>
 - **Walkthroughs with live examples:** [`docs/USE-CASES.md`](docs/USE-CASES.md)
+- **Tutorials, start to finish:** [`docs/TUTORIALS.md`](docs/TUTORIALS.md)
 - **Usage guide:** [`docs/USAGE.md`](docs/USAGE.md)
 - **Scientific and publication-readiness audit:** [`SCIENTIFIC-AUDIT.md`](SCIENTIFIC-AUDIT.md)
 - **Release notes:** [`CHANGELOG.md`](CHANGELOG.md)
@@ -166,7 +167,8 @@ Type a residue number to go straight to it. Name domains by residue range and co
 definition to every model of an AlphaFold run, and colour by them with a legend that lists them by
 name. Add or edit custom residue labels, or label every residue
 in the current model. Highlight or hide chain/residue
-ranges, and add atom-to-atom distance or three-atom angle measurements. Draw figure annotations —
+ranges, and add atom-to-atom distance or three-atom angle measurements — click a measurement's text to
+name it, colour it, hide its value or move it, and it prints that way in every export. Draw figure annotations —
 arrows, lines, residue markers, text callouts, and corner titles — that follow rotation and alignment
 and appear in every export; nudge any label into place and it stays there as the model turns. Give
 models display names for captions. Undo and redo every one of these changes.
@@ -176,6 +178,8 @@ into the file (or fixed pixel sizes), text sized in points, a journal font, a sc
 synchronized panel, every saved view as a ZIP of print-size PNGs, SVG variants of both with labels, arrows, captions, and the colour legend
 (pLDDT bands, chains, or models) as editable vector layers, and 5-, 10-, or 15-second WebM spin-video export. Reusable named views with
 captions, multi-panel contact-sheet export, and caption-text export.
+A one-click legend key for every figure: the colour key on its own as an image in the figure's format, font and text size (and as SVG,
+and in the views ZIP), with a sentence naming each entry's colour in words to paste into the figure legend.
 Self-contained interactive HTML reports (each panel with a hover-to-read, click-to-zoom sequence
 strip), share links that reopen models fetched by identifier
 with the same camera, colours, labels, and annotations, and a figure-legend writer that drafts the

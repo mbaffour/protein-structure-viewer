@@ -26,15 +26,29 @@
     root.querySelector('#gpv-contact-distances').disabled = !hasMap;
   }
 
+  /* The map, its CSVs and its composite panel answer the settings they were computed with. Once the
+     cutoff, the atoms or a chain changes the map is dimmed and says so, rather than pass for the
+     answer to the new settings. */
+  function markContactMapStale() {
+    if (!contactResult) return;
+    const wrap = root.querySelector('#gpv-contact-wrap');
+    if (wrap.classList.contains('is-stale')) return;
+    wrap.classList.add('is-stale');
+    const state = root.querySelector('#gpv-contact-state');
+    state.textContent = 'Settings changed · Compute map to update · shown: ' + state.textContent;
+  }
+  ['#gpv-contact-cutoff', '#gpv-contact-atoms', '#gpv-contact-a', '#gpv-contact-b'].forEach(selector => root.querySelector(selector).addEventListener('change', markContactMapStale));
+
   function contactChainOptions(entry) {
     const first = root.querySelector('#gpv-contact-a'); const second = root.querySelector('#gpv-contact-b');
     const rows = entry && entry.model ? residueRows(entry) : [];
     const previous = [first.value, second.value];
     const total = rows.reduce((sum, row) => sum + row.residues.length, 0);
+    /* An RNA or DNA chain counts nucleotides, not amino acids; a mixed set counts residues (18). */
     [first, second].forEach((select, index) => {
       select.replaceChildren();
-      rows.forEach(row => { const option = document.createElement('option'); option.value = row.chain; option.textContent = (row.chain || '—') + ' · ' + row.residues.length + ' aa'; select.append(option); });
-      if (rows.length) { const option = document.createElement('option'); option.value = contactAllChains; option.textContent = 'All chains · ' + total + ' aa'; select.append(option); }
+      rows.forEach(row => { const option = document.createElement('option'); option.value = row.chain; option.textContent = (row.chain || '—') + ' · ' + row.residues.length + residueCountUnit(row.residues); select.append(option); });
+      if (rows.length) { const option = document.createElement('option'); option.value = contactAllChains; option.textContent = 'All chains · ' + total + residueCountUnit(rows.flatMap(row => row.residues)); select.append(option); }
       const kept = previous[index] === contactAllChains ? rows.length > 0 : rows.some(row => row.chain === previous[index]);
       if (kept) select.value = previous[index]; else if (rows[Math.min(index, rows.length - 1)]) select.value = rows[Math.min(index, rows.length - 1)].chain;
     });
@@ -49,14 +63,16 @@
 
   /* One axis of the map: a chain's residues, or every chain's end to end, each residue stood for
      by the atom the sequence strip uses (the Cα, else a nucleotide's P), with the chain blocks
-     for the dividers, a chain|resi index for the contact search, and the coordinates the Cα–Cα
-     distances are read from. */
+     for the dividers, a chain|resi|code index for the contact search, and the coordinates the Cα–Cα
+     distances are read from. The index takes the insertion code: keyed by chain and number, 100 and
+     100A both found 100B's row, so 100B was credited with 100A's contact at 100A's distance and the
+     pairs among 100, 100A and 100B fell onto the diagonal and vanished. */
   function contactAxis(entry, value) {
     const all = value === contactAllChains;
     const rows = residueRows(entry).filter(row => all || row.chain === value);
     const residues = []; const blocks = [];
     rows.forEach(row => { blocks.push({ chain: row.chain, start: residues.length, end: residues.length + row.residues.length }); residues.push(...row.residues); });
-    const index = new Map(residues.map((atom, i) => [(atom.chain || '') + '|' + atom.resi, i]));
+    const index = new Map(residues.map((atom, i) => [residueCodeTag(atom), i]));
     const x = new Float64Array(residues.length); const y = new Float64Array(residues.length); const z = new Float64Array(residues.length);
     residues.forEach((atom, i) => { x[i] = atom.x; y[i] = atom.y; z[i] = atom.z; });
     return { value, all, chain: value, residues, blocks, index, x, y, z };
@@ -102,10 +118,10 @@
     const grid = spatialGrid(atomsB, cutoff); const limit = cutoff * cutoff;
     const pairs = new Map();
     atomsA.forEach(a => {
-      const i = axisA.index.get((a.chain || '') + '|' + a.resi); if (i === undefined) return;
+      const i = axisA.index.get(residueCodeTag(a)); if (i === undefined) return;
       grid.near(a).forEach(k => {
         const b = atomsB[k];
-        const j = axisB.index.get((b.chain || '') + '|' + b.resi); if (j === undefined) return;
+        const j = axisB.index.get(residueCodeTag(b)); if (j === undefined) return;
         /* A residue is never in contact with itself (the diagonal stays empty), and a symmetric
            map keeps each unordered pair once. */
         if (symmetric ? j <= i : axisA.residues[i] === axisB.residues[j]) return;
@@ -117,7 +133,7 @@
     /* Interface residues per side; for a symmetric map both sides are the same set. */
     const sideA = new Set(); const sideB = new Set();
     pairs.forEach((d, key) => { const [i, j] = key.split('|').map(Number); sideA.add(i); sideB.add(j); if (symmetric) { sideA.add(j); sideB.add(i); } });
-    const interfaceOf = (axis, side) => [...side].sort((x, y) => x - y).map(i => ({ chain: axis.residues[i].chain || '', resi: axis.residues[i].resi }));
+    const interfaceOf = (axis, side) => [...side].sort((x, y) => x - y).map(i => ({ chain: axis.residues[i].chain || '', resi: axis.residues[i].resi, icode: insertionCodeOf(axis.residues[i]) }));
     const interfaceA = interfaceOf(axisA, sideA); const interfaceB = interfaceOf(axisB, sideB);
     /* The scale of the All distances view: 0 Å to the largest distance on the map, at most 40 Å,
        so a large assembly's long distances do not wash out the contacts. */
@@ -147,6 +163,7 @@
       + (caForced ? ' · Cα only: over ' + contactHeavyLimit.toLocaleString('en-US') + ' residues on an axis the heavy-atom search would be too slow' : '');
     setContactButtons();
     root.querySelector('#gpv-contact-wrap').hidden = false;
+    root.querySelector('#gpv-contact-wrap').classList.remove('is-stale');
     root.querySelector('#gpv-contact-readout').textContent = 'Hover a cell to read the pair and its Cα–Cα distance · click a cell to measure that distance on the model';
     updateStatus('Contact map: ' + pairs.size + ' residue pairs ' + (symmetric ? 'within ' + contactAxisName(chainA) : 'between ' + contactAxisName(chainA) + ' and ' + contactAxisName(chainB)) + ' within ' + cutoff + ' Å' + (caForced ? ' (Cα only above ' + contactHeavyLimit + ' residues)' : ''));
   }
@@ -196,11 +213,13 @@
 
   /* Rows: chain A residues (top to bottom); columns: chain B residues (left to right).
      Closer pairs are darker. With `figure` the map gets margins, ticks, titles and a scale. */
-  function drawContactMap(canvas, figure = false, scale = 1) {
+  /* `cellScale` sizes the residue cells on its own when given (the composite fits the grid to its
+     cell and keeps the text at the figure's size); otherwise text and cells share `scale`. */
+  function drawContactMap(canvas, figure = false, scale = 1, cellScale = scale) {
     if (!contactResult) return;
     const { rowA, rowB, pairs, cutoff, chainA, chainB, symmetric, view } = contactResult;
     const n = rowA.residues.length; const m = rowB.residues.length;
-    const cell = contactCell(canvas) * scale;
+    const cell = contactCell(canvas) * cellScale;
     const margin = figure ? { left: 72 * scale, top: 54 * scale, right: 24 * scale, bottom: 64 * scale } : { left: 0, top: 0, right: 0, bottom: 0 };
     canvas.width = Math.round(m * cell + margin.left + margin.right); canvas.height = Math.round(n * cell + margin.top + margin.bottom);
     const context = canvas.getContext('2d');
@@ -261,9 +280,9 @@
     return { i, j, a, b, same: a === b, distance: contactPairDistance(i, j), ca: contactCaDistance(i, j) };
   }
 
-  /* `A:GLU 57 — B:ARG 59 · Cα–Cα 9.42 Å · closest atoms 3.12 Å`, or `· no contact within 4.5 Å`. */
+  /* `A:GLU57 — B:ARG59 · Cα–Cα 9.42 Å · closest atoms 3.12 Å`, or `· no contact within 4.5 Å`. */
   function contactPairText(hit) {
-    const label = atom => (atom.chain ? atom.chain + ':' : '') + (atom.resn || '') + ' ' + atom.resi;
+    const label = atom => residueName(atom, 'list');
     if (hit.same) return label(hit.a) + ' — the same residue';
     const pair = (hit.a.atom === 'CA' && hit.b.atom === 'CA' ? 'Cα–Cα ' : 'Cα–Cα (or P) ') + hit.ca.toFixed(2) + ' Å';
     if (hit.distance === undefined) return label(hit.a) + ' — ' + label(hit.b) + ' · ' + pair + ' · no contact within ' + contactResult.cutoff + ' Å';
@@ -282,7 +301,9 @@
     cancelMeasureTo(false);
     selectResidue(entry, hit.a);
     const made = measureResiduePair(entry, hit.a, entry, hit.b);
-    const selection = { model: entry.model.getID(), or: [{ chain: hit.a.chain, resi: hit.a.resi }, { chain: hit.b.chain, resi: hit.b.resi }] };
+    /* The two residues by chain, number and insertion code: zooming to 57 must not frame 57A and 57B too. */
+    const either = atom => sameResidue(atom, hit.a.chain, hit.a.resi, insertionCodeOf(hit.a)) || sameResidue(atom, hit.b.chain, hit.b.resi, insertionCodeOf(hit.b));
+    const selection = { model: entry.model.getID(), resi: [hit.a.resi, hit.b.resi], predicate: either };
     try { viewer.zoomTo(selection); viewer.render(); syncViewsFrom(viewer); } catch (error) { /* selection syntax unsupported: keep the current view */ }
     updateStatus(made ? labelEditorDefaultText(made.first) + ' — ' + made.summary + ' · measured' : contactPairText(hit) + ' · selected');
   }
@@ -291,12 +312,14 @@
     if (!contactResult) return;
     const entry = entryById(contactResult.entryId); if (!entry) return;
     remember('interface highlight');
-    const color = root.querySelector('#gpv-interface-color').value;
+    /* Every highlight takes Annotate's Highlight colour, as selections, the card and Near do. */
+    const color = root.querySelector('#gpv-selection-color').value;
     /* One selection per chain, first axis first — two for a pair of chains, as always; one for an
        intra-chain map; one per chain involved when an axis is all chains. */
     const byChain = new Map();
-    [...contactResult.interfaceA, ...contactResult.interfaceB].forEach(item => { if (!byChain.has(item.chain)) byChain.set(item.chain, new Set()); byChain.get(item.chain).add(item.resi); });
-    byChain.forEach((residues, chain) => selectionRecords.push({ id: nextAnnotationId++, entryId: entry.id, chain, residues: [...residues].sort((x, y) => x - y), action: 'highlight', color }));
+    [...contactResult.interfaceA, ...contactResult.interfaceB].forEach(item => { if (!byChain.has(item.chain)) byChain.set(item.chain, new Map()); byChain.get(item.chain).set(residueNumber(item), item); });
+    const byNumber = (a, b) => a.resi - b.resi || (insertionCodeOf(a) < insertionCodeOf(b) ? -1 : insertionCodeOf(a) > insertionCodeOf(b) ? 1 : 0);
+    byChain.forEach((residues, chain) => selectionRecords.push({ id: nextAnnotationId++, entryId: entry.id, chain, ...selectionResidues([...residues.values()].sort(byNumber)), action: 'highlight', color }));
     renderSelectionList(); applyStyle();
     updateStatus('Interface highlighted · ' + [...byChain.entries()].map(([chain, residues], index) => residues.size + (index ? '' : ' residue' + (residues.size === 1 ? '' : 's')) + ' on chain ' + (chain || '—')).join(', '));
   }
@@ -308,7 +331,8 @@
     /* Positions along the axes are residue order, chain by chain, so they sort an all-chains map too. */
     [...contactResult.pairs.entries()].map(([key, d]) => { const [i, j] = key.split('|').map(Number); return { i, j, a: contactResult.rowA.residues[i], b: contactResult.rowB.residues[j], d }; })
       .sort((x, y) => x.i - y.i || x.j - y.j)
-      .forEach(pair => rows.push([entry ? displayName(entry) : '', pair.a.chain || '', pair.a.resi, pair.a.resn || '', pair.b.chain || '', pair.b.resi, pair.b.resn || '', pair.d.toFixed(3), contactResult.mode === 'ca' ? 'CA' : 'heavy', contactResult.cutoff]));
+      /* The number as the file writes it (100A), as the card's Distances CSV does: three rows of "100" cannot be told apart. */
+      .forEach(pair => rows.push([entry ? displayName(entry) : '', pair.a.chain || '', residueNumber(pair.a), pair.a.resn || '', pair.b.chain || '', residueNumber(pair.b), pair.b.resn || '', pair.d.toFixed(3), contactResult.mode === 'ca' ? 'CA' : 'heavy', contactResult.cutoff]));
     downloadBlob(rows.map(row => row.map(csvCell).join(',')).join('\n'), 'text/csv', 'contacts-' + contactFileTag() + '.csv');
     updateStatus('Contacts CSV downloaded · ' + contactResult.pairs.size + ' pairs');
   }
@@ -332,7 +356,7 @@
     const onB = new Set(rowB.residues);
     const total = symmetric ? n * (n - 1) / 2 : n * m - rowA.residues.filter(atom => onB.has(atom)).length;
     const model = csvCell(entry ? displayName(entry) : '');
-    const prefix = atom => csvCell(atom.chain || '') + ',' + csvCell(atom.resi) + ',' + csvCell(atom.resn || '');
+    const prefix = atom => csvCell(atom.chain || '') + ',' + csvCell(residueNumber(atom)) + ',' + csvCell(atom.resn || '');
     const columns = rowB.residues.map(prefix);
     const parts = [['model', 'chain_a', 'resi_a', 'resn_a', 'chain_b', 'resi_b', 'resn_b', 'ca_distance_angstrom', 'min_heavy_distance_angstrom'].map(csvCell).join(',')];
     let chunk = []; let written = 0;

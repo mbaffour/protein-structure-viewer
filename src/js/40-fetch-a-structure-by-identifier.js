@@ -70,23 +70,105 @@
     return { entry, source, note };
   }
 
+  /* An export renders one state of the page. Every export path sets the busy badge to "Rendering …"
+     (or "Embedding …" for the report, "Saving session…") from its first line to its last, and a model
+     added between its awaits used to reach its legend but not its image. While that badge is up, an
+     import (31 loadFiles) or a fetch waits for it to come down, and says so. */
+  const exportBusyLabel = /^(Rendering|Embedding|Saving session)/;
+  /* The badge label alone was not enough: one label for the whole page, and any job started during an
+     export (Align visible, Segment PAE) wrote its own over it and never put it back, so the export
+     stopped counting as one and a dropped file loaded halfway through it. An export that began with
+     beginExport is counted here instead, whatever the badge says; the label test stays for the paths
+     that do not go through beginExport yet. */
+  let exportsInFlight = 0;
+  const exportWaiters = new Set();
+  function exportRendering() {
+    if (exportsInFlight > 0) return true;
+    const badge = root.querySelector('#gpv-busy');
+    return Boolean(badge && !badge.hidden && exportBusyLabel.test(root.querySelector('#gpv-busy-label').textContent));
+  }
+
+  /* Every export renders on the one shared export viewer (31) and most of them move the page through
+     the states they draw — a built figure applies each saved view in turn. A second export started
+     meanwhile emptied the first one's scene between its awaits, shrank the surface under its pngURI,
+     and captured a saved view's colours and camera as "the page to go back to", so both files came
+     out wrong and the screen was left in panel A's state. So: one export at a time. The entry calls
+     this first; null means another is rendering and nothing was started. Otherwise it returns the
+     function that ends this one, to call last, in the export's finally. A running Cycle models would
+     switch the model between the image and its labels (FC-7), so it stops here. */
+  function beginExport() {
+    if (exportRendering()) { announce('An export is still rendering · wait for it to finish, then press again', 'error'); return null; }
+    exportsInFlight += 1;
+    exportShown = null;
+    scaleBarMisses = [];
+    if (cycleTimer) stopCycle();
+    holdExportButtons();
+    let ended = false;
+    return () => {
+      if (ended) return;
+      ended = true;
+      exportsInFlight = Math.max(0, exportsInFlight - 1);
+      /* The held buttons take their states from the page again; the line the export wrote stays. */
+      updateStatus(root.querySelector('#gpv-state').textContent || 'Ready');
+      exportWaiters.forEach(waiter => waiter());
+    };
+  }
+
+  /* The buttons that start an export or snapshot the page, kept disabled while one renders: a restyle
+     during a built figure (each panel is applied in turn) recomputes every button from the page and
+     enabled them all again, still labelled "Rendering 1 / 3…". updateStatus calls this through
+     renderImageButton (33). */
+  const exportButtons = ['#gpv-image', '#gpv-svg', '#gpv-copy-image', '#gpv-contact-sheet', '#gpv-builder-svg', '#gpv-views-zip', '#gpv-compare-image', '#gpv-compare-svg', '#gpv-model-panels', '#gpv-composite', '#gpv-report', '#gpv-save-session'];
+  function holdExportButtons() {
+    if (!exportsInFlight) return;
+    exportButtons.forEach(selector => { const button = root.querySelector(selector); if (button) button.disabled = true; });
+  }
+
+  function afterExportRenders(what) {
+    updateStatus('Export in progress — ' + what + ' will load when it finishes');
+    return new Promise(resolve => {
+      const badge = root.querySelector('#gpv-busy');
+      /* The badge can come down before the export's count does (its finally ends the badge first), so
+         the end of an export asks again too. */
+      const check = () => { if (exportRendering()) return; observer.disconnect(); exportWaiters.delete(check); setTimeout(resolve, 0); };
+      const observer = new MutationObserver(check);
+      observer.observe(badge, { attributes: true, attributeFilter: ['hidden'], childList: true, characterData: true, subtree: true });
+      exportWaiters.add(check);
+      check();
+    });
+  }
+
   async function fetchStructure() {
     const field = root.querySelector('#gpv-fetch-id');
-    if (!parseIdentifier(field.value)) {
+    const target = parseIdentifier(field.value);
+    if (!target) {
       announce('Enter a four-character PDB ID (1ubq), a UniProt accession (P69905), or an AlphaFold DB name (AF-P0DTC2-F1)', 'error');
       field.focus();
       return;
     }
+    const id = field.value.trim();
     const button = root.querySelector('#gpv-fetch');
-    const done = setBusy('Fetching ' + field.value.trim() + '…');
     button.disabled = true;
+    if (exportRendering()) await afterExportRenders(id);
+    /* An armed Measure to… was armed among the models already open; the next click may land on the
+       fetched one, and must open its card rather than measure into it — as for an import. */
+    cancelMeasureTo(true);
+    const done = setBusy('Fetching ' + id + '…');
     try {
-      const { entry, source, note } = await fetchIdentifier(field.value);
-      selectModel(entry);
+      const { entry, source, note } = await fetchIdentifier(id);
+      selectModel(entry, true, true);
+      dismissSessionBanner();
       field.value = '';
-      announce('Loaded ' + entry.name + ' from ' + source.collection + note);
+      const comparing = root.querySelector('#gpv-side-by-side').checked && comparePanels.length > 0;
+      announce('Loaded ' + entry.name + ' from ' + source.collection + note + (comparing ? ' · in the primary panel' : ''));
     } catch (error) {
-      announce('Could not fetch that structure: ' + error.message, 'error');
+      /* A request that never got an answer (offline, blocked) throws the browser's own TypeError, worded
+         differently by every engine and saying nothing about what to do; that wording goes to the
+         console only. An answer the server gave (no such entry) keeps its own words. */
+      if (error instanceof TypeError) {
+        console.warn('Fetch of ' + id + ' failed:', error);
+        announce('Could not reach ' + (target.kind === 'pdb' ? 'the PDB' : 'AlphaFold DB') + ' (' + id + ') — check the network and the id', 'error');
+      } else announce('Could not fetch that structure: ' + error.message, 'error');
     } finally {
       done();
       button.disabled = false;

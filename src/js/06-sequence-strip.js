@@ -8,7 +8,9 @@
   let sequenceFrame = 0;
   let sequenceMarks = [];
 
-  /* One representative atom per residue (Cα, else P, else the first seen), grouped by chain. */
+  /* One representative atom per residue (Cα, else P, else the first seen), grouped by chain. A
+     residue is its number and its insertion code, so 100, 100A and 100B are three cells, in that
+     order. */
   function residueRows(entry) {
     if (entry.sequenceCache && entry.sequenceCache.atoms === entry.atoms) return entry.sequenceCache.rows;
     const chains = new Map();
@@ -17,11 +19,13 @@
       const chain = atom.chain || '';
       if (!chains.has(chain)) chains.set(chain, new Map());
       const residues = chains.get(chain);
-      const current = residues.get(atom.resi);
-      if (!current || atom.atom === 'CA' || (atom.atom === 'P' && current.atom !== 'CA')) residues.set(atom.resi, atom);
+      const id = atom.resi + '|' + insertionCodeOf(atom);
+      const current = residues.get(id);
+      if (!current || atom.atom === 'CA' || (atom.atom === 'P' && current.atom !== 'CA')) residues.set(id, atom);
     });
+    const byNumber = (a, b) => a.resi - b.resi || (insertionCodeOf(a) < insertionCodeOf(b) ? -1 : insertionCodeOf(a) > insertionCodeOf(b) ? 1 : 0);
     const rows = [...chains.entries()]
-      .map(([chain, residues]) => ({ chain, residues: [...residues.values()].sort((a, b) => a.resi - b.resi) }))
+      .map(([chain, residues]) => ({ chain, residues: [...residues.values()].sort(byNumber) }))
       .filter(row => row.residues.length > 1)
       .sort((a, b) => compareChains(a.chain, b.chain));
     entry.sequenceCache = { atoms: entry.atoms, rows };
@@ -54,12 +58,13 @@
     if (mode === 'annotated') return annotatedColor(entry, atom);
     if (mode === 'data') return dataColor(entry, atom);
     if (residueModes.includes(mode)) return residueColor(mode, atom);
+    if (mode === 'spectrum') return spectrumColor(entry, atom);
     return entry.scores.length ? plddtColor(Number(atom.b || 0)) : entry.color;
   }
 
   function describeResidue(entry, atom) {
     const confidence = entry.scores.length && Number.isFinite(Number(atom.b)) ? ' · pLDDT ' + Number(atom.b).toFixed(1) : '';
-    return (atom.resn || 'RES') + atom.resi + (atom.chain ? ' · chain ' + atom.chain : '') + confidence;
+    return residueName(atom, 'prose') + confidence;
   }
 
   function drawSequenceRow(canvas, entry, row) {
@@ -69,10 +74,10 @@
     context.setTransform(ratio, 0, 0, ratio, 0, 0); context.clearRect(0, 0, width, height);
     const count = row.residues.length; const cell = width / count; const gap = cell > 3 ? 1 : 0;
     const ink = themeColor('--card-foreground', '#111827');
-    const labelled = new Set(labelRecords.filter(label => label.entryId === entry.id && (label.chain || '') === row.chain).map(label => label.resi));
+    const labelled = new Set(labelRecords.filter(label => label.entryId === entry.id && (label.chain || '') === row.chain).map(label => label.resi + '|' + insertionCodeOf(label)));
     const highlighted = new Map();
     selectionRecords.filter(record => record.entryId === entry.id && record.action === 'highlight' && (!record.chain || record.chain === row.chain))
-      .forEach(record => record.residues.forEach(resi => highlighted.set(resi, record.color)));
+      .forEach(record => (Array.isArray(record.icodes) ? selectionResidueKeys(record) : record.residues.map(resi => 'any|' + resi)).forEach(key => highlighted.set(key, record.color)));
     const threshold = entry.scores.length ? hideBelow() : 0;
     const chainHidden = (entry.hiddenChains || []).includes(row.chain);
     row.residues.forEach((atom, index) => {
@@ -81,7 +86,8 @@
       context.globalAlpha = chainHidden || (threshold && Number(atom.b) < threshold) ? 0.22 : 1;
       context.fillRect(x, 4, Math.max(0.5, cell - gap), 12);
       context.globalAlpha = 1;
-      const mark = highlighted.get(atom.resi);
+      /* A record with insertion codes marks exactly its residues; one without, every residue of the number, as the view draws it. */
+      const mark = highlighted.get(residueNumber(atom)) || highlighted.get('any|' + atom.resi);
       if (mark) { context.fillStyle = mark; context.fillRect(x, 18, Math.max(0.5, cell - gap), 3); }
       if (cell >= 9) {
         const fill = sequenceColor(entry, atom);
@@ -90,7 +96,7 @@
         context.fillText(residueLetter(atom.resn), x + cell / 2, 10.5);
         context.textAlign = 'start';
       }
-      if (labelled.has(atom.resi)) {
+      if (labelled.has(atom.resi + '|' + insertionCodeOf(atom))) {
         context.fillStyle = ink; context.beginPath();
         context.moveTo(x + cell / 2, 3.5); context.lineTo(x + cell / 2 - 3.5, 0); context.lineTo(x + cell / 2 + 3.5, 0); context.fill();
       }
@@ -115,7 +121,7 @@
       if (index >= 0) { context.strokeStyle = '#d946ef'; context.lineWidth = 2; context.strokeRect(index * cell, 2, Math.max(3, cell), 16); }
     });
     if (sequenceHover && sequenceHover.entryId === entry.id && sequenceHover.chain === row.chain) {
-      const index = row.residues.findIndex(atom => atom.resi === sequenceHover.resi);
+      const index = row.residues.findIndex(atom => atom.resi === sequenceHover.resi && insertionCodeOf(atom) === (sequenceHover.icode || ''));
       if (index >= 0) { context.strokeStyle = ink; context.lineWidth = 2; context.strokeRect(index * cell, 2, Math.max(3, cell), 16); }
     }
   }
@@ -157,7 +163,7 @@
     canvas.addEventListener('pointermove', event => {
       const found = sequenceRowFor(canvas); if (!found) return;
       const index = sequenceIndexAt(canvas, found.row, event); const atom = found.row.residues[index];
-      sequenceHover = { entryId: found.entry.id, chain: found.row.chain, resi: atom.resi };
+      sequenceHover = { entryId: found.entry.id, chain: found.row.chain, resi: atom.resi, icode: insertionCodeOf(atom) };
       if (sequenceDrag && sequenceDrag.chain === found.row.chain) sequenceRange = { ...sequenceDrag, to: index };
       root.querySelector('#gpv-sequence-hint').textContent = describeResidue(found.entry, atom) + (sequenceDrag ? ' · release to pick the range' : '');
       drawSequenceRow(canvas, found.entry, found.row);
@@ -197,7 +203,9 @@
     canvas.addEventListener('dblclick', () => {
       const found = sequenceRowFor(canvas);
       if (!found || !sequenceHover || !found.entry.model) return;
-      const selection = { model: found.entry.model.getID(), resi: sequenceHover.resi };
+      /* The cell's residue alone, by insertion code (blank included): 57 framed 57, 57A and 57B. */
+      const code = insertionCodeOf(sequenceHover);
+      const selection = { model: found.entry.model.getID(), resi: sequenceHover.resi, predicate: atom => insertionCodeOf(atom) === code };
       if (found.row.chain) selection.chain = found.row.chain;
       viewer.zoomTo(selection); viewer.render(); syncViewsFrom(viewer);
     });
@@ -216,11 +224,15 @@
     const multi = entries.length > 1;
     const total = planned.reduce((sum, item) => sum + item.row.residues.length, 0);
     const mode = root.querySelector('#gpv-color-mode').value;
-    const colourNote = mode === 'chain' ? ' · coloured by chain' : mode === 'entity' ? ' · coloured by entity' : mode === 'deviation' ? ' · coloured by Cα deviation' : mode === 'fromresidue' ? distanceColourStripNote() : mode === 'agreement' ? ' · coloured by model agreement (Cα RMSF)' : mode === 'domain' ? ' · coloured by PAE domains' : mode === 'annotated' ? ' · coloured by annotated domains' : mode === 'data' ? ' · coloured by ' + (residueData ? residueData.name : 'per-residue data') : residueModes.includes(mode) ? ' · coloured by ' + ({ charge: 'residue charge', hydrophobicity: 'hydrophobicity', restype: 'residue type', amino: 'amino acid', ss: 'secondary structure' })[mode] : entries.some(entry => entry.scores.length) ? ' · coloured by pLDDT' : '';
+    const colourNote = mode === 'chain' ? ' · coloured by chain' : mode === 'entity' ? ' · coloured by entity' : mode === 'deviation' ? ' · coloured by Cα deviation' : mode === 'fromresidue' ? distanceColourStripNote() : mode === 'agreement' ? ' · coloured by model agreement (Cα RMSF)' : mode === 'domain' ? ' · coloured by PAE domains' : mode === 'annotated' ? ' · coloured by annotated domains' : mode === 'data' ? ' · coloured by ' + (residueData ? residueData.name : 'per-residue data') : residueModes.includes(mode) ? ' · coloured by ' + ({ charge: 'residue charge', hydrophobicity: 'hydrophobicity', restype: 'residue type', amino: 'amino acid', ss: 'secondary structure' })[mode] : mode === 'spectrum' ? ' · coloured N→C as a sequence spectrum' : entries.some(entry => entry.scores.length) ? ' · coloured by pLDDT' : '';
     const chainNote = planned.length > shown.length ? ' · first ' + shown.length + ' of ' + planned.length + ' rows' : '';
     const cut = hideBelow();
     const cutNote = cut && entries.some(entry => entry.scores.length) ? ' · pLDDT below ' + cut + ' hidden' : '';
-    root.querySelector('#gpv-sequence-title').textContent = (multi ? entries.length + ' models' : displayName(entries[0])) + ' · ' + total + ' residues' + colourNote + cutNote + chainNote;
+    /* The strip draws the first eight shown models; the title says so when more are shown, rather than
+       reading "8 models" beside "10 displayed". */
+    const shownModels = multi ? displayedEntries().filter(entry => entry.model).length : 1;
+    const modelsNote = shownModels > entries.length ? 'first ' + entries.length + ' of ' + shownModels + ' models' : entries.length + ' models';
+    root.querySelector('#gpv-sequence-title').textContent = (multi ? modelsNote : displayName(entries[0])) + ' · ' + total + ' residues' + colourNote + cutNote + chainNote;
     const key = shown.map(item => item.entry.id + ':' + item.row.chain + ((item.entry.hiddenChains || []).includes(item.row.chain) ? '!' : '') + ((item.entry.fadedChains || []).includes(item.row.chain) ? '~' : '')).join(',');
     rows.classList.toggle('is-multi', multi);
     if (rows.dataset.key !== key) {
@@ -271,6 +283,19 @@
       });
       head.append(title, meta, copy);
       const pre = document.createElement('pre'); pre.className = 'gpv-seq-lines';
+      /* The letters are the strip's keyboard way in: one stop per chain (a roving tabindex), the arrow
+         keys walk the letters (↑ ↓ a line of fifty), Home and End the ends, Enter or Space picks the
+         residue as a click does. The key goes no further, so ← → never also step the models. */
+      pre.addEventListener('keydown', event => {
+        const letters = [...pre.querySelectorAll('.gpv-aa')]; const index = letters.indexOf(event.target);
+        if (index < 0) return;
+        if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); event.target.click(); return; }
+        const moves = { ArrowRight: 1, ArrowLeft: -1, ArrowDown: 50, ArrowUp: -50, Home: -index, End: letters.length - 1 - index };
+        if (!(event.key in moves) || event.ctrlKey || event.metaKey || event.altKey) return;
+        event.preventDefault();
+        const next = letters[Math.max(0, Math.min(letters.length - 1, index + moves[event.key]))];
+        event.target.tabIndex = -1; next.tabIndex = 0; next.focus();
+      });
       const threshold = entry.scores.length ? hideBelow() : 0;
       for (let start = 0; start < row.residues.length; start += 50) {
         const line = document.createElement('div'); line.className = 'gpv-seq-line';
@@ -284,6 +309,8 @@
           span.style.color = /^#[0-9a-f]{6}$/i.test(fill) && hexLuminance(fill) > 0.5 ? '#111827' : '#ffffff';
           if (threshold && Number(atom.b) < threshold) span.classList.add('is-hidden');
           span.title = describeResidue(entry, atom);
+          span.setAttribute('role', 'button'); span.setAttribute('aria-label', span.title);
+          span.tabIndex = start === 0 && offset === 0 ? 0 : -1;
           span.dataset.resi = String(atom.resi);
           span.addEventListener('click', () => pickSequenceResidue(entry, atom));
           line.append(span);

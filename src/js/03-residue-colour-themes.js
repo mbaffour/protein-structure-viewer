@@ -17,7 +17,8 @@
   }
 
   function isNucleotide(atom) {
-    const code = String(atom.resn || '').toUpperCase().trim();
+    /* A modified nucleotide (PSU, 5MC …) counts as its parent, so an RNA chain with one is still "nt". */
+    const name = String(atom.resn || '').toUpperCase().trim(); const code = modifiedResidueParents[name] || name;
     return !aminoAcids[code] && Boolean(nucleotides[code]);
   }
 
@@ -32,6 +33,26 @@
     if (mode === 'amino') return aminoColors[letter] || '#d1d5db';
     if (mode === 'ss') return (ssColors[atom.ss] || ssColors.c)[0];
     return '#d1d5db';
+  }
+
+  /* Sequence spectrum: each chain runs from blue at its N-terminus to red at its C-terminus, by the
+     residue's place in the chain — the cells of the sequence strip, so the view and the strip are
+     painted from one table. 3Dmol has no colour scheme called "spectrum"; asked for one it drew the
+     model grey and warned once per atom. */
+  function spectrumRampColor(t) {
+    const hue = 240 * (1 - Math.max(0, Math.min(1, t))); const saturation = 0.85; const lightness = 0.5;
+    const chroma = (1 - Math.abs(2 * lightness - 1)) * saturation; const x = chroma * (1 - Math.abs((hue / 60) % 2 - 1)); const m = lightness - chroma / 2;
+    const [r, g, b] = hue < 60 ? [chroma, x, 0] : hue < 120 ? [x, chroma, 0] : hue < 180 ? [0, chroma, x] : [0, x, chroma];
+    return '#' + [r, g, b].map(channel => Math.round((channel + m) * 255).toString(16).padStart(2, '0')).join('');
+  }
+
+  function spectrumColor(entry, atom) {
+    if (!entry.spectrumCache || entry.spectrumCache.atoms !== entry.atoms) {
+      const map = new Map();
+      residueRows(entry).forEach(row => row.residues.forEach((residue, index) => map.set(row.chain + '|' + residue.resi + '|' + insertionCodeOf(residue), spectrumRampColor(row.residues.length > 1 ? index / (row.residues.length - 1) : 0.5))));
+      entry.spectrumCache = { atoms: entry.atoms, map };
+    }
+    return entry.spectrumCache.map.get((atom.chain || '') + '|' + atom.resi + '|' + insertionCodeOf(atom)) || entry.color;
   }
 
   const residueLegends = {
@@ -91,7 +112,7 @@
     if (mode === 'annotated') return { colorfunc: atom => annotatedColor(entry, atom) };
     if (mode === 'data') return { colorfunc: atom => dataColor(entry, atom) };
     if (residueModes.includes(mode)) return { colorfunc: atom => residueColor(mode, atom) };
-    if (mode === 'spectrum') return { colorscheme: 'spectrum' };
+    if (mode === 'spectrum') return { colorfunc: atom => spectrumColor(entry, atom) };
     if (mode === 'element') return { colorscheme: 'default' };
     return { color: entry.color };
   }
@@ -140,7 +161,10 @@
     if (spotlightResidues.length && root.querySelector('#gpv-position-sticks').checked) {
       spotlightResidues.forEach(spot => {
         if (spot.chain && (entry.hiddenChains || []).includes(spot.chain)) return;
-        model.setStyle(spot.chain ? { chain: spot.chain, resi: spot.resi } : { resi: spot.resi }, { stick: { radius: 0.22, colorscheme: 'default' } }, true);
+        const selection = spot.chain ? { chain: spot.chain, resi: spot.resi } : { resi: spot.resi };
+        /* Always by code, blank included: comparing plain 57 must not draw sticks on 57A and 57B. */
+        selection.predicate = atom => insertionCodeOf(atom) === insertionCodeOf(spot);
+        model.setStyle(selection, { stick: { radius: 0.22, colorscheme: 'default' } }, true);
       });
     }
     const surface = root.querySelector('#gpv-surface').value;
@@ -162,17 +186,43 @@
   const isWater = atom => waterNames.includes(String(atom.resn || '').toUpperCase());
 
   const residueTag = atom => (atom.chain || '') + '|' + atom.resi;
+  /* The tag with the insertion code, where one residue is looked up as itself — an alignment pair, a
+     deviation, a compared position — so 100, 100A and 100B are three. A residue without a code has the
+     same tag as before. Domains and PAE tokens, which are number ranges, keep residueTag. */
+  const residueCodeTag = atom => residueTag(atom) + (insertionCodeOf(atom) ? '|' + insertionCodeOf(atom) : '');
   const deviationBands = [[1, '#2563eb', '<1 Å'], [2, '#22c55e', '1–2 Å'], [4, '#eab308', '2–4 Å'], [8, '#f97316', '4–8 Å'], [Infinity, '#dc2626', '≥8 Å']];
   function deviationColor(entry, atom) {
-    const value = entry.deviations ? entry.deviations.get(residueTag(atom)) : undefined;
+    const value = entry.deviations ? entry.deviations.get(residueCodeTag(atom)) : undefined;
     if (value === undefined) return '#9ca3af';
     return deviationBands.find(([limit]) => value < limit)[1];
+  }
+
+  /* Whether Download one panel per model has models to draw, by the rule it draws by (34): the shown
+     models when there are two, otherwise the active model's whole collection. Enabled whenever two
+     models were loaded, it refused a fetched entry and a local file with one of them hidden. */
+  function modelPanelsAvailable() {
+    if (displayedEntries().filter(entry => entry.model).length >= 2) return true;
+    const active = activeEntry();
+    return Boolean(active) && structures.filter(entry => entry.collection === active.collection).length >= 2;
   }
 
   function updateStatus(message = 'Ready') {
     if (!root.querySelector('[data-gpv-panel="publish"]').hidden) { setTimeout(renderPublicationChecks, 0); setTimeout(renderCompositeControls, 0); }
     const visible = displayedEntries();
-    root.querySelector('#gpv-count').textContent = visible.length + ' displayed / ' + structures.length + ' loaded';
+    /* Models loaded but none of them shown (Hide all, or every switch off): an empty stage that does not
+       say why looks like a failed load. */
+    const allHidden = structures.length > 0 && !structures.some(entry => entry.visible);
+    if (allHidden && message === 'Ready') message = 'All models are hidden · Show all brings them back';
+    let hiddenHint = root.querySelector('#gpv-stage-hidden');
+    if (!hiddenHint && allHidden) {
+      hiddenHint = document.createElement('div'); hiddenHint.className = 'gpv-stage-empty'; hiddenHint.id = 'gpv-stage-hidden';
+      const title = document.createElement('strong'); title.textContent = 'All models are hidden';
+      const show = document.createElement('button'); show.className = 'btn'; show.type = 'button'; show.textContent = 'Show all';
+      show.addEventListener('click', () => root.querySelector('#gpv-show-all').click());
+      hiddenHint.append(title, show); root.querySelector('#gpv-stage-empty').after(hiddenHint);
+    }
+    if (hiddenHint) hiddenHint.hidden = !allHidden;
+    root.querySelector('#gpv-count').textContent = visible.length + ' displayed / ' + structures.length + ' loaded' + modelOrderNote();
     const scores = visible.flatMap(entry => entry.scores);
     const score = mean(scores);
     root.querySelector('#gpv-confidence').textContent = score === null ? 'Mean pLDDT —' : 'Mean pLDDT ' + score.toFixed(1);
@@ -191,8 +241,8 @@
     const scored = structures.some(entry => entry.visible && entry.scores.length);
     root.querySelector('#gpv-profile-svg').disabled = !scored;
     root.querySelector('#gpv-profile-png').disabled = !scored;
-    root.querySelector('#gpv-image').disabled = structures.length === 0; root.querySelector('#gpv-model-panels').disabled = structures.length < 2;
-    root.querySelector('#gpv-rmsd-matrix-run').disabled = structures.length < 2;
+    root.querySelector('#gpv-image').disabled = structures.length === 0; root.querySelector('#gpv-model-panels').disabled = !modelPanelsAvailable();
+    root.querySelector('#gpv-rmsd-matrix-run').disabled = visible.filter(entry => entry.visible).length < 2;
     root.querySelector('#gpv-svg').disabled = structures.length === 0;
     if (typeof renderImageButton === 'function') renderImageButton();
     root.querySelector('#gpv-video').disabled = structures.length === 0;
@@ -205,18 +255,30 @@
     root.querySelector('#gpv-motif-run').disabled = structures.length === 0;
     root.querySelector('#gpv-data-apply').disabled = structures.length === 0;
     scheduleSessionSave();
+    dropStaleRmsdMatrix();
     root.querySelector('#gpv-captions').disabled = savedViews.length === 0;
     ['#gpv-domain-labels', '#gpv-pae-domain-labels', '#gpv-architecture-png', '#gpv-architecture-svg'].forEach(selector => { root.querySelector(selector).disabled = structures.length === 0; });
     updateReportEstimate();
-    ['#gpv-current', '#gpv-reference', '#gpv-selection-model', '#gpv-left-model', '#gpv-previous', '#gpv-next', '#gpv-cycle', '#gpv-align', '#gpv-restore', '#gpv-add-selection', '#gpv-box-select', '#gpv-annotate', '#gpv-add-screen-text', '#gpv-interface-model', '#gpv-interface-run'].forEach(selector => {
+    ['#gpv-current', '#gpv-reference', '#gpv-selection-model', '#gpv-left-model', '#gpv-previous', '#gpv-next', '#gpv-add-selection', '#gpv-box-select', '#gpv-annotate', '#gpv-add-screen-text', '#gpv-interface-model', '#gpv-interface-run'].forEach(selector => {
       root.querySelector(selector).disabled = structures.length === 0;
     });
+    /* Nothing to click with nothing loaded, as for Start drawing; a mode already on can still be turned off. */
+    root.querySelector('#gpv-measure').disabled = structures.length === 0 && !measurementActive;
+    /* Align needs a second shown model to superpose; Restore needs something superposed to put back;
+       Cycle needs a shown model. Each used to stay enabled and answer with a misleading status. */
+    root.querySelector('#gpv-align').disabled = structures.filter(entry => entry.visible).length < 2;
+    root.querySelector('#gpv-restore').disabled = !structures.some(entry => entry.superposed);
+    root.querySelector('#gpv-cycle').disabled = !structures.some(entry => entry.visible) && !cycleTimer;
     const comparing = root.querySelector('#gpv-side-by-side').checked && comparePanels.length > 0 && structures.length > 0;
-    root.querySelector('#gpv-add-panel').disabled = structures.length === 0 || comparePanels.length >= maxComparePanels;
+    renderAddPanelButton();
     root.querySelector('#gpv-clear-panels').disabled = comparePanels.length === 0;
     root.querySelector('#gpv-compare-image').disabled = !comparing;
     root.querySelector('#gpv-compare-svg').disabled = !comparing;
-    if (comparing) root.querySelector('#gpv-count').textContent += ' · ' + (comparePanels.length + 1) + ' panels';
+    /* Across the panels: three models in three panels is "3 displayed", not the primary's 1. */
+    if (comparing) root.querySelector('#gpv-count').textContent = new Set([...visible.map(entry => entry.id), ...comparePanels.map(panel => panel.entryId).filter(id => entryById(id))]).size + ' displayed / ' + structures.length + ' loaded · ' + (comparePanels.length + 1) + ' panels' + modelOrderNote();
+    /* The buttons set above (the contact sheet, the views ZIP, the comparison) come after
+       renderImageButton's hold, so an export in flight holds them again here (40). */
+    holdExportButtons();
   }
 
   function materializeEntry(entry) {
@@ -227,13 +289,19 @@
       viewer.removeModel(model);
       throw new Error('No atoms could be read from ' + entry.name);
     }
+    /* mmCIF insertion codes and modified residues bonded into their chain (03b), before anything —
+       the chain colours, the pLDDT read below, the strip — looks at the atoms. */
+    prepareStructureAtoms(entry, atoms);
     entry.model = model;
     entry.atoms = atoms;
     seedChainColors(atoms);
     /* Experimental structures carry crystallographic B-factors, not pLDDT, in the same
        column; do not report them as confidence. */
     entry.experimentalMethod = entry.experimentalMethod ?? experimentalMethod(entry.text);
-    if (!entry.scores.length && entry.collection !== 'RCSB PDB' && !entry.experimentalMethod) entry.scores = modelScores(model);
+    /* A header-less PDB is read as a prediction (ColabFold and AlphaFold write none), but only one with
+       a polymer: a file of ligands and ions has no pLDDT, and its calcium ion, named CA, is not a Cα. */
+    const polymer = atoms.some(atom => !atom.hetflag && (atom.atom === 'CA' || atom.atom === "C1'"));
+    if (!entry.scores.length && entry.collection !== 'RCSB PDB' && !entry.experimentalMethod && polymer) entry.scores = modelScores(model);
     entry.originalAtoms = atoms.map(atom => ({ x: atom.x, y: atom.y, z: atom.z }));
     return model;
   }
@@ -273,11 +341,15 @@
     }
     releaseHiddenModels(shown);
     applySelections(shown);
+    /* Colour by distance (03a) is drawn now for the residue selected now. */
+    distanceColourStyled();
     renderScreenLegend();
     renderSequenceSoon();
     renderComposition();
     rebuildOverlays(false);
     renderComparePanels();
+    /* A measurement row says when what it measures is not drawn (04). */
+    markUndrawnMeasurements();
     viewer.render();
     if (!root.querySelector('[data-gpv-panel="confidence"]').hidden) renderConfidence();
     updateStatus();
@@ -293,7 +365,8 @@
       structures.forEach(entry => {
         const option = document.createElement('option');
         option.value = String(entry.id);
-        option.textContent = (entry.collection ? entry.collection + ' › ' : '') + displayName(entry);
+        /* A name that already carries its source (from an older scene or session) is not prefixed twice. */
+        option.textContent = (entry.collection && !displayName(entry).startsWith(entry.collection + ' › ') ? entry.collection + ' › ' : '') + displayName(entry);
         select.append(option);
       });
       if (structures.some(entry => String(entry.id) === String(previous))) select.value = String(previous);
@@ -316,6 +389,7 @@
   function renderList() {
     syncModelControls();
     const list = root.querySelector('#gpv-list');
+    const kept = rememberListFocus(list);
     list.replaceChildren();
     const matching = filteredStructures();
     /* Large AlphaFold archives routinely hold hundreds of models. Building a row
@@ -329,7 +403,7 @@
     shownRows.forEach(entry => {
       const row = document.createElement('div');
       row.className = 'gpv-entry' + (entry.id === activeId ? ' is-active' : '');
-      row.dataset.entryId = String(entry.id);
+      row.dataset.entryId = String(entry.id); row.dataset.rowId = String(entry.id);
 
       const visibleLabel = document.createElement('label');
       visibleLabel.className = 'form-check form-switch';
@@ -338,7 +412,7 @@
       visible.type = 'checkbox';
       visible.checked = entry.visible;
       visible.setAttribute('aria-label', 'Show ' + entry.name);
-      visible.addEventListener('change', () => { entry.visible = visible.checked; applyStyle(); });
+      visible.addEventListener('change', () => { entry.visible = visible.checked; applyStyle(); renderAlignmentResults(); renderEmphasiseButtons(); });
       visibleLabel.append(visible);
 
       const copy = document.createElement('span');
@@ -355,10 +429,11 @@
       rename.className = 'btn btn-ghost';
       rename.type = 'button';
       rename.textContent = 'Rename';
-      rename.setAttribute('aria-label', 'Rename ' + entry.name);
+      rename.setAttribute('aria-label', 'Rename ' + entry.name); rename.dataset.control = 'rename';
       rename.addEventListener('click', () => {
         const input = document.createElement('input');
-        input.className = 'form-control'; input.type = 'text'; input.maxLength = 120;
+        /* The field stands in for the button while it is open, so the rebuilt row gives the focus back to Rename. */
+        input.className = 'form-control'; input.type = 'text'; input.maxLength = 120; input.dataset.control = 'rename';
         input.value = displayName(entry); input.placeholder = entry.name;
         input.setAttribute('aria-label', 'Display name for ' + entry.name);
         let done = false;
@@ -380,13 +455,14 @@
       const score = document.createElement('span');
       score.className = 'gpv-entry-score text-small';
       const average = mean(entry.scores);
-      score.textContent = average === null ? (entry.model ? 'pLDDT —' : 'Not viewed') : average.toFixed(1);
+      score.textContent = average === null ? (entry.model ? 'pLDDT —' : notYetRanked(entry) ? 'Not yet ranked' : 'Not viewed') : average.toFixed(1);
+      if (average === null && notYetRanked(entry)) score.title = 'Not read yet, so it has no pLDDT to sort by: listed after the ranked models. Show it to read its pLDDT; the order is applied again when you choose it or load more files.';
 
       const color = document.createElement('input');
       color.className = 'form-control form-control-color';
       color.type = 'color';
       color.value = entry.color;
-      color.setAttribute('aria-label', 'Color for ' + entry.name);
+      color.setAttribute('aria-label', 'Colour for ' + displayName(entry));
       color.addEventListener('input', () => { entry.color = color.value; root.querySelector('#gpv-color-mode').value = 'structure'; applyStyle(); });
 
       const fadeLabel = document.createElement('label');
@@ -395,16 +471,21 @@
       const fade = document.createElement('input');
       fade.className = 'form-check-input'; fade.type = 'checkbox'; fade.checked = Boolean(entry.faded);
       fade.setAttribute('aria-label', 'Fade ' + entry.name);
-      fade.addEventListener('change', () => { remember('model fade'); entry.faded = fade.checked; applyStyle(); renderSequenceSoon(); });
+      fade.addEventListener('change', () => { remember('model fade'); entry.faded = fade.checked; applyStyle(); renderSequenceSoon(); updateStatus(displayName(entry) + (fade.checked ? ' is drawn faded, as context' : ' is drawn solid again')); });
       fadeLabel.append(fade);
 
       const focus = document.createElement('button');
       focus.className = 'btn btn-ghost'; focus.type = 'button'; focus.textContent = 'Emphasise';
       focus.title = 'Draw this model solid and fade every other shown model';
-      focus.setAttribute('aria-label', 'Emphasise ' + entry.name);
+      focus.setAttribute('aria-label', 'Emphasise ' + entry.name); focus.dataset.control = 'emphasise';
+      /* Emphasis fades the other shown models; with one shown there is none to fade, and the press used
+         to say it had faded them and take an undo step that changed nothing. */
+      const shownCount = structures.filter(item => item.visible).length;
+      if (shownCount < 2 || !entry.visible) { focus.disabled = true; focus.title = shownCount < 2 ? 'Needs two shown models' : 'Show this model to emphasise it'; }
       focus.addEventListener('click', () => {
-        remember('emphasis');
         const shown = structures.filter(item => item.visible && item.model);
+        if (shown.length < 2 || !shown.includes(entry)) { updateStatus(shown.length < 2 ? 'Only one model is shown — nothing to fade · Emphasise needs two shown models' : 'Show ' + displayName(entry) + ' first to emphasise it'); return; }
+        remember('emphasis');
         const alone = entry.faded === false && shown.every(item => item === entry || item.faded);
         shown.forEach(item => { item.faded = alone ? false : item !== entry; });
         renderList(); applyStyle(); renderSequenceSoon();
@@ -414,26 +495,115 @@
       const remove = document.createElement('button');
       remove.className = 'btn btn-ghost';
       remove.type = 'button';
-      remove.textContent = 'Remove';
-      remove.addEventListener('click', () => {
-        if (entry.model) viewer.removeModel(entry.model);
-        structures = structures.filter(item => item !== entry);
-        labelRecords = labelRecords.filter(label => label.entryId !== entry.id);
-        renderLabelList();
-        selectionRecords = selectionRecords.filter(selection => selection.entryId !== entry.id);
-        measurementRecords = measurementRecords.filter(measurement => measurement.points.every(point => point.entryId !== entry.id));
-        alignmentResults = [];
-        renderAlignmentResults();
-        renderSelectionList();
-        renderMeasurementList();
-        renderList();
-        applyStyle();
-      });
+      remove.textContent = 'Remove'; remove.dataset.control = 'remove';
+      remove.setAttribute('aria-label', 'Remove ' + displayName(entry));
+      remove.addEventListener('click', () => removeModelEntry(entry));
 
       row.append(visibleLabel, copy, score, color, fadeLabel, focus, rename, remove);
       list.append(row);
     });
+    restoreListFocus(list, kept);
+    /* The alignment table names models and dims hidden ones; Show all, Hide all and Rename come here. */
+    renderAlignmentResults();
   }
+
+  /* Everything that names the model goes with it: its records, the card and the selected residue
+     if they were its, the comparison that included it, and the modes when nothing is left to draw
+     on. Otherwise Add or update would label a "Missing model", and the card would follow a residue
+     that is no longer drawn. */
+  /* Removed models whose "same source" records moved to another model of their source, by id: undo
+     brings back snapshots taken before the move, and their records are moved the same way (05). */
+  const rehomedModels = new Map();
+  function rehomedRecord(record) {
+    if (!record || record.scope !== 'source') return record;
+    let id = record.entryId; const seen = new Set();
+    while (!entryById(id) && rehomedModels.has(id) && !seen.has(id)) { seen.add(id); id = rehomedModels.get(id); }
+    return id === record.entryId ? record : { ...record, entryId: id };
+  }
+
+  /* Named domains and per-residue data hang on the model they were made on. Scoped to the same
+     source, they colour every model of its collection — until that model was removed: domainApplies
+     found no owner and the domain silently stopped colouring the rest, its row still listed. Such a
+     record moves to a surviving model of the same source; a record of this model alone, or of a
+     source with no model left, goes with it. */
+  function rehomeModelRecords(entry) {
+    const successor = structures.find(item => item.collection === entry.collection) || null;
+    if (successor) rehomedModels.set(entry.id, successor.id);
+    const owned = record => record.scope !== 'all' && record.entryId === entry.id;
+    domainRecords = domainRecords.filter(record => !owned(record) || (record.scope === 'source' && successor)).map(record => (owned(record) ? { ...record, entryId: successor.id } : record));
+    domainVersion += 1; renderDomainList();
+    if (residueData && owned(residueData)) {
+      residueData = residueData.scope === 'source' && successor ? { ...residueData, entryId: successor.id } : null;
+      renderDataState();
+    }
+  }
+
+  function removeModelEntry(entry) {
+    const hadAlignment = alignmentResults.length > 0;
+    const wasReference = hadAlignment && Number(root.querySelector('#gpv-reference').value) === entry.id;
+    dismissCanvasText();
+    if (selectedResidue && selectedResidue.entryId === entry.id) clearSelectedResidue(false);
+    if (entry.model) viewer.removeModel(entry.model);
+    structures = structures.filter(item => item !== entry);
+    if (activeId === entry.id) activeId = structures[0] ? structures[0].id : null;
+    const keeps = point => point.entryId !== entry.id;
+    labelRecords = labelRecords.filter(keeps);
+    selectionRecords = selectionRecords.filter(keeps);
+    measurementRecords = measurementRecords.filter(measurement => measurement.points.every(keeps));
+    annotationRecords = annotationRecords.filter(record => record.points.every(keeps));
+    /* The deviations, the agreement and the position comparison were all made with this model. The
+       others stay where the superposition put them; Restore coordinates still takes them back. */
+    alignmentResults = [];
+    structures.forEach(item => { item.deviations = null; item.alignedPairs = null; });
+    ensembleSpread = null;
+    spotlightResidues = []; positionEffect = null; renderPositionEffect(); renderPositionState();
+    if (siteResults && siteResults.entryId === entry.id) siteResults = null;
+    if (nearbyResult && nearbyResult.entry === entry) { nearbyResult = null; root.querySelector('#gpv-near-copy').disabled = true; }
+    /* Its interface table: the rows named chain pairs of a model that was gone, Highlight did nothing
+       and the CSV wrote them with an empty model column. */
+    if (interfaceResults && interfaceResults.entryId === entry.id) { interfaceResults = null; renderInterfaceResults(); root.querySelector('#gpv-interface-state').textContent = ''; }
+    /* A measurement or a drawing half made on it: the next click on another model completed a record
+       whose first point was the removed model — made after its model had gone. */
+    const draftRequired = root.querySelector('#gpv-measure-type').value === 'angle' ? 3 : 2;
+    if (measurementDraft.some(point => !keeps(point))) {
+      measurementDraft = measurementDraft.filter(keeps);
+      if (measurementActive) root.querySelector('#gpv-measure-state').textContent = 'Selected ' + measurementDraft.length + ' of ' + draftRequired + ' atoms.';
+    }
+    if (annotationDraft.some(point => !keeps(point))) {
+      annotationDraft = annotationDraft.filter(keeps);
+      if (annotationActive) root.querySelector('#gpv-annotation-state').textContent = annotationPrompt();
+    }
+    rehomeModelRecords(entry);
+    if (rmsdMatrix) { rmsdMatrix = null; renderRmsdMatrix(); }
+    /* Its comparison panels close with it. They used to be handed silently to the first model, until
+       every panel showed the same one; and with no panel left the multi-view has nothing to compare. */
+    const panelsClosed = comparePanels.filter(panel => panel.entryId === entry.id);
+    panelsClosed.forEach(destroyPanelViewer);
+    comparePanels = comparePanels.filter(panel => panel.entryId !== entry.id);
+    const wasPrimary = root.querySelector('#gpv-side-by-side').checked && Number(root.querySelector('#gpv-left-model').value) === entry.id;
+    if (!comparePanels.length) root.querySelector('#gpv-side-by-side').checked = false;
+    if (!structures.length) {
+      setBoxSelectMode(false);
+      if (annotationActive) toggleAnnotating(false);
+      if (measurementActive) toggleMeasurement();
+    }
+    renderAlignmentResults();
+    renderLabelList(); renderSelectionList(); renderMeasurementList(); renderAnnotationList();
+    renderList();
+    applyStyle();
+    const primary = root.querySelector('#gpv-side-by-side').checked ? activeEntry() : null;
+    /* The alignment was made with this model: its table, deviations and agreement go with it, and the
+       status says so — the colours that relied on them turn grey with nothing else to explain why. The
+       other models stay where the superposition put them, which Restore coordinates puts back. */
+    const aligned = !hadAlignment ? '' : wasReference
+      ? ' · it was the alignment reference — alignment cleared' + (structures.some(item => item.superposed) ? '; Restore coordinates puts the others back' : '')
+      : ' · alignment cleared — Align visible again to compare the others';
+    announce('Removed ' + displayName(entry) + (panelsClosed.length ? ' · its panel' + (panelsClosed.length === 1 ? '' : 's') + ' closed' : '') + (wasPrimary && primary ? ' · the primary panel now shows ' + displayName(primary) : '') + aligned);
+  }
+
+  /* The model colours: the eight of the palette, then four more as distinct from them and from each
+     other, so a ninth model is not drawn in the first one's violet. Past twelve they repeat (USAGE). */
+  const modelPalette = [...palette, '#0f766e', '#92400e', '#4338ca', '#65a30d'];
 
   function addStructure(name, text, format, sourcePath = name, collection = 'Individual files', lazy = false) {
     const entry = {
@@ -443,7 +613,7 @@
       collection,
       model: null,
       visible: true,
-      color: palette[structures.length % palette.length],
+      color: modelPalette[structures.length % modelPalette.length],
       text,
       format,
       sourcePath,
@@ -484,7 +654,10 @@
     return filteredStructures().filter(entry => entry.visible);
   }
 
-  function selectModel(entry, fit = true) {
+  /* Picking a model — Current model, ← →, Previous/Next, cycling — shows it on its own, and says so
+     when that leaves an overlay; the mode is a preference, so the change is saved like a choice made
+     in the select. keepMode is for a model that arrives (a fetch): it joins the view as it is. */
+  function selectModel(entry, fit = true, keepMode = false) {
     if (!entry) return;
     /* The editor and the active label belong to what was on screen; another model is something else.
        The selected residue stays selected — the panel names its model — and its marker is simply not
@@ -496,14 +669,41 @@
     }
     activeId = entry.id;
     root.querySelector('#gpv-current').value = String(entry.id);
-    root.querySelector('#gpv-view-mode').value = 'single';
+    /* In the synchronized multi-view the primary panel is the current model: it changes with the
+       choice, where the status used to say "Showing" a model no panel showed. The View mode is not
+       the multi-view's, so it is left alone. */
+    const comparing = root.querySelector('#gpv-side-by-side').checked;
+    /* In the multi-view a model already in another panel swaps places with the primary one, rather than
+       showing twice while the model it replaced is in no panel. */
+    let swapped = null;
+    if (comparing) {
+      const previous = Number(root.querySelector('#gpv-left-model').value);
+      const panel = comparePanels.find(item => item.entryId === entry.id);
+      if (panel && previous && previous !== entry.id && entryById(previous)) { panel.entryId = previous; swapped = { panel: comparePanels.indexOf(panel) + 2, entry: entryById(previous) }; renderPanelControls(); }
+      root.querySelector('#gpv-left-model').value = String(entry.id);
+    }
+    const mode = root.querySelector('#gpv-view-mode');
+    const leftOverlay = !keepMode && !comparing && mode.value !== 'single';
+    if (leftOverlay) { mode.value = 'single'; savePreferences(); }
     applyStyle();
     root.querySelectorAll('#gpv-list [data-entry-id]').forEach(row => row.classList.toggle('is-active', Number(row.dataset.entryId) === entry.id));
     const activeRow = root.querySelector('#gpv-list [data-entry-id="' + entry.id + '"] .gpv-entry-score');
     const average = mean(entry.scores);
     if (activeRow) activeRow.textContent = average === null ? 'pLDDT —' : average.toFixed(1);
     if (fit && entry.model) { viewer.zoomTo({ model: entry.model.getID() }); viewer.render(); }
-    updateStatus('Showing ' + displayName(entry));
+    if (comparing) syncViewsFrom(viewer);
+    updateStatus('Showing ' + displayName(entry) + (comparing ? ' in the primary panel' + (swapped ? ' · ' + displayName(swapped.entry) + ' moved to panel ' + swapped.panel : '') : leftOverlay ? ' · one model at a time (View mode)' : ''));
+  }
+
+  /* The rows' Emphasise follows the shown models without rebuilding the list. */
+  function renderEmphasiseButtons() {
+    const shownCount = structures.filter(item => item.visible).length;
+    root.querySelectorAll('#gpv-list [data-entry-id]').forEach(row => {
+      const button = row.querySelector('[data-control="emphasise"]'); const entry = entryById(Number(row.dataset.entryId));
+      if (!button || !entry) return;
+      button.disabled = shownCount < 2 || !entry.visible;
+      button.title = shownCount < 2 ? 'Needs two shown models' : !entry.visible ? 'Show this model to emphasise it' : 'Draw this model solid and fade every other shown model';
+    });
   }
 
   function selectRelative(delta, fit = true) {
@@ -516,8 +716,7 @@
 
   function toggleCycle() {
     if (cycleTimer) { stopCycle(); return; }
-    if (!cycleEntries().length) return;
-    root.querySelector('#gpv-view-mode').value = 'single';
+    if (!cycleEntries().length) { updateStatus('No shown models to cycle'); return; }
     const delay = Math.max(500, Number(root.querySelector('#gpv-cycle-speed').value) * 1000);
     cycleTimer = setInterval(() => selectRelative(1, false), delay);
     const button = root.querySelector('#gpv-cycle');
@@ -531,14 +730,35 @@
     selectModel(candidates.includes(active) ? active : candidates[0], false);
   }
 
-  function residueKey(entryId, chain, resi) {
-    return [entryId, chain || '', resi].join('|');
+  /* An insertion code tells residues 100, 100A and 100B apart (antibody and Kabat numbering). 3Dmol
+     reads a blank as ' ' from a PDB file; its mmCIF reader does not read the column at all, so the
+     code is set from the file's atom_site loop as the model is made (03b), and '?' or '.' there mean
+     none, as a blank does. Records (a label, the selected residue, a measurement point) carry it as
+     `icode`, read the same way. */
+  function insertionCodeOf(atom) {
+    const code = String((atom && atom.icode) ?? '').trim();
+    return code === '?' || code === '.' ? '' : code;
   }
 
+  /* The residue number as the file writes it: 100, or 100A. */
+  function residueNumber(atom) {
+    return String(atom.resi) + insertionCodeOf(atom);
+  }
+
+  function sameResidue(atom, chain, resi, icode = '') {
+    return (atom.chain || '') === (chain || '') && atom.resi === resi && insertionCodeOf(atom) === (icode || '');
+  }
+
+  /* The key is entry|chain|resi as it always was; an insertion code adds a fourth part, so keys,
+     scenes and share links written before 2.52.0 still match their residues. */
+  function residueKey(entryId, chain, resi, icode = '') {
+    return [entryId, chain || '', resi].join('|') + (icode ? '|' + icode : '');
+  }
+
+  /* The Annotate readout and the status: the model as the lists name it, the residue as the card does. */
   function residueText(entry, atom) {
-    const chain = atom.chain ? ' chain ' + atom.chain : '';
     const confidence = entry.scores.length && Number.isFinite(Number(atom.b)) ? ' · pLDDT ' + Number(atom.b).toFixed(1) : '';
-    return entry.name + ' · ' + (atom.resn || 'Residue') + ' ' + atom.resi + chain + ' · atom ' + (atom.atom || '—') + confidence;
+    return displayName(entry) + ' · ' + residueName(atom, 'prose') + ' · atom ' + (atom.atom || '—') + confidence;
   }
 
   function selectResidue(entry, atom) {
@@ -546,6 +766,7 @@
       entryId: entry.id,
       chain: atom.chain || '',
       resi: atom.resi,
+      icode: insertionCodeOf(atom),
       resn: atom.resn || 'RES',
       atom: atom.atom || '',
       x: atom.x,
@@ -554,9 +775,9 @@
       b: atom.b
     };
     root.querySelector('#gpv-residue').textContent = residueText(entry, atom);
-    const key = residueKey(entry.id, atom.chain, atom.resi);
+    const key = residueKey(entry.id, atom.chain, atom.resi, insertionCodeOf(atom));
     const saved = labelRecords.find(label => label.key === key);
-    root.querySelector('#gpv-label-text').value = saved ? saved.text : (atom.resn || 'RES') + atom.resi + (atom.chain ? ' · ' + atom.chain : '');
+    root.querySelector('#gpv-label-text').value = saved ? saved.text : (atom.resn || 'RES') + residueNumber(atom) + (atom.chain ? ' · ' + atom.chain : '');
     root.querySelector('#gpv-add-label').disabled = false;
     updatePositionCompare();
     /* Colour by distance from the selected residue (03a) follows the selection. */
@@ -566,10 +787,10 @@
   }
 
   function addOrEditLabel() {
-    if (!selectedResidue) return;
+    if (!selectedResidue || !entryById(selectedResidue.entryId)) return;
     const text = root.querySelector('#gpv-label-text').value.trim();
     if (!text) return;
-    const key = residueKey(selectedResidue.entryId, selectedResidue.chain, selectedResidue.resi);
+    const key = residueKey(selectedResidue.entryId, selectedResidue.chain, selectedResidue.resi, selectedResidue.icode);
     remember('label change');
     const record = { ...selectedResidue, key, text };
     const index = labelRecords.findIndex(label => label.key === key);
@@ -605,21 +826,26 @@
 
   const labelSizes = [[10, 'Small'], [12, 'Normal'], [15, 'Large'], [19, 'Huge']];
 
+  /* Separate labels has something to do whenever there is text it can move: a label or a measurement. */
+  function updateSeparateLabelsButton() {
+    const separate = root.querySelector('#gpv-labels-separate');
+    if (separate) separate.disabled = !labelRecords.length && !measurementRecords.length;
+  }
+
   function renderLabelList() {
     renderSequenceSoon();
-    const list = root.querySelector('#gpv-label-list'); list.replaceChildren();
-    const separate = root.querySelector('#gpv-labels-separate');
-    if (separate) separate.disabled = !labelRecords.length;
+    const list = root.querySelector('#gpv-label-list'); const kept = rememberListFocus(list); list.replaceChildren();
+    updateSeparateLabelsButton();
     labelRecords.forEach(label => {
       const entry = entryById(label.entryId);
-      const row = document.createElement('div'); row.className = 'gpv-entry';
+      const row = document.createElement('div'); row.className = 'gpv-entry'; row.dataset.rowId = label.key;
       const copy = document.createElement('span'); copy.className = 'gpv-edit-copy';
       const text = document.createElement('input'); text.className = 'form-control'; text.type = 'text'; text.value = label.text; text.maxLength = 120;
-      text.setAttribute('aria-label', 'Label text for ' + (label.resn || 'residue') + ' ' + label.resi);
+      text.setAttribute('aria-label', 'Label text for ' + residueName(label, 'prose'));
       text.addEventListener('change', () => { const value = text.value.trim(); if (!value) { text.value = label.text; return; } remember('label text'); label.text = value; rebuildOverlays(); updateStatus('Label updated'); });
       text.addEventListener('keydown', event => { if (event.key === 'Enter') { event.preventDefault(); text.blur(); } });
       const where = document.createElement('span'); where.className = 'gpv-entry-source text-small';
-      where.textContent = (entry ? displayName(entry) : 'Missing model') + ' · ' + (label.resn || 'RES') + ' ' + label.resi + (label.chain ? ' · chain ' + label.chain : '');
+      where.textContent = (entry ? displayName(entry) : 'Missing model') + ' · ' + residueName(label, 'prose');
       copy.append(text, where);
       const tools = document.createElement('span'); tools.className = 'gpv-edit-tools';
       const size = document.createElement('select'); size.className = 'form-select'; size.setAttribute('aria-label', 'Label size');
@@ -631,13 +857,17 @@
       color.setAttribute('aria-label', 'Label colour');
       color.addEventListener('input', () => { if (!color.dataset.remembered) { remember('label colour'); color.dataset.remembered = '1'; } label.color = color.value; rebuildOverlays(); });
       color.addEventListener('change', () => { delete color.dataset.remembered; });
-      const show = document.createElement('button'); show.className = 'btn btn-ghost'; show.type = 'button'; show.textContent = 'Show';
+      const show = document.createElement('button'); show.className = 'btn btn-ghost'; show.type = 'button'; show.textContent = 'Show'; show.dataset.control = 'show';
       show.title = 'Zoom to this residue';
-      show.addEventListener('click', () => { if (!entry || !entry.model) return; const selection = { model: entry.model.getID(), resi: label.resi }; if (label.chain) selection.chain = label.chain; viewer.zoomTo(selection); viewer.render(); syncViewsFrom(viewer); });
+      /* Frames the label's residue alone, by its insertion code too (blank included), as Go to does. */
+      show.addEventListener('click', () => { if (!entry || !entry.model) return; const selection = { model: entry.model.getID(), resi: label.resi, predicate: atom => insertionCodeOf(atom) === insertionCodeOf(label) }; if (label.chain) selection.chain = label.chain; viewer.zoomTo(selection); viewer.render(); syncViewsFrom(viewer); });
       const reset = document.createElement('button'); reset.className = 'btn btn-ghost'; reset.type = 'button'; reset.textContent = 'Reset';
       reset.title = 'Put the label back on its residue'; reset.disabled = labelOffsetLength(label) === 0;
+      /* Reset greys itself out once used; the focus then goes to Show beside it rather than onto the page. */
+      reset.dataset.control = 'reset'; reset.dataset.controlFallback = 'show';
       reset.addEventListener('click', () => { remember('label position'); label.offset = null; delete label.autoPlaced; renderLabelList(); rebuildOverlays(); updateStatus('Label put back on its residue'); });
-      const remove = document.createElement('button'); remove.className = 'btn btn-ghost'; remove.type = 'button'; remove.textContent = 'Remove';
+      const remove = document.createElement('button'); remove.className = 'btn btn-ghost'; remove.type = 'button'; remove.textContent = 'Remove'; remove.dataset.control = 'remove';
+      remove.setAttribute('aria-label', 'Remove the label on ' + residueName(label, 'prose'));
       remove.addEventListener('click', () => { remember('label removal'); labelRecords = labelRecords.filter(item => item !== label); renderLabelList(); rebuildOverlays(); updateStatus('Label removed'); });
       tools.append(size, color, show, reset, remove);
       /* Dragging is mouse-only by design (a finger drag turns the model), so these are how a label is
@@ -645,10 +875,10 @@
          stays on the button and Enter can be pressed again. */
       const nudge = document.createElement('span'); nudge.className = 'gpv-nudge';
       nudge.setAttribute('role', 'group'); nudge.setAttribute('aria-label', 'Move the label');
-      [['←', 'Move label left', -12, 0], ['→', 'Move label right', 12, 0], ['↑', 'Move label up', 0, -12], ['↓', 'Move label down', 0, 12]].forEach(([glyph, title, dx, dy]) => {
+      [['←', 'Move label left', -12, 0, 'left'], ['→', 'Move label right', 12, 0, 'right'], ['↑', 'Move label up', 0, -12, 'up'], ['↓', 'Move label down', 0, 12, 'down']].forEach(([glyph, title, dx, dy, direction]) => {
         const button = document.createElement('button'); button.className = 'btn btn-ghost'; button.type = 'button'; button.textContent = glyph;
         button.setAttribute('aria-label', title); button.title = title;
-        button.addEventListener('click', () => { remember('label nudge'); nudgeCanvasText({ kind: 'label', record: label }, dx, dy); reset.disabled = false; rebuildOverlays(); });
+        button.addEventListener('click', () => { remember('label nudge'); nudgeCanvasText({ kind: 'label', record: label }, dx, dy); reset.disabled = false; rebuildOverlays(); updateStatus('Label moved ' + direction + ' · Reset puts it back'); });
         nudge.append(button);
       });
       const select = document.createElement('button'); select.className = 'btn btn-ghost'; select.type = 'button'; select.textContent = 'Select';
@@ -662,6 +892,7 @@
       nudge.append(select);
       row.append(copy, tools, nudge); list.append(row);
     });
+    restoreListFocus(list, kept);
   }
 
   /* A label belongs to its residue: that is its anchor. Dragging it stores `offset`, a
@@ -669,7 +900,7 @@
      and a thin leader line is drawn back to the residue once it has moved a clear distance. */
   function labelAnchor(label, byId = entriesById()) {
     const entry = byId.get(label.entryId);
-    const atom = entry && entry.atoms.find(item => (item.chain || '') === label.chain && item.resi === label.resi && (item.atom === 'CA' || item.atom === label.atom));
+    const atom = entry && entry.atoms.find(item => sameResidue(item, label.chain, label.resi, insertionCodeOf(label)) && (item.atom === 'CA' || item.atom === label.atom));
     return atom ? { x: atom.x, y: atom.y, z: atom.z } : { x: label.x, y: label.y, z: label.z };
   }
   function labelOffsetLength(label) {
@@ -691,7 +922,12 @@
     labelRecords.filter(label => shownIds.has(label.entryId)).forEach(label => {
       const anchor = labelAnchor(label, byId);
       const position = (placement && placement.get(label)) || shiftBy(anchor, label.offset);
-      if (leaderLength(anchor, position) > leaderMinimum) target.addLine({ start: anchor, end: position, color: label.color || leaderColor(), linewidth: Math.max(1, Math.round(scale)) });
+      if (leaderLength(anchor, position) > leaderMinimum) {
+        /* A cylinder in an export, as a measurement's line is (drawMeasurements). */
+        const leader = { start: anchor, end: position, color: label.color || leaderColor() };
+        const radius = exportStrokeRadius(target, midpoint(anchor, position), Math.max(1, scale));
+        if (radius) target.addCylinder({ ...leader, radius, fromCap: 1, toCap: 1 }); else target.addLine({ ...leader, linewidth: Math.max(1, Math.round(scale)) });
+      }
       const style = labelStyle(position, { color: label.color, size: label.size, scale });
       target.addLabel(label.text, label === active ? activeLabelStyle(style) : style);
     });
@@ -704,8 +940,10 @@
     if (root.querySelector('#gpv-all-labels').checked) {
       const entry = activeEntry();
       if (entry && shownIds.has(entry.id)) {
-        entry.atoms.filter(atom => atom.atom === 'CA').forEach(atom => {
-          const text = (atom.resn || 'RES') + atom.resi + (atom.chain ? ' · ' + atom.chain : '');
+        /* One per polymer residue — Cα, else P — so nucleotides are labelled and a calcium ion,
+           whose atom is also called CA, is not. */
+        residueRows(entry).flatMap(row => row.residues).forEach(atom => {
+          const text = (atom.resn || 'RES') + residueNumber(atom) + (atom.chain ? ' · ' + atom.chain : '');
           target.addLabel(text, labelStyle({ x: atom.x, y: atom.y, z: atom.z }, { scale }));
         });
       }
@@ -718,7 +956,7 @@
   function drawOverlays(target, shownIds, dimensions, includeScreenText = true, placement = null) {
     const scale = overlayScale(dimensions);
     drawLabels(target, shownIds, scale, placement);
-    drawMeasurements(target, shownIds, scale);
+    drawMeasurements(target, shownIds, scale, placement);
     drawAnnotations(target, shownIds, dimensions, includeScreenText);
   }
 
@@ -731,6 +969,14 @@
     const topInset = comparing ? 44 : 0;
     drawOverlays(viewer, new Set(displayedEntries().map(entry => entry.id)), { width: stage.clientWidth, height: stage.clientHeight, topInset });
     if (shouldRender) viewer.render();
+  }
+
+  /* The first part of a residue range the reader below cannot read ("100A-100C", a typo "2O"), or
+     null. Such a part was skipped without a word, so "100A-100C, 105" made a selection of 105 alone
+     and said "Selection added". Ranges take numbers only: an insertion-code run names no defined set. */
+  function unreadableRangePart(value) {
+    const part = String(value || '').split(',').map(item => item.trim()).find(item => item && !/^(-?\d+)(?:\s*-\s*(-?\d+))?$/.test(item));
+    return part === undefined ? null : part;
   }
 
   function parseResidueRange(value) {
@@ -746,6 +992,38 @@
     return [...residues];
   }
 
+  /* A selection record names its residues by number, as it always has; one that takes in a residue
+     with an insertion code also carries `icodes`, a list as long as `residues` ('' for none), so 57,
+     57A and 57B stay three residues. Records without codes keep their old shape. */
+  function selectionResidues(items) {
+    const residues = items.map(item => item.resi);
+    const icodes = items.map(item => insertionCodeOf(item));
+    return icodes.some(Boolean) ? { residues, icodes } : { residues };
+  }
+
+  function selectionResidueKeys(record) {
+    return record.residues.map((resi, index) => resi + (Array.isArray(record.icodes) && record.icodes[index] ? record.icodes[index] : ''));
+  }
+
+  /* Of the highlight records a press would add ({ chain, residues, icodes? }), the ones not already
+     on the list for this model in this colour: a second press with nothing changed is refused rather
+     than stacking identical rows and undo steps (as Near's highlight does, 10). */
+  function newHighlightRecords(entryId, records, color) {
+    const same = (record, made) => record.entryId === entryId && record.action === 'highlight' && (record.chain || '') === (made.chain || '') && record.color === color && selectionResidueKeys(record).join() === selectionResidueKeys(made).join();
+    return records.filter(made => !selectionRecords.some(record => same(record, made)));
+  }
+
+  /* The atoms a record takes in, as a 3Dmol selection: by number, and by insertion code when it has them. */
+  function selectionSpec(record) {
+    const selection = { resi: record.residues };
+    if (record.chain) selection.chain = record.chain;
+    if (Array.isArray(record.icodes)) {
+      const keys = new Set(selectionResidueKeys(record));
+      selection.predicate = atom => keys.has(residueNumber(atom));
+    }
+    return selection;
+  }
+
   function applySelections(shown = new Set(displayedEntries())) {
     const byId = entriesById();
     selectionRecords.forEach(record => {
@@ -753,8 +1031,7 @@
       /* A record can outlive its model: the entry may have been released to save
          memory, or its coordinates may have failed to parse. */
       if (!entry || !entry.model || !shown.has(entry)) return;
-      const selection = { resi: record.residues };
-      if (record.chain) selection.chain = record.chain;
+      const selection = selectionSpec(record);
       if (record.action === 'hide') entry.model.setStyle(selection, {});
       else if (typeof entry.model.addStyle === 'function') entry.model.addStyle(selection, { stick: { color: record.color, radius: 0.25 }, sphere: { color: record.color, scale: 0.3 } });
     });
@@ -771,10 +1048,13 @@
       const name = document.createElement('span');
       name.className = 'gpv-entry-name';
       /* compactRange (28-figure-legend.js) folds a long selection into runs — "10–20" instead of
-         "10, 11, 12, 13 … 20" — the same way the figure legend and domain ranges already read. */
-      name.textContent = entry.name + ' · chain ' + (record.chain || '—') + ' · ' + compactRange(record.residues) + ' · ' + record.action;
+         "10, 11, 12, 13 … 20" — the same way the figure legend and domain ranges already read. A
+         selection with insertion codes goes through it too, now that it keeps a coded residue out of
+         every run, so this row and the figure legend's caption read alike: "9, 10A, 10B, 11–13". */
+      name.textContent = displayName(entry) + ' · ' + (record.chain ? 'chain ' + record.chain : 'all chains') + ' · ' + (Array.isArray(record.icodes) ? clipText(compactRange(record.residues, record.icodes), 60) : compactRange(record.residues)) + ' · ' + record.action;
       const remove = document.createElement('button');
       remove.className = 'btn btn-ghost'; remove.type = 'button'; remove.textContent = 'Remove';
+      remove.setAttribute('aria-label', 'Remove the selection ' + name.textContent);
       remove.addEventListener('click', () => { remember('selection removal'); selectionRecords = selectionRecords.filter(item => item.id !== record.id); renderSelectionList(); applyStyle(); });
       /* A highlight is a set of residues worth naming; a hidden range has nothing on screen to label. */
       row.append(name);
@@ -786,6 +1066,8 @@
   function addSelection() {
     const entryId = Number(root.querySelector('#gpv-selection-model').value);
     const chain = root.querySelector('#gpv-selection-chain').value.trim();
+    const unread = unreadableRangePart(root.querySelector('#gpv-selection-range').value);
+    if (unread !== null) { updateStatus('Could not read "' + unread + '" — enter a valid residue number or range, such as 10-25, 40 (a residue with an insertion code, such as 100A, is selected with Shift-drag)'); return; }
     const residues = parseResidueRange(root.querySelector('#gpv-selection-range').value);
     if (!entryId || !residues.length) { updateStatus('Enter a valid residue number or range'); return; }
     remember('selection');
@@ -794,19 +1076,26 @@
   }
 
   function atomReference(entry, atom) {
-    return { entryId: entry.id, chain: atom.chain || '', resi: atom.resi, atom: atom.atom || '', index: Number.isInteger(atom.index) ? atom.index : null };
+    const icode = insertionCodeOf(atom);
+    return { entryId: entry.id, chain: atom.chain || '', resi: atom.resi, ...(icode ? { icode } : {}), atom: atom.atom || '', index: Number.isInteger(atom.index) ? atom.index : null };
   }
 
   function resolvePoint(reference) {
     const entry = structures.find(item => item.id === reference.entryId);
     if (!entry) return null;
-    return entry.atoms.find(atom => Number.isInteger(reference.index) && atom.index === reference.index)
-      || entry.atoms.find(atom => (atom.chain || '') === reference.chain && atom.resi === reference.resi && (atom.atom || '') === reference.atom) || null;
+    /* The stored index is a shortcut, not the identity: a scene restored onto a file of the same name
+       but another atom order (a re-run, a remediated entry, waters stripped) put other atoms at those
+       indices, and the distance between them was shown under the scene's atom names. The index hit
+       counts only when it is the named atom; otherwise the atom is found by its name, or not at all. */
+    const named = atom => sameResidue(atom, reference.chain, reference.resi, insertionCodeOf(reference)) && (atom.atom || '') === reference.atom;
+    const indexed = Number.isInteger(reference.index) ? entry.atoms.find(atom => atom.index === reference.index) : null;
+    if (indexed && (typeof reference.atom !== 'string' || named(indexed))) return indexed;
+    return entry.atoms.find(named) || null;
   }
 
   function pointName(reference) {
     const entry = structures.find(item => item.id === reference.entryId);
-    return (entry ? displayName(entry) : 'Missing model') + ' · ' + (reference.chain || '—') + ':' + reference.resi + ' ' + (reference.atom || 'atom');
+    return (entry ? displayName(entry) : 'Missing model') + ' · ' + (reference.chain || '—') + ':' + residueNumber(reference) + ' ' + (reference.atom || 'atom');
   }
 
   function measurementValue(record) {
@@ -825,19 +1114,84 @@
     return value === null ? '—' : value.toFixed(2) + (record.type === 'distance' ? ' Å' : '°');
   }
 
+  /* Where a measurement's text sits before anyone moves it: the vertex of an angle, the middle of a
+     distance. `points` are the resolved atoms; given only the record they are resolved here. */
+  function measurementAnchor(points, record) {
+    const atoms = points || (record ? record.points.map(resolvePoint) : []);
+    if (!atoms.length || atoms.some(point => !point)) return null;
+    return record && record.type === 'angle' ? atoms[1] : midpoint(atoms[0], atoms[1]);
+  }
+
+  /* The words a measurement's label reads: the user's text and the value — "H-bond · 3.02 Å" — the
+     value alone with no text, the text alone with Show value off. Never empty: with no text and the
+     value hidden, the value shows anyway, since a label of nothing would be a box on its own. */
+  function measurementLabelText(record) {
+    const text = String(record.text || '').trim();
+    const value = measurementText(record);
+    if (!text) return value;
+    return record.showValue === false ? text : text + ' · ' + value;
+  }
+
+  /* A colour the user chose, or null: the line then keeps the crimson every measurement has always
+     had, and the label the plain ink of a residue label. */
+  function measurementColor(record) {
+    return record && /^#[0-9a-f]{6}$/i.test(record.color || '') ? record.color : null;
+  }
+
+  /* One point as a reader names it: residue, number with its insertion code and chain, then the atom —
+     "HIS57 · B NE2", "ALA10A · A CA". Without the code a distance from 10A to 10B read as ALA10 to ALA10. */
+  function measurementPointText(reference) {
+    const atom = resolvePoint(reference);
+    return (atom && atom.resn ? atom.resn : 'RES') + residueNumber(reference) + (reference.chain ? ' · ' + reference.chain : '') + ' ' + (reference.atom || 'atom');
+  }
+
+  /* The atoms a measurement joins — "HIS57 · B NE2 ↔ SER195 · C OG", "→" between the points of an
+     angle. With more than one model loaded the model is named too, once in front when every point
+     is in the same model, before each point when they are not; `compact` (the figure legend) leaves
+     the model out. */
+  function measurementAtomsText(record, compact = false) {
+    const joiner = record.type === 'angle' ? ' → ' : ' ↔ ';
+    const names = record.points.map(measurementPointText);
+    if (compact || structures.length < 2) return names.join(joiner);
+    const modelName = point => { const entry = entryById(point.entryId); return entry ? displayName(entry) : 'Missing model'; };
+    const models = new Set(record.points.map(point => point.entryId));
+    if (models.size === 1) return modelName(record.points[0]) + ' · ' + names.join(joiner);
+    return record.points.map((point, index) => modelName(point) + ' · ' + names[index]).join(joiner);
+  }
+
   function midpoint(a, b) {
     return { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2, z: (a.z + b.z) / 2 };
   }
 
-  function drawMeasurements(target, shownIds, scale = 1) {
+  /* `placement`, when a figure panel or Separate labels has resolved one, says where the label goes;
+     without one it sits at its own offset from its anchor, as a residue label does. */
+  function drawMeasurements(target, shownIds, scale = 1, placement = null) {
+    /* The ring on the measurement the arrow keys move, and the thicker line under the row the pointer
+       is on, are the screen's alone: exports and comparison panels draw into viewers of their own. */
+    const onScreen = target === viewer;
+    const active = onScreen ? activeMeasurementRecord() : null;
+    const hovered = onScreen ? measurementHover : null;
     measurementRecords.forEach(record => {
       if (!record.points.every(point => shownIds.has(point.entryId))) return;
       const points = record.points.map(resolvePoint);
       if (points.some(point => !point)) return;
-      const line = (start, end) => target.addLine({ start, end, color: '#e11d48', dashed: true, linewidth: 2 });
+      const color = measurementColor(record) || '#e11d48';
+      const linewidth = hovered !== null && hovered === record.id ? 4 : 2;
+      /* An export draws the line as a cylinder at the SVG's stroke (32 exportStrokeRadius): a GL line
+         is clamped to one device pixel, a 0.6 px hairline in a 300 dpi figure. Dashes as the SVG's. */
+      const stroke = (start, end, px, dashed) => {
+        const radius = exportStrokeRadius(target, midpoint(start, end), px); if (!radius) return false;
+        target.addCylinder({ start, end, radius, color, fromCap: 1, toCap: 1, dashed, dashLength: radius * 6, gapLength: radius * 4 });
+        return true;
+      };
+      const line = (start, end) => { if (!stroke(start, end, 2 * scale, record.dashed !== false)) target.addLine({ start, end, color, dashed: record.dashed !== false, linewidth }); };
       line(points[0], points[1]);
       if (record.type === 'angle') line(points[1], points[2]);
-      target.addLabel(measurementText(record), labelStyle(record.type === 'angle' ? points[1] : midpoint(points[0], points[1]), { scale }));
+      const anchor = measurementAnchor(points, record);
+      const position = (placement && placement.get(record)) || shiftBy(anchor, record.offset);
+      if (leaderLength(anchor, position) > leaderMinimum && !stroke(anchor, position, Math.max(1, scale), false)) target.addLine({ start: anchor, end: position, color, linewidth: Math.max(1, Math.round(scale)) });
+      const style = labelStyle(position, { color: measurementColor(record), scale });
+      target.addLabel(measurementLabelText(record), record === active ? activeLabelStyle(style) : style);
     });
   }
 

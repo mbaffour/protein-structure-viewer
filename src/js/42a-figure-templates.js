@@ -125,6 +125,9 @@
   root.querySelector('#gpv-template-delete').addEventListener('click', () => {
     const name = root.querySelector('#gpv-template-list').value;
     if (!name) return;
+    /* A stored template is gone for good once deleted — it is not part of the undo history — and the
+       button sits beside Apply, so it asks first. */
+    if (!window.confirm('Delete the figure template "' + name + '"? This cannot be undone.')) return;
     writeJson(figureTemplateKey, figureTemplates().filter(item => item.name !== name));
     renderFigureTemplates('');
     announce('Template "' + name + '" deleted');

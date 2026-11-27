@@ -69,9 +69,18 @@
     return { id: nextPanelId++, entryId, element: null, stage: null, label: null, viewer: null, model: null, observer: null };
   }
 
+  /* The next model without a panel. Only the first panel may repeat the primary's model (a single
+     model compared with itself); past that, a model already in a panel is not offered again, and
+     Add panel is disabled — it used to add syn_c a second time when the models ran out. */
   function defaultPanelEntry() {
     const taken = new Set([Number(root.querySelector('#gpv-left-model').value), ...comparePanels.map(panel => panel.entryId)]);
-    return structures.find(entry => !taken.has(entry.id)) || structures[structures.length - 1] || null;
+    return structures.find(entry => !taken.has(entry.id)) || (comparePanels.length ? null : structures[structures.length - 1]) || null;
+  }
+  function renderAddPanelButton() {
+    const button = root.querySelector('#gpv-add-panel');
+    const full = comparePanels.length >= maxComparePanels; const none = Boolean(structures.length) && !full && !defaultPanelEntry();
+    button.disabled = !structures.length || full || none;
+    button.title = none ? 'Every loaded model already has a panel' : '';
   }
 
   function addComparePanel(entryId = null) {
@@ -128,7 +137,7 @@
       const row = document.createElement('div'); row.className = 'gpv-entry gpv-panel-row';
       const name = document.createElement('span'); name.className = 'gpv-entry-score'; name.textContent = 'Panel ' + (index + 2);
       const select = document.createElement('select'); select.className = 'form-select'; select.setAttribute('aria-label', 'Model shown in panel ' + (index + 2));
-      structures.forEach(entry => select.append(new Option((entry.collection ? entry.collection + ' › ' : '') + displayName(entry), String(entry.id))));
+      structures.forEach(entry => select.append(new Option((entry.collection && !displayName(entry).startsWith(entry.collection + ' › ') ? entry.collection + ' › ' : '') + displayName(entry), String(entry.id))));
       select.value = String(panel.entryId);
       select.disabled = !structures.length;
       select.addEventListener('change', () => {
@@ -141,7 +150,7 @@
       row.append(name, select, remove);
       list.append(row);
     });
-    root.querySelector('#gpv-add-panel').disabled = !structures.length || comparePanels.length >= maxComparePanels;
+    renderAddPanelButton();
     root.querySelector('#gpv-clear-panels').disabled = !comparePanels.length;
   }
 
@@ -195,10 +204,7 @@
       }
       if (typeof secondary.removeAllSurfaces === 'function') secondary.removeAllSurfaces();
       panel.model = secondary.addModel(target.text, target.format);
-      panel.model.selectedAtoms({}).forEach((atom, atomIndex) => {
-        const source = target.atoms[atomIndex];
-        if (source) { atom.x = source.x; atom.y = source.y; atom.z = source.z; }
-      });
+      adoptEntryAtoms(panel.model.selectedAtoms({}), target);
       applyModelStyle(panel.model, target, secondary);
       drawOverlays(secondary, new Set([target.id]), { width: panel.stage.clientWidth, height: panel.stage.clientHeight }, false);
       const background = backgroundSpec();
@@ -228,7 +234,7 @@
   }
 
   function restoreCoordinates(shouldRender = true) {
-    structures.forEach(entry => { entry.deviations = null; entry.alignedPairs = null; });
+    structures.forEach(entry => { entry.deviations = null; entry.alignedPairs = null; entry.superposed = false; });
     ensembleSpread = null;
     structures.filter(entry => entry.model).forEach(entry => entry.atoms.forEach((atom, index) => {
       const original = entry.originalAtoms[index];
@@ -253,9 +259,12 @@
     return total.map(value => value / points.length);
   }
 
+  /* By chain, residue number and insertion code: 57A pairs with 57A. Keyed by number alone, 57, 57A and
+     57B were one key and the last of them stood in for all three. A calcium ion is not a Cα. */
   function identifierPairs(reference, target) {
-    const referenceMap = new Map(reference.atoms.filter(atom => atom.atom === 'CA').map(atom => [(atom.chain || '') + '|' + atom.resi, atom]));
-    const pairs = target.atoms.filter(atom => atom.atom === 'CA' && referenceMap.has((atom.chain || '') + '|' + atom.resi)).map(atom => [referenceMap.get((atom.chain || '') + '|' + atom.resi), atom]);
+    const alpha = atom => atom.atom === 'CA' && !atom.hetflag;
+    const referenceMap = new Map(reference.atoms.filter(alpha).map(atom => [residueCodeTag(atom), atom]));
+    const pairs = target.atoms.filter(atom => alpha(atom) && referenceMap.has(residueCodeTag(atom))).map(atom => [referenceMap.get(residueCodeTag(atom)), atom]);
     return { pairs, method: 'chain/residue IDs', identity: null, chainPairs: null };
   }
 
@@ -265,12 +274,17 @@
     SEC: 'U', PYL: 'O', ASX: 'B', GLX: 'Z'
   };
 
+  /* Each chain's Cα atoms with their one-letter codes, for the sequence-aware pairings and the ipSAE
+     pooling (17a). A calcium ion is a HETATM atom named CA: as an "X residue" it paired with the other
+     model's ion and entered the fit, the RMSD and the identity as a Cα pair. A modified residue bonded
+     into its chain (TPO, MSE) has had its hetflag cleared (03b), so it stays, and it reads its parent's
+     letter, as the strip and the FASTA write it — as X it mis-scored against its own copy. */
   function residueChains(entry) {
     const chains = new Map();
-    entry.atoms.filter(atom => atom.atom === 'CA').forEach(atom => {
+    entry.atoms.filter(atom => atom.atom === 'CA' && !atom.hetflag).forEach(atom => {
       const chain = atom.chain || '';
       if (!chains.has(chain)) chains.set(chain, []);
-      chains.get(chain).push({ atom, letter: aminoAcids[String(atom.resn || '').toUpperCase()] || 'X' });
+      chains.get(chain).push({ atom, letter: residueLetter(atom.resn) });
     });
     return chains;
   }
@@ -397,6 +411,9 @@
     const named = parts.length > 1;
     const chain = named ? parts[0].trim() : (/^[A-Za-z][A-Za-z0-9]{0,3}$/.test(value) ? value : '');
     const rangeText = named ? parts.slice(1).join(':').trim() : (chain ? '' : value);
+    /* A part that cannot be read refuses the region, as Selections and Domains do, rather than fitting
+       on the parts that could be. */
+    if (rangeText && unreadableRangePart(rangeText) !== null) return null;
     const residues = rangeText ? new Set(parseResidueRange(rangeText)) : null;
     if (chain && !rangeText) return { chain, residues: null, label: 'chain ' + chain };
     if (!residues || !residues.size) return null;
@@ -467,6 +484,8 @@
       atom.z = transformed[2] + referenceCenter[2];
     });
     target.deviations = new Map();
+    /* Moved off its own coordinates: Restore coordinates has something to put back. */
+    target.superposed = true;
     /* The pairing this fit used, kept as reference residue tag → the target's own atom: the
        correspondence behind every deviation, and what Compare this position looks a residue up
        through when the two models number their residues differently. */
@@ -479,8 +498,8 @@
       const dy = pair[0].y - pair[1].y;
       const dz = pair[0].z - pair[1].z;
       const distance = Math.sqrt(dx * dx + dy * dy + dz * dz);
-      target.deviations.set(residueTag(pair[1]), distance);
-      const tag = residueTag(pair[0]);
+      target.deviations.set(residueCodeTag(pair[1]), distance);
+      const tag = residueCodeTag(pair[0]);
       if (!target.alignedPairs.has(tag)) target.alignedPairs.set(tag, pair[1]);
       reference.deviationSamples.set(tag, [...(reference.deviationSamples.get(tag) || []), distance]);
       if (!fitSet || fitSet.has(pair[1])) fitSquaredError += dx * dx + dy * dy + dz * dz;
@@ -489,9 +508,17 @@
     return {
       count: pairs.length, rmsd: Math.sqrt(squaredError / pairs.length),
       fitCount: fitPairs.length, fitRmsd: Math.sqrt(fitSquaredError / fitPairs.length), fitRegion,
-      method: pairing.method, identity: pairing.identity, chainPairs: pairing.chainPairs, name: target.name, reference: reference.name
+      method: pairing.method, identity: pairing.identity, chainPairs: pairing.chainPairs, name: target.name, reference: reference.name,
+      entryId: target.id, referenceId: reference.id
     };
   }
+
+  /* Unrelated proteins superpose too — 5CHA onto 1BRS gives 34 Å over 368 pairs at 31 % identity — and
+     nothing else on screen says the numbers mean nothing. */
+  function alignmentCaution(result) {
+    return result.rmsd > 10 || (result.identity !== null && result.identity < 0.3);
+  }
+  const alignmentCautionText = 'low identity / large RMSD — these models may not be comparable';
 
   function renderAlignmentResults() {
     const wrap = root.querySelector('#gpv-alignment-wrap');
@@ -503,13 +530,19 @@
     body.replaceChildren();
     alignmentResults.forEach(result => {
       const row = document.createElement('tr');
-      const values = [result.name, result.reference, String(result.count), result.identity === null ? '—' : (result.identity * 100).toFixed(1) + '%', result.rmsd.toFixed(3), result.fitRegion ? result.fitRegion + ' · ' + result.fitCount + ' Cα' : 'all matched', result.fitRmsd.toFixed(3), result.method + (result.chainPairs ? ' · ' + result.chainPairs : '')];
+      /* Models by the names they have now (a rename after aligning used to leave the file name), and a
+         model hidden since is dimmed: the row describes a superposition the view no longer shows. */
+      const target = entryById(result.entryId); const reference = entryById(result.referenceId);
+      const caution = alignmentCaution(result); const hidden = Boolean(target && !target.visible);
+      const values = [target ? displayName(target) : result.name, reference ? displayName(reference) : result.reference, String(result.count), result.identity === null ? '—' : (result.identity * 100).toFixed(1) + '%', result.rmsd.toFixed(3), result.fitRegion ? result.fitRegion + ' · ' + result.fitCount + ' Cα' : 'all matched', result.fitRmsd.toFixed(3), result.method + (result.chainPairs ? ' · ' + result.chainPairs : '') + (caution ? ' · ' + alignmentCautionText : '') + (hidden ? ' · hidden since — Align visible to update' : '')];
       values.forEach((value, index) => {
         const cell = document.createElement(index < 2 ? 'th' : 'td');
         cell.textContent = value;
         if ((index >= 2 && index <= 4) || index === 6) cell.className = 'text-end';
         row.append(cell);
       });
+      if (caution) row.classList.add('is-caution');
+      if (hidden) row.style.opacity = '0.5';
       body.append(row);
     });
   }
@@ -530,6 +563,8 @@
     const referenceId = Number(root.querySelector('#gpv-reference').value);
     const reference = entryById(referenceId);
     if (!reference) return;
+    /* One shown model has nothing to be superposed on; say that rather than blame the matching. */
+    if (!visibleEntries().some(entry => entry !== reference)) { announce('Show at least two models to align', 'error'); return; }
     const done = setBusy('Aligning…');
     const failures = [];
     const ready = entry => {
@@ -577,7 +612,9 @@
     if (results.length) {
       const averageRmsd = mean(results.map(result => result.rmsd));
       const identities = results.map(result => result.identity).filter(value => value !== null);
-      announce('Aligned ' + results.length + ' model' + (results.length === 1 ? '' : 's') + (results[0].fitRegion ? ' on ' + results[0].fitRegion + ' · mean fitted RMSD ' + mean(results.map(result => result.fitRmsd)).toFixed(2) + ' Å' : '') + ' · mean Cα RMSD ' + averageRmsd.toFixed(2) + ' Å over all matched pairs' + (identities.length ? ' · mean identity ' + (mean(identities) * 100).toFixed(1) + '%' : ''));
+      const doubtful = results.filter(alignmentCaution);
+      announce('Aligned ' + results.length + ' model' + (results.length === 1 ? '' : 's') + (results[0].fitRegion ? ' on ' + results[0].fitRegion + ' · mean fitted RMSD ' + mean(results.map(result => result.fitRmsd)).toFixed(2) + ' Å' : '') + ' · mean Cα RMSD ' + averageRmsd.toFixed(2) + ' Å over all matched pairs' + (identities.length ? ' · mean identity ' + (mean(identities) * 100).toFixed(1) + '%' : '')
+        + (doubtful.length ? ' · caution: ' + alignmentCautionText + ' (' + clipText(doubtful.map(result => { const entry = entryById(result.entryId); return entry ? displayName(entry) : result.name; }).join(', '), 60) + ')' : ''));
     } else announce('No model had at least three matching Cα atoms to align on', 'error');
   }
 
@@ -624,6 +661,16 @@
       if (again && again.rmsd <= best.rmsd) best = again;
     }
     return best;
+  }
+  /* The matrix names the models it was computed over. Once a model is hidden, shown, added or
+     renamed it no longer describes the view, and the legend, methods text and composite would go on
+     quoting it, so it is dropped (updateStatus runs after every such change). */
+  function dropStaleRmsdMatrix() {
+    if (!rmsdMatrix) return;
+    const names = structures.filter(entry => entry.visible && entry.model).map(displayName);
+    if (names.join('\n') === rmsdMatrix.names.join('\n')) return;
+    rmsdMatrix = null; renderRmsdMatrix();
+    if (typeof renderCompositeControls === 'function') renderCompositeControls();
   }
   function computeRmsdMatrix() {
     if (typeof numeric === 'undefined' || typeof numeric.svd !== 'function') { announce('The matrix needs the numeric.js library, which did not load. Reload the page and try again.', 'error'); return; }
@@ -795,9 +842,11 @@
     }
     if (restoreMotion !== null) return;
     /* The video records the stage canvas itself, so the on-screen ring around the active label
-       would be in every frame of it — and so would the selected residue's marker. */
-    clearSelectedResidue();
-    clearActiveText();
+       would be in every frame of it — and so would the selected residue's marker. The marker is
+       hidden rather than the residue deselected, which would turn distance colouring grey. */
+    cancelMeasureTo(false);
+    clearActiveText(false);
+    markerHiddenForVideo = true; rebuildOverlays();
     const button = root.querySelector('#gpv-video');
     const duration = Number(root.querySelector('#gpv-video-length').value) || 5;
     const stream = canvas.captureStream(30);
@@ -807,6 +856,7 @@
     recorder.ondataavailable = event => { if (event.data.size) chunks.push(event.data); };
     recorder.onstop = () => {
       viewer.spin(false);
+      markerHiddenForVideo = false; rebuildOverlays();
       stream.getTracks().forEach(track => track.stop());
       const url = URL.createObjectURL(new Blob(chunks, { type: 'video/webm' }));
       const link = document.createElement('a');
@@ -956,17 +1006,25 @@
   function sceneOverlays(keep = () => true) {
     const kept = record => keep(record.entryId);
     const keptPoints = record => record.points.every(point => keep(point.entryId));
-    const point = item => ({ model: nameOf(item.entryId), chain: item.chain, resi: item.resi, atom: item.atom, index: item.index });
+    /* A residue's insertion code is written only when it has one, so scenes without insertion codes
+       read exactly as before and older viewers ignore the field. */
+    const icodeOf = item => { const icode = insertionCodeOf(item); return icode ? { icode } : {}; };
+    const point = item => ({ model: nameOf(item.entryId), chain: item.chain, resi: item.resi, ...icodeOf(item), atom: item.atom, index: item.index });
+    /* An offset Separate labels chose is written as such (`autoPlaced`), so after a scene, a session or
+       a share link the next Separate labels may still move it; without the flag it read as placed by
+       hand and stayed put. Only with an offset: the flag means nothing on a label at its residue. */
     return {
-      labels: labelRecords.filter(kept).map(label => ({ model: nameOf(label.entryId), chain: label.chain, resi: label.resi, atom: label.atom, text: label.text, color: label.color, size: label.size, ...(label.kind === 'domain' || label.kind === 'position' ? { kind: label.kind } : {}), ...(labelOffsetLength(label) ? { offset: label.offset } : {}) })),
-      selections: selectionRecords.filter(kept).map(record => ({ model: nameOf(record.entryId), chain: record.chain, residues: record.residues, action: record.action, color: record.color })),
-      measurements: measurementRecords.filter(keptPoints).map(record => ({ type: record.type, points: record.points.map(point) })),
+      labels: labelRecords.filter(kept).map(label => ({ model: nameOf(label.entryId), chain: label.chain, resi: label.resi, ...icodeOf(label), atom: label.atom, text: label.text, color: label.color, size: label.size, ...(label.kind === 'domain' || label.kind === 'position' ? { kind: label.kind } : {}), ...(labelOffsetLength(label) ? { offset: label.offset } : {}), ...(label.autoPlaced && labelOffsetLength(label) ? { autoPlaced: true } : {}) })),
+      selections: selectionRecords.filter(kept).map(record => ({ model: nameOf(record.entryId), chain: record.chain, residues: record.residues, ...(Array.isArray(record.icodes) ? { icodes: record.icodes } : {}), action: record.action, color: record.color })),
+      /* A measurement's text, value switch, offset, colour and dash only when they differ from the
+         defaults, so a scene with none of them reads exactly as it did before they existed. */
+      measurements: measurementRecords.filter(keptPoints).map(record => ({ type: record.type, points: record.points.map(point), ...(record.text ? { text: record.text } : {}), ...(record.showValue === false ? { showValue: false } : {}), ...(labelOffsetLength(record) ? { offset: record.offset } : {}), ...(record.autoPlaced && labelOffsetLength(record) ? { autoPlaced: true } : {}), ...(measurementColor(record) ? { color: record.color } : {}), ...(record.dashed === false ? { dashed: false } : {}) })),
       residueData: residueData && (residueData.scope === 'all' || keep(residueData.entryId)) ? { name: residueData.name, scale: residueData.scale, scope: residueData.scope, model: nameOf(residueData.entryId), rows: [...residueData.values.entries()].map(([key, value]) => [key.split('|')[0], Number(key.split('|')[1]), value]).concat([...residueData.byResi.entries()].map(([resi, value]) => ['', resi, value])) } : null,
       domains: domainRecords.filter(record => record.scope === 'all' || kept(record)).map(record => ({ name: record.name, color: record.color, chain: record.chain, residues: record.residues, scope: record.scope, model: nameOf(record.entryId) })),
       annotations: annotationRecords.filter(keptPoints).map(record => ({ type: record.type, text: record.text, color: record.color, size: record.size, dashed: record.dashed, corner: record.corner, offset: record.offset, distance: record.distance, dx: record.dx, dy: record.dy, points: record.points.map(point) })),
       /* Compared positions belong to no single model — they are a chain and a residue number applied
          to whatever is shown — so they survive a share link that drops some models. */
-      positions: spotlightResidues.map(spot => ({ chain: spot.chain, resi: spot.resi }))
+      positions: spotlightResidues.map(spot => ({ chain: spot.chain, resi: spot.resi, ...(insertionCodeOf(spot) ? { icode: insertionCodeOf(spot) } : {}) }))
     };
   }
 
@@ -979,6 +1037,9 @@
       color: entry.color,
       label: entry.label || '',
       hiddenChains: entry.hiddenChains || [],
+      /* Both fades, as the session writes them: applyScene sets each from the record, so a faded
+         chain left out here came back solid from every scene. */
+      fadedChains: entry.fadedChains || [],
       ...(entry.faded ? { faded: true } : {}),
       ...(entry.fetchId ? { fetch: entry.fetchId } : {})
     })));

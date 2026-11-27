@@ -66,6 +66,9 @@
     return total;
   }
 
+  /* Residues are kept as the file numbers them (100, 100A), so an antibody's 100, 100A and 100B are
+     three interface residues and three pairs, not one; keyed by number alone, a contact at 100A
+     counted once for all three, Highlight lit 100 and 100B with it and the CSV wrote "100". */
   function contactSummary(atoms, cutoff) {
     const grid = spatialGrid(atoms, cutoff);
     const limit = cutoff * cutoff;
@@ -81,8 +84,8 @@
         if (!pairs.has(key)) pairs.set(key, { chains: [first.chain || '', second.chain || ''], contacts: 0, residuePairs: new Set(), residuesA: new Set(), residuesB: new Set() });
         const record = pairs.get(key);
         record.contacts += 1;
-        record.residuePairs.add(first.resi + '|' + second.resi);
-        record.residuesA.add(first.resi); record.residuesB.add(second.resi);
+        record.residuePairs.add(residueNumber(first) + '|' + residueNumber(second));
+        record.residuesA.add(residueNumber(first)); record.residuesB.add(residueNumber(second));
       });
     });
     return [...pairs.values()].sort((a, b) => b.contacts - a.contacts);
@@ -98,7 +101,13 @@
     await afterPaint();
     try {
       if (!entry.model) materializeEntry(entry);
-      const atoms = heavyAtoms(entry);
+      /* Water is solvent, not a side of an interface. A crystal structure's waters carry the protein
+         chains' letters, so they were counted as contacts, listed as interface residues (barnase
+         "residue 241") and buried as surface: 1BRS A–D read 280 contacts and 2289 Å² where the
+         protein–protein interface is 165 and about 1550 Å². PDBePISA leaves water out of interface
+         areas the same way. Ligands and ions stay with their chain: a bound cofactor at an interface
+         is part of it, and a predicted model's ligand chain is a partner of its own. */
+      const atoms = heavyAtoms(entry).filter(atom => !isWater(atom));
       const chains = [...new Set(atoms.map(atom => atom.chain || ''))];
       if (chains.length < 2) { interfaceResults = { entryId: entry.id, cutoff, rows: [] }; renderInterfaceResults(); state.textContent = displayName(entry) + ' has a single chain — no inter-chain interface to measure.'; return; }
       const rows = contactSummary(atoms, cutoff);
@@ -134,17 +143,26 @@
       cells.forEach((value, index) => { const cell = document.createElement(index === 0 ? 'th' : 'td'); cell.textContent = value; if (index > 0) cell.className = 'text-end'; tr.append(cell); });
       const action = document.createElement('td');
       const highlight = document.createElement('button'); highlight.className = 'btn btn-ghost'; highlight.type = 'button'; highlight.textContent = 'Highlight';
+      highlight.title = 'Highlight this interface’s residues in the Annotate tab’s Highlight colour';
       highlight.addEventListener('click', () => highlightInterface(row));
       action.append(highlight); tr.append(action); body.append(tr);
     });
   }
 
+  /* A side's residues back as { resi, icode }, in residue order: 99, 100, 100A, 100B, 101. */
+  function interfaceResidueItems(residues) {
+    return [...residues].map(value => { const match = String(value).match(/^(-?\d+)(.*)$/); return match ? { resi: Number(match[1]), icode: match[2] } : { resi: Number(value), icode: '' }; })
+      .sort((a, b) => a.resi - b.resi || (a.icode < b.icode ? -1 : a.icode > b.icode ? 1 : 0));
+  }
+
   function highlightInterface(row) {
-    const entryId = interfaceResults.entryId; const color = root.querySelector('#gpv-interface-color').value;
+    /* One highlight colour for the whole viewer: Annotate's, as the contact map, the card, Near and
+       Ligand sites use. Interfaces had a colour well of its own until 2.52.0. */
+    const entryId = interfaceResults.entryId; const color = root.querySelector('#gpv-selection-color').value;
     const entry = entryById(entryId); if (!entry) return;
     remember('interface highlight');
     [[row.chains[0], row.residuesA], [row.chains[1], row.residuesB]].forEach(([chain, residues]) => {
-      selectionRecords.push({ id: nextAnnotationId++, entryId, chain, residues: [...residues].sort((a, b) => a - b), action: 'highlight', color });
+      selectionRecords.push({ id: nextAnnotationId++, entryId, chain, ...selectionResidues(interfaceResidueItems(residues)), action: 'highlight', color });
     });
     if (!entry.visible) entry.visible = true;
     renderSelectionList(); renderList(); applyStyle();
@@ -156,7 +174,7 @@
     const entry = entryById(interfaceResults.entryId);
     const quote = value => '"' + String(value).replace(/"/g, '""') + '"';
     const lines = [['model', 'chain_a', 'chain_b', 'cutoff_angstrom', 'atom_contacts', 'residue_pairs', 'interface_residues_a', 'interface_residues_b', 'buried_surface_area_A2', 'residues_a', 'residues_b'].join(',')];
-    interfaceResults.rows.forEach(row => lines.push([entry ? entry.name : '', row.chains[0], row.chains[1], interfaceResults.cutoff, row.contacts, row.residuePairs.size, row.residuesA.size, row.residuesB.size, Number.isFinite(row.bsa) ? row.bsa.toFixed(1) : '', [...row.residuesA].sort((a, b) => a - b).join(' '), [...row.residuesB].sort((a, b) => a - b).join(' ')].map(quote).join(',')));
+    interfaceResults.rows.forEach(row => lines.push([entry ? entry.name : '', row.chains[0], row.chains[1], interfaceResults.cutoff, row.contacts, row.residuePairs.size, row.residuesA.size, row.residuesB.size, Number.isFinite(row.bsa) ? row.bsa.toFixed(1) : '', interfaceResidueItems(row.residuesA).map(residueNumber).join(' '), interfaceResidueItems(row.residuesB).map(residueNumber).join(' ')].map(quote).join(',')));
     downloadBlob(lines.join('\n'), 'text/csv', 'interface-geometry.csv');
     announce('Interface CSV downloaded');
   }

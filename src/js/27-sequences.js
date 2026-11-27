@@ -3,14 +3,17 @@
   const nucleotides = { DA: 'A', DC: 'C', DG: 'G', DT: 'T', DU: 'U', A: 'A', C: 'C', G: 'G', U: 'U', I: 'I' };
   function residueLetter(resn) {
     const code = String(resn || '').toUpperCase().trim();
-    return aminoAcids[code] || nucleotides[code] || 'X';
+    /* A modified residue (TPO, MSE …) is written as its parent's letter, as the PDB's own sequence
+       records write it (03b); one with no known parent is X. */
+    const parent = modifiedResidueParents[code];
+    return aminoAcids[code] || nucleotides[code] || (parent && (aminoAcids[parent] || nucleotides[parent])) || 'X';
   }
 
   function fastaText(entries) {
     const records = [];
     entries.forEach(entry => residueRows(entry).forEach(row => {
       const sequence = row.residues.map(atom => residueLetter(atom.resn)).join('');
-      const confidence = entry.scores.length ? mean(row.residues.map(atom => Number(atom.b) || 0)) : null;
+      const confidence = entry.scores.length ? mean(row.residues.map(atom => residueConfidence(entry, atom))) : null;
       const header = '>' + displayName(entry).replace(/\s+/g, '_') + (row.chain ? '|chain_' + row.chain : '') + ' length=' + sequence.length + (confidence === null ? '' : ' mean_pLDDT=' + confidence.toFixed(1));
       records.push(header + '\n' + (sequence.match(/.{1,60}/g) || ['']).join('\n'));
     }));

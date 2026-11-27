@@ -8,11 +8,14 @@
      used (alignedPairs), not by matching chain and residue number: models from different sources
      number differently — an AlphaFold DB model keeps the initiator Met that a crystal structure's
      mature chain lacks — and pooling by number then averages each residue with its neighbour.
-     Residues present in one model only are skipped. */
+     Residues present in one model only are skipped.
+     The tag is residueCodeTag, the same one the superposition pairs by (30): keyed by number alone,
+     100, 100A and 100B were one key — the reference kept only the last of the three, and every pair
+     the alignment had made for a coded residue then matched nothing and was dropped. */
   function ensembleAgreement(reference, targets) {
     if (!reference || !targets.length) return null;
     const perTag = new Map();
-    reference.atoms.forEach(atom => { if (atom.atom === 'CA' && !atom.hetflag) perTag.set(residueTag(atom), [[atom.x, atom.y, atom.z]]); });
+    reference.atoms.forEach(atom => { if (atom.atom === 'CA' && !atom.hetflag) perTag.set(residueCodeTag(atom), [[atom.x, atom.y, atom.z]]); });
     /* model id → its own residue tag → the reference tag it was paired with; null for the reference. */
     const byEntry = new Map([[reference.id, null]]);
     targets.forEach(entry => {
@@ -21,7 +24,7 @@
         const points = perTag.get(tag);
         if (!points || atom.hetflag) return;
         points.push([atom.x, atom.y, atom.z]);
-        own.set(residueTag(atom), tag);
+        own.set(residueCodeTag(atom), tag);
       });
       byEntry.set(entry.id, own);
     });
@@ -39,8 +42,14 @@
   function agreementValue(entry, atom) {
     if (!ensembleSpread || !entry || !ensembleSpread.byEntry.has(entry.id)) return undefined;
     const pairing = ensembleSpread.byEntry.get(entry.id);
-    const tag = pairing ? pairing.get(residueTag(atom)) : residueTag(atom);
+    const tag = pairing ? pairing.get(residueCodeTag(atom)) : residueCodeTag(atom);
     return tag === undefined ? undefined : ensembleSpread.values.get(tag);
+  }
+
+  /* chain | number | insertion code, back out of the tag the values are keyed by. */
+  function agreementTagParts(tag) {
+    const [chain, resi, icode = ''] = String(tag).split('|');
+    return { chain, resi: Number(resi), icode };
   }
 
   function agreementColor(entry, atom) {
@@ -52,27 +61,38 @@
   /* The RMSF profile: per-residue Cα spread across the aligned models, one panel per chain,
      the agreement bands as stripes behind the trace so the reader sees at a glance which
      stretches the models agree on. The ensemble figure's companion to the pLDDT profile. */
-  function rmsfProfileSvg() {
+  /* `fit` lays it out for a composite cell, as plddtProfileSvg's does: no title or band key (the
+     caption and the stripes carry them), text at the figure's size. */
+  function rmsfProfileSvg(fit = null) {
     if (!ensembleSpread || !ensembleSpread.values.size) return null;
     const byChain = new Map();
-    ensembleSpread.values.forEach((value, tag) => { const [chain, resi] = tag.split('|'); if (!byChain.has(chain)) byChain.set(chain, []); byChain.get(chain).push({ resi: Number(resi), value }); });
+    ensembleSpread.values.forEach((value, tag) => { const { chain, resi, icode } = agreementTagParts(tag); if (!byChain.has(chain)) byChain.set(chain, []); byChain.get(chain).push({ resi, icode, value }); });
     const chains = [...byChain.keys()].sort(compareChains).slice(0, 12);
     if (!chains.length) return null;
-    const width = 1200; const left = 72; const right = 30; const top = 64; const rowHeight = 170; const gap = 40; const bottom = 40;
-    const height = top + chains.length * rowHeight + (chains.length - 1) * gap + bottom;
+    let k = 1; let width = 1200; let left = 72; let right = 30; let top = 64; let rowHeight = 170; let gap = 40; let bottom = 40; let axisLabel = 52;
+    if (fit) {
+      left = 50; right = 12; top = 24; gap = 30; bottom = 26; axisLabel = 40;
+      k = Math.min(fit.scale, fit.height / (top + bottom + (chains.length - 1) * gap + chains.length * 40));
+      [left, right, top, gap, bottom, axisLabel] = [left, right, top, gap, bottom, axisLabel].map(value => value * k);
+      width = fit.width; rowHeight = (fit.height - top - bottom - (chains.length - 1) * gap) / chains.length;
+    }
+    const height = fit ? fit.height : top + chains.length * rowHeight + (chains.length - 1) * gap + bottom;
     const ink = '#111827'; const muted = '#6b7280'; const grid = '#e5e7eb';
     const ceiling = Math.max(1, Math.ceil(ensembleSpread.max * 1.05 * 2) / 2);
     const parts = [];
-    const text = (x, y, value, size, anchor = 'start', weight = 400, fill = ink, extra = '') => '<text x="' + f(x) + '" y="' + f(y) + '" font-family="' + svgFont + '" font-size="' + size + '" font-weight="' + weight + '" text-anchor="' + anchor + '" fill="' + fill + '"' + extra + '>' + svgEscape(value) + '</text>';
-    parts.push('<g id="title">' + text(left, 32, (provenanceValues().title ? provenanceValues().title + ' · ' : '') + 'Per-residue Cα RMSF across ' + ensembleSpread.count + ' models', 20, 'start', 600) + '</g>');
-    parts.push('<g id="bands">');
-    let cursor = width - right; svgMeasure.font = '500 12px ' + svgFont;
-    [...agreementBands].reverse().forEach(([, color, label]) => { const labelWidth = svgMeasure.measureText(label).width; cursor -= labelWidth; parts.push(text(cursor, 34, label, 12, 'start', 500)); cursor -= 18; parts.push('<rect x="' + f(cursor) + '" y="24" width="12" height="12" rx="2" fill="' + color + '"/>'); cursor -= 16; });
-    parts.push('</g>');
+    const text = (x, y, value, size, anchor = 'start', weight = 400, fill = ink, extra = '') => '<text x="' + f(x) + '" y="' + f(y) + '" font-family="' + svgFont + '" font-size="' + f(size * k) + '" font-weight="' + weight + '" text-anchor="' + anchor + '" fill="' + fill + '"' + extra + '>' + svgEscape(value) + '</text>';
+    if (!fit) parts.push('<g id="title">' + text(left, 32, (provenanceValues().title ? provenanceValues().title + ' · ' : '') + 'Per-residue Cα RMSF across ' + ensembleSpread.count + ' models', 20, 'start', 600) + '</g>');
+    if (!fit) {
+      parts.push('<g id="bands">');
+      let cursor = width - right; svgMeasure.font = '500 12px ' + svgFont;
+      [...agreementBands].reverse().forEach(([, color, label]) => { const labelWidth = svgMeasure.measureText(label).width; cursor -= labelWidth; parts.push(text(cursor, 34, label, 12, 'start', 500)); cursor -= 18; parts.push('<rect x="' + f(cursor) + '" y="24" width="12" height="12" rx="2" fill="' + color + '"/>'); cursor -= 16; });
+      parts.push('</g>');
+    }
     const plotWidth = width - left - right;
     chains.forEach((chain, index) => {
       const y0 = top + index * (rowHeight + gap);
-      const residues = byChain.get(chain).sort((a, b) => a.resi - b.resi);
+      /* 100, 100A and 100B are three points at the same place on the axis, in their own order. */
+      const residues = byChain.get(chain).sort((a, b) => a.resi - b.resi || (a.icode < b.icode ? -1 : a.icode > b.icode ? 1 : 0));
       const minResi = residues[0].resi; const maxResi = residues[residues.length - 1].resi;
       const x = resi => left + (maxResi === minResi ? 0 : (resi - minResi) / (maxResi - minResi) * plotWidth);
       const y = value => y0 + rowHeight - Math.min(ceiling, value) / ceiling * rowHeight;
@@ -82,19 +102,20 @@
       const tickStep = ceiling <= 2 ? 0.5 : ceiling <= 5 ? 1 : ceiling <= 12 ? 2 : 5;
       for (let value = 0; value <= ceiling + 1e-9; value += tickStep) {
         parts.push('<line x1="' + f(left) + '" x2="' + f(left + plotWidth) + '" y1="' + f(y(value)) + '" y2="' + f(y(value)) + '" stroke="' + grid + '"/>');
-        parts.push(text(left - 8, y(value) + 4, String(Math.round(value * 10) / 10), 11, 'end', 400, muted));
+        parts.push(text(left - 8 * k, y(value) + 4 * k, String(Math.round(value * 10) / 10), 11, 'end', 400, muted));
       }
-      const step = [10, 20, 25, 50, 100, 200, 250, 500, 1000].find(candidate => (maxResi - minResi) / candidate <= 14) || 1000;
+      const most = fit ? Math.max(3, Math.min(14, Math.floor(plotWidth / (40 * k)))) : 14;
+      const step = [10, 20, 25, 50, 100, 200, 250, 500, 1000].find(candidate => (maxResi - minResi) / candidate <= most) || 1000;
       for (let resi = Math.ceil(minResi / step) * step; resi <= maxResi; resi += step) {
-        parts.push('<line x1="' + f(x(resi)) + '" x2="' + f(x(resi)) + '" y1="' + f(y0 + rowHeight) + '" y2="' + f(y0 + rowHeight + 4) + '" stroke="' + muted + '"/>');
-        parts.push(text(x(resi), y0 + rowHeight + 17, String(resi), 11, 'middle', 400, muted));
+        parts.push('<line x1="' + f(x(resi)) + '" x2="' + f(x(resi)) + '" y1="' + f(y0 + rowHeight) + '" y2="' + f(y0 + rowHeight + 4 * k) + '" stroke="' + muted + '"/>');
+        parts.push(text(x(resi), y0 + rowHeight + 17 * k, String(resi), 11, 'middle', 400, muted));
       }
       parts.push('<rect x="' + f(left) + '" y="' + f(y0) + '" width="' + f(plotWidth) + '" height="' + f(rowHeight) + '" fill="none" stroke="' + muted + '"/>');
-      parts.push(text(left, y0 - 8, chain ? 'Chain ' + chain : 'Chain —', 13, 'start', 600));
-      parts.push(text(left - 52, y0 + rowHeight / 2, 'RMSF (Å)', 11, 'middle', 400, muted, ' transform="rotate(-90 ' + f(left - 52) + ' ' + f(y0 + rowHeight / 2) + ')"'));
+      parts.push(text(left, y0 - 8 * k, chain ? 'Chain ' + chain : 'Chain —', fit ? 11 : 13, 'start', 600));
+      parts.push(text(left - axisLabel, y0 + rowHeight / 2, 'RMSF (Å)', 11, 'middle', 400, muted, ' transform="rotate(-90 ' + f(left - axisLabel) + ' ' + f(y0 + rowHeight / 2) + ')"'));
       const d = residues.map((item, position) => (position ? 'L' : 'M') + f(x(item.resi)) + ' ' + f(y(item.value))).join(' ');
       parts.push('<path d="' + d + ' L' + f(x(maxResi)) + ' ' + f(y(0)) + ' L' + f(x(minResi)) + ' ' + f(y(0)) + ' Z" fill="' + ink + '" fill-opacity="0.08"/>');
-      parts.push('<path d="' + d + '" fill="none" stroke="' + ink + '" stroke-width="1.8" stroke-linejoin="round"/>');
+      parts.push('<path d="' + d + '" fill="none" stroke="' + ink + '" stroke-width="' + f(1.8 * k) + '" stroke-linejoin="round"/>');
       parts.push('</g>');
     });
     return { svg: svgDocument(width, height, '#ffffff', parts.join('\n')), width, height };
@@ -118,8 +139,12 @@
   function downloadRmsfCsv() {
     if (!ensembleSpread) return;
     const rows = [['chain', 'resi', 'models', 'ca_rmsf_angstrom']];
-    [...ensembleSpread.values.entries()].sort((a, b) => compareChains(a[0].split('|')[0], b[0].split('|')[0]) || Number(a[0].split('|')[1]) - Number(b[0].split('|')[1]))
-      .forEach(([tag, value]) => rows.push([tag.split('|')[0], tag.split('|')[1], ensembleSpread.counts.get(tag), value.toFixed(3)]));
+    /* `resi` carries the insertion code where a residue has one — "100A", as the measurements CSV
+       writes it — so 100, 100A and 100B are three rows that can be told apart. */
+    [...ensembleSpread.values.entries()]
+      .map(([tag, value]) => ({ ...agreementTagParts(tag), value, tag }))
+      .sort((a, b) => compareChains(a.chain, b.chain) || a.resi - b.resi || (a.icode < b.icode ? -1 : a.icode > b.icode ? 1 : 0))
+      .forEach(row => rows.push([row.chain, row.resi + row.icode, ensembleSpread.counts.get(row.tag), row.value.toFixed(3)]));
     rows.push([]); rows.push(['# models', ensembleSpread.models.join(' | ')]);
     rows.push(['# residue numbering', ensembleSpread.models[0] + ' (reference); each model matched through its superposition pairing']);
     downloadBlob(rows.map(row => row.join(',')).join('\n'), 'text/csv', 'protein-ensemble-rmsf.csv');

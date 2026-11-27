@@ -2,10 +2,13 @@
 
   const persistedControls = [
     '#gpv-style', '#gpv-color-mode', '#gpv-projection', '#gpv-outline', '#gpv-label-style', '#gpv-background', '#gpv-background-color', '#gpv-hetero',
-    '#gpv-export-mode', '#gpv-print-width', '#gpv-print-aspect', '#gpv-print-dpi', '#gpv-print-text', '#gpv-figure-font', '#gpv-scale-bar', '#gpv-legend-position', '#gpv-image-format',
+    '#gpv-export-mode', '#gpv-print-width', '#gpv-print-custom', '#gpv-print-aspect', '#gpv-print-dpi', '#gpv-print-text', '#gpv-figure-font', '#gpv-scale-bar', '#gpv-legend-position', '#gpv-image-format',
     '#gpv-view-mode', '#gpv-order', '#gpv-alignment-mode', '#gpv-fit-scope', '#gpv-position-cutoff', '#gpv-export-size', '#gpv-export-scale',
     '#gpv-panel-columns', '#gpv-video-length', '#gpv-cycle-speed', '#gpv-speed', '#gpv-report-scope',
-    '#gpv-position-figure-deviation', '#gpv-ipsae-pae', '#gpv-ipsae-dist'
+    '#gpv-position-figure-deviation', '#gpv-ipsae-pae', '#gpv-ipsae-dist',
+    /* Depth cueing, the surface, the Okabe–Ito palette, Low confidence and the legend on exports: USAGE
+       promised these were remembered and they came back at their defaults. */
+    '#gpv-fog', '#gpv-surface', '#gpv-safe-palette', '#gpv-hide-below', '#gpv-export-legend'
   ];
 
   function savePreferences() {
@@ -38,6 +41,9 @@
     });
     root.querySelector('#gpv-cycle-value').textContent = Number(root.querySelector('#gpv-cycle-speed').value).toFixed(1) + ' s';
     root.querySelector('#gpv-speed-value').textContent = Number(root.querySelector('#gpv-speed').value).toFixed(2).replace(/0$/, '') + '×';
+    /* The palette switch is read through a flag, and depth cueing is the viewer's own setting. */
+    safePaletteOn = root.querySelector('#gpv-safe-palette').checked;
+    if (root.querySelector('#gpv-fog').checked) applyAppearance();
   }
 
   root.querySelector('#gpv-files').addEventListener('change', event => loadFiles([...event.target.files]));
@@ -95,18 +101,28 @@
   });
   root.querySelector('#gpv-projection').addEventListener('change', applyAppearance);
   root.querySelector('#gpv-outline').addEventListener('change', applyAppearance);
+  /* While a journal preset sets the controls below, their change events are its own, not hand edits. */
+  let applyingJournal = false;
   root.querySelector('#gpv-journal').addEventListener('change', event => {
     const [mm, dpi, points] = String(event.target.value || '').split('|').map(Number);
     if (!mm) return;
+    applyingJournal = true;
     const set = (selector, value) => { const control = root.querySelector(selector); if ([...control.options].some(option => option.value === String(value))) control.value = String(value); control.dispatchEvent(new Event('change', { bubbles: true })); };
     set('#gpv-export-mode', 'print');
     const width = root.querySelector('#gpv-print-width');
     if ([...width.options].some(option => option.value === String(mm))) set('#gpv-print-width', mm);
     else { root.querySelector('#gpv-print-custom').value = String(mm); set('#gpv-print-width', 'custom'); root.querySelector('#gpv-print-custom').dispatchEvent(new Event('change', { bubbles: true })); }
     set('#gpv-print-dpi', dpi); set('#gpv-print-text', points); set('#gpv-figure-font', 'Arial, Helvetica, sans-serif');
+    applyingJournal = false;
     updateExportEstimate();
     announce(event.target.selectedOptions[0].textContent + ' · ' + mm + ' mm at ' + dpi + ' dpi, ' + points + ' pt Arial');
   });
+  /* A hand edit to anything a preset set means the figure no longer follows that journal's guide, so
+     the select stops naming it. */
+  ['#gpv-export-mode', '#gpv-print-width', '#gpv-print-custom', '#gpv-print-dpi', '#gpv-print-text', '#gpv-figure-font'].forEach(selector => root.querySelector(selector).addEventListener('change', () => {
+    const journal = root.querySelector('#gpv-journal');
+    if (!applyingJournal && journal.value) journal.value = '';
+  }));
   root.querySelector('#gpv-fog').addEventListener('change', applyAppearance);
   root.querySelector('#gpv-background').addEventListener('change', applyAppearance);
   root.querySelector('#gpv-background-color').addEventListener('input', applyAppearance);
@@ -125,7 +141,7 @@
     applyModelOrder();
     renderList();
     applyStyle();
-    updateStatus('Model order updated');
+    updateStatus('Model order updated' + modelOrderNote());
   });
   root.querySelector('#gpv-source-filter').addEventListener('change', () => {
     stopCycle(); listLimit = listPageSize; renderList();
@@ -149,68 +165,45 @@
     root.querySelector('#gpv-speed-value').textContent = Number(event.target.value).toFixed(2).replace(/0$/, '') + '×';
     applyMotion();
   });
+  /* Results computed from the models Clear all removes. Model ids are never reused (nextStructureId
+     keeps counting), so none of them could attach to a new model, but their tables, buttons and the
+     sentences the legend and methods text build from them would stay. Renamed legend entries name
+     things that are gone too; chain colours are a preference and stay. */
+  const motifIdleText = root.querySelector('#gpv-motif-state').textContent;
+  function resetAnalyses() {
+    siteResults = null; renderLigandSites(null);
+    ensembleSpread = null;
+    rmsdMatrix = null; renderRmsdMatrix();
+    msaAssets = []; renderMsaState();
+    nearbyResult = null; root.querySelector('#gpv-near-copy').disabled = true;
+    root.querySelector('#gpv-motif-state').textContent = motifIdleText;
+    setFigureLabels({}); renderFigureLabels();
+  }
   root.querySelector('#gpv-clear').addEventListener('click', () => {
-    if (structures.length > 1 && !confirm('Remove all ' + structures.length + ' models, plus any labels, selections, measurements, and saved views?')) return;
-    stopCycle();
-    stopMotion();
-    dismissCanvasText();
-    cancelMeasureTo(false);
-    setBoxSelectMode(false);
-    viewer.removeAllModels();
-    viewer.removeAllLabels();
-    viewer.removeAllShapes();
-    comparePanels.forEach(destroyPanelViewer);
-    releaseExportViewer();
-    structures = [];
-    activeId = null;
-    selectedResidue = null;
-    clearHistory();
-    labelRecords = [];
-    spotlightResidues = []; positionEffect = null; renderPositionEffect(); renderPositionState();
-    domainRecords = []; domainVersion += 1;
-    residueData = null; nearbyResult = null; renderDataState();
-    selectionRecords = [];
-    measurementRecords = [];
-    measurementDraft = [];
-    measurementActive = false;
-    annotationRecords = [];
-    annotationDraft = [];
-    annotationActive = false;
-    interfaceResults = null;
-    renderInterfaceResults();
+    /* Clear all cannot be undone, so it asks whenever there is anything to lose beyond a single
+       model: work on it, saved views, or more models. */
+    const work = labelRecords.length + selectionRecords.length + measurementRecords.length + annotationRecords.length + domainRecords.length + savedViews.length;
+    if ((structures.length > 1 || work) && !confirm('Remove ' + (structures.length === 1 ? 'the model' : 'all ' + structures.length + ' models') + ' and everything made on ' + (structures.length === 1 ? 'it' : 'them') + ' — labels, selections, measurements, annotations, domains and saved views? This cannot be undone.')) return;
+    /* Emptying the page is the session's own path (12 sessionEmptyPage), which a session file takes
+       before it writes its own work over the page: the models, their records and panels, the
+       analyses made on them, the undo history and the drawing and measuring modes. What is left
+       here is what Clear all alone does — the fields and the Motion select nobody is restoring. */
+    sessionEmptyPage();
+    /* Nothing is left to turn; the Motion select says so, and S starts it again from off. */
+    root.querySelector('#gpv-motion').value = 'off';
     root.querySelector('#gpv-interface-state').textContent = '';
-    setButtonText(root.querySelector('#gpv-annotate'), 'Start drawing');
-    root.querySelector('#gpv-stage').classList.remove('is-drawing');
-    root.querySelector('#gpv-annotation-state').textContent = 'Pick a tool, start drawing, then click atoms in the main viewer.';
-    savedViews = [];
-    confidenceAssets = [];
-    interactionResults = null;
-    alignmentResults = [];
-    pendingScene = null;
-    root.querySelector('#gpv-residue').textContent = idleResidueText;
     root.querySelector('#gpv-label-text').value = '';
     root.querySelector('#gpv-position-set').value = '';
     root.querySelector('#gpv-add-label').disabled = true;
     root.querySelector('#gpv-position-compare').disabled = true;
     root.querySelector('#gpv-all-labels').checked = false;
-    root.querySelector('#gpv-side-by-side').checked = false;
-    clearComparePanels();
     root.querySelector('#gpv-model-search').value = '';
-    root.querySelector('#gpv-measure').textContent = 'Start measuring';
-    root.querySelector('#gpv-measure-state').textContent = 'Measurement mode is off.';
     root.querySelector('#gpv-source-filter').value = 'all';
     root.querySelector('#gpv-import-errors').hidden = true;
     root.querySelector('#gpv-pae-detail').textContent = 'Move over the heatmap to inspect a residue pair.';
     root.querySelector('#gpv-fetch-id').value = '';
     listLimit = listPageSize;
-    nextStructureId = 1;
     nextAnnotationId = 1;
-    renderAlignmentResults();
-    renderSelectionList();
-    renderMeasurementList();
-    renderAnnotationList();
-    renderLabelList();
-    renderSavedViews();
     renderList();
     applyStyle();
     renderComparePanels();
@@ -236,15 +229,26 @@
   root.querySelector('#gpv-label-text').addEventListener('keydown', event => { if (event.key === 'Enter') addOrEditLabel(); });
   root.querySelector('#gpv-all-labels').addEventListener('change', () => rebuildOverlays());
   root.querySelector('#gpv-labels-separate').addEventListener('click', () => {
-    remember('separate labels');
-    const result = separateLabels();
+    /* A dry run first: a press that would leave every offset as it is (a second press at the same
+       camera) moves nothing, says so and takes no undo step that would undo nothing. */
+    const preview = separateLabels({ write: false });
     /* Without a projection there is no way to know which boxes overlap; saying so beats moving
        labels on a guess. */
-    if (!result) { announce('Cannot measure the label positions yet — render the view first', 'error'); return; }
-    renderLabelList(); rebuildOverlays();
-    if (result.moved) announce(result.moved + ' label' + (result.moved === 1 ? '' : 's') + ' moved apart');
-    else if (result.blocked) announce('The labels still overlapping are ones you placed by hand — drag them, or Reset a row first');
-    else announce('Labels already clear of each other');
+    if (!preview) { announce('Cannot measure the label positions yet — render the view first', 'error'); return; }
+    const count = (number, one) => number + ' ' + one + (number === 1 ? '' : 's');
+    const still = remaining => (remaining ? ' · ' + count(remaining, 'pair') + ' still overlap' : '');
+    if (!preview.changed) {
+      if (preview.blocked) announce('The labels still overlapping are ones you placed by hand — drag them, or Reset a row first');
+      else if (preview.remaining) announce('Nothing more to move' + still(preview.remaining) + ' — zoom in, or drag them apart');
+      else announce('Labels already clear of each other');
+      return;
+    }
+    remember('separate labels');
+    const result = separateLabels();
+    renderLabelList(); renderMeasurementList(); rebuildOverlays();
+    /* "3 labels moved apart" as it has always read; measurement text it moved is counted beside them. */
+    const movedLabels = result.changedLabels || 0; const movedMeasurements = result.changedMeasurements || 0;
+    announce((movedLabels && movedMeasurements ? count(movedLabels, 'label') + ' and ' + count(movedMeasurements, 'measurement') : movedMeasurements ? count(movedMeasurements, 'measurement') : count(movedLabels, 'label')) + ' moved apart' + still(result.remaining));
   });
   root.querySelector('#gpv-clear-labels').addEventListener('click', () => {
     if (labelRecords.length) remember('clearing labels');
@@ -267,6 +271,8 @@
   root.querySelector('#gpv-screen-text').addEventListener('keydown', event => { if (event.key === 'Enter') addScreenText(); });
   root.querySelector('#gpv-clear-annotations').addEventListener('click', () => { if (annotationRecords.length) remember('clearing annotations'); annotationRecords = []; annotationDraft = []; renderAnnotationList(); rebuildOverlays(); updateStatus('Annotations cleared'); });
   root.querySelector('#gpv-measure-type').addEventListener('change', () => { measurementDraft = []; if (measurementActive) root.querySelector('#gpv-measure-state').textContent = 'Select ' + (root.querySelector('#gpv-measure-type').value === 'angle' ? 3 : 2) + ' atoms in the viewer.'; });
+  root.querySelector('#gpv-measurements-copy').addEventListener('click', copyMeasurements);
+  root.querySelector('#gpv-measurements-csv').addEventListener('click', downloadMeasurementsCsv);
   root.querySelector('#gpv-clear-measurements').addEventListener('click', () => { if (measurementRecords.length) remember('clearing measurements'); measurementRecords = []; measurementDraft = []; renderMeasurementList(); rebuildOverlays(); updateStatus('Measurements cleared'); });
   root.querySelector('#gpv-side-by-side').addEventListener('change', event => {
     stopCycle();
@@ -303,7 +309,8 @@
   root.querySelector('#gpv-color-mode').addEventListener('change', () => {
     const mode = root.querySelector('#gpv-color-mode').value;
     if (mode === 'deviation' && !alignmentResults.length) announce('Deviation colouring stays grey until you align: Compare → Align visible');
-    if (mode === 'fromresidue' && !distanceColourTarget()) announce('Click a residue first — distance colouring stays grey until a residue is selected');
+    if (mode === 'agreement' && !ensembleSpread) announce('Model agreement stays grey until you align: Compare → Align visible');
+    if (mode === 'fromresidue' && !distanceColourTarget()) announce(distanceColourHint + ' — distance colouring stays grey until a residue is selected');
   });
   root.querySelector('#gpv-interface-run').addEventListener('click', analyseInterfaces);
   root.querySelector('#gpv-interface-csv').addEventListener('click', downloadInterfaceCsv);
@@ -344,6 +351,9 @@
     try {
       const scene = JSON.parse(await file.text());
       if (scene.type !== 'protein-viewer-scene') throw new Error('Not a scene file');
+      /* A scene replaces the records, the colours and the camera an export is drawing; it waits, as a
+         file opened or fetched during one does (40). */
+      if (exportRendering()) await afterExportRenders(file.name);
       if (structures.length) await applyScene(scene);
       else { pendingScene = scene; updateStatus('Scene loaded; now add its matching structure files'); }
     } catch (error) {
@@ -377,8 +387,22 @@
     /* event.target is not always an Element (it can be the document), and a
        shortcut must never swallow a character someone is typing — including the
        "?" that opens help. */
-    const typing = target instanceof Element && (target.matches('input, select, textarea, [contenteditable]') || Boolean(target.closest('dialog[open]')));
-    if (typing && event.key !== 'Escape') return;
+    const typing = target instanceof Element && (target.matches('input:not([type=checkbox]):not([type=radio]):not([type=range]):not([type=color]):not([type=button]):not([type=file]), select, textarea, [contenteditable]') || Boolean(target.closest('dialog[open]')));
+    /* The read-only box the clipboard fallback puts text in holds nothing to type or undo: Esc closes
+       it, and ⌘Z / Ctrl+Z undoes in the app, as anywhere else outside a field. */
+    if (target instanceof Element && target.id === 'gpv-copy-fallback-text') {
+      if (event.key === 'Escape') { event.preventDefault(); root.querySelector('#gpv-copy-fallback-close').click(); updateStatus('Copy box closed'); return; }
+      if ((event.ctrlKey || event.metaKey) && !event.altKey && event.key.toLowerCase() === 'z') { event.preventDefault(); if (event.shiftKey) redo(); else undo(); return; }
+    }
+    /* A field or the help dialog owns every key it gets, Esc included: Esc there cancels a rename or
+       closes the dialog, and must not also leave full screen, Drag to select, drawing or measuring.
+       A switch, slider or colour well is not typing, so the shortcuts still work after a click on one. */
+    if (typing) return;
+    /* A key another control has already used — a tab button's or the divider's arrows — is not also a
+       shortcut; nor is an arrow, Delete or Backspace on a slider, a radio button, or inside the residue
+       card or the box popover, where it would step to another model or move the active label. */
+    if (event.defaultPrevented) return;
+    if (target instanceof Element && /^(Arrow|Delete$|Backspace$)/.test(event.key) && target.closest('input[type=range], input[type=radio], #gpv-label-editor, #gpv-box-popover')) return;
     if ((event.ctrlKey || event.metaKey) && !event.altKey && event.key.toLowerCase() === 'z') { event.preventDefault(); if (event.shiftKey) redo(); else undo(); return; }
     if (event.ctrlKey || event.metaKey || event.altKey) return;
     /* The label editor, the active label's arrows and Delete, and L come first: while a label is
@@ -393,6 +417,10 @@
       if (measurementActive) { toggleMeasurement(); return; }
       return;
     }
+    /* ← → and C change the model on show; during an export that is the model being drawn, and its
+       image and its labels would describe two different models (an export stops the cycle as it starts). */
+    const stepsModel = event.key === 'ArrowLeft' || event.key === 'ArrowRight' || (event.key.toLowerCase() === 'c' && !event.shiftKey);
+    if (stepsModel && exportRendering()) { event.preventDefault(); updateStatus('An export is rendering · the model on show changes when it has finished'); return; }
     if (event.key === 'ArrowLeft') { event.preventDefault(); stopCycle(); selectRelative(-1); return; }
     if (event.key === 'ArrowRight') { event.preventDefault(); stopCycle(); selectRelative(1); return; }
     const key = event.key.toLowerCase();

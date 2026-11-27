@@ -106,6 +106,9 @@
     const format = imageFormats[imageFormat()];
     const button = root.querySelector('#gpv-image');
     if (!button.dataset.busy) button.textContent = 'Download figure ' + format.label;
+    /* updateStatus calls this after it has set the image buttons from the page; while an export
+       renders they stay off (40). */
+    holdExportButtons();
   }
   /* toBlob falls back to PNG when a browser cannot encode the type asked for; say so rather than
      handing over a .jpg that is really a PNG. */
@@ -113,20 +116,21 @@
     return new Promise(resolve => canvas.toBlob(blob => resolve(blob), mime, quality));
   }
   async function downloadPublicationImage() {
+    const finish = beginExport(); if (!finish) return;
     const key = imageFormat(); const format = imageFormats[key];
     const button = root.querySelector('#gpv-image');
-    const plan = exportDimensions();
-    if (plan.width * plan.height > 6000000) toast('Rendering ' + plan.width + ' × ' + plan.height + ' — this can take a while and the page will not respond meanwhile.');
+    const planned = exportDimensions();
+    if (planned.width * planned.height > 6000000) toast('Rendering ' + planned.width + ' × ' + planned.height + ' — this can take a while and the page will not respond meanwhile.');
     const done = setBusy('Rendering ' + format.label + '…');
     button.dataset.busy = '1'; button.disabled = true; button.textContent = 'Rendering…';
     await afterPaint();
     try {
-      const uri = await withLegend(await renderPublicationImage(null, plan), plan);
-      const size = plan.width + ' × ' + plan.height + (plan.dpi ? ' at ' + plan.dpi + ' dpi (' + plan.mm + ' mm wide)' : '');
+      const { plan, uri } = await renderFittedFigure(planned);
+      const size = plan.width + ' × ' + plan.height + (plan.dpi ? ' at ' + plan.dpi + ' dpi (' + plan.mm + ' mm wide)' : '') + exportCapNote(plan) + scaleBarMissNote();
       if (key === 'png') {
         const blob = await pngWithDpi(uri, plan.dpi);
         downloadBlob(blob, 'image/png', exportFileName('protein-publication', plan, 'png'));
-        announce('Figure PNG downloaded · ' + size + (plan.capped ? ' · size capped for browser stability' : ''));
+        announce('Figure PNG downloaded · ' + size);
       } else if (key === 'tiff') {
         const blob = await tiffFromImage(uri, plan.dpi || 96);
         downloadBlob(blob, 'image/tiff', exportFileName('protein-publication', plan, 'tiff'));
@@ -151,7 +155,8 @@
       announce('Could not render the figure ' + format.label + ': ' + error.message, 'error');
     } finally {
       releaseExportViewer(); done();
-      delete button.dataset.busy; button.disabled = structures.length === 0; renderImageButton();
+      delete button.dataset.busy; button.disabled = structures.length === 0;
+      finish(); renderImageButton();
     }
   }
 
@@ -174,7 +179,7 @@
     applyViewStyle(target);
     if (!entry.model) materializeEntry(entry);
     const model = target.addModel(entry.text, entry.format);
-    model.selectedAtoms({}).forEach((atom, index) => { const source = entry.atoms[index]; if (source) { atom.x = source.x; atom.y = source.y; atom.z = source.z; } });
+    adoptEntryAtoms(model.selectedAtoms({}), entry);
     await applyModelStyle(model, entry, target);
     const shownIds = new Set([entry.id]);
     /* Camera first, then the overlays: this panel's labels are placed in this panel's projection,

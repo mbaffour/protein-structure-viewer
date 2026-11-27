@@ -16,12 +16,14 @@
   }
   const formatDataValue = value => Math.abs(value) >= 100 ? value.toFixed(0) : Math.abs(value) >= 10 ? value.toFixed(1) : value.toFixed(2);
 
+  /* A row whose residue number or value is not a number — an insertion-coded 100A, a blank, "n/a" —
+     is left out, and counted, so the status can say how many were. */
   function parseResidueRows(rows) {
-    const values = new Map(); const byResi = new Map();
-    rows.forEach(row => { const chain = String(row[0] || '').trim(); const resi = Number(row[1]); const value = Number(row[2]); if (!Number.isFinite(resi) || !Number.isFinite(value)) return; if (chain) values.set(chain + '|' + resi, value); else byResi.set(resi, value); });
+    const values = new Map(); const byResi = new Map(); let skipped = 0;
+    rows.forEach(row => { const chain = String(row[0] || '').trim(); const resi = Number(row[1]); const value = Number(row[2]); if (!Number.isFinite(resi) || !Number.isFinite(value)) { skipped += 1; return; } if (chain) values.set(chain + '|' + resi, value); else byResi.set(resi, value); });
     const all = [...values.values(), ...byResi.values()];
     if (!all.length) return null;
-    return { values, byResi, min: Math.min(...all), max: Math.max(...all), count: all.length };
+    return { values, byResi, min: Math.min(...all), max: Math.max(...all), count: all.length, skipped };
   }
 
   /* CSV/TSV with a residue column and a numeric value column; chain optional. Header
@@ -34,13 +36,19 @@
     const rows = lines.map(line => line.split(delimiter).map(cell => cell.trim().replace(/^"|"$/g, '')));
     const header = rows[0].map(cell => cell.toLowerCase());
     const numeric = cell => /^-?\d+(\.\d+)?(e[-+]?\d+)?$/i.test(cell || '');
-    const headerless = header.every(cell => cell === '' || numeric(cell));
+    let headerless = header.every(cell => cell === '' || numeric(cell));
     let chainCol = -1; let resiCol = -1; let valueCol = -1;
     if (!headerless) {
       chainCol = header.findIndex(cell => ['chain', 'chain_id', 'asym', 'asym_id', 'auth_asym_id', 'label_asym_id'].includes(cell));
       resiCol = header.findIndex(cell => ['resi', 'residue', 'resid', 'res', 'position', 'pos', 'site', 'resnum', 'residue_number', 'auth_seq_id', 'seq_id', 'index'].includes(cell));
       const skip = new Set(['resn', 'aa', 'residue_name', 'wt', 'wild_type', 'mutation', 'name', 'label', 'chain', 'chain_id']);
       valueCol = header.findIndex((cell, index) => index !== chainCol && index !== resiCol && !skip.has(cell) && rows.slice(1).some(row => numeric(row[index])));
+      /* "A,10,0.5" is not all numbers, so it looked like a header — but no header word was recognised
+         and it has the chain,number,number shape of a data row. Taken as a header, residue A:10 got no
+         value and nothing said a row was dropped. */
+      if (chainCol < 0 && resiCol < 0 && rows[0].length >= 3 && !numeric(rows[0][0]) && numeric(rows[0][1]) && numeric(rows[0][2])) {
+        headerless = true; chainCol = -1; valueCol = -1;
+      }
     }
     const body = headerless ? rows : rows.slice(1);
     if (resiCol < 0) { if (body[0] && body[0].length >= 3 && !numeric(body[0][0])) { chainCol = 0; resiCol = 1; valueCol = 2; } else { chainCol = -1; resiCol = 0; valueCol = 1; } }
@@ -54,8 +62,12 @@
     return { min: residueData.min, max: residueData.max === residueData.min ? residueData.min + 1 : residueData.max };
   }
 
+  /* A table names residues by number only (a 100A row is skipped as unreadable), so a residue with an
+     insertion code has no value of its own: keyed by chain and number, 100A and 100B were painted with
+     100's value, a different residue's. */
   function residueDataValue(entry, atom) {
     if (!residueData || !domainApplies(residueData, entry)) return undefined;
+    if (insertionCodeOf(atom)) return undefined;
     const key = (atom.chain || '') + '|' + atom.resi;
     if (residueData.values.has(key)) return residueData.values.get(key);
     return residueData.byResi.get(atom.resi);
@@ -75,7 +87,7 @@
     residueData = { ...table, name, scale: root.querySelector('#gpv-data-scale').value, scope: root.querySelector('#gpv-data-scope').value, entryId: entry.id };
     root.querySelector('#gpv-data-name').value = name;
     renderDataState(); applyStyle();
-    announce(name + ': ' + table.count + ' values from ' + formatDataValue(table.min) + ' to ' + formatDataValue(table.max) + (table.values.size ? '' : ' (no chain column — applied to every chain)'));
+    announce(name + ': ' + table.count + ' values from ' + formatDataValue(table.min) + ' to ' + formatDataValue(table.max) + (table.values.size ? '' : ' (no chain column — applied to every chain)') + (table.skipped ? ' · ' + plural(table.skipped, 'row') + ' skipped (residue number or value not a number)' : ''));
   }
 
   function renderDataState() {
@@ -91,7 +103,8 @@
   function downloadResidueDataCsv() {
     if (!residueData) return;
     const owner = entryById(residueData.entryId); const entry = (owner && owner.model) ? owner : activeEntry();
-    const names = new Map(); if (entry) entry.atoms.forEach(atom => { if (atom.atom === 'CA') names.set((atom.chain || '') + '|' + atom.resi, atom.resn || ''); });
+    /* The residue a row names is the one without an insertion code: 100, not whichever of 100A or 100B came last. */
+    const names = new Map(); if (entry) entry.atoms.forEach(atom => { if (atom.atom === 'CA' && !atom.hetflag && !insertionCodeOf(atom)) names.set((atom.chain || '') + '|' + atom.resi, atom.resn || ''); });
     const rows = [['chain', 'resi', 'resn', residueData.name.replace(/[^\w()\-. ]+/g, ' ').trim() || 'value']];
     const sortKey = (a, b) => compareChains(a[0], b[0]) || a[1] - b[1];
     const entries = [...residueData.values.entries()].map(([key, value]) => { const [chain, resi] = key.split('|'); return [chain, Number(resi), value]; });

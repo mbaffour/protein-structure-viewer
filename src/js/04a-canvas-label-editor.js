@@ -7,12 +7,12 @@
      link or report changes shape because of it. */
 
   /* Which piece of text the arrow keys move and Delete removes. Stored by identity — a label's
-     `key`, an annotation's `id` — rather than by object, because addOrEditLabel replaces a record
+     `key`, an annotation's or a measurement's `id` — rather than by object, because addOrEditLabel replaces a record
      with a merged copy and undo rebuilds every array from a clone: a stored reference would go on
      pointing at an object nothing draws any more. */
   let activeText = null;
-  /* { kind: 'new' | 'label' | 'annotation', entryId, atom, key, id, textKind } while the editor is
-     open; null when it is closed. */
+  /* { kind: 'new' | 'label' | 'annotation' | 'measurement', entryId, atom, key, id, textKind } while
+     the editor is open; null when it is closed. */
   let labelEditor = null;
   let labelEditorFrame = 0;
   let labelEditorHost = null;
@@ -32,6 +32,10 @@
       const record = identity.key ? labelRecords.find(label => label.key === identity.key) : labelRecords.find(label => label === identity.record);
       return record ? { kind: 'label', record } : null;
     }
+    if (identity.kind === 'measurement') {
+      const record = measurementRecords.find(item => item.id === identity.id);
+      return record ? { kind: 'measurement', record } : null;
+    }
     const record = annotationRecords.find(item => item.id === identity.id);
     return record ? { kind: record.type === 'screen' ? 'screen' : 'annotation', record } : null;
   }
@@ -47,6 +51,13 @@
   function activeLabelRecord() {
     const resolved = activeCanvasText();
     return resolved && resolved.kind === 'label' ? resolved.record : null;
+  }
+
+  /* The same for drawMeasurements: the measurement whose text the arrow keys move, ringed on the
+     main viewer alone. */
+  function activeMeasurementRecord() {
+    const resolved = activeCanvasText();
+    return resolved && resolved.kind === 'measurement' ? resolved.record : null;
   }
 
   /* A 2 px ring in the interface accent. A plain-text label has no box to ring, so it is given a
@@ -72,18 +83,22 @@
      screen pixels with y growing downward. Text attached to the structure keeps a model-space
      offset, so the screen step is turned into ångström along the camera's own right and up axes;
      a corner title keeps screen pixels. Callers take their own undo step: a drag takes one for the
-     whole gesture, a key press one per press. */
-  function nudgeCanvasText(item, dxScreen, dyScreen, perAngstrom = pixelsPerAngstrom(viewer) || 20) {
+     whole gesture, a key press one per press. The pixels per ångström are measured at the text's own
+     anchor, every move: in perspective a label nearer the camera than the model centre moves further
+     per ångström than one behind it, and measured at the centre an arrow press or a drag after Go to
+     moved the text half the distance asked. */
+  function nudgeCanvasText(item, dxScreen, dyScreen, perAngstrom = null) {
     const record = item.record;
     if (item.kind === 'screen') {
       record.dx = (record.dx || 0) + dxScreen;
       record.dy = (record.dy || 0) + dyScreen;
       return;
     }
+    const scale = perAngstrom || pixelsPerAngstrom(viewer, canvasTextPoint(item.kind, record)) || pixelsPerAngstrom(viewer) || 20;
     const view = typeof viewer.getView === 'function' ? viewer.getView() : [0, 0, 0, 0, 0, 0, 0, 1];
     const right = screenAxisInModelSpace(view, { x: 1, y: 0, z: 0 });
     const up = screenAxisInModelSpace(view, { x: 0, y: 1, z: 0 });
-    const step = 1 / perAngstrom;
+    const step = 1 / scale;
     const offset = record.offset || { x: 0, y: 0, z: 0 };
     record.offset = {
       x: offset.x + (right.x * dxScreen - up.x * dyScreen) * step,
@@ -91,11 +106,11 @@
       z: offset.z + (right.z * dxScreen - up.z * dyScreen) * step
     };
     /* Once a hand has been on it the placement is the user's, and Separate labels leaves it alone. */
-    if (item.kind === 'label') delete record.autoPlaced;
+    if (item.kind === 'label' || item.kind === 'measurement') delete record.autoPlaced;
   }
 
   function renderCanvasTextLists(kind) {
-    if (kind === 'label') renderLabelList(); else renderAnnotationList();
+    if (kind === 'label') renderLabelList(); else if (kind === 'measurement') renderMeasurementList(); else renderAnnotationList();
   }
 
   function labelEditorElement() {
@@ -106,7 +121,7 @@
     const head = document.createElement('div'); head.className = 'gpv-label-editor-head';
     const residue = document.createElement('span'); residue.className = 'gpv-label-editor-residue text-small';
     const close = document.createElement('button'); close.type = 'button'; close.className = 'btn btn-ghost gpv-label-editor-close';
-    close.textContent = '×'; close.title = 'Close (Esc)'; close.setAttribute('aria-label', 'Close the label editor');
+    close.textContent = '×'; close.title = 'Close (Esc)'; close.setAttribute('aria-label', 'Close the editor');
     head.append(residue, close);
     const input = document.createElement('input');
     input.id = 'gpv-label-editor-text'; input.className = 'form-control'; input.type = 'text'; input.maxLength = 120;
@@ -118,7 +133,10 @@
        the distances CSV (04c). */
     const card = residueCardElements();
     actions.append(commit, card.measure, card.atoms, card.contacts, card.distances, remove);
-    host.append(head, card.facts, card.list, input, actions);
+    /* A measurement's own controls (04): Name the atoms, Show value, colour, Dashed and the atoms it
+       joins. Hidden for every other kind of text. */
+    const measure = measurementEditorElement();
+    host.append(head, card.facts, card.list, input, measure, actions);
     /* Enter and Esc are the editor's own. Stopping them here keeps the page's shortcuts from also
        acting on them — Esc would otherwise leave full screen or stop a measurement as well. */
     input.addEventListener('keydown', event => {
@@ -147,8 +165,19 @@
     return Boolean(labelEditorHost && target instanceof Node && labelEditorHost.contains(target));
   }
 
+  /* One residue, one spelling, in three forms: 'short' — "GLU57 · B" — on the canvas (a label's
+     default text, the marker, the contacts list, the distance key); 'prose' — "GLU57 · chain B" —
+     where a line of text names it (the card's head, the hover readout); 'list' — "B:GLU57" — in a
+     list copied for a methods section. The number carries its insertion code. */
+  function residueName(atom, form = 'short') {
+    const name = (atom.resn || 'RES') + residueNumber(atom);
+    const chain = atom.chain || '';
+    if (form === 'list') return (chain ? chain + ':' : '') + name;
+    return name + (chain ? (form === 'prose' ? ' · chain ' : ' · ') + chain : '');
+  }
+
   function labelEditorDefaultText(atom) {
-    return (atom.resn || 'RES') + atom.resi + (atom.chain ? ' · ' + atom.chain : '');
+    return residueName(atom);
   }
 
   function locationText(chain, resi) {
@@ -157,7 +186,7 @@
 
   /* A residue picked in the viewer or the strip: a new label, or the one already on it. */
   function openLabelEditorForResidue(entry, atom) {
-    const key = residueKey(entry.id, atom.chain, atom.resi);
+    const key = residueKey(entry.id, atom.chain, atom.resi, insertionCodeOf(atom));
     const existing = labelRecords.find(label => label.key === key);
     if (existing) { openLabelEditor({ kind: 'label', entryId: entry.id, atom, key }, existing.text, describeResidue(entry, atom)); setActiveText('label', existing); return; }
     /* selectResidue has just filled the panel's field; that is the suggestion, so the panel and the
@@ -172,15 +201,17 @@
     if (item.kind === 'label') {
       const label = item.record;
       const entry = entryById(label.entryId);
-      const atom = { chain: label.chain, resi: label.resi, resn: label.resn, b: label.b, x: label.x, y: label.y, z: label.z, atom: label.atom };
-      openLabelEditor({ kind: 'label', entryId: label.entryId, atom, key: label.key, record: label }, label.text, entry ? describeResidue(entry, atom) : (label.resn || 'RES') + label.resi);
+      const atom = { chain: label.chain, resi: label.resi, icode: insertionCodeOf(label), resn: label.resn, b: label.b, x: label.x, y: label.y, z: label.z, atom: label.atom };
+      openLabelEditor({ kind: 'label', entryId: label.entryId, atom, key: label.key, record: label }, label.text, entry ? describeResidue(entry, atom) : residueName(atom, 'prose'));
+    } else if (item.kind === 'measurement') {
+      openLabelEditor({ kind: 'measurement', id: item.record.id }, String(item.record.text || ''), measurementEditorHead(item.record));
     } else {
       openLabelEditor({ kind: 'annotation', id: item.record.id, textKind: item.kind }, String(item.record.text || ''), null);
     }
     setActiveText(item.kind, item.record);
   }
 
-  /* L: the residue already selected — by a click, the strip, Go to or the arrow keys of the strip —
+  /* L: the residue already selected — by a click, the strip, its letters, or Go to —
      gets the editor without another click. */
   function openLabelEditorForSelection() {
     if (!selectedResidue) { updateStatus('Select a residue first — click it in the viewer or the sequence strip — then press L to label it'); return; }
@@ -191,18 +222,26 @@
 
   function openLabelEditor(target, text, residueLine) {
     const host = labelEditorElement();
+    /* An armed Measure to… and an open card are never both waiting: the card's own Measure to… closes
+       it before arming, and opening a card (L, a click on text) drops the arm and says so — otherwise
+       the crosshair stayed on behind the card and its Esc closed the card alone. */
+    const disarmed = cancelMeasureTo(false);
     labelEditor = target;
     const residue = host.querySelector('.gpv-label-editor-residue');
     /* Annotation text belongs to no one residue, so its editor has no residue line. */
     residue.textContent = residueLine || '';
     residue.hidden = !residueLine;
-    host.setAttribute('aria-label', residueLine ? 'Label for ' + residueLine : 'Edit annotation text');
+    const measuring = target.kind === 'measurement';
+    host.setAttribute('aria-label', measuring ? 'Text for the measurement ' + residueLine : residueLine ? 'Label for ' + residueLine : 'Edit annotation text');
     fillResidueCard(host, target, residueLine);
+    fillMeasurementEditor(host, measuring ? labelEditorRecord() : null);
     const commit = host.querySelector('#gpv-label-editor-commit');
     commit.textContent = target.kind === 'new' ? 'Label' : 'Update';
-    host.querySelector('#gpv-label-editor-remove').hidden = target.kind !== 'label';
+    host.querySelector('#gpv-label-editor-remove').hidden = target.kind !== 'label' && !measuring;
     const input = host.querySelector('#gpv-label-editor-text');
     input.maxLength = target.kind === 'annotation' ? 160 : 120;
+    input.placeholder = measuring ? 'Text before the value, e.g. H-bond' : '';
+    input.setAttribute('aria-label', measuring ? 'Measurement text' : 'Label text');
     input.value = text;
     host.hidden = false;
     positionLabelEditor();
@@ -211,6 +250,7 @@
     input.focus({ preventScroll: true });
     input.select();
     if (!labelEditorFrame) labelEditorFrame = requestAnimationFrame(followLabelEditor);
+    if (disarmed) updateStatus('Measure to… cancelled · the card is open' + (residueLine ? ' at ' + residueLine : ''));
   }
 
   /* There is no render event to listen to, and the camera moves under the editor through 3Dmol's
@@ -221,15 +261,29 @@
     if (!labelEditor) return;
     /* The text it was editing may have been removed from its row, cleared or undone. */
     if (labelEditor.kind !== 'new' && !labelEditorRecord()) { closeLabelEditor(false); return; }
+    /* A residue whose model or chain has just been hidden, or that Low confidence now cuts, is no
+       longer on screen; the card would be following nothing. */
+    if (!labelEditorResidueShown()) { closeLabelEditor(false); return; }
     positionLabelEditor();
     refreshMeasureToButton();
     labelEditorFrame = requestAnimationFrame(followLabelEditor);
+  }
+
+  function labelEditorResidueShown() {
+    const editor = labelEditor;
+    if (!editor || (editor.kind !== 'new' && editor.kind !== 'label')) return true;
+    const entry = entryById(editor.entryId);
+    if (!entry || !displayedEntries().includes(entry)) return false;
+    if ((entry.hiddenChains || []).includes(editor.atom.chain || '')) return false;
+    const threshold = entry.scores.length ? hideBelow() : 0;
+    return !(threshold && Number.isFinite(Number(editor.atom.b)) && Number(editor.atom.b) < threshold);
   }
 
   function labelEditorRecord() {
     const editor = labelEditor; if (!editor) return null;
     if (editor.kind === 'label') return labelRecords.find(label => (editor.key ? label.key === editor.key : label === editor.record)) || null;
     if (editor.kind === 'annotation') return annotationRecords.find(item => item.id === editor.id) || null;
+    if (editor.kind === 'measurement') return measurementRecords.find(item => item.id === editor.id) || null;
     return null;
   }
 
@@ -240,14 +294,14 @@
     const rect = stage.getBoundingClientRect();
     const record = labelEditorRecord();
     let point = null;
-    if (editor.kind === 'annotation') {
+    if (editor.kind === 'annotation' || editor.kind === 'measurement') {
       const item = record && draggableLabels().find(candidate => candidate.record === record);
       if (item && item.screen) return { x: item.screen.x, y: item.screen.y };
       point = item ? item.position : null;
     } else if (editor.kind === 'label' && record) point = labelPosition(record);
     /* A new label is anchored where it will be drawn — labelAnchor, the residue's Cα as a rule —
        not at whichever atom of the residue the click happened to land nearest. */
-    else point = labelAnchor({ entryId: editor.entryId, chain: editor.atom.chain || '', resi: editor.atom.resi, atom: editor.atom.atom || '', x: editor.atom.x, y: editor.atom.y, z: editor.atom.z });
+    else point = labelAnchor({ entryId: editor.entryId, chain: editor.atom.chain || '', resi: editor.atom.resi, icode: insertionCodeOf(editor.atom), atom: editor.atom.atom || '', x: editor.atom.x, y: editor.atom.y, z: editor.atom.z });
     if (!point || !Number.isFinite(point.x)) return null;
     const screen = viewer.modelToScreen(point);
     if (!screen || !Number.isFinite(screen.x) || !Number.isFinite(screen.y)) return null;
@@ -289,8 +343,11 @@
   function commitLabelEditor() {
     const editor = labelEditor; if (!editor) return;
     const text = labelEditorHost.querySelector('#gpv-label-editor-text').value.trim();
+    /* A measurement's text may be emptied: the label then reads the value alone, as it always did. */
+    if (editor.kind === 'measurement') { commitMeasurementText(text); return; }
     /* An empty commit is a cancel: a label of nothing is never created, and an existing label is
-       removed with Remove, not by emptying it. */
+       removed with Remove, not by emptying it. Annotation text has rules of its own. */
+    if (!text && editor.kind === 'annotation' && labelEditorRecord()) { commitEmptyAnnotationText(labelEditorRecord()); return; }
     if (!text) { closeLabelEditor(true); return; }
     if (editor.kind === 'new') {
       const entry = entryById(editor.entryId);
@@ -298,14 +355,14 @@
       /* The panel's own path, so a label added here is the label the panel would have added: one
          record, one undo step. If something else was selected meanwhile, re-select this residue
          first so the panel names what is being labelled. */
-      const selected = selectedResidue && residueKey(selectedResidue.entryId, selectedResidue.chain, selectedResidue.resi);
+      const selected = selectedResidue && residueKey(selectedResidue.entryId, selectedResidue.chain, selectedResidue.resi, selectedResidue.icode);
       if (selected !== editor.key) selectResidue(entry, editor.atom);
       root.querySelector('#gpv-label-text').value = text;
       addOrEditLabel();
       const record = labelRecords.find(label => label.key === editor.key);
       closeLabelEditor(true);
       if (record) setActiveText('label', record);
-      updateStatus('Label added at ' + locationText(editor.atom.chain, editor.atom.resi) + ' · arrow keys move it, Esc lets go');
+      updateStatus('Label added at ' + locationText(editor.atom.chain, residueNumber(editor.atom)) + ' · arrow keys move it, Esc lets go');
       return;
     }
     const record = labelEditorRecord();
@@ -333,7 +390,26 @@
     setActiveText(editor.textKind || 'annotation', record);
   }
 
+  /* An emptied field on annotation text: an arrow's, a line's or a marker's text is optional, and an
+     empty commit takes it away, as the row does. A callout and a corner title are their text, so they
+     keep it, and the status says how to remove them instead. */
+  function commitEmptyAnnotationText(record) {
+    if (record.type === 'callout' || record.type === 'screen') {
+      closeLabelEditor(true);
+      updateStatus((record.type === 'screen' ? 'Screen text' : 'A callout') + ' keeps its text — type new words, or Remove it from its row in Annotate');
+      return;
+    }
+    if (record.text) {
+      remember('annotation text');
+      record.text = '';
+      renderAnnotationList(); rebuildOverlays();
+      updateStatus(annotationTools[record.type].label + ' text removed');
+    }
+    closeLabelEditor(true);
+  }
+
   function removeFromLabelEditor() {
+    if (labelEditor && labelEditor.kind === 'measurement') { removeMeasurementFromEditor(); return; }
     const record = labelEditor && labelEditor.kind === 'label' ? labelEditorRecord() : null;
     if (!record) { closeLabelEditor(true); return; }
     remember('label removal');
@@ -352,13 +428,41 @@
     activeText = null;
   }
 
+  /* What a piece of canvas text is called in the status line and the undo history. */
+  function canvasTextNoun(kind) {
+    return kind === 'measurement' ? 'measurement' : kind === 'label' ? 'label' : 'annotation text';
+  }
+
+  /* The undo step a move of that text takes: "Undid measurement text move". */
+  function canvasTextMoveStep(kind) {
+    return kind === 'measurement' ? 'measurement text move' : kind === 'label' ? 'label nudge' : 'annotation text move';
+  }
+
+  /* Why the active text is drawn on no view, or null: the rows' arrows, Show and Edit already refuse a
+     measurement on a hidden model (measurementUndrawnReason, 04), and the arrow keys moved it anyway —
+     an undo step and "Measurement text moved" for text no one could see. A label on a hidden model is
+     refused the same way. */
+  function canvasTextUndrawnReason(resolved) {
+    if (resolved.kind === 'measurement') return measurementUndrawnReason(resolved.record);
+    if (resolved.kind !== 'label') return null;
+    const entry = entryById(resolved.record.entryId);
+    if (!entry) return 'Its model is no longer loaded';
+    if (displayedEntries().includes(entry)) return null;
+    if (root.querySelector('#gpv-side-by-side').checked && comparePanels.some(panel => panel.entryId === entry.id)) return null;
+    return 'Show ' + displayName(entry) + ' first — this label is not drawn while it is hidden';
+  }
+
   function nudgeActiveText(dx, dy, repeat) {
     const resolved = activeCanvasText(); if (!resolved) return;
+    const undrawn = canvasTextUndrawnReason(resolved);
+    if (undrawn) { updateStatus(undrawn); return; }
     /* Holding an arrow key is one move, not sixty undo steps. */
-    if (!repeat) remember('label nudge');
+    if (!repeat) remember(canvasTextMoveStep(resolved.kind));
     nudgeCanvasText(resolved, dx, dy);
     renderCanvasTextLists(resolved.kind);
     rebuildOverlays();
+    const noun = canvasTextNoun(resolved.kind);
+    updateStatus(noun.charAt(0).toUpperCase() + noun.slice(1) + (resolved.kind === 'measurement' ? ' text' : '') + ' moved · arrow keys move it, Shift for 1 px, Esc lets go');
   }
 
   function removeActiveText() {
@@ -370,6 +474,11 @@
       labelRecords = labelRecords.filter(label => label !== resolved.record);
       renderLabelList(); rebuildOverlays();
       updateStatus('Label removed');
+    } else if (resolved.kind === 'measurement') {
+      remember('measurement removal');
+      measurementRecords = measurementRecords.filter(item => item.id !== resolved.record.id);
+      renderMeasurementList(); rebuildOverlays();
+      updateStatus('Measurement removed');
     } else {
       remember('annotation removal');
       annotationRecords = annotationRecords.filter(item => item.id !== resolved.record.id);
@@ -387,7 +496,7 @@
       /* An armed Measure to… is the most passing state of all, so Esc drops it before anything else. */
       if (cancelMeasureTo(true)) return true;
       if (labelEditor) { closeLabelEditor(true); return true; }
-      if (activeText) { clearActiveText(); updateStatus('No label selected'); return true; }
+      if (activeText) { const kind = activeText.kind; clearActiveText(); updateStatus('No ' + canvasTextNoun(kind) + ' selected'); return true; }
       /* Then the selected residue and its marker — but only when no mode or full screen is waiting
          for this Esc: a residue is selected by nearly every click, and Esc must still leave Drag to
          select, full screen, measuring and drawing in one press, as it always has. */
@@ -399,6 +508,13 @@
     /* Arrows belong to the label only while one is active and nothing else (a tab button, say)
        has already taken the key; with nothing active ← and → still step through the models. */
     if (event.defaultPrevented || !activeCanvasText()) return false;
+    /* Enter on the selected measurement — after its row's Select, which hands the focus to the stage —
+       opens its editor, so its atoms and Name the atoms are not mouse-only. A focused button or field
+       keeps its own Enter. */
+    const resolved = activeCanvasText();
+    if (event.key === 'Enter' && resolved.kind === 'measurement' && !labelEditor && !(event.target instanceof Element && event.target.closest('button, input, select, textarea, a, summary'))) {
+      event.preventDefault(); openMeasurementEditorFromRow(resolved.record); return true;
+    }
     const step = event.shiftKey ? 1 : 8;
     const moves = { ArrowLeft: [-step, 0], ArrowRight: [step, 0], ArrowUp: [0, -step], ArrowDown: [0, step] };
     if (moves[event.key]) { event.preventDefault(); nudgeActiveText(moves[event.key][0], moves[event.key][1], event.repeat); return true; }

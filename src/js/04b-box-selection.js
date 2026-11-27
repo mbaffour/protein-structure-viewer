@@ -113,7 +113,7 @@
     selectResiduesInBox(bounds);
   }
 
-  /* Every Cα drawn on screen whose projection falls inside the rectangle, one per residue: the same
+  /* Every residue drawn on screen whose Cα (P for a nucleotide) projects inside the rectangle: the same
      projection pickAtomAt uses, so what the box encloses is what a click there would have picked.
      A hidden chain, and residues hidden under the low-confidence cut, are not drawn, so they are not
      picked; neither is a calcium ion, whose atom is also called CA. */
@@ -123,13 +123,14 @@
     displayedEntries().filter(entry => entry.model).forEach(entry => {
       const hidden = entry.hiddenChains || [];
       const cut = threshold && entry.scores.length;
-      entry.atoms.forEach(atom => {
-        if (atom.atom !== 'CA' || atom.hetflag || hidden.includes(atom.chain || '')) return;
+      /* One atom per polymer residue, as the strip has it: Cα, else P for a nucleotide. */
+      residueRows(entry).flatMap(row => row.residues).forEach(atom => {
+        if (hidden.includes(atom.chain || '')) return;
         if (cut && Number(atom.b) < threshold) return;
         const screen = viewer.modelToScreen({ x: atom.x, y: atom.y, z: atom.z });
         if (!screen || !Number.isFinite(screen.x) || !Number.isFinite(screen.y)) return;
         if (screen.x < bounds.left || screen.x > bounds.right || screen.y < bounds.top || screen.y > bounds.bottom) return;
-        const key = residueKey(entry.id, atom.chain, atom.resi);
+        const key = residueKey(entry.id, atom.chain, atom.resi, insertionCodeOf(atom));
         if (seen.has(key)) return;
         seen.add(key); picks.push({ entry, atom });
       });
@@ -149,12 +150,14 @@
     const groups = new Map();
     picks.forEach(({ entry, atom }) => {
       const id = entry.id + '|' + (atom.chain || '');
-      if (!groups.has(id)) groups.set(id, { entryId: entry.id, chain: atom.chain || '', residues: [] });
-      groups.get(id).residues.push(atom.resi);
+      if (!groups.has(id)) groups.set(id, { entryId: entry.id, chain: atom.chain || '', residues: new Map() });
+      groups.get(id).residues.set(residueNumber(atom), atom);
     });
     const color = root.querySelector('#gpv-selection-color').value;
     remember('box selection');
-    groups.forEach(group => selectionRecords.push({ id: nextAnnotationId++, entryId: group.entryId, chain: group.chain, residues: [...new Set(group.residues)].sort((a, b) => a - b), action: 'highlight', color }));
+    /* 57, 57A and 57B are three residues: a box over 57A alone highlights 57A alone. */
+    const byNumber = (a, b) => a.resi - b.resi || (insertionCodeOf(a) < insertionCodeOf(b) ? -1 : insertionCodeOf(a) > insertionCodeOf(b) ? 1 : 0);
+    groups.forEach(group => selectionRecords.push({ id: nextAnnotationId++, entryId: group.entryId, chain: group.chain, ...selectionResidues([...group.residues.values()].sort(byNumber)), action: 'highlight', color }));
     renderSelectionList(); applyStyle();
     const models = new Set(picks.map(pick => pick.entry.id)).size;
     const summary = plural(picks.length, 'residue') + ' in ' + plural(groups.size, 'chain') + ' of ' + plural(models, 'model');
@@ -259,10 +262,10 @@
     const fresh = [];
     let kept = 0;
     picks.forEach(({ entry, atom }) => {
-      const key = residueKey(entry.id, atom.chain, atom.resi);
+      const key = residueKey(entry.id, atom.chain, atom.resi, insertionCodeOf(atom));
       if (taken.has(key)) { kept += 1; return; }
       taken.add(key);
-      fresh.push({ entryId: entry.id, chain: atom.chain || '', resi: atom.resi, resn: atom.resn || 'RES', atom: atom.atom || '', x: atom.x, y: atom.y, z: atom.z, b: atom.b, key, text: labelEditorDefaultText(atom) });
+      fresh.push({ entryId: entry.id, chain: atom.chain || '', resi: atom.resi, icode: insertionCodeOf(atom), resn: atom.resn || 'RES', atom: atom.atom || '', x: atom.x, y: atom.y, z: atom.z, b: atom.b, key, text: labelEditorDefaultText(atom) });
     });
     if (!fresh.length) { updateStatus(picks.length ? 'Every one of these residues is already labelled' : 'No residues of this selection are loaded'); return 0; }
     remember(what);
@@ -281,10 +284,13 @@
     const entry = entryById(record.entryId);
     if (!entry || !entry.atoms.length) return [];
     const wanted = new Set(record.residues);
+    /* A record with insertion codes takes in exactly its residues, as it is drawn (selectionSpec): by
+       number alone a highlight of 57A labelled 57 and 57B too. One without codes keeps its old reading. */
+    const keys = Array.isArray(record.icodes) ? new Set(selectionResidueKeys(record)) : null;
     const found = new Map();
     entry.atoms.forEach(atom => {
-      if (atom.hetflag || !wanted.has(atom.resi) || (record.chain && (atom.chain || '') !== record.chain)) return;
-      const key = residueKey(entry.id, atom.chain, atom.resi);
+      if (atom.hetflag || !wanted.has(atom.resi) || (keys && !keys.has(residueNumber(atom))) || (record.chain && (atom.chain || '') !== record.chain)) return;
+      const key = residueKey(entry.id, atom.chain, atom.resi, insertionCodeOf(atom));
       const current = found.get(key);
       if (!current || (atom.atom === 'CA' && current.atom !== 'CA')) found.set(key, atom);
     });

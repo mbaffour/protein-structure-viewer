@@ -6,6 +6,7 @@ interpretation caveats see [`SCIENTIFIC-AUDIT.md`](../SCIENTIFIC-AUDIT.md).
 
 ## Contents
 
+- [Tutorials](TUTORIALS.md) — six walkthroughs, start to finish, each ending in a file
 - [Layout](#layout)
 - [Composite figure](#composite-figure)
 - [Publication checklist](#publication-checklist)
@@ -60,7 +61,17 @@ the upload card. Several archives can be dropped together.
 
 AlphaFold DB entries are resolved through the EBI API rather than by guessing a file name, so the
 current model version is always used, and the entry's predicted-aligned-error file is pulled in with
-the coordinates when it is available.
+the coordinates when it is available. A fetched model joins the view as an opened file does: it becomes
+the current model (in the synchronized multi-view, the primary panel's, and the status says so) and
+cancels an armed *Measure to…*. When the request cannot reach the server at all — offline, or blocked
+— the status says *Could not reach the PDB (1ubq) — check the network and the id* (or *AlphaFold DB*);
+an entry the server does not have says so in its own words. A file opened or fetched while a figure is
+rendering waits for the figure to finish (*Export in progress — 1brs.cif will load when it finishes*),
+so the image and its legend show the same models; so does *Load scene JSON*. Exports themselves take
+turns: while one renders the other export buttons are off, and a press that gets through is refused
+(*An export is still rendering · wait for it to finish, then press again*). An export stops *Cycle
+models* as it starts, and ← → and C do nothing until it has finished, so the image, its labels and its
+legend are all of one model.
 
 **Confidence and ranking metadata.** Drop these alongside (or inside) your models and they attach
 automatically by file-name matching:
@@ -97,12 +108,12 @@ Anything the viewer cannot interpret is skipped and reported in the red notice b
 
 | Key | Action |
 | --- | --- |
-| <kbd>←</kbd> / <kbd>→</kbd> | Previous / next model (while a label is active they move the label instead) |
+| <kbd>←</kbd> / <kbd>→</kbd> | Previous / next model, shown one at a time (while a label is active they move the label instead) |
 | <kbd>L</kbd> | Open the label editor at the selected residue |
 | <kbd>M</kbd> | *Measure to…*: the distance from the selected residue to the next residue you click — Cα–Cα, or the closest heavy atoms when the residue card's *Measure* choice says *closest atoms* |
 | <kbd>Enter</kbd> / <kbd>Esc</kbd> | In the label editor: add or update the label / close it without changes |
 | <kbd>←</kbd> <kbd>→</kbd> <kbd>↑</kbd> <kbd>↓</kbd> | Move the active label 8 px (<kbd>Shift</kbd>: 1 px) |
-| <kbd>Delete</kbd> | Remove the active label |
+| <kbd>Delete</kbd> / <kbd>Backspace</kbd> | Remove the active label (or the active measurement or annotation text) |
 | <kbd>Shift</kbd> + drag | Draw a box over the model: the residues inside are highlighted, and the popover labels them all (<kbd>Enter</kbd>) or keeps the highlight (<kbd>Esc</kbd>) |
 | <kbd>C</kbd> | Start or pause automatic cycling |
 | <kbd>F</kbd> | Fit every panel to what it displays |
@@ -115,7 +126,12 @@ Anything the viewer cannot interpret is skipped and reported in the red notice b
 | <kbd>?</kbd> | Open in-app help |
 | <kbd>Esc</kbd> | Cancel an armed *Measure to…*; close the label editor or let go of the active label; otherwise close help, leave *Drag to select*, leave full screen, or stop measuring or drawing; with none of those, clear the selected residue and its marker |
 
-Shortcuts are suppressed while you are typing in a field.
+Shortcuts are suppressed while you are typing in a text field or a select, and while the help dialog is
+open: there <kbd>Esc</kbd> only cancels the edit or closes help, and leaves full screen, *Drag to
+select*, measuring and drawing as they were. A switch, checkbox or colour well does not hold them back
+— after a click on one, <kbd>?</kbd> still opens help — and keys a control uses itself stay with it:
+the arrows of a slider, a tab button, the panel divider, the residue card and the box popover never
+also step to another model.
 
 ## Orientation
 
@@ -128,13 +144,34 @@ panel of the same model that line up exactly.
 ## Models tab
 
 - **Source** filters to one loaded archive. **Find models** filters by name or stoichiometry.
-- **View mode** switches between overlaying every shown model and displaying one at a time.
+- **View mode** switches between overlaying every shown model and displaying one at a time. A
+  structure fetched by ID joins the view in whichever mode it is in. Files you open do the same, and
+  the first model they add becomes the current one — the one shown in one-at-a-time mode — and the
+  status line names it (`Loaded 2 models from 1 source · showing hbdimer / hbdimer_model_0.cif`). A
+  second copy of a file already open is named `1brs.cif (2)`.
 - **Model order** sorts by load order, ranking score, or mean pLDDT. Models without the chosen score
-  sort last.
+  sort last. An archive's models are read only when first shown, so under mean pLDDT the ones not yet
+  viewed read *Not yet ranked*, follow the ranked models, and are counted in the status bar
+  (*· 4 not yet ranked*); show one and choose the order again to place it.
 - **Cycle models** steps through the currently filtered, visible models at the chosen interval.
-  Navigation and cycling both switch the view to one-at-a-time mode.
+  Navigation (*Current model*, ← →, Previous/Next) and cycling switch the view to one at a time; the
+  status line says so when it leaves an overlay, and the mode is remembered like a choice made in
+  *View mode*. In the synchronized multi-view they change the model in the primary panel instead.
+  Cycling needs a shown model: after **Hide all** the button is off, and the view itself says *All
+  models are hidden* with a **Show all** button.
 - Each row has its own visibility switch, mean pLDDT readout, colour picker, and remove button.
   Changing a row's colour switches the colour scheme to *Per structure* so the change is visible.
+  Models take twelve distinct colours in the order they are opened; past twelve the colours repeat
+  (the *Model* key on the view names every shown model).
+  **Remove** takes the model's labels, selections, measurements and annotations with it, closes the
+  residue card and clears the selected residue if they were on that model, drops the alignment and
+  comparison it was part of, closes any comparison panel showing it, and says *Removed …* (`· its panel
+  closed`); with no model left, *Drag to select*, measuring and drawing turn off.
+- **Clear all** removes every model and everything made on them. It cannot be undone, so it asks
+  first whenever there are two or more models, or any label, selection, measurement, annotation,
+  domain or saved view; one bare model clears at once. Analyses go with the models (ligand sites,
+  model agreement, the RMSD matrix, a loose alignment, renamed legend entries), and the next models
+  never inherit them; custom chain colours stay, as a preference.
 - Long lists are paged: **Show more** adds another 60 rows.
 
 **Display names.** **Rename** on a model row sets the name that badges, captions, the confidence
@@ -154,7 +191,10 @@ Unticking a chain hides it everywhere — viewer,
 synchronized panels, PNG and SVG exports, the surface — while the sequence strip keeps the row, dimmed
 and marked *hidden*, so you still see what is missing. **Show all chains** restores them. The line
 underneath counts ligands and ions by residue name (HEM ×4, ZN ×2 …); water is never counted. Hidden
-chains are stored in scene JSON, carried by share links, and respected by the report.
+chains are stored in scene JSON, carried by share links, and respected by the report. A file of
+ligands and ions alone has no table: the line reads *No polymer chains (ligands and ions only)*, and
+it is given no pLDDT (a file without a header is otherwise read as a prediction, as ColabFold and
+AlphaFold write none).
 
 Under the table, a line gives the **stoichiometry** (entities by identical sequence with their chains
 and lengths) and the **Cα extent** (the exact maximum Cα–Cα distance, or a lower bound marked ≥ above 6 000 residues) and **radius of gyration**, both in
@@ -176,7 +216,8 @@ shown, ligands as sticks). Nothing is locked; adjust any control afterwards.
 
 **Ligands and ions** decides how hetero groups are drawn — AlphaFold 3 ligands, cofactors, ions and
 glycans, or the ligands in an experimental structure: sticks with small spheres (default), spheres
-only, or hidden. Water is never drawn. Cartoon mode alone would hide all of them.
+only, or hidden. Water is never drawn. Cartoon mode alone would hide all of them. A modified residue bonded into its chain — a phosphothreonine or selenomethionine written as
+HETATM — is not a ligand: it is drawn, counted and written (as its parent's letter) with its chain.
 
 **Surface** adds a molecular surface — translucent or opaque — coloured by the current scheme, on top
 of the representation. Combined with *Residue charge* or *Hydrophobicity* it gives the familiar
@@ -192,7 +233,10 @@ Notes on the colour schemes:
   without confidence scores — any structure fetched from the PDB — keeps its own model colour instead,
   in the view, the strip, every export and the report, so crystallographic B-factors are never shown
   as pLDDT. A structure opened from a local file is treated as scored if its B-factor column holds
-  values, so check what an experimental file you open yourself is being coloured by.
+  values, so check what an experimental file you open yourself is being coloured by. With no scored
+  model shown, the legend under the viewport says so (*No pLDDT in 5cha.cif (experimental) — drawn in
+  the model colour*). That line is a note for you, not a key: it is not printed on exports, and the
+  publication checklist does not ask for a legend for it.
 - **Per entity** gives every chain with the same sequence one colour, so a sixty-copy capsid shows
   its two or three distinct proteins; the legend names each entity with a Greek letter and its copy
   count, chains and length (α ×60 · A, B, … · 426 aa), abbreviating with `+N more` past twenty
@@ -204,21 +248,30 @@ Notes on the colour schemes:
   the palette for that chain everywhere those surfaces read it. The
   legend under the viewport names every chain, wrapping onto as many rows as it needs; past twenty
   chains it names the first nineteen and ends with `+N more`, and the generated figure legend text
-  names them all. In overlay mode with per-structure colouring the legend names the models instead.
+  names them all. A chain switched off in Composition is not in the key. In overlay mode with
+  per-structure colouring the legend names the models instead, the same way: every model up to twenty,
+  then `+N more`.
 - **Cα deviation after alignment** colours each residue by the distance between its Cα and the
   matched residue of the reference once you have used *Align visible* (Compare tab): under 1 Å blue,
   1–2 Å green, 2–4 Å yellow, 4–8 Å orange, 8 Å and above red; residues the alignment did not match
   are grey. The reference model shows its mean deviation across the aligned models. Before an
-  alignment everything is grey and the status line says so.
+  alignment everything is grey: the status line and the legend under the viewport say to align first,
+  and, as for model agreement, that note is screen-only — an export prints no band key over grey.
 - **Distance from selected residue** colours every residue of the selected residue's model by the
   distance of its closest heavy atom to that residue (the `min_heavy_distance` of the card's
   *Distances CSV*): ≤4 Å dark blue, 4–6 Å blue, 6–10 Å light blue, 10–20 Å pale blue, over 20 Å light
-  grey; the residue itself takes the accent colour, and other models, ligands and water are grey.
+  grey (`#d1d5db`, dark enough to read on white paper); the residue itself is orange (`#f97316`, the
+  Annotate highlight colour, the same in either interface theme so an export does not depend on it),
+  and other models, ligands and water are grey.
   Click a residue first — with nothing selected everything is grey and the status says *Click a residue
-  first*; selecting another residue recolours at once. The sequence strip follows, the legend names the
+  first*, until a click answers it with *Coloured by distance from GLU57 · B*; selecting another residue recolours at once. The sequence strip follows, the legend names the
   residue (`Distance from GLU57 · B`), and the methods text gains a sentence defining the bands. Scenes,
   sessions and share links keep the scheme, but not the selection (they never have), so a restored
   scene or a saved view is grey until you click the residue again.
+- **Sequence spectrum** runs each chain from blue at its N-terminus to red at its C-terminus, by the
+  residue's place in the chain; the sequence strip and its letters are painted from the same colours,
+  and so are the HTML report's view and strip. The legend under the viewport shows the ramp
+  (*N-terminus → C-terminus, per chain*); exports carry no key for it.
 - **Residue charge**, **Hydrophobicity (Kyte–Doolittle)**, **Residue type**, **Amino acid** and
   **Secondary structure** colour by what the residue is rather than by model or confidence. Charge:
   Lys and Arg blue, His light blue (partial), Asp, Glu and nucleotides red, everything else grey.
@@ -234,7 +287,9 @@ Notes on the colour schemes:
   differently — an AlphaFold DB model with its initiator Met beside a crystal structure without it —
   are compared residue for residue; values are reported in the reference's numbering. **Download RMSF
   CSV** in the Compare tab writes the values per residue, how many models each residue was found in,
-  and the models used.
+  and the models used. Before an alignment every residue is grey: choosing the scheme says *Model
+  agreement stays grey until you align: Compare → Align visible*, and the legend under the viewport says
+  the same. Like the pLDDT note above, that line is screen-only — never printed on an export.
 - **Low confidence** hides residues below pLDDT 50 or 70 — in the viewer, in every synchronized
   panel, and in every PNG and SVG export, so a figure without disordered tails takes one click. The
   sequence strip dims the hidden residues and its title says what is hidden. The setting is stored in
@@ -242,8 +297,9 @@ Notes on the colour schemes:
 - **Transparent** background is the right choice for figures that will be composited; PNG export
   preserves the alpha channel.
 
-Appearance choices, export settings, and animation speeds are remembered in the browser between
-sessions.
+Appearance choices — style, colour scheme, projection, outline, label style, background, hetero
+groups, depth cueing, surface, the Okabe–Ito palette and *Low confidence* — export settings (the
+legend on exports included), and animation speeds are remembered in the browser between sessions.
 
 ## Annotate tab
 
@@ -251,10 +307,16 @@ sessions.
 the nearest atom within a few pixels, so a click on a cartoon ribbon lands on the closest Cα.
 Hovering shows the nearest residue in the status bar without clicking.
 
-**Go to.** Type a residue in the *Go to* field — `B:45`, `45B`, or plain `45` for any chain — and
-press **Go** or <kbd>Enter</kbd>. The residue is selected as if clicked (the label field fills in, and
+**Go to.** Type a residue in the *Go to* field — `B:45`, `B45` (as the card and the labels write
+`HIS57 · B`), `45B`, or plain `45` for any chain — and press **Go** or <kbd>Enter</kbd>. An insertion code follows the number: `H:100A`, or `100A` when the
+model has a residue 100A and no chain A (otherwise `100A` still means chain A); a plain `100` is the
+residue without one. A chain is matched as typed, ignoring case only when no chain has exactly that
+name. Residues told apart only by an insertion code — 100, 100A, 100B in Kabat-numbered antibodies —
+are separate cells in the sequence strip and keep their own labels, card and marker, from a PDB or an
+mmCIF file alike; a scene, session
+or share link records the code (`"icode": "A"`) only where there is one. The residue is selected as if clicked (the label field fills in, and
 a drawing or measurement in progress takes it as a point), the camera zooms to it, and the strip
-marks it.
+marks it. A residue card left open at another residue closes, as it does for a click on the view.
 
 **Sequence strip.** Under the viewer, each chain of the displayed model is drawn as a row of residues
 coloured by pLDDT (or by chain, when that colouring is on), with residue numbers along the bottom.
@@ -266,19 +328,24 @@ index of your annotations. In **overlay** mode the strip shows one row per displ
 active model first, so the pLDDT of competing predictions lines up residue by residue; one-at-a-time
 and side-by-side views show the active model alone. Hovering the PAE heatmap in the Confidence tab
 marks both residues of the pair on the strip in magenta. *Hide sequence* collapses it; the choice is
-remembered. Very large sets show the first twenty-four rows.
+remembered. Very large sets show the first twenty-four rows, and the strip draws at most eight models
+at once: with more shown its title says so (*first 8 of 10 models*).
 
 **Sequence letters.** Open *Sequence letters* under the strip to read each chain's one-letter
 sequence, fifty residues a line in blocks of ten with the first residue number of each line in the
 gutter. Every letter is a chip in the current colour scheme, so charge, hydrophobicity or pLDDT can be
 read residue by residue; hidden low-confidence residues are faded. Click a letter to select that
-residue (the label field fills in), and **Copy** puts the chain's sequence on the clipboard. The strip
+residue (the label field fills in), and **Copy** puts the chain's sequence on the clipboard. The
+letters are the strip's keyboard way in: each chain is one <kbd>Tab</kbd> stop, the arrow keys walk the
+letters (↑ ↓ a line of fifty, <kbd>Home</kbd> and <kbd>End</kbd> the ends) without stepping through the
+models, and <kbd>Enter</kbd> or <kbd>Space</kbd> picks the residue as a click does. The strip
 cells also print their letters when the window is wide enough for them. *Download FASTA* in the Models
 tab writes the same sequences to a file.
 
 **Undo and redo.** <kbd>Ctrl</kbd>/<kbd>⌘</kbd>+<kbd>Z</kbd> undoes the last change to labels,
 selections, measurements, or figure annotations — additions, removals, text or colour edits, nudges,
-and clears — and <kbd>Shift</kbd> with it redoes. The Undo and Redo buttons beside the residue
+and clears — as well as a model's fade, *Emphasise*, *Use medoid*, a renamed legend entry and *Colour
+by MSA*, and <kbd>Shift</kbd> with it redoes. The Undo and Redo buttons beside the residue
 readout do the same. Sixty steps are kept. Loading a scene or *Clear all* starts a fresh history.
 
 **Labels.** Click a residue in the viewer — or pick one in the sequence strip or the sequence
@@ -299,14 +366,21 @@ and appears only for a model with confidence scores; the secondary structure (α
 loop) is the one 3Dmol assigned to the Cα, and is left out for a model whose file gave it none; the
 neighbour count is the proximity tool's own count for that residue (see *Nearby residues* below) —
 residues with any heavy atom within its *Within (Å)* cutoff, 4.5 Å unless you change it — so the card
-and **Highlight nearby residues** always agree. Nothing on the card is saved.
+and **Highlight nearby residues** always agree; changing the cutoff recounts an open card and its
+contacts list. The cutoff runs from 2 to 12 Å: a value outside that is set to the nearest end, in the
+field as well as in the count. Nothing on the card is saved. The card never runs past the bottom of the view: when it
+is taller than the view (a phone, five or six panels), it scrolls; at a desktop size the contacts list
+is kept short enough that the card's buttons stay in view. It closes when its residue is no
+longer drawn — its model or chain hidden, or cut by *Low confidence*.
 
 **The residue marker.** While a residue is selected and its model is shown, a small marker on the
 view names it — `GLU57 · B · pLDDT 94.8` — in a smaller type with an accent-coloured border, so it is
 not mistaken for a label. It is screen-only: exports, comparison panels, figures, videos and the
 report never draw it, and a residue that already carries a label gets no marker. <kbd>Esc</kbd> with
 no editor open, no active label and no mode on clears the selection and the marker, and so does
-*Clear all*; while the residue's model is not the one shown, the marker is simply not drawn.
+*Clear all* or removing its model; while the residue's model is not the one shown, the marker is
+simply not drawn. A spin video hides the marker while it records but keeps the residue selected, so
+a video coloured by distance from it stays coloured.
 
 **Measure to….** The card's **Measure to…** button (or <kbd>M</kbd> for the selected residue, without
 opening the card) keeps the residue as the first point and waits for a second: the cursor turns to a
@@ -320,12 +394,17 @@ when the residues come closer than their Cα atoms do, the closest heavy-atom ap
 apart are both one click each. Clicking the same residue again measures nothing and keeps waiting;
 <kbd>Esc</kbd> cancels. The button is unavailable while measurement mode or drawing is on, whose
 clicks are already spoken for, and turning either on (or *Drag to select*) drops a waiting
-*Measure to…*.
+*Measure to…*. So does opening a card (<kbd>L</kbd>, or a click on a label): the status says *Measure
+to… cancelled*, and the crosshair goes.
 
 **Distances from this residue.** The card's **Distances CSV** button downloads the residue against
 every other residue of its model — `chain, resi, resn, ca_distance, min_heavy_distance`, the Cα–Cα
 distance and the closest approach of any two heavy atoms, both in Å — nearest first, and the status
-names the nearest residue. The residue itself is left out, so the first row is its nearest neighbour.
+names the nearest residue. A residue with an insertion code is written with it in `resi` (`57A`), so
+the columns stay the same; 57, 57A and 57B are three rows, and the card at 57A measures from 57A. For
+nucleotides `ca_distance` is the distance between their P atoms, and the status and the contacts list
+say *P–P* rather than *Cα*; an ion or a ligand atom is named by its own atom name (a calcium ion is
+`CA`, never *Cα*). The residue itself is left out, so the first row is its nearest neighbour.
 For a whole map of distances, see *Contact and distance map* in the Compare tab.
 
 **Contacts.** The neighbour count on the card (`6 residues within 4.5 Å` — a link) or the card's
@@ -334,14 +413,19 @@ tool counts — any heavy atom within the *Within (Å)* cutoff of any heavy atom
 and hetero groups never listed, so the list, the count and **Highlight nearby residues** always agree —
 nearest first by closest heavy-atom distance, with the two atoms (this residue's first) and the
 Cα–Cα distance: `ARG59 · B   2.87 Å  NH1–OD1   Cα 9.42 Å`. Every row names its chain, the residue's own
-included. About nine rows show, then the list scrolls. Hover a row (or Tab to it) and a temporary
+included. The first few rows show (about four on a desktop), then the list scrolls. Hover a row (or Tab to it) and a temporary
 label names that residue on the view — never a record, never exported. Click a row to measure it as an
-ordinary measurement (the list stays open); **Measure all** measures every row in one undo step;
+ordinary measurement (the list stays open); **Measure all** measures every row in one undo step,
+leaving out a contact already measured between the same two atoms (`10 measurements … · 10 new · 1
+already measured`) — pressed again it adds nothing and says so;
 **Highlight** makes exactly the selection *Highlight nearby residues* would make for this residue (one
-record per chain, in the highlight colour, one undo step); **Copy** puts the rows on the clipboard as
-tab-separated text (`residue, chain, resi, resn, closest_distance, closest_atoms, bond, ca_distance`,
+record per chain, in the highlight colour, one undo step; a chain already highlighted with the same
+residues in the same colour is not added again); **Copy** puts the rows on the clipboard as
+tab-separated text (where the browser refuses the clipboard, here and for *Copy measurements* and *Copy
+residue list*, the text appears selected in a read-only box under the view, ready for
+<kbd>Ctrl</kbd>/<kbd>⌘</kbd>+<kbd>C</kbd>, and **Done** closes it) (`residue, chain, resi, resn, closest_distance, closest_atoms, bond, ca_distance`,
 Å to three decimals). Residues covalently joined to this one are listed too, in their place, but
-tagged *peptide bond* (closest atoms C–N within 1.9 Å) or *disulfide* (SG–SG of two cysteines within
+tagged *peptide bond* (closest atoms C–N within 1.9 Å; the tag drops under the name when the cell is narrow) or *disulfide* (SG–SG of two cysteines within
 2.3 Å) — decided by geometry, so insertion codes and chain breaks do not mislead it — and the `bond`
 column says which. The list is worked out when you open it and forgotten when the card closes; nothing
 about it is saved.
@@ -354,19 +438,24 @@ measurement. The status then names the atoms: `HIS57 · B — SER195 · C: NE2�
 remembered with your other preferences. A click on the *Contact and distance map* always measures
 Cα–Cα, because the map is a Cα map.
 
-The label you have just added, edited or clicked is the *active* label, outlined in the accent colour
+The label you have just added, edited, clicked or dragged is the *active* label, outlined in the accent colour
 on screen (never in an export). The arrow keys move it 8 px at a time (<kbd>Shift</kbd>: 1 px),
-<kbd>Delete</kbd> removes it, and <kbd>Esc</kbd> lets go of it — after which ← and → step through the
-models again. Each row of the label list also has ← → ↑ ↓ buttons that move the label 12 px per press
+<kbd>Delete</kbd> (or <kbd>Backspace</kbd>) removes it, and <kbd>Esc</kbd> lets go of it — after which ← and → step through the
+models again. The text moves by the pixels asked at any zoom and in either projection: in perspective
+the step is measured at the label's own depth, so after *Go to* a 100 px drag is still 100 px. Each row of the label list also has ← → ↑ ↓ buttons that move the label 12 px per press
 and **Select**, which makes it the active label. On a touchscreen, tap a residue to label it and tap
 a label to edit it; use the row arrows to move it, since a finger drag turns the model.
 
-*Label every residue* annotates all Cα atoms of the current model — useful for small structures,
+*Label every residue* labels every residue of the current model at its Cα (a nucleotide at its P);
+ligands and ions — a calcium ion's atom is also called CA — are left out. Useful for small structures,
 unreadable for large ones.
 
 **Selections.** Pick a model, optionally a chain, and a residue range (`20-45`, or `20,24,31`, or a
 mix), then **Highlight** it in a chosen colour or **Hide** it. Leaving the chain blank applies the
-range to every chain.
+range to every chain. A range takes residue numbers only: one with a part that cannot be read
+(`100A-100C, 105`, or a typed `2O`) is refused and the part named, rather than kept in part; a residue
+with an insertion code, such as 100A, is selected with Shift-drag (below). Domains and the fit region
+read ranges the same way.
 
 **Selecting a region of the model.** Hold <kbd>Shift</kbd> and drag across the model: instead of
 turning, the view draws a box, and every residue whose Cα lies inside it — in every displayed model,
@@ -386,7 +475,9 @@ the sequence strip.
 one, residues `1-75` or `1-75,120-140`, a colour — and choose where it applies: **Every model from the
 same source** (the models of one AlphaFold run, which share a sequence), **This model only**, or
 **Every loaded model**. **Add domain** stores it; the list lets you rename, recolour, re-scope or
-remove it, and every change can be undone. **Colour by annotated domains** switches the colour scheme
+remove it, and every change can be undone. Removing the model a domain was added on moves a *same
+source* domain to another model of that source (per-residue data likewise), and takes a *this model
+only* domain with it. **Colour by annotated domains** switches the colour scheme
 so the domains are painted in their colours and everything else is grey; the legend under the viewer
 and on every export lists the domains by name, so a figure legend can point at "the N-lobe in blue"
 and the picture agrees. Where two definitions overlap, the earlier one wins. **Adopt PAE domains**
@@ -400,7 +491,9 @@ a chain column is optional; header names such as `resi`, `residue`, `position`, 
 dataset a name, a colour scale (viridis for sequential values, blue–white–red centred on zero for
 signed ones such as ΔΔG, white–red for densities), and a scope (this model, every model from the
 same source, every model). **Colour by data** paints the values; the legend shows five steps of the
-scale with their values; residues without a value are grey; the sequence strip follows. Datasets are
+scale with their values; residues without a value are grey; the sequence strip follows. A row whose
+residue number or value is not a number (an insertion-coded `100A`, `n/a`) is left out, and the
+announcement counts them: `… · 2 rows skipped`. Datasets are
 stored in scene JSON and share links. A CSV dropped together with the structures is read as
 per-residue data when it is not an AlphaFold ranking file.
 
@@ -416,8 +509,46 @@ list** puts `A:HIS87, A:LEU91, …` on the clipboard for a methods section.
 in the chosen colour, and the hits are listed by chain and position. Unknown residues are `X`.
 
 **Measurements.** Choose distance (two atoms) or angle (three atoms), press **Start measuring**, and
-click the atoms in the viewport. Values update as coordinates change — so aligning models updates
-the distances between them. <kbd>Esc</kbd> leaves measurement mode.
+click the atoms in the viewport — side-chain atoms too, in a model of any size: on a large model the
+click is searched among the Cα atoms first and then among every atom of the residues near the pointer — or use *Measure to…*, `M`, a contact on the residue card or a click on
+the contact and distance map. Values update as coordinates change — so aligning models updates the
+distances between them. <kbd>Esc</kbd> leaves measurement mode.
+
+A measurement is drawn as a crimson dashed line with its value at the midpoint (at the vertex for an
+angle), and its text is canvas text like a label's. Click it on the view and an editor opens at it: the
+head line names it — `Distance · HIS57 · B NE2 ↔ SER195 · C OG · 3.02 Å` — and the field takes words
+that are written before the value, so the label reads `H-bond · 3.02 Å` (empty the field and it reads the
+value alone again). **Name the atoms** puts `HIS57 · B NE2 ↔ SER195 · C OG` into the field for you;
+<kbd>Enter</kbd> or **Update** keeps it. **Show value** hides the number when the words say enough, the
+colour picker colours the line and the text together (**Default** beside it puts back the crimson line
+and plain ink text), **Dashed** makes the line solid or dashed again, and
+for a distance between two residues the **Atoms** choice joins their Cα atoms or their closest pair of
+heavy atoms — the same record, its text and colour kept, the value and head line following. A
+measurement first made between other atoms keeps *as measured* in that choice, so the atoms you clicked
+can be chosen again (for this session; a scene saves the atoms it is on). **Remove**
+deletes it. Drag the text to move it (a thin leader line in the measurement's colour leads back to the
+line once it has moved), or click **Select** in its row and use the arrow keys — 8 px a press, 1 px with
+<kbd>Shift</kbd> — and <kbd>Delete</kbd> to remove it; <kbd>Esc</kbd> lets go. Every change is one undo
+step. From the keyboard the editor opens with the row's **Edit**, or with <kbd>Enter</kbd> once **Select**
+has made the measurement active; <kbd>Tab</kbd> walks its controls and <kbd>Esc</kbd> closes it, as for
+a label.
+
+Each measurement has a row in *Measurements*: its text field, the atoms and value it joins, a colour
+and its **Default**,
+**Dashed**, **Show value**, **Show** (centres the view on it without changing the zoom), **Reset** (puts
+the text back where it started), **Remove**, the arrow buttons and **Select** a label row has, and
+**Edit**, which opens the editor. Each control is read out with the measurement it belongs to.
+<kbd>Enter</kbd> in the text field keeps the text and moves the focus to the row's **Show**, so
+<kbd>Ctrl</kbd>/<kbd>⌘</kbd>+<kbd>Z</kbd> undoes it straight away. A measurement whose model is hidden
+(One at a time shows one model), or one between two models that sit in different panels of the
+multi-view, is not drawn: its row says *not drawn* and why, and **Show**, the arrows and **Edit** say so
+instead of moving anything.
+Hovering a row draws that measurement's line thicker on the view (never in an export).
+**Copy measurements** copies every measurement as tab-separated text, and **Download measurements CSV**
+writes the same table — `type`, then `model`, `chain`, `resi`, `resn` and `atom` for each of three points
+(the third empty for a distance), `value`, `unit` and `text` — one row per measurement. A residue with
+an insertion code keeps it in `resi` (`10A`), as the row and the figure legend name it
+(`ALA10A · A CA ↔ ALA10B · A CA`).
 
 **Figure annotations.** Pick a tool, press **Start drawing**, and click atoms in the main viewer:
 an **arrow** or **line** joins two clicked atoms, a **residue marker** drops a translucent sphere on
@@ -425,7 +556,11 @@ one atom, and a **text callout** places your text on a leader line pointing away
 Choose colour, size, dashed style, and optional label text before you click. A residue clicked on the
 sequence strip or in the sequence letters counts as an atom click while drawing or measuring, so an
 arrow between residue 16 and residue 112 needs no hunting in three dimensions. **Screen text** adds a
-corner title (for panel letters or captions) that stays put while the model rotates. Annotations are
+corner title (for panel letters or captions) that stays put while the model rotates. While drawing
+or measuring (or with *Measure to…* armed), a click on a label or other text over an atom goes to the
+atom, as it would with no text there. On the canvas, emptying an arrow's, a line's or a marker's text
+and pressing <kbd>Enter</kbd> removes the text, as its row does; a callout and a corner title keep
+theirs (remove them from their row). Annotations are
 anchored to atoms, so they follow rotation and alignment, and they are drawn into publication and
 comparison PNGs, comparison panels, and the shared report. Remove any one from the list, or clear
 them all. <kbd>Esc</kbd> stops drawing.
@@ -444,7 +579,7 @@ rendered at twice the nominal size. Up to eight models and twelve chains are plo
 4.5 Å) and press **Analyse ligand sites**. Each ligand or ion group gets a row: its atom count, the
 residues with a heavy atom within the cutoff, the mean pLDDT of those residues and — when the PAE
 matrix carries AlphaFold 3 ligand tokens — the mean predicted aligned error between the ligand's tokens
-and the site's residues. **Highlight** adds the site as a selection in the interface colour; **Download
+and the site's residues. **Highlight** adds the site as a selection in Annotate's *Highlight colour*; **Download
 sites CSV** lists everything with the residue lists. Read the two numbers together: a site with high
 pLDDT but high ligand–site PAE is a well-folded pocket with an uncertain pose.
 
@@ -475,7 +610,11 @@ structural domain assignment, and it says nothing about whether that unit is pla
 
 **Align visible** superposes every visible model onto the reference using a Kabsch rotation over the
 paired Cα atoms, and reports per-model Cα pairs, sequence identity, RMSD, and the chain mapping used.
-**Restore coordinates** undoes the superposition. **Download RMSD CSV** exports the table.
+It needs two shown models, and is off until there are. A pair under 30 % identity or over 10 Å RMSD is
+aligned all the same, but the status line and its row add *low identity / large RMSD — these models
+may not be comparable*. The table names models by their current display names, and a row whose model
+has been hidden since is dimmed (*hidden since — Align visible to update*). **Restore coordinates**
+undoes the superposition, and is off while nothing is superposed. **Download RMSD CSV** exports the table.
 
 Alignment needs at least three paired Cα atoms. If nothing aligns, the models likely share no chains
 under the chosen mapping — try the sequence-aware mode.
@@ -486,8 +625,10 @@ one row, four make a 2 × 2 grid, five or six use three columns. Dragging, wheel
 rocking any panel moves them all. **Camera sync** chooses what is shared: *Rotation only* keeps each
 model framed on its own centre, which suits assemblies of different size; *Rotation and zoom* locks
 the cameras completely, which suits superposed models after **Align visible**. **Fit** (or
-<kbd>F</kbd>) refits every panel. The panel set, sync mode, and each panel's camera are stored in saved
-views and scene manifests, and the shared report opens with the same panels.
+<kbd>F</kbd>) refits every panel. **Add panel** offers the next model without a panel and is off once
+every loaded model has one; ← → and *Current model* change the primary panel. The panel set, sync
+mode, and each panel's camera are stored in saved views and scene manifests, and the shared report
+opens with the same panels.
 
 
 ### Contact and distance map
@@ -495,7 +636,10 @@ views and scene manifests, and the shared report opens with the same panels.
 At the foot of the Compare tab (called *Interface contact map* before 2.50.0). Choose two chains of
 the current model, a **cutoff** (default 4.5 Å) and whether **any heavy atom** or **Cα only** counts,
 then **Compute map**. The first chain runs down the side, the second along the top; faint lines mark
-every 10, 25, 50 or 100 residues depending on chain length.
+every 10, 25, 50 or 100 residues depending on chain length. Changing the chains, the cutoff or the
+atoms afterwards dims the map and its state line reads *Settings changed · Compute map to update*: the
+map, its CSVs and its composite panel still describe the settings they were computed with until you
+compute again.
 
 - **Which chains.** Two different chains give the interface map. The **same chain twice** gives the
   familiar square residue–residue map of one chain, symmetric about an empty diagonal (a residue is
@@ -509,15 +653,15 @@ every 10, 25, 50 or 100 residues depending on chain length.
   whichever is smaller (light) — the pairs that touch and the ones that do not. The cutoff still
   decides which pairs are contacts for the contacts CSV and **Highlight interface**.
 - **Hover** any cell to read the pair with its Cα–Cα distance, and the closest heavy-atom distance
-  when the pair is a contact: `A:GLU 57 — B:ARG 59 · Cα–Cα 9.42 Å · closest atoms 3.12 Å`, or
+  when the pair is a contact: `A:GLU57 — B:ARG59 · Cα–Cα 9.42 Å · closest atoms 3.12 Å`, or
   `… · Cα–Cα 21.70 Å · no contact within 4.5 Å`.
 - **Click** any cell to draw that distance on the model: an ordinary distance measurement between
   the two residues' Cα atoms — listed, exported, saved and undone like one made in measurement mode,
   in one undo step — with the first residue selected and the view zoomed to the pair. A distance
   between two residues that do not interact is one click away.
 
-**Highlight interface** adds one selection per chain involved (two for a pair of chains) in the
-interface colour. **Download map PNG** writes the map as shown — contacts or all distances — with
+**Highlight interface** adds one selection per chain involved (two for a pair of chains) in Annotate's
+*Highlight colour*, as every other highlight does. **Download map PNG** writes the map as shown — contacts or all distances — with
 axes, title and a distance scale in Å at 300 dpi. **Download contacts CSV** lists one row per pair in
 contact with the closest-atom distance. **Download distances CSV** lists **every** pair of the map in
 long form — `model, chain_a, resi_a, resn_a, chain_b, resi_b, resn_b, ca_distance_angstrom,
@@ -553,8 +697,10 @@ ipTM are what speak to domain and chain placement.
 **Interfaces.** Pick a model and a contact cutoff (3–6 Å, default 4) and press **Analyse
 interfaces**. For every pair of chains in contact the table lists heavy-atom contacts, residue pairs,
 interface residues on each chain, and buried surface area — the solvent-accessible area each chain
-loses on forming the pair, by Shrake–Rupley with a 1.4 Å probe and 92 points per atom. **Highlight**
-adds the interface residues of a pair as a coloured selection you can manage in the Annotate tab;
+loses on forming the pair, by Shrake–Rupley with a 1.4 Å probe and 92 points per atom. Water is left
+out (ligands and ions count with their chain). **Highlight**
+adds the interface residues of a pair as a selection in Annotate's *Highlight colour* — the one colour
+every highlight in the viewer uses — which you can manage in the Annotate tab;
 **Download interface CSV** exports the table with the residue lists. This is geometry of the model as
 loaded — it says how the prediction is packed, not whether the interaction exists — so read it next
 to the chain-pair ipTM and PAE above it.
@@ -574,7 +720,8 @@ chain pair on the interface itself, with four published scores:
 
 Choose a **PAE cutoff** (10 Å by default; the reference's AlphaFold 3 example uses 10, its
 AlphaFold 2 example and ColabFold's own scores 15) and an **interface distance** (which only changes
-the residue counts), then **Score chain pairs** for the current model or **Score all shown models**.
+the residue counts), then **Score chain pairs** for the current model or **Score all shown models**
+(which first reads any shown model of an archive you have not looked at yet).
 The table gives ipSAE with both directions, the ipTM the predictor itself reported for the pair,
 pDockQ, pDockQ2, LIS and the interface residues of each chain (PAE below the cutoff and Cβ within the
 distance). Hover the ipSAE to see which residue gives it. With two or more models scored, a second
@@ -606,7 +753,8 @@ confident interface can still be wrong, and a true one can be predicted poorly.
 
 AlphaFold 3 archives include, under `msas/`, the unpaired multiple sequence alignment for each
 entity as an `.a3m` file. The viewer keeps these when the archive is opened (an `.a3m` can also be
-added on its own with *Add structures*), and **Colour by MSA** maps the alignment's per-column
+added on its own with **Choose model files**, and then serves every model — fetched, unzipped or opened as
+a file — with the import line saying *Alignment added*), and **Colour by MSA** maps the alignment's per-column
 statistic onto every chain whose sequence matches the alignment's query. Three statistics:
 **conservation**, 1 − H/log₂20 where H is the Shannon entropy of the amino-acid distribution at the
 column with gaps and X excluded (1 = one residue everywhere, 0 = uniform). By default the entropy uses
@@ -635,17 +783,27 @@ the estimate line gives the pixel dimensions and the physical size, the PNG carr
 file (a `pHYs` chunk, which is what journal figure checkers read), and every residue label, callout,
 measurement value, legend and caption is drawn so its text prints at the chosen point size. The
 **figure font** (Arial/Helvetica by default, Times, or the system font) applies to all of them and to
-SVG text. **Download publication TIFF** writes a baseline uncompressed RGBA TIFF with the resolution
-set; it is large (about 4 bytes per pixel) but it is what some journals ask for. The PNG is rendered
-off-screen at full resolution, independent of your window size. Very large requests are capped at roughly 24 megapixels
-for browser stability, and the status line says when that happened.
+SVG text. **Figure format → TIFF** makes the download button write a baseline uncompressed RGBA TIFF
+with the resolution set instead of a PNG; it is large (about 4 bytes per pixel) but it is what some
+journals ask for. The PNG is rendered off-screen at full resolution, independent of your window size,
+and the file is exactly the size the estimate states, legend or not. Very large requests are capped at roughly 24 megapixels for browser
+stability, and at the largest canvas your graphics card can draw (often 8192 px a side, which 3Dmol's
+doubled drawing resolution reaches at 178 mm and 600 dpi). A capped print figure keeps its width and
+gives up resolution — the estimate and the status line say `rendered at 584 dpi, the most this GPU
+allows for 178 mm`, and that dpi is the one written into the file, so it still prints 178 mm wide. If
+the browser then allows the canvas less than the card reports, the figure is drawn once more at what it
+allows and later estimates fit under it; a render that would still pass the limit says so and saves
+nothing.
 
 Rendering is one long synchronous WebGL call, so the page stops responding while it runs — expect a
 few seconds on a machine with a real GPU and considerably longer without one. A warning appears above
 6 megapixels. If you only need a figure for a slide, 1× scale is four times faster than 2×.
 
 **Copy PNG to clipboard** renders the same publication figure and places it on the clipboard, so a
-figure goes into a slide or a manuscript draft without a file in between. Chrome and Edge support
+figure goes into a slide or a manuscript draft without a file in between. It is rendered the way the
+download is — inside the GPU's limit, and once more at the size the browser allowed if it gave the
+canvas less — and the status states the size copied (`Figure copied to the clipboard · 1004 × 669 at
+300 dpi (85 mm wide)`), with the same *rendered at … dpi, the most this GPU allows* when it was lowered. Chrome and Edge support
 image clipboard writes; Firefox and Safari may refuse, in which case the viewer says so and the
 download remains.
 
@@ -666,6 +824,8 @@ and the settings; **Download matrix PNG** and **SVG** draw the heat map at the o
 the values in the cells and a colour bar, and the same panel can be ticked into the composite figure.
 The **Mean** column gives each model's mean RMSD to the others and ★ marks the **medoid**, the
 model closest to all the rest — usually the one to show, and not necessarily the top-ranked one.
+Hiding, showing, adding, removing or renaming a model drops the matrix, which would otherwise go on
+naming models the view no longer shows; compute it again for the new set.
 **Use medoid as reference** sets it as the alignment reference, superposes every shown model onto it,
 and draws it solid with the others faded, in one press. The methods text gains a sentence stating
 how the pairs were superposed, the range of values and which model is the medoid. Recompute after
@@ -675,7 +835,8 @@ current matrix used.
 **Emphasising one model.** An overlay of several models drawn identically is a tangle. Each row of the
 Models list carries a fade switch, and **Emphasise** fades every other shown model in one press: the
 emphasised model keeps its colour and full ribbon while the others are mixed towards the paper and
-drawn thin, so the figure reads as one subject against context. Pressing **Emphasise** again on a
+drawn thin, so the figure reads as one subject against context. It needs two shown models (with one
+there is nothing to fade, and the button says *Needs two shown models*). Pressing **Emphasise** again on a
 model that is already the only solid one puts them all back. Fading is per model and independent of
 the per-chain fading in the composition table, it dims the sequence strip as well, and it is carried
 by scenes, session files, share links and the shared report.
@@ -703,7 +864,10 @@ and the methods text carry both numbers and the region. If fewer than three resi
 match between two models, that pair is fitted on everything and the table says so.
 
 **Moving labels.** Every piece of text in the 3D view can be dragged with the mouse: residue labels,
-callout and measurement text, and corner titles. Hover one and the pointer becomes a grab cursor while
+callout and measurement text, and corner titles. A click on any of them without dragging opens the editor
+on it; a measurement's text is moved, nudged, reset and removed exactly as a label's is, keeps its own
+leader line in the measurement's colour, and its place is a model-space offset that travels with the
+scene the same way. Hover one and the pointer becomes a grab cursor while
 the readout names the label; drag it where the figure needs it. The camera stays put during the drag,
 and on a touchscreen a finger drag still rotates the model, so nothing is lost on a tablet. A residue
 label that has moved keeps a thin leader line back to its residue in the label's colour — on screen and
@@ -711,8 +875,8 @@ in every export, the composite and built figures and the shared report — so a 
 is being named. The move is kept as a model-space offset, which means it holds its place against the
 structure as the camera turns rather than sliding across the screen, and it travels with scenes,
 sessions and share links and is undone with ⌘Z. **Reset** in the label's row puts it back on its
-residue; the arrow buttons in a label's or an annotation's row nudge its text 12 px a press for fine
-work, and the arrow keys move the active label (see *Labels* above).
+residue; the arrow buttons in a label's, a measurement's or an annotation's row nudge its text 12 px a
+press for fine work, and the arrow keys move the active label or measurement (see *Labels* above).
 
 **Separating labels that overlap.** One label per model at the same residue of superposed models is a
 pile by construction, so *Compare this position* and *Compare these positions* untangle what they place:
@@ -720,7 +884,11 @@ each label's box is measured at the current framing and the ones that cover each
 the screen, the reference model's label keeping its place. *Make site figure* does the same again for the
 close-up, because the framing decides which labels collide. **Separate labels**, beside *Clear labels*,
 runs the pass over every label on screen whenever you want it — after turning the model, say — and reports
-`3 labels moved apart` or `Labels already clear of each other`. The nudge is an ordinary offset: it keeps
+`3 labels moved apart` or `Labels already clear of each other` — with `· 4 pairs still overlap` when it
+could not clear them all. A press that would leave every label where it is (pressed again at the same
+camera) says *Nothing more to move* and takes no undo step. Measurement text takes part as well: a
+measurement's value sitting on a residue label is moved off it like a label (`2 labels and 1 measurement
+moved apart`), and the button is available whenever there are labels or measurements to separate. The nudge is an ordinary offset: it keeps
 its leader line, **Reset** puts the label back, and ⌘Z undoes it. A label you have dragged yourself is
 never moved, only avoided, and no label travels more than six of its own heights, so one can never end up
 off the structure it names.
@@ -731,7 +899,7 @@ print on top of each other. Every panel of an exported figure therefore works it
 for itself, in that panel's own framing and at the size that panel prints its text — the PNG and the SVG
 of a figure agree exactly, each panel of a multi-panel figure gets its own answer, and nothing on screen
 moves: the export is a rendering, not an edit, and a label you have placed by hand is left where you put
-it there too. A panel keeps what you would otherwise have got whenever the new placement would not cover
+it there too. Measurement text is placed in the same pass, so a value never prints on top of a label. A panel keeps what you would otherwise have got whenever the new placement would not cover
 less: a site of a dozen positions is more print-size boxes than a panel can hold however they are
 arranged, and is best split over more panels.
 
@@ -767,8 +935,9 @@ after the fit, the rows ordered by how far they moved and closed by a **Neighbou
 readout adds `site moved 0.42 Å in model_mutant · 7 neighbours within 5 Å moved 0.31 Å on average`.
 A substitution that only swaps a side chain leaves a table of near-zero deviations; one that shifts a
 helix shows it residue by residue. **Highlight neighbourhood** puts the neighbours into the Selections
-list as an ordinary orange highlight on the reference model — one row per chain, so it can be
-recoloured, removed or undone — and **Download effect CSV** writes `chain,resi,resn,role` with
+list as an ordinary highlight in Annotate's *Highlight colour* on the reference model — one row per
+chain, so it can be recoloured, removed or undone; pressing it again with nothing changed adds nothing —
+and **Download effect CSV** writes `chain,resi,resn,role` with
 `role` reading `site` or `neighbour`, plus one deviation column per model. Change the cutoff and the
 table is measured again; the value is remembered between sessions and travels in scenes and share
 links. The figure legend gains the sentence *After superposition the Cα at A:15 moved 0.42 Å in
@@ -777,8 +946,9 @@ neighbourhood rule.
 
 **A whole set of positions at once.** A binding site, an interface or a loop is several residues, and
 comparing them one press at a time leaves an effect table about the last one rather than about the site.
-Type the set into **Positions** — `A:20-30, A:45`, `K:12`, or bare numbers and ranges like `20-30, 45`,
-which take the chain of the selected residue or the only chain the models have — and press **Compare
+Type the set into **Positions** — `A:20-30, A:45`, `K:12`, `H:100A` for a residue with an insertion code
+(a single position, not a range), or bare numbers and ranges like `20-30, 45`, which take the chain of the
+selected residue or the only chain the models have — and press **Compare
 these positions**. Spacing is free and chain names are matched case-insensitively against the chains the
 models carry. Each position is then compared exactly as a single one is: the side chain drawn in every
 shown model, a label naming that model's own residue, and the position added to the compared set; a
@@ -803,7 +973,8 @@ is framed on the site *and its neighbourhood* — every residue with a heavy ato
 **Neighbourhood (Å)** cutoff of it — not the lone residue, so a position in a large assembly keeps the
 context around it instead of filling the panel with the nearest wall of ribbon. It needs a
 compared position and at least two shown models; it switches colouring to one colour per model and turns
-**Side chains at compared positions** on. The close-up takes the comparison readout as its caption.
+**Side chains at compared positions** on. The close-up takes the comparison readout as its caption;
+a position with an insertion code keeps it (*Site H:100A*).
 With the models superposed and **Deviation panel** on (it is on by default), a third panel follows:
 **Deviation**, the close-up framed exactly as panel B but with every model drawn solid and coloured by
 Cα deviation from the reference — the distance between paired Cα atoms after the superposition — blue
@@ -816,7 +987,7 @@ panel*. The viewer's own colour mode is put back afterwards, exactly as the came
 The panels are ticked as the *only* panels of the figure builder, in two columns — three with the
 deviation panel — with letters, captions and a legend on each, and the Publish tab opens at the
 builder, so the next press is
-**Download figure PNG** or **Download figure SVG**. The screen goes back to what it was — solid, never
+**Download built figure PNG** or **Download built figure SVG**. The screen goes back to what it was — solid, never
 left faded — the panels keep their own emphasis, and the whole press is a single ⌘Z. If several
 positions are compared the figure covers all of them: the close-up frames every site and their shared
 neighbourhood, the panel is named **Sites** and captioned with the set readout, and the overview reads
@@ -881,7 +1052,8 @@ SVG** is unchanged: raster molecule, vector labels, legend and scale bar.
 
 **Comparison figure.** With the synchronized multi-view on, **Download comparison PNG** renders every
 panel at the chosen size and stitches them into one lettered figure with each model's name and mean
-pLDDT in a caption strip. The total is capped at roughly 24 megapixels, so six panels at a large
+pLDDT in a caption strip at the chosen text size; the whole figure is therefore columns × the chosen
+width, which the status states (*2008 × 860 at 300 dpi (170 mm wide)*). The total is capped at roughly 24 megapixels, so six panels at a large
 size come out smaller per panel than one. With *pLDDT legend on exports* ticked and confidence
 colouring active, the four-band legend is drawn onto both kinds of PNG, and the comparison figure gets
 a footer with the legend and your project title.
@@ -893,16 +1065,46 @@ projection for figures that carry one.
 
 **Vector figures.** **Download figure SVG** and **Download comparison SVG** write the same figures with
 the molecule as a raster image and everything drawn over it — residue labels, measurements, arrows,
-callouts, markers, corner titles, panel letters, captions, legend — as SVG elements. Open the file in
+callouts, markers, corner titles, panel letters, captions, legend — as SVG elements. A measurement's
+text, colour, solid or dashed line and the place you moved its text to (with its leader line) are written
+exactly as on screen, in the SVG as in the PNG, PDF and TIFF, and every label takes the PNG's colours
+— its box the figure's background, its text the ink that reads on it — whichever interface theme you
+work in; *Plain text* labels have no box in either file. Open the file in
 Illustrator, Inkscape, or Affinity to restyle type, recolour arrows, or move a label without
 re-rendering.
+
+**Legend key.** **Download legend key** saves the figure's colour key on its own: a small image of the
+title and every entry with its exact swatch colour and its name, as the legend on the figure draws them
+(Figure labels renames included), in the figure font, at the figure's text size, in its ink on its
+background — a transparent figure gives a transparent key. It writes the format chosen in **Figure
+format** (PNG and TIFF with the resolution, PDF at its physical size, JPEG, WebP), named
+`<figure title>-legend-key.png` (`protein-figure-legend-key.png` without a title). **Download legend key
+SVG** writes the same key with editable text. The key is drawn by the code that draws the legend on
+every exported figure, so the two match swatch for swatch and letter for letter, with two differences.
+The key is always a single row wrapping at its own width — the figure's width, or 1200 px of
+screen-size text if that is narrower — where the figure's legend may be shrunk to fit a panel or
+stacked down a side. On a transparent background the key has no panel behind it, where the figure's
+legend keeps its light panel to stay legible over the molecule. The box under the buttons
+says the same key in words, ready to paste into the figure legend and edit — `Model: model_a (purple);
+model_b (cyan); model_c (orange).` or `pLDDT: <50 (orange); 50–70 (yellow); 70–90 (light blue); ≥90
+(dark blue).` Each colour is named by the nearest of a few dozen colour words measured perceptually
+(CIEDE2000), and the hex code is added only where two entries would otherwise share a word; a long chain
+key that stops at `+N more` is written out in full. **Copy legend text** copies it. The image, the SVG
+and the text are drawn at the moment you ask, so they follow the colour scheme, the models shown, their
+colours and the Figure labels — there is no stored copy to go stale. A colour scheme with nothing to
+name (element colouring, a single model in its own colour, amino-acid colours) greys the buttons out
+and the box says why. **Download all views (ZIP)** puts the key in the ZIP as `legend-key.png` and
+`legend-key.svg` — one pair per distinct key, named after the first view that uses it, when views are
+coloured differently. The figure builder and the composite figure draw each panel's legend from the same
+key, so they need no separate file.
 
 **Video.** Record a 5, 10, or 15 second WebM of the structure spinning. Chrome and Firefox support
 this; Safari does not, and the viewer will say so.
 
 **All views as a ZIP.** **Download all views (ZIP)** renders each saved view as a publication PNG
 at the current output settings — print size, resolution, text size, legend, scale bar — named
-`01-A-<view>.png` onward, together with `captions.txt` (title, captions, notes and the generated
+`01-A-<view>.png` onward (the letter is the view's panel letter in the figure; a view left out of the
+figure has none), together with `captions.txt` (title, captions, notes and the generated
 figure legend). Large view sets take a while; the button counts progress.
 
 **Saved views.** Save the current camera, model selection, colours, representation, and background
@@ -911,12 +1113,18 @@ be exported as caption text, and be followed as a guided tour inside the shared 
 
 **Figure builder.** Saved views are the panels. The table under *Figure builder* lists every saved
 view with an include switch, its panel letter, an editable caption and move up/down buttons; the
-letters follow the order of the included views. Choose **Panel columns** (Auto picks a near-square
+letters follow the order of the included views, and the saved-views list, *Download captions* and the
+views ZIP use the same letters (a view left out of the figure shows —). Choose **Panel columns** (Auto picks a near-square
 grid, or 1 to 4), the **Captions** style (name and caption, name only, caption only, none), and
-whether each panel carries its **legend and scale bar**. **Download figure PNG** renders every
+whether each panel carries its **legend and scale bar**. **Download built figure PNG** renders every
 ticked view from its own camera, colour scheme, model selection and background at the same text
 size, puts the letter and caption in a strip under each cell, and writes the resolution into the
-file; **Download figure SVG** does the same with vector captions, labels, legends and scale bars.
+file; **Download built figure SVG** does the same with vector captions, labels, legends and scale bars.
+A corner title (Annotate → screen text) belongs to one figure and is printed in no panel of a built
+figure, PNG or SVG; add it as a caption or in the layout program. A legend placed down one side of a
+panel shrinks to fit the panel's height and, if it still cannot, goes along the bottom.
+A caption wraps onto up to three lines; one longer than that ends in an ellipsis, and the estimate
+line and the download's status say which panel's caption was shortened.
 The cells share the aspect ratio set under *Output* and are sized so the whole figure is exactly the
 chosen figure width: a 178 mm double-column figure stays 178 mm whether it holds two panels or six,
 and the estimate line gives the pixel size of the figure and of each panel before you render. The
@@ -931,7 +1139,8 @@ width, aspect, resolution and text size (and the pixel size and scale for pixel 
 format, the legend switch, the legend position and the scale bar are stored together in this
 browser. Pick a template from **Saved templates** and press **Apply**, and every one of those
 controls goes back to it, with a line saying what changed at a glance — `Template "Main figures"
-applied · 2 columns · 178 mm at 300 dpi`. **Delete** forgets one. A template carries presentation
+applied · 2 columns · 178 mm at 300 dpi`. **Delete** forgets one, after asking — a template is not
+part of the undo history. A template carries presentation
 only — never the ticked views, the models, the camera, the colours or any file name — so one saved
 for an earlier project is safe to apply here: it changes how the figure is drawn, never what is in
 it. Up to 20 are kept, listed by name; saving a name that already exists replaces it and says
@@ -939,8 +1148,8 @@ it. Up to 20 are kept, listed by name; saving a name that already exists replace
 session file or share link reproduces the figure's presentation as well as its contents.
 
 **Reports.** **Share report** builds a standalone HTML file with the coordinate data embedded —
-including aligned positions if you superposed models, plus labels, measurements, and figure
-annotations. Choose whether it carries the models currently shown or every loaded model; the
+including aligned positions if you superposed models, plus labels, measurements — with their text,
+colour, line style and moved text — and figure annotations. Choose whether it carries the models currently shown or every loaded model; the
 estimated size is shown before you build it. The report opens with no server and lets a reader show
 one to six synchronized panels (it starts with the panels you had open), pick a model per panel, step
 every panel forward and backward or cycle automatically, spin and fit them together, switch the
@@ -949,13 +1158,18 @@ and secondary structure), show ligands as sticks or spheres or hide them, follow
 read pLDDT and PAE for the focused panel, and export a stitched lettered PNG or a composite video of
 their own. Chains you hid stay hidden in the report. Under every panel a sequence strip shows the model's
 residues in the panel's colour scheme, one row per chain, hidden chains dimmed: hover to read chain,
-residue and pLDDT, click to zoom that panel to the residue.
+residue and pLDDT, click to zoom that panel to the residue. The report reads residues as the viewer
+does: insertion codes from an mmCIF file (100, 100A and 100B are three residues), and a modified
+residue written as HETATM but bonded into its chain (a phosphothreonine) drawn and listed with the
+chain, not as a ligand.
 
 Two controls govern size and portability. **PAE in report** keeps the heatmaps at full detail (up to
 400 × 400), compacts them to 200 × 200, or omits them; the size estimate updates as you switch.
-**Embed 3Dmol.js for offline use** inlines the rendering library — about 1.5 MB — after re-checking it
-against the page's integrity hash, so the report opens with no network at all. Leave it off when the
-recipient will be online and you want the smallest file.
+**Embed 3Dmol.js for offline use** inlines the rendering library — about 500 KB, which the size
+estimate counts — after re-checking it against the page's integrity hash, so the report opens with no
+network at all. Leave it off when the recipient will be online and you want the smallest file; the
+report then loads 3Dmol.js from the CDN with the same integrity hash the viewer uses. The report's
+header calls its models predictions only when it holds a predicted one.
 
 **Provenance.** Fill in the figure title, model source, method and version, and notes. These travel
 into the report header, the caption export, and the scene manifest.
@@ -963,7 +1177,9 @@ into the report header, the caption export, and the scene manifest.
 **Figure legend.** **Write figure legend** drafts a legend from the scene: models shown,
 representation, colour scheme with its bands written out, any low-confidence cut, ligand handling,
 the alignment reference, method and per-model Cα RMSD, whether panels are synchronized, labelled
-residues, highlighted ranges, measurements with their values, annotation text, and your provenance
+residues (a label you renamed is followed by its residue, `Catalytic Ser (SER195 · C)`), highlighted
+ranges, measurements with the atoms they join, their values and their text
+(`HIS57 · B NE2 ↔ SER195 · C OG 3.02 Å (H-bond)`), annotation text, and your provenance
 notes. The text is copied to the clipboard and appears in an editable field. It is a draft in the
 tool's words; edit it into yours.
 
@@ -972,14 +1188,23 @@ models were superposed (Kabsch least squares on Cα atoms, and whether the pairs
 residue identifiers or from sequence alignment), that RMSD is over all paired Cα atoms without outlier
 rejection, how RMSF and Cα deviation are defined, the PAE-domain heuristic with its cutoff, the
 contact and ligand-site cutoffs, how extent and radius of gyration are computed, the colour scale in
-use, any hidden low-confidence residues and the export size — with the viewer and 3Dmol.js versions
-and a pointer to the validation record. Only sentences that apply to the current scene are written.
+use, how the distances and angles shown were measured (between Cα atoms, or between the atoms the
+figure legend names), any hidden low-confidence residues and the export size — with the viewer and
+3Dmol.js versions and a pointer to the validation record. It opens by saying what was inspected:
+*Experimental structure (PDB 5CHA)* for a model with an experimental method record or fetched from the
+PDB, *Predicted structures* for models with pLDDT or a predictor's confidence files, and *Structures*
+for a mixture or anything else. Only sentences that apply to the current scene are written.
 
 **Session files.** **Save session file** writes one ZIP that carries the models themselves (their
 coordinate text), every confidence matrix as binary floats, the current alignment, labels, selections,
 measurements, annotations, named domains, per-residue data, saved views, provenance and every setting.
-**Open session file** — or dropping the ZIP onto the page, or choosing it with *Add structures* —
-restores all of it, on any computer, with no other files. It is the way to stop work and continue
+**Open session file** — or dropping the ZIP onto the page, or choosing it with **Choose model files** —
+restores all of it, on any computer, with no other files. A session is a whole workspace, so it
+*replaces* the page: with models or work on the page it first asks *Replace the … and the work on this
+page with the session? Cancel keeps the page.*, and the status then counts the models on the page.
+Replacing cannot be undone (the models it replaced are gone). Scene JSON is the opposite: it carries
+records for the models you already have and applies them to the page's models by file name. It is the
+way to stop work and continue
 later, to move between machines, or to give a colleague the exact state behind a figure. The file
 name starts with the figure title when one is set. Compared with the two other ways of keeping work:
 the browser autosave is automatic but stays on this machine and skips coordinates over 80 MB and PAE
@@ -998,7 +1223,11 @@ The scene is compressed into the URL fragment (the part after `#`), so nothing i
 and the link works wherever the viewer is hosted. Files you opened from disk cannot travel this way —
 the recipient has no way to fetch them — so they are left out, and the status line says how many.
 Saved views whose models were fetched by identifier travel in the link too, so the recipient can
-follow your guided tour. Links are typically one
+follow your guided tour. Emphasis and faded chains travel with the models. The recipient's viewer
+matches each model by what it was fetched as, not by its name on your page: a model you named
+`1brs.cif (2)` because a local `1brs.cif` was open beside it is the recipient's `1brs.cif`, and a
+recipient's own local file of the same name is never taken for it. If some records find no model
+(a fetch that failed), the status line says how many. Links are typically one
 to three kilobytes; a scene with many annotations may run longer, and every modern browser accepts
 fragments far larger than that.
 
@@ -1040,14 +1269,16 @@ doi:10.1093/bioinformatics/btu829. *Help → How to cite* in the viewer has both
 A moment after every change, the open models (coordinates and confidence data), annotations,
 domains, per-residue data, views and settings are saved in the browser's IndexedDB. Reopening the
 page shows *Restore your last session?* with the model count and time; **Restore** rebuilds it,
-**Not now** leaves it for later, **Forget it** deletes it. Sessions above 80 MB of coordinates are
+**Not now** leaves it for later — it is offered again on the next visit — and **Forget it** deletes
+it. Opening or fetching other work takes the banner down, since the autosave then holds the new work. Sessions above 80 MB of coordinates are
 not autosaved (the viewer says so once). The copy lives only in that browser profile; scene JSON,
 reports and share links remain the deliberate ways to keep or hand over work.
 
 
 
 **Label style (Annotate).** *Boxed* labels sit on a small card and read on any background;
-*Plain text* drops the card and border for clean figures where the box would cover the model.
+*Plain text* drops the card and border for clean figures where the box would cover the model — in
+the PNG, PDF, TIFF and SVG alike.
 The choice applies to residue labels, measurements and callouts, is saved with scenes, and is
 carried into the shared report.
 
@@ -1060,7 +1291,14 @@ figure at the chosen print size and resolution: panel A is the 3D view as it sta
 and scale bar you have chosen), followed by the panels you tick — the **PAE heatmap** of the current
 model, the **pLDDT profile** of the displayed models, and the **contact or distance map** when one has
 been computed in the Compare tab. Each panel is rendered fresh at output resolution, never scaled up
-from the screen, and carries a caption; the file carries its resolution. Choose one, two or three
+from the screen, and carries a caption; the file carries its resolution. The pLDDT and RMSF profiles
+are laid out at the size of their cell with their axis text at the chosen point size, and the PAE
+heatmap has a colour bar from 0 to its maximum in Å. Every caption, panel letter, panel A's legend and
+the labels of the contact map, RMSD matrix and architecture bar print at the chosen text size; captions
+wrap onto up to three lines, and a chart that cannot hold its text in its cell makes its row taller
+(the status says so) rather than shrinking the text. At a print size the figure is the width chosen,
+however many columns (the status gives the printed width); a pixel export keeps each cell at least
+300 px wide. Choose one, two or three
 columns. Panels that are not available for the current model are greyed out with the reason in their
 tooltip. The result is the confidence figure most AlphaFold papers need, assembled in one step; open
 it in Illustrator or Inkscape for the final layout if the journal needs a different arrangement.
@@ -1071,10 +1309,14 @@ At the foot of the Publish tab. The viewer reads its own settings and lists, wit
 or a note, what a journal's figure guide or a careful reviewer would raise: a pixel export that
 carries no physical size; resolution below 300 dpi; text under 7 pt at the printed width; chain,
 entity or domain colours that are not colour-blind safe; a colour scheme whose legend is switched
-off; a scale bar in perspective projection, where its length depends on depth; several models shown
+off; a scale bar in perspective projection, where its length depends on depth; a scale bar the last export
+had to leave out of a panel because it did not fit there (the export's status names the panel; choose a
+shorter bar); several models shown
 without superposition; a pLDDT cut that hides residues; a dark or custom background; many chains
 without an outline; no figure title. Warnings have a one-click fix where one exists (use print size,
-use Okabe–Ito, draw legend, switch to orthographic). The list refreshes as you change settings, and
+use Okabe–Ito, draw legend, switch to orthographic), and the status line says what each one set. The
+list refreshes as you change settings — the legend switch, the scale bar and the title field
+included — and
 the badge on the heading reads *ready* when no warning remains. It is a checklist, not a judge:
 notes are suggestions, and a warning you have a reason to ignore can be ignored.
 
@@ -1098,12 +1340,14 @@ inside the renderer.
 the text size and Arial from that journal's figure guide: Nature 89 / 183 mm, Science 55 / 121 /
 184 mm, Cell Press 85 / 114 / 174 mm, PNAS 87 / 178 mm, PLOS 190 mm, eLife 85 / 170 mm. Guides
 change; treat the preset as a starting point and check the current instructions before you
-submit. Every setting can still be changed afterwards.
+submit. Every setting can still be changed afterwards; once one is, the select goes back to *Choose a
+journal…*, since the figure no longer follows that guide.
 
 **One panel per model (Publish).** Renders every shown model — or, when one model is shown,
-every model of the current run — from the camera of the main view into one lettered figure at
-the chosen size, with the model name and mean pLDDT under each panel and the resolution written
-into the PNG. This is the "five models, identically framed" figure that a reviewer asks for
+every model of the current run — from the camera of the main view into one lettered figure of
+the chosen width (the panels share it, as in the figure builder; the status gives the width in mm),
+with the model name and mean pLDDT under each panel at the chosen text size and the resolution
+written into the PNG. This is the "five models, identically framed" figure that a reviewer asks for
 first. Align the models first if you want superposed frames rather than the raw coordinates.
 
 ## Reproducible scenes
@@ -1115,14 +1359,21 @@ measurements, saved views, comparison and alignment settings, and your provenanc
 To restore one, load the structure files first, then pick the scene JSON under **Restore scene JSON**
 (or just drop the JSON in with the files — it is applied once structures are present). Hashes are
 recomputed on restore, and the status line warns if any file no longer matches the one the scene was
-saved from.
+saved from. Records whose model is not on the page are dropped, and the status says how many
+(*Scene restored · 2 records matched no model on this page*). A restore replaces the labels,
+selections, measurements, annotations and saved views on the page, so it is one undo step:
+<kbd>Ctrl</kbd>/<kbd>⌘</kbd>+<kbd>Z</kbd> (*Undid scene restore*) brings back what it replaced — the
+colour scheme, representation, background, projection, title, model colours and camera included — and
+redo puts the scene back. A session file is different: it replaces the whole page (see *Session files*).
 
 The manifest is what you archive alongside a figure so the scene can be rebuilt later. It is not a
 substitute for keeping the coordinate files.
 
 ## Recipes
 
-Three workflows the viewer was built around, end to end.
+Three workflows the viewer was built around, end to end. For the same ground covered a step at a
+time — with what you should see after each press, and a public structure to practise on — see
+[`TUTORIALS.md`](TUTORIALS.md).
 
 **A thesis figure comparing several predictions.** Drop the result archives. In **Models**, order by
 ranking score and hide anything you will not show. In **Appearance**, colour by pLDDT confidence and
@@ -1149,7 +1400,8 @@ region of interest, and quote the alignment statistics next to any RMSD you repo
 
 Archives with hundreds of predictions are handled with a few deliberate compromises:
 
-- Multi-model archives open in one-at-a-time mode rather than as a single overlay.
+- Multi-model archives opened on an empty page open in one-at-a-time mode rather than as a single
+  overlay; added to models already open, they follow the View mode in use.
 - Only the first model of an archive is parsed eagerly; the rest are parsed when first displayed.
 - Above 40 loaded models, models that are not displayed and not referenced by an annotation are
   released from GPU memory and re-parsed on demand.
@@ -1159,8 +1411,9 @@ Archives with hundreds of predictions are handled with a few deliberate compromi
   eight seconds and keeps the browser well under a gigabyte.
 - Above 25 models in one archive, the `*_full_data_*.json` PAE payloads are skipped altogether. Drop the
   specific ones you need separately.
-- PAE matrices above 1 500 tokens are not written to the session autosave; everything else is. Reopen
-  the archive to get them back.
+- PAE matrices above 1 500 tokens are not written to the session autosave; everything else is. The
+  restore says so, naming the models (*the PAE of … was too large to autosave*); reopen the archive to
+  get them back, or keep them with **Save session file**.
 - The model list renders 60 rows at a time.
 
 ## Validation

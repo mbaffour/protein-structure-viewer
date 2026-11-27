@@ -4,6 +4,16 @@
      ratio and are sized so the whole figure is the chosen output width. Panel letters and
      captions go in a strip under each cell; legend and scale bar sit inside the cell. */
   function figurePanelsSelected() { return savedViews.filter(view => view.inFigure !== false); }
+  /* A view's letter in the built figure — the ticked views in order, A, B, C… — or a dash when it is
+     not in the figure. One lettering for the saved-views list, the builder and both captions files,
+     so the list never says D for the panel the figure prints as A. */
+  function panelLetter(view) {
+    const index = figurePanelsSelected().indexOf(view);
+    return index < 0 ? '—' : String.fromCharCode(65 + index);
+  }
+  function panelCaptionLines() {
+    return figurePanelsSelected().map(view => panelLetter(view) + '. ' + view.name + (view.caption ? ': ' + view.caption : ''));
+  }
   function builderOptions() {
     const columns = root.querySelector('#gpv-panel-columns').value;
     return { columns, captions: root.querySelector('#gpv-builder-captions').value, letters: root.querySelector('#gpv-builder-letters').checked, legends: root.querySelector('#gpv-builder-legends').checked, architecture: root.querySelector('#gpv-builder-architecture').checked };
@@ -23,39 +33,57 @@
     const cellWidth = Math.floor(requested.width / columns);
     const cellHeight = Math.max(1, Math.floor(cellWidth * requested.height / Math.max(1, requested.width)));
     const fontPx = Math.max(10, Math.round(requested.dpi ? requested.points / 72 * requested.dpi : 12 * figureScale(requested)));
-    /* Captions wrap onto a second line when they do not fit beside the letter; the strip is as
-       tall as the longest caption in the figure needs, so every row lines up. */
+    /* Captions wrap onto up to three lines when they do not fit beside the letter; the strip is as
+       tall as the longest caption in the figure needs, so every row lines up. Past three the last
+       line ends in an ellipsis and `cut` marks it, so the estimate and the status can say so — Make
+       site figure writes captions that long itself. */
     const inset = Math.round(cellWidth * 0.025);
     furnitureMeasure.font = '700 ' + Math.round(fontPx * 1.3) + 'px ' + figureFont();
     const letterWidth = options.letters ? furnitureMeasure.measureText('W').width + fontPx * 0.8 : 0;
     const captionWidth = cellWidth - inset - letterWidth - fontPx;
     furnitureMeasure.font = '500 ' + fontPx + 'px ' + figureFont();
-    const captionLines = view => { const wrapped = wrapText(furnitureMeasure, builderCaption(view, options), captionWidth); return wrapped.length > 2 ? [wrapped[0], truncateToWidth(furnitureMeasure, wrapped.slice(1).join(' '), captionWidth)] : wrapped; };
+    const captionLines = view => {
+      const wrapped = wrapText(furnitureMeasure, builderCaption(view, options), captionWidth);
+      if (wrapped.length <= 3) return wrapped;
+      const kept = [wrapped[0], wrapped[1], truncateToWidth(furnitureMeasure, wrapped.slice(2).join(' '), captionWidth)]; kept.cut = true;
+      return kept;
+    };
     const lines = Math.max(1, ...panels.map(view => captionLines(view).length));
+    const shortened = panels.filter(view => captionLines(view).cut).map(panelLetter);
     const captionHeight = options.letters || options.captions !== 'none' ? Math.round(fontPx * (0.9 + 1.3 * lines)) : Math.round(fontPx * 0.5);
     const cellPlan = { width: cellWidth, height: cellHeight, dpi: requested.dpi, points: requested.points, textScale: requested.textScale, mm: requested.mm ? requested.mm / columns : undefined };
     /* The optional architecture row spans the figure width under the panels and reads the
        domains of the model on screen. */
     const scale = figureScale(cellPlan); const architecture = options.architecture ? architectureModel(activeEntry()) : null;
     const architectureRow = architecture ? architectureHeight(architecture, scale) + Math.round(24 * scale) : 0;
-    return { requested, options, columns, rows, cellWidth, cellHeight, fontPx, inset, letterWidth, captionWidth, captionLines, lines, captionHeight, architecture, architectureRow, scale, width: columns * cellWidth, height: rows * (cellHeight + captionHeight) + architectureRow, cellPlan };
+    return { requested, options, columns, rows, cellWidth, cellHeight, fontPx, inset, letterWidth, captionWidth, captionLines, lines, captionHeight, architecture, architectureRow, scale, width: columns * cellWidth, height: rows * (cellHeight + captionHeight) + architectureRow, cellPlan, shortened };
+  }
+  function shortenedCaptionsNote(layout) {
+    return layout.shortened.length ? ' · caption' + (layout.shortened.length === 1 ? ' of panel ' : 's of panels ') + layout.shortened.join(', ') + ' shortened to fit three lines' : '';
   }
   function builderCaption(view, options) {
     const name = String(view.name || ''); const caption = String(view.caption || '');
     return options.captions === 'name' ? name : options.captions === 'caption' ? caption : options.captions === 'none' ? '' : [name, caption].filter(Boolean).join(' — ');
   }
+  /* Every change rebuilds the rows; the focus goes back to the same control of the same view — a moved
+     view's row is the one it moved to, and its other arrow once this one has nowhere left to go. */
+  function focusBuilderControl(index, control, fallback = null) {
+    const row = root.querySelectorAll('#gpv-builder-rows tr')[index]; if (!row) return;
+    const target = [control, fallback].map(name => name && row.querySelector('[data-control="' + name + '"]')).find(item => item && !item.disabled);
+    if (target) target.focus({ preventScroll: true });
+  }
   function renderFigureBuilder() {
     const body = root.querySelector('#gpv-builder-rows'); if (!body) return;
     body.replaceChildren();
-    let letter = 0;
     savedViews.forEach((view, index) => {
       const included = view.inFigure !== false;
       const tr = document.createElement('tr');
       const inCell = document.createElement('td'); const tick = document.createElement('input'); tick.type = 'checkbox'; tick.className = 'form-check-input'; tick.checked = included; tick.setAttribute('aria-label', 'Include ' + view.name + ' in the figure');
-      tick.addEventListener('change', () => { remember('figure panels'); view.inFigure = tick.checked; renderFigureBuilder(); });
+      tick.dataset.control = 'include';
+      tick.addEventListener('change', () => { remember('figure panels'); view.inFigure = tick.checked; renderSavedViews(); focusBuilderControl(index, 'include'); });
       /* The theme draws checkboxes only inside a .form-check label; a bare input is invisible. */
       const tickLabel = document.createElement('label'); tickLabel.className = 'form-check'; tickLabel.append(tick); inCell.append(tickLabel); tr.append(inCell);
-      const letterCell = document.createElement('td'); letterCell.className = 'gpv-builder-letter'; letterCell.textContent = included ? String.fromCharCode(65 + letter) : '—'; if (included) letter += 1; tr.append(letterCell);
+      const letterCell = document.createElement('td'); letterCell.className = 'gpv-builder-letter'; letterCell.textContent = panelLetter(view); tr.append(letterCell);
       const nameCell = document.createElement('th'); nameCell.scope = 'row'; nameCell.textContent = view.name; tr.append(nameCell);
       const captionCell = document.createElement('td'); const caption = document.createElement('input'); caption.type = 'text'; caption.className = 'form-control'; caption.value = view.caption || ''; caption.placeholder = 'Panel caption'; caption.maxLength = 200; caption.setAttribute('aria-label', 'Caption for ' + view.name);
       caption.addEventListener('input', () => { view.caption = caption.value.trim().slice(0, 200); renderSavedViews(false); });
@@ -63,7 +91,8 @@
       captionCell.append(caption); tr.append(captionCell);
       const orderCell = document.createElement('td'); const order = document.createElement('span'); order.className = 'gpv-builder-order';
       const move = (delta, label, glyph) => { const button = document.createElement('button'); button.type = 'button'; button.className = 'btn btn-ghost'; button.textContent = glyph; button.setAttribute('aria-label', label + ' ' + view.name); button.disabled = index + delta < 0 || index + delta >= savedViews.length;
-        button.addEventListener('click', () => { remember('figure panel order'); const target = index + delta; [savedViews[index], savedViews[target]] = [savedViews[target], savedViews[index]]; renderSavedViews(); }); return button; };
+        button.dataset.control = delta < 0 ? 'up' : 'down';
+        button.addEventListener('click', () => { remember('figure panel order'); const target = index + delta; [savedViews[index], savedViews[target]] = [savedViews[target], savedViews[index]]; renderSavedViews(); focusBuilderControl(target, delta < 0 ? 'up' : 'down', delta < 0 ? 'down' : 'up'); }); return button; };
       order.append(move(-1, 'Move up', '↑'), move(1, 'Move down', '↓')); orderCell.append(order); tr.append(orderCell);
       body.append(tr);
     });
@@ -72,15 +101,19 @@
     if (!savedViews.length) { estimate.textContent = 'Save a view above to start a figure.'; return; }
     if (!panels.length) { estimate.textContent = 'No view is ticked.'; return; }
     const layout = figureLayout(panels.length, panels);
-    estimate.textContent = panels.length + ' panel' + (panels.length === 1 ? '' : 's') + ' · ' + layout.columns + ' column' + (layout.columns === 1 ? '' : 's') + ' · ' + layout.width + ' × ' + layout.height + ' px' + (layout.requested.dpi ? ' · ' + layout.requested.mm + ' mm wide at ' + layout.requested.dpi + ' dpi · text ' + layout.requested.points + ' pt' : '') + ' · each panel ' + layout.cellWidth + ' × ' + layout.cellHeight + ' px' + (layout.architecture ? ' · architecture row ' + layout.architectureRow + ' px' : layout.options.architecture ? ' · no domains for an architecture row' : '');
+    estimate.textContent = panels.length + ' panel' + (panels.length === 1 ? '' : 's') + ' · ' + layout.columns + ' column' + (layout.columns === 1 ? '' : 's') + ' · ' + layout.width + ' × ' + layout.height + ' px' + (layout.requested.dpi ? ' · ' + layout.requested.mm + ' mm wide at ' + layout.requested.dpi + ' dpi · text ' + layout.requested.points + ' pt' : '') + exportCapText(layout.requested) + ' · each panel ' + layout.cellWidth + ' × ' + layout.cellHeight + ' px' + (layout.architecture ? ' · architecture row ' + layout.architectureRow + ' px' : layout.options.architecture ? ' · no domains for an architecture row' : '') + shortenedCaptionsNote(layout);
   }
   async function downloadFigure(kind) {
     const panels = figurePanelsSelected();
     const button = root.querySelector(kind === 'svg' ? '#gpv-builder-svg' : '#gpv-contact-sheet'); const idle = button.textContent;
     if (!panels.length) { announce('Tick at least one saved view for the figure', 'error'); return; }
+    const finish = beginExport(); if (!finish) return;
     const layout = figureLayout(panels.length, panels); const options = layout.options; const palette = figurePalette();
     const done = setBusy('Rendering figure…'); button.disabled = true; button.textContent = 'Rendering…'; await afterPaint();
     const restore = captureViewState();
+    /* Said last, after the on-screen view is back: putting it back restyles the models, whose status
+       line ('Ready') would otherwise replace what was written. */
+    let outcome = null;
     const canvas = kind === 'png' ? document.createElement('canvas') : null; let context = null;
     if (canvas) { canvas.width = layout.width; canvas.height = layout.height; context = canvas.getContext('2d'); context.fillStyle = palette.paper; context.fillRect(0, 0, canvas.width, canvas.height); }
     const parts = []; const scale = figureScale(layout.cellPlan);
@@ -90,9 +123,11 @@
         button.textContent = 'Rendering ' + (index + 1) + ' / ' + panels.length + '…'; await afterPaint();
         applyViewState(panels[index], { panels: false });
         const x = (index % layout.columns) * layout.cellWidth; const y = Math.floor(index / layout.columns) * (layout.cellHeight + layout.captionHeight);
-        const uri = await renderPublicationImage(null, layout.cellPlan, kind === 'png');
-        const wanted = options.legends && legendItems('figure') !== null; const bar = options.legends ? scaleBarSpec(exportViewer, layout.cellPlan) : null;
+        /* No corner text in any panel, PNG or SVG: it is a title for one figure, and the PNG printed it
+           once per panel while the SVG never had it. */
+        const uri = await renderPublicationImage(null, layout.cellPlan, kind === 'png', false, false);
         const letter = String.fromCharCode(65 + index); const captionLines = layout.captionLines(panels[index]);
+        const wanted = options.legends && legendItems('figure') !== null; const bar = options.legends ? scaleBarSpec(exportViewer, layout.cellPlan, letter) : null;
         const firstLine = y + layout.cellHeight + Math.round(layout.fontPx * 1.1); const lineStep = Math.round(layout.fontPx * 1.3);
         const textX = x + layout.inset + layout.letterWidth;
         if (kind === 'png') {
@@ -104,7 +139,8 @@
           captionLines.forEach((line, lineIndex) => context.fillText(line, textX, firstLine + lineIndex * lineStep));
         } else {
           parts.push(svgImage(uri, x, y, layout.cellWidth, layout.cellHeight));
-          const overlay = overlaySvg(exportViewer, new Set(displayedEntries().map(entry => entry.id)), layout.cellPlan, false);
+          /* The models this panel's image was drawn with (FC-7). */
+          const overlay = overlaySvg(exportViewer, exportShown || new Set(), layout.cellPlan, false);
           parts.push('<g transform="translate(' + f(x) + ' ' + f(y) + ')">' + overlay + svgFurniture(layout.cellWidth, layout.cellHeight, scale, bar, palette, wanted) + '</g>');
           if (options.letters) parts.push(svgText(x + layout.inset, firstLine, layout.fontPx * 1.3, 700, letter));
           captionLines.forEach((line, lineIndex) => parts.push(svgText(textX, firstLine + lineIndex * lineStep, layout.fontPx, 500, line)));
@@ -121,11 +157,13 @@
       const stem = 'protein-figure-' + panels.length + '-panel' + (panels.length === 1 ? '' : 's');
       if (kind === 'png') downloadBlob(await pngWithDpi(canvas.toDataURL('image/png'), layout.requested.dpi), 'image/png', exportFileName(stem, layout.requested, 'png'));
       else downloadBlob(svgDocument(layout.width, layout.height, palette.paper, parts.join('\n')), 'image/svg+xml', stem + '.svg');
-      announce('Figure ' + kind.toUpperCase() + ' downloaded · ' + panels.length + ' panel' + (panels.length === 1 ? '' : 's') + ' · ' + layout.width + ' × ' + layout.height + ' px' + (layout.requested.dpi ? ' · ' + layout.requested.mm + ' mm wide at ' + layout.requested.dpi + ' dpi' : ''));
+      outcome = ['Figure ' + kind.toUpperCase() + ' downloaded · ' + panels.length + ' panel' + (panels.length === 1 ? '' : 's') + ' · ' + layout.width + ' × ' + layout.height + ' px' + (layout.requested.dpi ? ' · ' + layout.requested.mm + ' mm wide at ' + layout.requested.dpi + ' dpi' : '') + exportCapText(layout.requested) + shortenedCaptionsNote(layout) + scaleBarMissNote()];
     } catch (error) {
-      announce('Could not render the figure: ' + error.message, 'error');
+      outcome = ['Could not render the figure: ' + error.message, 'error'];
     } finally {
       releaseExportViewer(); applyViewState(restore, { panels: false }); done(); button.textContent = idle; renderFigureBuilder();
+      finish();
+      if (outcome) announce(...outcome);
     }
   }
   function downloadContactSheet() { return downloadFigure('png'); }
@@ -135,7 +173,7 @@
 
   function downloadCaptions() {
     const provenance = provenanceValues();
-    const lines = [provenance.title || 'Protein structure figure', provenance.source, provenance.method, '', ...savedViews.map((view, index) => String.fromCharCode(65 + index) + '. ' + view.name + (view.caption ? ': ' + view.caption : '')), '', provenance.notes].filter((line, index, array) => line || array[index - 1]);
+    const lines = [provenance.title || 'Protein structure figure', provenance.source, provenance.method, '', ...panelCaptionLines(), '', provenance.notes].filter((line, index, array) => line || array[index - 1]);
     downloadBlob(lines.join('\n'), 'text/plain', 'protein-figure-captions.txt'); updateStatus('Figure captions downloaded');
   }
 
@@ -167,8 +205,9 @@
       if (!Array.isArray(matrix) || !limit) return sum;
       const side = Math.min(matrix.length, limit); return sum + side * side * 5;
     }, 0);
-    const libraryBytes = root.querySelector('#gpv-report-offline').checked ? 1500000 : 0;
-    const bytes = chosen.reduce((sum, entry) => sum + entry.text.length, 0) + paeBytes + libraryBytes;
+    const libraryBytes = root.querySelector('#gpv-report-offline').checked ? reportLibraryBytes() : 0;
+    /* Model text is embedded as JSON, which writes each line break as two characters. */
+    const bytes = chosen.reduce((sum, entry) => sum + entry.text.length + (entry.text.match(/\n/g) || []).length, 0) + paeBytes + libraryBytes + reportShellSize();
     label.textContent = chosen.length + ' model' + (chosen.length === 1 ? '' : 's') + ' · roughly ' + formatBytes(bytes)
       + (paeBytes ? ' (PAE ' + formatBytes(paeBytes) + ')' : '')
       + (bytes > 40 * 1024 * 1024 ? ' — large enough to be slow to open; narrow the selection or compact the PAE.' : '');
@@ -219,9 +258,14 @@
       if (!record.points.every(point => point.entryId === entry.id)) return;
       const points = record.points.map(resolvePoint);
       if (points.some(point => !point)) return;
-      shapes.push({ kind: 'line', start: xyz(points[0]), end: xyz(points[1]), color: '#e11d48', dashed: true });
-      if (record.type === 'angle') shapes.push({ kind: 'line', start: xyz(points[1]), end: xyz(points[2]), color: '#e11d48', dashed: true });
-      shapes.push({ kind: 'label', position: xyz(record.type === 'angle' ? points[1] : midpoint(points[0], points[1])), text: measurementText(record), color: '#111827', size: 1 });
+      const color = measurementColor(record); const dashed = record.dashed !== false;
+      shapes.push({ kind: 'line', start: xyz(points[0]), end: xyz(points[1]), color: color || '#e11d48', dashed });
+      if (record.type === 'angle') shapes.push({ kind: 'line', start: xyz(points[1]), end: xyz(points[2]), color: color || '#e11d48', dashed });
+      const anchor = measurementAnchor(points, record);
+      const position = shiftBy(anchor, record.offset);
+      /* A moved label keeps a thin leader back to what it measures, as on screen. */
+      if (leaderLength(anchor, position) > leaderMinimum) shapes.push({ kind: 'line', start: xyz(anchor), end: xyz(position), color: color || '#e11d48', dashed: false, width: 1 });
+      shapes.push({ kind: 'label', position: xyz(position), text: measurementLabelText(record), color: color || '#111827', size: 1 });
     });
     annotationRecords.forEach(record => {
       if (record.type === 'screen' || !record.points.every(point => point.entryId === entry.id)) return;
@@ -242,10 +286,38 @@
     return shapes;
   }
 
+  /* methodsSubject's rule: a method record or a PDB fetch is experimental; pLDDT or a predictor's
+     confidence files make a prediction. */
+  function reportPredicted(entry) {
+    const experimental = Boolean(entry.experimentalMethod || entry.collection === 'RCSB PDB');
+    return !experimental && Boolean(entry.scores.length || (entry.confidence && Object.keys(entry.confidence).length));
+  }
+
   function reportPanelNames() {
     const primary = activeEntry();
     if (!root.querySelector('#gpv-side-by-side').checked || !comparePanels.length) return primary ? [primary.name] : [];
     return [primary ? primary.name : null, ...panelNames()].filter(Boolean);
+  }
+
+  /* The online report loads the pinned build from the CDN with the viewer's own Subresource Integrity
+     hash, so a substituted file is refused there as it is here. */
+  function reportLibraryTag() {
+    const tag = document.querySelector('script[src*="3Dmol"]');
+    const integrity = tag ? tag.getAttribute('integrity') : null; const crossorigin = tag ? tag.getAttribute('crossorigin') : null;
+    const attribute = (name, value) => (value && /^[\w+/=. -]+$/.test(value) ? ' ' + name + "='" + value + "'" : '');
+    return "<script src='https://cdnjs.cloudflare.com/ajax/libs/3Dmol/2.4.2/3Dmol-min.js'" + attribute('integrity', integrity) + attribute('crossorigin', integrity ? crossorigin || 'anonymous' : null) + "><\/script>";
+  }
+  /* What Embed 3Dmol.js adds: the library as this page loaded it (Resource Timing), else the size of
+     the pinned 2.4.2 build. The estimate added 1.5 MB, about three times the 513 KB file. */
+  function reportLibraryBytes() {
+    const timing = typeof performance !== 'undefined' && performance.getEntriesByType ? performance.getEntriesByType('resource').find(item => /3Dmol[^/]*\.js/i.test(item.name) && item.decodedBodySize > 0) : null;
+    return timing ? timing.decodedBodySize : 513564;
+  }
+  /* The page around the data — styles, controls, the report's own script — measured once. */
+  let reportShellBytes = 0;
+  function reportShellSize() {
+    if (!reportShellBytes) reportShellBytes = reportTemplate({ domains: '', chainColors: '', residueThemes: JSON.stringify(residueThemeTables()), spectrumRamp: spectrumRampColor.toString(), residueData: '', heteroMode: '', title: '', structures: '', views: '', metadata: '', initial: '', library: '' }).length;
+    return reportShellBytes;
   }
 
   /* Offline reports inline the pinned 3Dmol build. The bytes are fetched from the
@@ -268,10 +340,46 @@
     return '<script>' + text + '<\/script>';
   }
 
+  /* The residues as the viewer reads them, for the report's own copy of each model (L-R1). The report
+     parses the file again with 3Dmol, which leaves out what 03b adds: an mmCIF file's insertion codes
+     (100, 100A and 100B came back as three residues numbered 100) and the HETATM residues bonded into
+     their chain (TPO drawn as a ligand, missing from the strip). Rather than a second copy of that rule
+     the report carries its result, by atom index as adoptEntryAtoms copies it: [index, code] for each
+     atom with a code in an mmCIF model (the PDB reader reads codes itself), and the index of each
+     polymer HETATM atom. A model not yet drawn has no atoms to read, so it is parsed once here, on the
+     export surface, by the same prepareStructureAtoms. */
+  function reportAtomNotes(entry) {
+    let atoms = entry.atoms;
+    let scratch = false;
+    if (!atoms.length) {
+      try {
+        const target = acquireExportViewer(4, 4); scratch = true;
+        atoms = target.addModel(entry.text, entry.format).selectedAtoms({});
+        prepareStructureAtoms(entry, atoms);
+      } catch (error) { atoms = []; }
+    }
+    const icodes = []; const polymerAtoms = [];
+    atoms.forEach((atom, index) => {
+      if (entry.format === 'cif' && insertionCodeOf(atom)) icodes.push([index, insertionCodeOf(atom)]);
+      if (atom.polymerHetatm) polymerAtoms.push(index);
+    });
+    if (scratch) releaseExportViewer();
+    return { ...(icodes.length ? { icodes } : {}), ...(polymerAtoms.length ? { polymerAtoms } : {}) };
+  }
+
   async function downloadReport() {
     const chosen = reportEntries();
     if (!chosen.length) { announce('Load a model before building a report', 'error'); return; }
-    let library = "<script src='https://cdnjs.cloudflare.com/ajax/libs/3Dmol/2.4.2/3Dmol-min.js'><\/script>";
+    /* A report reads the page's camera, colours and models; during a built figure those are a saved
+       view's, and the export surface it may parse on is the figure's. */
+    const finish = beginExport(); if (!finish) return;
+    try {
+      await buildReport(chosen);
+    } finally { finish(); }
+  }
+
+  async function buildReport(chosen) {
+    let library = reportLibraryTag();
     if (root.querySelector('#gpv-report-offline').checked) {
       const done = setBusy('Embedding 3Dmol.js…');
       try { library = await embeddedLibraryTag(); }
@@ -292,7 +400,8 @@
       hasConfidence: entry.scores.length > 0,
       coords: reportCoordinates(entry),
       shapes: reportShapes(entry),
-      labels: labelRecords.filter(label => label.entryId === entry.id).map(label => ({ text: label.text, chain: label.chain, resi: label.resi, atom: label.atom, ...labelPosition(label), color: label.color || null, size: label.size || 12 }))
+      labels: labelRecords.filter(label => label.entryId === entry.id).map(label => ({ text: label.text, chain: label.chain, resi: label.resi, ...(insertionCodeOf(label) ? { icode: insertionCodeOf(label) } : {}), atom: label.atom, ...labelPosition(label), color: label.color || null, size: label.size || 12 })),
+      ...reportAtomNotes(entry)
     }));
     const chosenNames = new Set(chosen.map(entry => entry.name));
     const contactOwner = contactResult ? entryById(contactResult.entryId) : null;
@@ -304,8 +413,10 @@
          chain, so only maps whose axes are single chains (two chains, or one against itself) go in. */
       contacts: contactOwner && chosenNames.has(contactOwner.name) && contactResult.pairs.size && !contactResult.allChainsA && !contactResult.allChainsB ? {
         model: contactOwner.name, chainA: contactResult.chainA, chainB: contactResult.chainB, cutoff: contactResult.cutoff, mode: contactResult.mode,
-        residuesA: contactResult.rowA.residues.map(atom => atom.resi), residuesB: contactResult.rowB.residues.map(atom => atom.resi),
-        pairs: [...contactResult.pairs.entries()].map(([key, d]) => { const [i, j] = key.split('|').map(Number); return [contactResult.rowA.residues[i].resi, contactResult.rowB.residues[j].resi, Math.round(d * 1000) / 1000]; })
+        /* As the file numbers them — 100A, not 100 — since the report keys the map by these: by number
+           alone 100, 100A and 100B were one row. */
+        residuesA: contactResult.rowA.residues.map(residueNumber), residuesB: contactResult.rowB.residues.map(residueNumber),
+        pairs: [...contactResult.pairs.entries()].map(([key, d]) => { const [i, j] = key.split('|').map(Number); return [residueNumber(contactResult.rowA.residues[i]), residueNumber(contactResult.rowB.residues[j]), Math.round(d * 1000) / 1000]; })
       } : null,
       panels: reportPanelNames().filter(name => chosenNames.has(name)),
       sync: root.querySelector('#gpv-sync-mode').value,
@@ -313,6 +424,9 @@
       representation: root.querySelector('#gpv-style').value,
       colorMode: root.querySelector('#gpv-color-mode').value,
       aligned: exported.some(entry => Array.isArray(entry.coords)),
+      /* The caution about predictions only when the report holds one, by the methods text's rule (28):
+         a crystal structure alone was introduced as a prediction. */
+      predicted: chosen.some(reportPredicted),
       screenText: annotationRecords.filter(record => record.type === 'screen').map(record => ({ text: record.text, color: record.color, size: record.size, corner: record.corner, dx: record.dx || 0, dy: record.dy || 0 })),
       seconds: Number(root.querySelector('#gpv-video-length').value) || 5,
       generated: new Date().toISOString().slice(0, 10),
@@ -323,6 +437,8 @@
       domains: JSON.stringify(domainRecords.map(record => { const owner = entryById(record.entryId); return { name: record.name, color: record.color, chain: record.chain, residues: record.residues, scope: record.scope, model: owner ? owner.name : null, collection: owner ? owner.collection || '' : '' }; })),
       chainColors: JSON.stringify(Object.fromEntries([...chainOrder.keys()].map(chain => [chain, chainColor(chain)]))),
       residueThemes: JSON.stringify(residueThemeTables()),
+      /* The viewer's own ramp, as source, so the report's spectrum is the viewer's to the colour. */
+      spectrumRamp: spectrumRampColor.toString(),
       residueData: JSON.stringify(residueData ? (() => { const owner = entryById(residueData.entryId); return { name: residueData.name, scale: residueData.scale, scope: residueData.scope, model: owner ? owner.name : null, collection: owner ? owner.collection || '' : '', min: dataRange().min, max: dataRange().max, stops: dataScales[residueData.scale] || dataScales.viridis, rows: [...residueData.values.entries()].map(([key, value]) => [key.split('|')[0], Number(key.split('|')[1]), value]).concat([...residueData.byResi.entries()].map(([resi, value]) => ['', resi, value])) }; })() : null),
       heteroMode: JSON.stringify(root.querySelector('#gpv-hetero').value),
       title: (provenanceValues().title || 'Protein Model Report').replace(/[<>&]/g, ''),
@@ -415,6 +531,7 @@ const chainColors=${data.chainColors};
 const domainRecords=${data.domains};
 const residueDataset=${data.residueData};
 const residueThemes=${data.residueThemes};
+${data.spectrumRamp}
 const initialHetero=${data.heteroMode};
 const el = id => document.getElementById(id);
 const directContexts = typeof OffscreenCanvas !== 'undefined' && !(window.chrome && /Chrom/.test(navigator.userAgent));
@@ -424,7 +541,7 @@ let timer = 0, spinning = false, syncing = false, syncFrame = 0, focused = 0, re
 const title = el('project-title');
 if (metadata.title) { title.hidden = false; title.textContent = metadata.title; }
 el('project-meta').textContent = [metadata.source, metadata.method, metadata.notes].filter(Boolean).join(' · ');
-el('generated').textContent = 'Interactive report generated by Protein Structure Viewer ' + initial.version + ' on ' + initial.generated + '. Predicted structures are predictions, not experimental determinations.' + (initial.aligned ? ' Superposed models are shown in their aligned positions.' : '');
+el('generated').textContent = 'Interactive report generated by Protein Structure Viewer ' + initial.version + ' on ' + initial.generated + '.' + (initial.predicted ? ' Predicted structures are predictions, not experimental determinations.' : '') + (initial.aligned ? ' Superposed models are shown in their aligned positions.' : '');
 const guided = el('guided'), guidedWrap = el('guided-wrap');
 if (!savedViews.length) guidedWrap.hidden = true;
 savedViews.forEach((v, i) => { const o = document.createElement('option'); o.value = i; o.textContent = String.fromCharCode(65 + i) + ' · ' + v.name; guided.append(o); });
@@ -473,7 +590,7 @@ function styleSpec(s) {
   if (mode === 'ss') options = { colorfunc: a => residueThemes.ss[a.ss] || residueThemes.ss.c };
   if (mode === 'data') options = { colorfunc: a => dataColorFor(s, a) };
   if (mode === 'annotated') { const lookup = domainLookupFor(s); options = { colorfunc: a => { const r = lookup.get((a.chain || '') + '|' + a.resi); return r ? r.color : '#9ca3af'; } }; }
-  if (mode === 'spectrum') options = { colorscheme: 'spectrum' };
+  if (mode === 'spectrum') options = { colorfunc: a => spectrumColorOf(s, a) };
   if (mode === 'element') options = { colorscheme: 'default' };
   if (s.faded) {
     const paper = paperColor(); const colorOf = options.colorfunc || (options.color ? () => options.color : null);
@@ -528,7 +645,16 @@ function show(pane, preserveView) {
   const s = structures[pane.index];
   pane.viewer.removeAllModels(); pane.viewer.removeAllLabels(); pane.viewer.removeAllShapes();
   const m = pane.viewer.addModel(s.text, s.format);
+  /* What the viewer read and 3Dmol's parser does not (03b): mmCIF insertion codes, and the HETATM
+     residues bonded into their chain, which are residues, not ligands. By atom index, before anything
+     reads the atoms. */
+  if (Array.isArray(s.icodes) || Array.isArray(s.polymerAtoms)) {
+    const atoms = m.selectedAtoms({});
+    (s.icodes || []).forEach(([i, code]) => { if (atoms[i]) atoms[i].icode = code; });
+    (s.polymerAtoms || []).forEach(i => { if (atoms[i]) atoms[i].hetflag = false; });
+  }
   if (Array.isArray(s.coords)) m.selectedAtoms({}).forEach((a, i) => { if (s.coords.length >= i * 3 + 3) { a.x = s.coords[i * 3]; a.y = s.coords[i * 3 + 1]; a.z = s.coords[i * 3 + 2]; } });
+  spectrumFor(s, m);
   m.setStyle({}, styleSpec(s));
   const het = el('hetero').value;
   m.setStyle({ hetflag: true }, het === 'hide' ? {} : het === 'sphere' ? { sphere: { scale: 0.35, colorscheme: 'default' } } : { stick: { radius: 0.25, colorscheme: 'default' }, sphere: { scale: 0.28, colorscheme: 'default' } });
@@ -539,7 +665,7 @@ function show(pane, preserveView) {
   (s.shapes || []).forEach(sh => {
     if (sh.kind === 'arrow') pane.viewer.addArrow({ start: sh.start, end: sh.end, radius: sh.radius, radiusRatio: 2.2, mid: 0.72, color: sh.color });
     else if (sh.kind === 'cylinder') pane.viewer.addCylinder({ start: sh.start, end: sh.end, radius: sh.radius, color: sh.color, dashed: !!sh.dashed, fromCap: 1, toCap: 1 });
-    else if (sh.kind === 'line') pane.viewer.addLine({ start: sh.start, end: sh.end, color: sh.color, dashed: !!sh.dashed, linewidth: 2 });
+    else if (sh.kind === 'line') pane.viewer.addLine({ start: sh.start, end: sh.end, color: sh.color, dashed: !!sh.dashed, linewidth: sh.width || 2 });
     else if (sh.kind === 'sphere') pane.viewer.addSphere({ center: sh.center, radius: sh.radius, color: sh.color, alpha: sh.alpha === undefined ? 1 : sh.alpha });
     else if (sh.kind === 'label') pane.viewer.addLabel(sh.text, { position: sh.position, backgroundColor: '#fff', fontColor: sh.color || '#111827', borderColor: sh.color || '#94a3b8', borderThickness: initial.labelStyle === 'plain' ? 0 : 1, showBackground: initial.labelStyle !== 'plain', fontSize: Math.round(13 * (sh.size || 1)), inFront: true, backgroundOpacity: 0.85 });
   });
@@ -550,7 +676,7 @@ function show(pane, preserveView) {
   if (oldView) pane.viewer.setView(oldView); else pane.viewer.zoomTo();
   pane.viewer.render();
   lastViews.set(pane, pane.viewer.getView());
-  pane.plddt = s.hasConfidence ? mean(m.selectedAtoms({}).filter(a => (a.atom === 'CA' || (a.atom === "C1'" && !a.hetflag)) && Number.isFinite(Number(a.b))).map(a => Number(a.b))) : null;
+  pane.plddt = s.hasConfidence ? mean(m.selectedAtoms({}).filter(a => !a.hetflag && (a.atom === 'CA' || a.atom === "C1'") && Number.isFinite(Number(a.b))).map(a => Number(a.b))) : null;
   const c = s.confidence || {};
   pane.stats.textContent = (pane.plddt === null ? 'pLDDT —' : 'pLDDT ' + pane.plddt.toFixed(1)) + (Number.isFinite(Number(c.iptm)) ? ' · ipTM ' + metric(c.iptm, 2) : Number.isFinite(Number(c.ptm)) ? ' · pTM ' + metric(c.ptm, 2) : '');
   if (panes[focused] === pane) describe(pane);
@@ -612,13 +738,14 @@ function addPane(index) {
   strip.addEventListener('pointermove', e => {
     const hit = stripHit(pane, e); if (!hit) return;
     pane.mark = { row: hit.row, index: hit.index };
-    readout.textContent = (hit.chain ? 'Chain ' + hit.chain + ' · ' : '') + (hit.atom.resn || 'RES') + hit.atom.resi + (Number.isFinite(Number(hit.atom.b)) ? ' · pLDDT ' + Number(hit.atom.b).toFixed(1) : '') + ' · click to zoom';
+    readout.textContent = (hit.chain ? 'Chain ' + hit.chain + ' · ' : '') + (hit.atom.resn || 'RES') + hit.atom.resi + icodeOf(hit.atom) + (Number.isFinite(Number(hit.atom.b)) ? ' · pLDDT ' + Number(hit.atom.b).toFixed(1) : '') + ' · click to zoom';
     drawStrip(pane, structures[pane.index]);
   });
   strip.addEventListener('pointerleave', () => { pane.mark = null; readout.textContent = 'Hover the strip to read a residue; click to zoom to it.'; drawStrip(pane, structures[pane.index]); });
   strip.addEventListener('click', e => {
     const hit = stripHit(pane, e); if (!hit) return;
-    const sel = { resi: hit.atom.resi }; if (hit.chain) sel.chain = hit.chain;
+    const code = icodeOf(hit.atom), sel = { resi: hit.atom.resi }; if (hit.chain) sel.chain = hit.chain;
+    if (code) sel.predicate = a => icodeOf(a) === code;
     pane.viewer.zoomTo(sel); pane.viewer.render(); focusPane(pane);
   });
   const bg = backgroundFor(el('background').value); viewer.setBackgroundColor(bg.color, bg.alpha); applyViewStyle(viewer);
@@ -685,10 +812,33 @@ function refreshDomainLegend() {
 function stripRows(m) {
   const byChain = new Map();
   m.selectedAtoms({}).forEach(a => { if (a.hetflag || a.atom !== 'CA') return; const c = a.chain || ''; if (!byChain.has(c)) byChain.set(c, []); byChain.get(c).push(a); });
-  return [...byChain.entries()].map(([chain, atoms]) => ({ chain, atoms: atoms.sort((x, y) => x.resi - y.resi) })).filter(r => r.atoms.length > 1).slice(0, 12);
+  return [...byChain.entries()].map(([chain, atoms]) => ({ chain, atoms: atoms.sort((x, y) => x.resi - y.resi || (icodeOf(x) < icodeOf(y) ? -1 : icodeOf(x) > icodeOf(y) ? 1 : 0)) })).filter(r => r.atoms.length > 1).slice(0, 12);
 }
+/* Sequence spectrum, as the viewer paints it: each chain blue at its first residue to red at its last,
+   by the residue's place in the chain (polymer residues, in number and insertion-code order; a chain
+   of one residue keeps the model colour). 3Dmol has no colour scheme called "spectrum" and drew grey. */
+function icodeOf(a) { const c = String(a && a.icode != null ? a.icode : '').trim(); return c === '?' || c === '.' ? '' : c; }
+function spectrumFor(s, m) {
+  if (s.spectrum) return s.spectrum;
+  const byChain = new Map();
+  m.selectedAtoms({}).forEach(a => {
+    if (a.hetflag || !Number.isFinite(Number(a.resi))) return;
+    const c = a.chain || ''; if (!byChain.has(c)) byChain.set(c, new Map());
+    const residues = byChain.get(c); const id = a.resi + '|' + icodeOf(a); const current = residues.get(id);
+    if (!current || a.atom === 'CA' || (a.atom === 'P' && current.atom !== 'CA')) residues.set(id, a);
+  });
+  const map = new Map();
+  byChain.forEach((residues, c) => {
+    const list = [...residues.values()].sort((x, y) => x.resi - y.resi || (icodeOf(x) < icodeOf(y) ? -1 : icodeOf(x) > icodeOf(y) ? 1 : 0));
+    if (list.length < 2) return;
+    list.forEach((a, i) => map.set(c + '|' + a.resi + '|' + icodeOf(a), spectrumRampColor(i / (list.length - 1))));
+  });
+  s.spectrum = map; return map;
+}
+function spectrumColorOf(s, a) { return (s.spectrum && s.spectrum.get((a.chain || '') + '|' + a.resi + '|' + icodeOf(a))) || s.color; }
 function stripColor(s, a) {
   const mode = el('colors').value;
+  if (mode === 'spectrum') return spectrumColorOf(s, a);
   if (mode === 'plddt') return s.hasConfidence ? pcolor(Number(a.b || 0)) : s.color;
   if (mode === 'chain') return chainColors[a.chain || ''] || '#9ca3af';
   if (mode === 'ss') return residueThemes.ss[a.ss] || residueThemes.ss.c;

@@ -3,7 +3,7 @@
 The core structural quantities below were compared with an independent implementation on three real
 AlphaFold 3 runs. Later sections record separate interaction-confidence checks on real and published
 predictor outputs. This file records the methods, results, limits and ways to rerun them. The core
-three-run check was last run on 2026-09-15 with viewer 2.37.0; the interaction-confidence check was
+three-run check was last run on 2026-11-08 with viewer 2.52.0 (175 comparisons: the original 130 plus the distance-map and residue-contacts checks added in 2.50.0 and 2.51.0, all within tolerance, re-run after batch L changed what counts as a residue and excluded water from interfaces — no recorded number moved); the interaction-confidence check was
 run on 2026-09-27 with viewer 2.48.0.
 
 ## Method
@@ -316,7 +316,7 @@ statement about the alignment, reported so nobody mistakes the weighting for a r
 | A — M13 virion tip | n_l_o_k_m (γ) | 90 | 73 | 5.0 × 10⁻⁷ | 5.0 × 10⁻⁷ | 4.9 × 10⁻⁷ | exact | 0.121 |
 | B — MS2 maturation protein–coat | a | 1 875 | 393 | 5.0 × 10⁻⁷ | 5.0 × 10⁻⁷ | 5.0 × 10⁻⁷ | exact | 0.138 |
 | B — MS2 maturation protein–coat | b_c | 62 | 130 | 5.0 × 10⁻⁷ | 5.0 × 10⁻⁷ | 4.9 × 10⁻⁷ | exact | 0.130 |
-| C — phiX174 F–G | a | 2 048 | 427 | 5.0 × 10⁻⁷ | 5.0 × 10⁻⁷ | 5.0 × 10⁻⁷ | exact | 0.262 |
+| C — phiX174 F–G | a | 2 048 | 427 | 5.0 × 10⁻⁷ | 5.0 × 10⁻⁷ | 5.0 × 10⁻⁷ | exact | 0.261 |
 | C — phiX174 F–G | b | 798 | 175 | 5.0 × 10⁻⁷ | 4.9 × 10⁻⁷ | 5.0 × 10⁻⁷ | exact | 0.317 |
 
 Differences are the six-decimal rounding of the reference. Note the single-sequence alignment for the
@@ -338,6 +338,24 @@ of BSA over all of them were compared as well as the named pair.
 | A — M13 virion tip | K–F | 7 271.8 / 7 223.4 | 3 290.1 / 3 258.2 | 9 537.9 / 9 429.7 | 1 024.0 / 1 051.9 | 2.7 % | 34 / 34 | 22 246 / 22 089 | ✓ |
 | B — MS2 maturation protein–coat | A–B | 22 101.3 / 22 134.0 | 9 554.0 / 9 556.0 | 30 585.4 / 30 628.7 | 1 069.9 / 1 061.4 | 0.8 % | 3 / 3 | 7 668 / 7 588 | ✓ |
 | C — phiX174 F–G | A–B | 23 907.2 / 23 893.5 | 9 757.0 / 9 760.8 | 32 954.8 / 32 956.1 | 709.5 / 698.1 | 1.6 % | 1 / 1 | 710 / 698 | ✓ |
+
+**A crystal structure, without its water (added 2.52.0, batch L).** The three runs above are predicted
+models, which have no water. On the deposited barnase–barstar structure 1BRS
+(`tests/fixtures/experimental/1brs.cif`), whose 513 waters all carry protein chain letters, the viewer
+counted them as part of their chains until 2.52.0 (A–D: 280 contacts, 2 289 Å²). It now leaves water
+out. The reference is `tests/reference.py`, unmodified, run on 1BRS with its HOH records removed
+(`python3 reference.py <folder> A 4 A D`, the file copied as `1brs_model_0.cif` and `_1.cif`, since the
+script wants two models); the atom-pair count, which reference.py does not report, is Biopython's
+`NeighborSearch` over the same water-free heavy atoms. Checked by a step of `tests/run.mjs`.
+
+| run | chains | atom contacts (viewer / ref) | residue pairs (viewer / ref) | residues (viewer / ref) | BSA (viewer / ref, Å²) | rel. diff. | pairs | total BSA (viewer / ref, Å²) | |
+|---|---|---:|---:|---:|---:|---:|---:|---:|:--:|
+| 1BRS, water removed | A–D | 165 / 165 | 36 / 36 | 16 + 14 / 16 + 14 | 1 561.5 / 1 551.8 | 0.6 % | 5 / 5 | 5 330 / 5 348 | ✓ |
+
+The residue pairs of the other four chain pairs agree too (A–B 11, A–C 2, B–E 37, C–F 34). With the
+waters left in, reference.py gives 2 319.8 Å² for A–D — its BSA comment says it keeps every
+non-hydrogen atom, water included, which is what the viewer did before — so the 47 % was a difference
+in what was counted, not in how.
 
 **Why the tolerance is per cent and not 10⁻⁵.** Shrake–Rupley is a sampling method: it counts how many
 of a fixed set of points on each atom's expanded sphere escape every neighbour. The viewer and

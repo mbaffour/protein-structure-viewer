@@ -879,6 +879,7 @@ html>body{padding:0}</style>
     <span id="gpv-state" aria-live="polite">Ready</span>
     <span id="gpv-hover" class="gpv-hover" aria-hidden="true"></span>
   </div>
+  <div class="gpv-copy-fallback" id="gpv-copy-fallback" hidden><label class="form-label text-small"><span>The clipboard was not available — the text is selected here; press Ctrl/⌘+C</span><textarea class="form-control" id="gpv-copy-fallback-text" rows="3" readonly></textarea></label><button class="btn btn-ghost" type="button" id="gpv-copy-fallback-close">Done</button></div>
   <div class="gpv-sequence" id="gpv-sequence" hidden>
     <div class="gpv-sequence-head text-small">
       <strong id="gpv-sequence-title">Sequence</strong>
@@ -934,7 +935,7 @@ html>body{padding:0}</style>
     <div class="viz-controls gpv-presets"><span class="text-small text-muted">Presets</span><button class="btn" type="button" id="gpv-preset-thesis" data-tooltip="White background, orthographic cartoon, legend on exports, 1800 × 1200 at 2×">Thesis figure</button><button class="btn" type="button" id="gpv-preset-slide" data-tooltip="Dark background, perspective cartoon, colour by chain">Dark slide</button><button class="btn" type="button" id="gpv-preset-review" data-tooltip="pLDDT colouring with the legend, every residue shown, ligands as sticks">Confidence review</button></div>
     <div class="viz-controls">
       <label class="form-label">Representation<select class="form-select" id="gpv-style"><option value="cartoon">Cartoon</option><option value="stick">Sticks</option><option value="sphere">Spheres</option><option value="line">Lines</option></select></label>
-      <label class="form-label">Color scheme<select class="form-select" id="gpv-color-mode"><option value="structure">Per structure</option><option value="chain">Per chain</option><option value="entity">Per entity (identical sequences)</option><option value="plddt">pLDDT confidence</option><option value="deviation">Cα deviation after alignment</option><option value="fromresidue" title="Colour every residue of the selected residue’s model by the distance of its closest heavy atom to that residue: ≤4, 4–6, 6–10, 10–20 and over 20 Å, the residue itself in the accent colour. Click a residue first; changing the selection recolours">Distance from selected residue</option><option value="agreement">Model agreement (Cα RMSF)</option><option value="domain">PAE domains</option><option value="annotated">Annotated domains</option><option value="data">Per-residue data</option><option value="charge">Residue charge</option><option value="hydrophobicity">Hydrophobicity (Kyte–Doolittle)</option><option value="restype">Residue type</option><option value="amino">Amino acid</option><option value="ss">Secondary structure</option><option value="spectrum">Sequence spectrum</option><option value="element">Element</option></select></label>
+      <label class="form-label">Colour scheme<select class="form-select" id="gpv-color-mode"><option value="structure">Per structure</option><option value="chain">Per chain</option><option value="entity">Per entity (identical sequences)</option><option value="plddt">pLDDT confidence</option><option value="deviation">Cα deviation after alignment</option><option value="fromresidue" title="Colour every residue of the selected residue’s model by the distance of its closest heavy atom to that residue: ≤4, 4–6, 6–10, 10–20 and over 20 Å, the residue itself in the accent colour. Click a residue first; changing the selection recolours">Distance from selected residue</option><option value="agreement">Model agreement (Cα RMSF)</option><option value="domain">PAE domains</option><option value="annotated">Annotated domains</option><option value="data">Per-residue data</option><option value="charge">Residue charge</option><option value="hydrophobicity">Hydrophobicity (Kyte–Doolittle)</option><option value="restype">Residue type</option><option value="amino">Amino acid</option><option value="ss">Secondary structure</option><option value="spectrum">Sequence spectrum</option><option value="element">Element</option></select></label>
       <label class="form-label">Low confidence<select class="form-select" id="gpv-hide-below" data-tooltip="Hide residues whose pLDDT is below the threshold — in the viewer, every panel and every export"><option value="0">Show every residue</option><option value="50">Hide pLDDT below 50</option><option value="70">Hide pLDDT below 70</option></select></label>
       <label class="form-label">Ligands and ions<select class="form-select" id="gpv-hetero" data-tooltip="How hetero groups — ligands, cofactors, ions, glycans — are drawn; water is never shown"><option value="stick">Sticks and spheres</option><option value="sphere">Spheres</option><option value="hide">Hidden</option></select></label>
       <label class="form-check form-switch"><input class="form-check-input" id="gpv-safe-palette" type="checkbox"><span class="form-check-label">Colour-blind-safe palette (Okabe–Ito) for chains and domains</span></label>
@@ -956,12 +957,12 @@ html>body{padding:0}</style>
       <button class="btn" type="button" id="gpv-add-label" disabled>Add or update</button>
       <label class="form-check form-switch"><input class="form-check-input" id="gpv-all-labels" type="checkbox"><span class="form-check-label">Label every residue</span></label>
       <label class="form-label">Label style<select class="form-select" id="gpv-label-style" data-tooltip="Boxed labels read on any background; plain text suits clean figures where the box would hide the model"><option value="boxed">Boxed</option><option value="plain">Plain text</option></select></label>
-      <button class="btn btn-ghost" type="button" id="gpv-labels-separate" disabled data-tooltip="Push apart any labels whose boxes overlap at the current framing — one label per model at the same site lands in a pile — stacking them down the screen with a leader line back to each residue. Labels you have dragged yourself are left where you put them">Separate labels</button>
+      <button class="btn btn-ghost" type="button" id="gpv-labels-separate" disabled data-tooltip="Push apart any labels and measurement text whose boxes overlap at the current framing — one label per model at the same site lands in a pile — stacking them down the screen with a leader line back to each residue or measurement. Text you have dragged yourself is left where you put it">Separate labels</button>
       <button class="btn btn-ghost" type="button" id="gpv-clear-labels">Clear labels</button>
     </div>
     <div class="viz-controls">
       <button class="btn" type="button" id="gpv-position-compare" disabled data-tooltip="Show the side chain at the selected position in every shown model, label each model&#39;s residue there, and say whether they differ — positions are matched by the alignment pairing when the models are superposed, otherwise by chain and residue number">Compare this position</button>
-      <label class="form-label">Positions<input class="form-control" id="gpv-position-set" type="text" placeholder="A:20-30, A:45" data-tooltip="A comma-separated set of positions: A:20-30, A:45, or plain numbers like 20-30 and 45, which use the chain of the selected residue (or the only chain the models have)" aria-label="Positions to compare, as a comma-separated list of chains, numbers and ranges"></label>
+      <label class="form-label">Positions<input class="form-control" id="gpv-position-set" type="text" placeholder="A:20-30, A:45" data-tooltip="A comma-separated set of positions: A:20-30, A:45, H:100A for a residue with an insertion code, or plain numbers like 20-30 and 45, which use the chain of the selected residue (or the only chain the models have)" aria-label="Positions to compare, as a comma-separated list of chains, numbers and ranges"></label>
       <button class="btn" type="button" id="gpv-position-set-run" data-tooltip="Compare every position in the list across the shown models in one press — a binding site or an interface is several residues — and measure one neighbourhood table covering all of them">Compare these positions</button>
       <label class="form-check form-switch"><input class="form-check-input" id="gpv-position-sticks" type="checkbox" checked><span class="form-check-label">Side chains at compared positions</span></label>
       <label class="form-label">Neighbourhood (Å)<input class="form-control" id="gpv-position-cutoff" type="number" min="3" max="12" step="0.5" value="5" data-tooltip="Residues of the reference model with any heavy atom this close to the compared residue are the neighbourhood whose movement is measured"></label>
@@ -979,7 +980,7 @@ html>body{padding:0}</style>
       <label class="form-label">Chain<input class="form-control" id="gpv-selection-chain" type="text" placeholder="A"></label>
       <label class="form-label">Residues<input class="form-control" id="gpv-selection-range" type="text" placeholder="20-45 or 20,24,31"></label>
       <label class="form-label">Action<select class="form-select" id="gpv-selection-action"><option value="highlight">Highlight</option><option value="hide">Hide</option></select></label>
-      <label class="form-label">Highlight color<input class="form-control form-control-color" id="gpv-selection-color" type="color" value="#f97316"></label>
+      <label class="form-label">Highlight colour<input class="form-control form-control-color" id="gpv-selection-color" type="color" value="#f97316"></label>
       <button class="btn" type="button" id="gpv-add-selection" disabled>Add selection</button>
       <button class="btn" type="button" id="gpv-box-select" disabled aria-pressed="false" data-tooltip="While on, a drag across the model draws a box instead of turning it: every residue inside is highlighted in the colour above, and you can label them all. With a mouse, Shift + drag does the same without the toggle. Esc stops">Drag to select</button>
       <button class="btn btn-ghost" type="button" id="gpv-clear-selections">Clear selections</button>
@@ -1034,7 +1035,9 @@ html>body{padding:0}</style>
     <div class="viz-controls">
       <label class="form-label">Measurement<select class="form-select" id="gpv-measure-type"><option value="distance">Distance (2 atoms)</option><option value="angle">Angle (3 atoms)</option></select></label>
       <button class="btn" type="button" id="gpv-measure">Start measuring</button>
-      <button class="btn btn-ghost" type="button" id="gpv-clear-measurements">Clear measurements</button>
+      <button class="btn btn-ghost" type="button" id="gpv-clear-measurements" disabled>Clear measurements</button>
+      <button class="btn btn-ghost" type="button" id="gpv-measurements-copy" disabled data-tooltip="Copy every measurement as tab-separated text: the type, each point's model, chain, residue and atom, the value, its unit and the measurement's text">Copy measurements</button>
+      <button class="btn" type="button" id="gpv-measurements-csv" disabled data-tooltip="The same table as a CSV file: one row per measurement, the third point left empty for a distance">Download measurements CSV</button>
       <span class="text-muted" id="gpv-measure-state">Measurement mode is off.</span>
     </div>
     <div class="gpv-list" id="gpv-measurement-list" aria-label="Measurements"></div>
@@ -1161,7 +1164,6 @@ html>body{padding:0}</style>
       <label class="form-label gpv-slider-label">Contact cutoff <span id="gpv-interface-cutoff-value">4.0 Å</span><input class="form-range" id="gpv-interface-cutoff" type="range" min="3" max="6" step="0.5" value="4"></label>
       <button class="btn" type="button" id="gpv-interface-run" disabled><i data-icon="crosshair" aria-hidden="true"></i>Analyse interfaces</button>
       <button class="btn" type="button" id="gpv-interface-csv" disabled>Download interface CSV</button>
-      <label class="form-label">Highlight colour<input class="form-control form-control-color" id="gpv-interface-color" type="color" value="#e11d48"></label>
       <span class="text-muted text-small" id="gpv-interface-state"></span>
     </div>
     <div class="table-responsive" id="gpv-contacts-wrap" hidden><table class="table table-sm" aria-label="Inter-chain interface geometry"><thead><tr><th>Chain pair</th><th class="text-end">Atom contacts</th><th class="text-end">Residue pairs</th><th class="text-end">Interface residues</th><th class="text-end">Buried surface (Å²)</th><th></th></tr></thead><tbody id="gpv-contacts-rows"></tbody></table></div>
@@ -1185,8 +1187,12 @@ html>body{padding:0}</style>
       <button class="btn" type="button" id="gpv-image" disabled>Download figure PNG</button>
       <button class="btn" type="button" id="gpv-copy-image" disabled data-tooltip="Render the publication PNG and put it on the clipboard, ready to paste into slides or a document">Copy PNG to clipboard</button>
       <button class="btn" type="button" id="gpv-svg" disabled data-tooltip="Raster molecule with labels, arrows, callouts and legend as editable vector layers">Download figure SVG</button>
+      <button class="btn" type="button" id="gpv-legend-key" disabled data-tooltip="A small image of the figure's colour key on its own — every entry with its exact colour and name, in the figure font and text size, in the Figure format chosen above — to place beside the figure or in its legend">Download legend key</button>
+      <button class="btn" type="button" id="gpv-legend-key-svg" disabled data-tooltip="The same colour key as an SVG with editable text, drawn by the code that draws the legend on the figure SVG">Download legend key SVG</button>
       <button class="btn" type="button" id="gpv-compare-image" disabled data-tooltip="Stitch every synchronized panel into one lettered figure at the chosen size">Download comparison PNG</button>
       <button class="btn" type="button" id="gpv-model-panels" disabled data-tooltip="One lettered panel per model, every panel rendered from the current camera — the five models of an AlphaFold run side by side, identically framed">Download one panel per model</button>
+      <textarea class="form-control gpv-legend-text" id="gpv-legend-key-text" rows="2" readonly aria-label="Legend text starter" placeholder="Load a model to name the colours of its key"></textarea>
+      <button class="btn btn-ghost" type="button" id="gpv-legend-key-copy" disabled data-tooltip="Copy the sentence above — every key entry with its colour in words — to paste into the figure legend and edit">Copy legend text</button>
     </div>
     <div class="viz-controls gpv-composite" aria-label="Composite figure">
       <span class="text-small text-muted">Composite figure</span>
@@ -1249,8 +1255,8 @@ html>body{padding:0}</style>
       <label class="form-check form-switch"><input class="form-check-input" id="gpv-builder-letters" type="checkbox" checked><span class="form-check-label">Panel letters</span></label>
       <label class="form-check form-switch"><input class="form-check-input" id="gpv-builder-legends" type="checkbox" checked><span class="form-check-label">Legend and scale bar on each panel</span></label>
       <label class="form-check form-switch"><input class="form-check-input" id="gpv-builder-architecture" type="checkbox"><span class="form-check-label">Domain architecture row under the panels</span></label>
-      <button class="btn" type="button" id="gpv-contact-sheet" disabled data-tooltip="One lettered figure of the ticked views at the chosen output width and resolution, dpi written into the file">Download figure PNG</button>
-      <button class="btn" type="button" id="gpv-builder-svg" disabled data-tooltip="The same figure with vector captions, labels, legends and scale bars — editable in Illustrator or Inkscape">Download figure SVG</button>
+      <button class="btn" type="button" id="gpv-contact-sheet" disabled data-tooltip="One lettered figure of the ticked views at the chosen output width and resolution, dpi written into the file">Download built figure PNG</button>
+      <button class="btn" type="button" id="gpv-builder-svg" disabled data-tooltip="The same figure with vector captions, labels, legends and scale bars — editable in Illustrator or Inkscape">Download built figure SVG</button>
       <span class="text-muted text-small" id="gpv-builder-estimate"></span>
     </div>
     <div class="viz-controls">
@@ -1274,6 +1280,7 @@ html>body{padding:0}</style>
       <button class="btn btn-ghost gpv-icon-btn" value="close" aria-label="Close help"><i data-icon="x" aria-hidden="true"></i></button>
     </form>
     <div class="gpv-dialog-body">
+      <p class="text-small">New here? <code>docs/TUTORIALS.md</code> in the repository — <a href="https://github.com/mbaffour/protein-structure-viewer/blob/main/docs/TUTORIALS.md" target="_blank" rel="noopener">github.com/mbaffour/protein-structure-viewer</a> — has six walkthroughs that run from an empty page to a finished file: a first figure, a wild type against a mutant, an ensemble, exporting cleanly, a reproducible figure, and measuring a site. Each can be followed with a structure fetched from the PDB or AlphaFold DB.</p>
       <h3>Getting structures in</h3>
       <ul>
         <li>Drop <code>.pdb</code>, <code>.cif</code>, <code>.mmcif</code>, or whole AlphaFold result <code>.zip</code> archives anywhere on the page.</li>
@@ -1283,7 +1290,7 @@ html>body{padding:0}</style>
       <h3>In the 3D view</h3>
       <ul>
         <li>Drag to rotate, scroll to zoom, right-drag or two-finger drag to pan.</li>
-        <li>Click any atom to inspect its residue: a small card opens at it with the residue, chain, pLDDT, secondary structure and how many residues sit within the Annotate tab's <em>Within (Å)</em> distance — type a label and press <kbd>Enter</kbd>, or press <strong>Measure to…</strong> and click a second residue for the distance — Cα–Cα, or the closest pair of heavy atoms when the card's <em>Measure</em> choice says <em>closest atoms</em> (remembered). The neighbour count, or <strong>Contacts</strong>, lists those residues nearest first with their closest atoms and Cα–Cα distance: hover a row to name it on the view, click it to measure it, or use <strong>Measure all</strong> (one undo step), <strong>Highlight</strong> or <strong>Copy</strong>. <em>Appearance → Color scheme → Distance from selected residue</em> colours the model by each residue's closest heavy-atom distance to the selected one. A small marker keeps naming the selected residue on the view (never in an export). Click a label without dragging it to edit its text.</li>
+        <li>Click any atom to inspect its residue: a small card opens at it with the residue, chain, pLDDT, secondary structure and how many residues sit within the Annotate tab's <em>Within (Å)</em> distance — type a label and press <kbd>Enter</kbd>, or press <strong>Measure to…</strong> and click a second residue for the distance — Cα–Cα, or the closest pair of heavy atoms when the card's <em>Measure</em> choice says <em>closest atoms</em> (remembered). The neighbour count, or <strong>Contacts</strong>, lists those residues nearest first with their closest atoms and Cα–Cα distance: hover a row to name it on the view, click it to measure it, or use <strong>Measure all</strong> (one undo step), <strong>Highlight</strong> or <strong>Copy</strong>. <em>Appearance → Colour scheme → Distance from selected residue</em> colours the model by each residue's closest heavy-atom distance to the selected one. A small marker keeps naming the selected residue on the view (never in an export). Click a label without dragging it to edit its text.</li>
         <li>Use <strong>Figure annotations</strong> in the Annotate tab to draw arrows, lines, residue markers, and text callouts by clicking atoms, and to add corner titles. They follow rotation and alignment and are included in PNG exports and reports.</li>
         <li>Turn on <strong>Synchronized multi-view</strong> in the Compare tab to show up to six models in linked viewports. Dragging, spinning, or rocking any one of them moves them all.</li>
       </ul>
@@ -1294,8 +1301,9 @@ html>body{padding:0}</style>
           <tr><th><kbd>L</kbd></th><td>Open the label editor at the selected residue</td></tr>
           <tr><th><kbd>M</kbd></th><td>Measure to…: the distance from the selected residue to the next residue you click (in the view, the sequence strip or with Go to) — Cα–Cα, or the closest heavy atoms when the residue card's <em>Measure</em> choice says so — added as an ordinary measurement</td></tr>
           <tr><th><kbd>Enter</kbd> / <kbd>Esc</kbd></th><td>In the label editor: add or update the label / close it without changes</td></tr>
-          <tr><th><kbd>←</kbd> <kbd>→</kbd> <kbd>↑</kbd> <kbd>↓</kbd></th><td>Move the active label 8 px (<kbd>Shift</kbd>: 1 px). A label becomes active when you click it, label it, or press <strong>Select</strong> in its row</td></tr>
-          <tr><th><kbd>Delete</kbd></th><td>Remove the active label</td></tr>
+          <tr><th><kbd>←</kbd> <kbd>→</kbd> <kbd>↑</kbd> <kbd>↓</kbd></th><td>Move the active label 8 px (<kbd>Shift</kbd>: 1 px). A label becomes active when you click it, drag it, label it, or press <strong>Select</strong> in its row</td></tr>
+          <tr><th>Measurement text</th><td>Click a measurement's text on the view to edit it like a label: type words before the value, <strong>Name the atoms</strong>, show or hide the value, colour it, make the line solid or dashed, join the Cα atoms or the closest atoms, or <strong>Remove</strong> it. Drag it, or nudge it with the arrow keys, to move it; <kbd>Delete</kbd> removes it. Its text, colour and place reach every export — PNG, SVG, PDF, the report, the figure legend and scenes</td></tr>
+          <tr><th><kbd>Delete</kbd> / <kbd>Backspace</kbd></th><td>Remove the active label (or the active measurement or annotation text)</td></tr>
           <tr><th><kbd>Shift</kbd> + drag</th><td>Draw a box over the model: every residue inside is highlighted, and the popover labels them all (<kbd>Enter</kbd>) or keeps the highlight (<kbd>Esc</kbd>). On a touchscreen, turn on <strong>Drag to select</strong> in Annotate</td></tr>
           <tr><th><kbd>C</kbd></th><td>Start or pause automatic cycling</td></tr>
           <tr><th><kbd>F</kbd></th><td>Fit every panel to what it displays</td></tr>
@@ -1325,8 +1333,9 @@ html>body{padding:0}</style>
       </ul>
       <h3>Tips for figures and reviewers</h3>
       <ul>
-        <li><em>Annotate → Compare this position</em> takes the residue you have selected and, in every shown model, draws its side chain, writes that model’s own residue on it (Arg273, His273) and states whether the models agree — the one-press check on a wild-type and mutant pair. Positions are matched by the Cα pairing of the superposition once the models are aligned, and by chain and residue number otherwise. After <em>Align visible</em> the same press also measures what the substitution did: a neighbourhood table of every residue with a heavy atom within the cutoff of the site, each row giving its Cα deviation from the reference in every other model, with <em>Highlight neighbourhood</em> and an effect CSV. A binding site is several residues, so the same block takes a set: type <em>A:20-30, A:45</em> (or bare numbers and ranges, which use the chain of the selected residue) into <em>Positions</em> and press <em>Compare these positions</em> — every one of them is compared in one press and one undo step, up to 40, any that fewer than two shown models carry being skipped and counted, and the table then opens with a row per site followed by the union of their neighbourhoods. <em>Make site figure</em> then turns the comparison into a finished two-panel figure in one press: panel A an overview of the superposed models with the site marked, panel B a close-up of the site with the side chains and each model’s label, the reference model solid and the others faded. With the models superposed and <em>Deviation panel</em> on, a panel C follows: the same close-up, every model solid and coloured by how far each residue moved from the reference, blue under 1 Å to red 8 Å and over, with the band scale as its legend. The panels are saved as views, ticked as the only panels of the figure builder in two columns (three with the deviation panel), and the Publish tab opens at the builder ready for <em>Download figure PNG</em> or <em>SVG</em>; ⌘Z takes the whole press back.</li>
+        <li><em>Annotate → Compare this position</em> takes the residue you have selected and, in every shown model, draws its side chain, writes that model’s own residue on it (Arg273, His273) and states whether the models agree — the one-press check on a wild-type and mutant pair. Positions are matched by the Cα pairing of the superposition once the models are aligned, and by chain and residue number otherwise. After <em>Align visible</em> the same press also measures what the substitution did: a neighbourhood table of every residue with a heavy atom within the cutoff of the site, each row giving its Cα deviation from the reference in every other model, with <em>Highlight neighbourhood</em> and an effect CSV. A binding site is several residues, so the same block takes a set: type <em>A:20-30, A:45</em> (or bare numbers and ranges, which use the chain of the selected residue) into <em>Positions</em> and press <em>Compare these positions</em> — every one of them is compared in one press and one undo step, up to 40, any that fewer than two shown models carry being skipped and counted, and the table then opens with a row per site followed by the union of their neighbourhoods. <em>Make site figure</em> then turns the comparison into a finished two-panel figure in one press: panel A an overview of the superposed models with the site marked, panel B a close-up of the site with the side chains and each model’s label, the reference model solid and the others faded. With the models superposed and <em>Deviation panel</em> on, a panel C follows: the same close-up, every model solid and coloured by how far each residue moved from the reference, blue under 1 Å to red 8 Å and over, with the band scale as its legend. The panels are saved as views, ticked as the only panels of the figure builder in two columns (three with the deviation panel), and the Publish tab opens at the builder ready for <em>Download built figure PNG</em> or <em>SVG</em>; ⌘Z takes the whole press back.</li>
         <li><em>Publish → Figure format</em> saves the same figure as PNG or TIFF with the resolution in the file, as a PDF whose page is the physical size you chose, or as JPEG or WebP for slides; <em>Download figure SVG</em> stays the vector option with editable text.</li>
+        <li><em>Publish → Download legend key</em> saves the figure's colour key on its own — every entry with its exact colour and name, in the figure font and text size, in the chosen Figure format — and <em>Download legend key SVG</em> saves it with editable text; the box under them says the same key in words ("model_a (purple); model_b (cyan)") for the figure legend, and <em>Copy legend text</em> copies it. Both follow the colour scheme, the shown models, their colours and the Figure labels, and the views ZIP carries the key as <code>legend-key.png</code> and <code>legend-key.svg</code>.</li>
         <li>After <em>Align visible</em>, <em>RMSF profile SVG/PNG</em> plots the per-residue Cα spread across the aligned models, one panel per chain with the agreement bands behind the trace, and the same plot is a panel of the composite figure — the ensemble counterpart of the pLDDT profile.</li>
         <li><em>Compare → Pairwise RMSD → Compute matrix</em> superposes every shown model onto every other with the same rules as Align visible and tabulates the Cα RMSDs — which models of an ensemble agree, which is the odd one out — with a mean column, a ★ on the medoid, a CSV, a heat-map PNG or SVG with the values in the cells, and a panel for the composite figure. <em>Use medoid as reference</em> superposes everything onto that model and draws it solid against the rest.</li>
         <li><em>Compare → Match identical chains by position</em> re-pairs the chains of an assembly by where they sit after a first fit, so a model that puts the same subunit in a different place is compared against the copy it actually corresponds to; the chain mapping it chose is printed with each result.</li>
@@ -1341,6 +1350,7 @@ html>body{padding:0}</style>
         <li><em>Confidence → Colour by MSA</em> reads the alignment inside an AlphaFold 3 archive (or an .a3m you add) and colours matching chains by conservation (Henikoff position-based sequence weights by default, switchable), identity to the query or coverage; the legend, exports and methods text follow.</li>
         <li><em>Publish → Download composite figure</em> stitches the 3D view with the PAE heatmap, the pLDDT profile and the contact map into one lettered figure at print size, each panel rendered at output resolution.</li>
         <li>The <em>Publication checklist</em> at the foot of the Publish tab lists what a journal or reviewer would flag about the current figure — no physical size, low resolution, small text, colour-blind-unsafe colours, missing legend, scale bar in perspective, unsuperposed models, no title — with one-click fixes.</li>
+        <li>A measurement's text is edited like a label: click it on the view to type words before the value (“H-bond · 3.02 Å”), press <strong>Name the atoms</strong> for “HIS57 · B NE2 ↔ SER195 · C OG”, hide the value, colour the line and text, make the line solid, or join the two residues' Cα atoms or closest atoms; drag it or nudge it with the arrow keys to move it. Its row in <em>Annotate → Measurements</em> has the same controls, and <strong>Copy measurements</strong> and <strong>Download measurements CSV</strong> list every measurement with its atoms and value. The text, colour and place reach every export — PNG, SVG, PDF, the report, the figure legend, scenes and share links — and <strong>Separate labels</strong> moves measurement text off the labels it covers, on screen and again at print size.</li>
         <li><em>Compare → Contact and distance map</em> draws every residue pair of two chains (or one chain against itself, or all chains) within a cutoff, closer pairs darker, or with <em>All distances</em> every pair by its Cα–Cα distance; hover reads the pair and its distance, a click draws that distance on the model as a measurement, <em>Highlight interface</em> colours the interface, and the map, the contacts and every distance download as PNG and CSV. <em>Annotate → Label style</em> switches every label between boxed and plain text.</li>
         <li><em>Appearance → Outline</em> draws a silhouette line around every element (thin for most figures, bold for small panels) and <em>Depth cueing</em> fades the far side; both apply to panels and exports. In the composition table, <em>Faded</em> blends a chain into the background to spotlight the others. <em>Publish → Journal preset</em> sets width, resolution, text size and font from a journal's figure guide, and <em>Download one panel per model</em> renders every model from the same camera into one lettered figure.</li>
         <li>The <em>layout</em> button in the header (panel icon) switches between the side-panel workspace, where the 3D view stays pinned while you work in the scrolling tool panel, and the stacked layout. The tool panel sits on the left; the arrows button beside it swaps the two sides. Drag the divider between them to give tables more room; double-click it to reset. Screens narrower than 1100 px always stack.</li>
@@ -1364,6 +1374,16 @@ html>body{padding:0}</style>
 
 <style>
   #generic-protein-viewer { width: 100%; color: var(--foreground); }
+  /* Accent-coloured text, and the selected tab's fill behind white text: --primary is a fill and ring
+     colour, 2.9:1 on white, so text in the accent takes a darker blue in the light theme (5:1 on white,
+     4.6:1 on the --accent tint). The dark theme keeps the accent it has. */
+  #generic-protein-viewer { --accent-ink: light-dark(rgb(11 107 203), rgb(131 195 255)); --accent-foreground: var(--accent-ink); }
+  /* Muted text and every ghost button take this ink. At 49.4 % it was 3.2:1 on white in the light
+     theme — the card's facts, the contacts' atoms, the measurement rows, Show, Remove and the arrows
+     among them; at 68 % it is 5.6:1 on white and above 4.5:1 on the panel's grey. The dark theme
+     already passes and keeps its value. */
+  #generic-protein-viewer { --muted-foreground: light-dark(rgb(26 28 31 / 68%), rgb(255 255 255 / 49.8%)); }
+  #generic-protein-viewer .btn:not(.btn-primary, .viz-tile):is([aria-pressed="true"], [aria-selected="true"], .is-selected) { border-color: var(--accent-ink); background: var(--accent-ink); }
   #generic-protein-viewer .viz-controls { margin-bottom: 12px; align-items: end; }
   #generic-protein-viewer .form-label { min-width: 126px; flex: 1 1 138px; }
   #generic-protein-viewer .gpv-current-label { flex: 3 1 280px; }
@@ -1414,17 +1434,25 @@ html>body{padding:0}</style>
   #generic-protein-viewer .gpv-nudge .btn { padding: 2px 8px; }
   #generic-protein-viewer .gpv-nudge .form-control { width: 64px; flex: 0 0 auto; padding: 2px 6px; }
   /* The on-canvas label editor: a popover inside the stage, placed by script next to its residue. */
-  #generic-protein-viewer .gpv-label-editor { position: absolute; z-index: 5; display: grid; gap: 6px; width: 240px; max-width: calc(100% - 8px); padding: 8px; border: 1px solid var(--border); border-radius: var(--radius-md); color: var(--popover-foreground); background: var(--popover); box-shadow: 0 6px 20px -8px rgb(0 0 0 / 35%); cursor: auto; }
+  #generic-protein-viewer .gpv-label-editor { position: absolute; z-index: 5; display: grid; gap: 6px; width: 240px; max-width: calc(100% - 8px); max-height: calc(100% - 8px); overflow: auto; overscroll-behavior: contain; padding: 8px; border: 1px solid var(--border); border-radius: var(--radius-md); color: var(--popover-foreground); background: var(--popover); box-shadow: 0 6px 20px -8px rgb(0 0 0 / 35%); cursor: auto; }
+  #generic-protein-viewer #gpv-contact-wrap.is-stale canvas { opacity: 0.4; }
+  #generic-protein-viewer .gpv-copy-fallback { display: flex; align-items: flex-end; gap: 8px; margin-top: 6px; } #generic-protein-viewer .gpv-copy-fallback[hidden] { display: none; } #generic-protein-viewer .gpv-copy-fallback .form-label { flex: 1 1 auto; margin: 0; }
   #generic-protein-viewer .gpv-label-editor[hidden], #generic-protein-viewer .gpv-label-editor .btn[hidden] { display: none; }
   #generic-protein-viewer .gpv-label-editor-head { display: flex; align-items: center; gap: 6px; min-width: 0; }
   #generic-protein-viewer .gpv-label-editor-residue { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--muted-foreground); }
   #generic-protein-viewer .gpv-label-editor-close { min-height: 24px; padding: 0 8px; }
   #generic-protein-viewer .gpv-label-editor-actions { display: flex; flex-wrap: wrap; gap: 6px; }
+  #generic-protein-viewer .gpv-measure-editor { align-items: center; }
+  #generic-protein-viewer .gpv-measure-editor[hidden], #generic-protein-viewer .gpv-measure-editor [hidden] { display: none; }
+  #generic-protein-viewer .gpv-measure-editor .form-control-color { width: 34px; padding: 2px; }
+  #generic-protein-viewer .gpv-measure-editor-pair { display: inline-flex; align-items: center; gap: 4px; }
+  #generic-protein-viewer .gpv-measure-editor-pair .form-select { width: auto; padding-right: 26px; }
+  #generic-protein-viewer .gpv-edit-tools .gpv-check { white-space: nowrap; }
   /* The residue card's second line (pLDDT · secondary structure · neighbours) wraps rather than clips. */
   #generic-protein-viewer .gpv-residue-card-facts { color: var(--muted-foreground); line-height: 1.35; }
   #generic-protein-viewer .gpv-residue-card-facts[hidden] { display: none; }
   /* The neighbour count on the card opens the contacts list: a link in look, a button for the keyboard. */
-  #generic-protein-viewer .gpv-residue-card-near { padding: 0; border: 0; background: none; color: var(--primary); font: inherit; text-decoration: underline dotted; text-underline-offset: 2px; cursor: pointer; }
+  #generic-protein-viewer .gpv-residue-card-near { padding: 0; border: 0; background: none; color: var(--accent-ink); font: inherit; text-decoration: underline dotted; text-underline-offset: 2px; cursor: pointer; }
   #generic-protein-viewer .gpv-residue-card-near:focus-visible { outline: 2px solid var(--ring, var(--primary)); outline-offset: 1px; border-radius: 2px; }
   #generic-protein-viewer .gpv-residue-card-atoms { display: inline-flex; align-items: center; gap: 4px; color: var(--muted-foreground); }
   #generic-protein-viewer .gpv-residue-card-atoms[hidden] { display: none; }
@@ -1436,13 +1464,15 @@ html>body{padding:0}</style>
   #generic-protein-viewer .gpv-residue-contacts-tools { display: flex; flex-wrap: wrap; gap: 4px; }
   #generic-protein-viewer .gpv-residue-contacts-tools .btn { min-height: 26px; padding: 0 8px; }
   /* About nine rows, then the list scrolls inside the card. */
-  #generic-protein-viewer .gpv-residue-contacts-rows { max-height: 13.5em; margin: 0; padding: 0; overflow-y: auto; list-style: none; border: 1px solid var(--border); border-radius: var(--radius-sm, 4px); }
+  #generic-protein-viewer #gpv-measurement-list .gpv-entry.is-undrawn .gpv-entry-source::after { content: " · " attr(data-undrawn); }
+  #generic-protein-viewer .gpv-residue-contacts-rows { max-height: 11em; margin: 0; padding: 0; overflow-y: auto; list-style: none; border: 1px solid var(--border); border-radius: var(--radius-sm, 4px); }
   #generic-protein-viewer .gpv-residue-contact { display: grid; grid-template-columns: minmax(0, 1fr) auto auto auto; gap: 6px; align-items: baseline; width: 100%; min-height: 1.5em; padding: 0 6px; border: 0; background: none; color: inherit; font: inherit; font-size: 0.8125rem; font-variant-numeric: tabular-nums; text-align: left; cursor: pointer; }
   #generic-protein-viewer .gpv-residue-contact:hover, #generic-protein-viewer .gpv-residue-contact:focus-visible { background: color-mix(in srgb, var(--primary) 14%, transparent); outline: none; }
-  #generic-protein-viewer .gpv-contact-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  #generic-protein-viewer .gpv-contact-name { min-width: 0; }
+  #generic-protein-viewer .gpv-aa:focus-visible { outline: 2px solid var(--ring, var(--primary)); outline-offset: 1px; }
   #generic-protein-viewer .gpv-contact-atoms, #generic-protein-viewer .gpv-contact-ca { color: var(--muted-foreground); }
   /* The tag on a covalently joined contact (peptide bond, disulfide): quiet, inside the name cell. */
-  #generic-protein-viewer .gpv-contact-bond { margin-left: 6px; padding: 0 5px; border: 1px solid var(--border); border-radius: 999px; color: var(--muted-foreground); font-size: 0.75em; white-space: nowrap; }
+  #generic-protein-viewer .gpv-contact-bond { display: inline-block; margin-left: 6px; padding: 0 5px; border: 1px solid var(--border); border-radius: 999px; color: var(--muted-foreground); font-size: 0.75em; white-space: nowrap; }
   #generic-protein-viewer .gpv-residue-contacts-empty { color: var(--muted-foreground); }
   /* Measure to… is armed: the next click on a residue is its second point. */
   #generic-protein-viewer .gpv-stage.is-measuring-to { cursor: crosshair; }
@@ -1488,7 +1518,7 @@ html>body{padding:0}</style>
   #generic-protein-viewer .gpv-check-list li.is-warn > i { background: color-mix(in srgb, #f97316 22%, transparent); color: #c2410c; }
   #generic-protein-viewer .gpv-check-list li.is-info > i { background: color-mix(in srgb, #2563eb 16%, transparent); color: #1d4ed8; }
   #generic-protein-viewer .gpv-check-list li.is-warn { color: var(--foreground); }
-  #generic-protein-viewer .gpv-check-list button { font: inherit; color: var(--primary); background: none; border: 0; padding: 0; text-decoration: underline; cursor: pointer; }
+  #generic-protein-viewer .gpv-check-list button { font: inherit; color: var(--accent-ink); background: none; border: 0; padding: 0; text-decoration: underline; cursor: pointer; }
   #generic-protein-viewer .gpv-composite { align-items: center; }
   #generic-protein-viewer .gpv-contacts { margin-top: 14px; }
   #generic-protein-viewer .gpv-contacts > summary { cursor: pointer; font-weight: 600; margin-bottom: 8px; }
