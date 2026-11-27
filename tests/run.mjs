@@ -363,7 +363,14 @@ const recover = async (failedName, mark) => {
   }
 };
 
+/* PSV_ONLY=<regexp> runs only the steps whose name matches — for checking one step, or the steps of
+   one change, without the forty-minute suite. The steps before it are skipped, so use it for steps
+   that make their own page (freshViewer) or follow steps the pattern also names; the summary says
+   how many were skipped, and a filtered run is never a gate. */
+const onlySteps = process.env.PSV_ONLY ? new RegExp(process.env.PSV_ONLY) : null;
+let skippedSteps = 0;
 const step = async (name, body) => {
+  if (onlySteps && !onlySteps.test(name)) { skippedSteps += 1; return; }
   currentStep = name;
   steps += 1;
   const mark = await markState();
@@ -6667,7 +6674,7 @@ await step('under a GPU cap the builder’s estimate and status and the composit
     if (!(await freshStatus(fresh)).includes('178 mm wide at ' + dpi + ' dpi · ' + note)) throw new Error('builder status: ' + await freshStatus(fresh));
     await freshDownload(fresh, '#gpv-composite', 180000);
     const status = await freshStatus(fresh);
-    if (!new RegExp('^Composite figure downloaded · 1 panel · \\d+ × \\d+ at ' + dpi + ' dpi · ' + note + '$').test(status)) throw new Error('composite status: ' + status);
+    if (!new RegExp('^Composite figure downloaded · 1 panel · \\d+ × \\d+ at ' + dpi + ' dpi \\(178 mm wide\\) · ' + note + '$').test(status)) throw new Error('composite status: ' + status);
     console.log('       ' + status);
   } finally { await fresh.close(); }
 });
@@ -9426,6 +9433,7 @@ console.log('steps retried after a timeout: ' + retries);
    not on the `suspect` one failed on its own; a suspect step ran on a page recovery could not
    put back, so its failure says as much about the recovery as about the viewer. */
 console.log('safety net: baseline ' + baselineMs + ' ms · marks ' + (markMs / 1000).toFixed(1) + ' s over ' + steps + ' steps · recoveries ' + recoveries + (recoveries ? ' in ' + (recoveryMs / 1000).toFixed(1) + ' s' : '') + ' · incomplete ' + incompleteRecoveries);
+if (onlySteps) console.log('PSV_ONLY ' + onlySteps + ': ' + steps + ' steps run, ' + skippedSteps + ' skipped — a filtered run, not a gate');
 console.log('failed steps: ' + (failures.length ? failures.join(', ') : 'none'));
 console.log('failed on their own: ' + (failures.filter(name => !suspect.includes(name)).length ? failures.filter(name => !suspect.includes(name)).join(', ') : 'none'));
 console.log('failed after an incomplete recovery (suspect): ' + (suspect.length ? suspect.join(', ') : 'none'));

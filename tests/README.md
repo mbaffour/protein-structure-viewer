@@ -22,7 +22,10 @@ a substituted library.
 
 Set `PSV_BROWSER=firefox` or `PSV_BROWSER=webkit` to run the same suite in another engine (Playwright's
 WebKit is the closest headless stand-in for Safari; install them once with `npx playwright install
-firefox webkit`). Set `PSV_HEADED=1` to watch the run in a visible browser. Set `PSV_CHROMIUM` to an existing
+firefox webkit`). Set `PSV_HEADED=1` to watch the run in a visible browser. Set `PSV_ONLY='<regexp>'` to run
+only the steps whose name matches (`PSV_ONLY='under a GPU cap' node run.mjs`): the others are skipped and
+counted, so it suits a step that opens its own page or a run of steps the pattern names together — a
+quick check while writing a step, never a gate. Set `PSV_CHROMIUM` to an existing
 Chromium binary to skip Playwright's own download — useful in CI images that already ship one:
 
 ```
