@@ -14,7 +14,7 @@ jobs:
   playwright:
     name: playwright (${{ matrix.browser }})
     runs-on: ubuntu-24.04
-    timeout-minutes: 40
+    timeout-minutes: 90
     strategy:
       fail-fast: false
       matrix:
@@ -36,8 +36,19 @@ jobs:
         working-directory: tests
         run: npx playwright install --with-deps ${{ matrix.browser }}
 
+      # The tutorials walked end to end against the built page: every control docs/TUTORIALS.md names
+      # has to exist and be drivable in the order the tutorial gives, so a renamed control or a step
+      # that silently needs another one first fails here. It takes a few minutes and runs first, so a
+      # broken walkthrough is known before the long suite ends; it writes the vendor/ copies itself
+      # (npm test would, but has not run yet). Chromium leg only: it passes in WebKit too and can be
+      # widened to the other engines if that is ever worth the minutes.
+      - name: Walk the tutorials
+        if: matrix.browser == 'chromium'
+        working-directory: tests
+        run: node vendor.mjs && node tutorials.mjs
+
       - name: Run regression suite
-        if: matrix.browser != 'firefox'
+        if: ${{ !cancelled() && matrix.browser != 'firefox' }}
         working-directory: tests
         env:
           PSV_BROWSER: ${{ matrix.browser }}
@@ -46,27 +57,17 @@ jobs:
       # Headless Firefox on Linux cannot create a WebGL context ("this._gl is null"), so
       # Firefox runs headed inside a virtual X display instead.
       - name: Run regression suite (Firefox, headed under Xvfb)
-        if: matrix.browser == 'firefox'
+        if: ${{ !cancelled() && matrix.browser == 'firefox' }}
         working-directory: tests
         env:
           PSV_BROWSER: firefox
           PSV_HEADED: '1'
         run: xvfb-run --auto-servernum --server-args="-screen 0 1920x1200x24" npm test
 
-      # The tutorials walked end to end against the built page: every control docs/TUTORIALS.md names
-      # has to exist and be drivable in the order the tutorial gives, so a renamed control or a step
-      # that silently needs another one first fails here. Like the step below it drives a browser and
-      # needs the vendor/ copies npm test has just written, so it runs in the Chromium leg. It passes
-      # in WebKit too and can be widened to the other engines if that is ever worth the minutes.
-      - name: Walk the tutorials
-        if: matrix.browser == 'chromium'
-        working-directory: tests
-        run: node tutorials.mjs
-
       # Distances and contacts against PDBePISA and a published catalytic triad. It drives Chromium, so
       # it runs in the Chromium leg, after npm test has written vendor/; validate-scripts has no browser.
       - name: Validate against measured structures
-        if: matrix.browser == 'chromium'
+        if: ${{ !cancelled() && matrix.browser == 'chromium' }}
         working-directory: tests
         run: npm run validate:experimental
 
